@@ -2,3 +2,7 @@
 	path = engine
 	url = https://github.com/amehcgracia-byte/zucker_videos.git
 	branch = claude/show-after-44
+[submodule "mixer"]
+	path = mixer
+	url = https://github.com/amehcgracia-byte/ZuckerMixer.git
+	branch = master
