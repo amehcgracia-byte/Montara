@@ -245,6 +245,7 @@ $("#cancel").addEventListener("click", async () => {
 function showResult(s) {
   const result = s.result || {};
   const url = `/api/v1/wizard/result?t=${Date.now()}`;
+  $("#resultVideo").classList.toggle("vertical", state.platform === "reel");
   $("#resultVideo").src = url;
   $("#download").href = url;
   if (result.filename) $("#download").setAttribute("download", result.filename);
