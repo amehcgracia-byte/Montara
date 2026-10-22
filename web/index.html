@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Montara</title>
+<link rel="icon" href="mark.svg" type="image/svg+xml">
+<link rel="stylesheet" href="montara.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="#" data-go="home" aria-label="Montara home">
+    <img src="mark.svg" alt="" width="34" height="28"><span>montara</span>
+  </a>
+  <nav class="steps" id="steps" hidden>
+    <span data-step="mode">Mode</span><span data-step="footage">Footage</span><span data-step="making">Edit</span><span data-step="result">Result</span>
+  </nav>
+  <button class="btn primary" id="newVideo" data-go="mode">New video</button>
+</header>
+
+<main>
+  <!-- Home -->
+  <section class="screen" id="home">
+    <div class="hero">
+      <h1>Drop your footage.<br><em>Get the edit.</em></h1>
+      <p class="lead">Multicam concerts, vertical reels and stories, edited on the beat from the material you already shot.</p>
+      <button class="btn primary big" data-go="mode">Start a new video</button>
+    </div>
+    <div class="modes mini">
+      <div><b>Stage</b><span>Full multicam, synced to the beat</span></div>
+      <div><b>Pulse</b><span>Vertical reels in one click</span></div>
+      <div><b>Story</b><span>Moments into stories</span></div>
+    </div>
+  </section>
+
+  <!-- Step 1: mode -->
+  <section class="screen" id="mode" hidden>
+    <h2>What are we making?</h2>
+    <div class="modes">
+      <button class="mode" data-platform="youtube">
+        <span class="dot"></span><h3>Stage</h3>
+        <p>Every camera synced to your master audio and cut on the beat. Horizontal, full length.</p>
+        <small>Needs: videos + master audio</small>
+      </button>
+      <button class="mode" data-platform="reel">
+        <span class="dot"></span><h3>Pulse</h3>
+        <p>A fast vertical reel from all your clips, ready to post.</p>
+        <small>Needs: videos (+ optional audio)</small>
+      </button>
+      <button class="mode" data-platform="show" disabled>
+        <span class="dot"></span><h3>Story</h3>
+        <p>Scenes, text and motion that turn moments into a story.</p>
+        <small class="soon">Coming soon</small>
+      </button>
+    </div>
+  </section>
+
+  <!-- Step 2: footage -->
+  <section class="screen" id="footage" hidden>
+    <h2><span id="modeLabel">Stage</span> · Add your footage</h2>
+    <label class="drop" id="drop">
+      <input type="file" id="fileInput" multiple accept="video/*,audio/*,.insv,.wav,.mp3,.m4a,.aif,.aiff,.flac">
+      <strong>Drop camera files &amp; master audio</strong>
+      <span>or click to choose · MP4, MOV, WAV, MP3…</span>
+    </label>
+    <ul class="files" id="files"></ul>
+    <div class="form">
+      <label>Video name <input id="videoName" type="text" maxlength="80"></label>
+      <label id="durationRow" hidden>Reel length <input id="reelDuration" type="range" min="15" max="60" step="5" value="30"> <output id="reelDurationOut">30 s</output></label>
+    </div>
+    <p class="hint" id="footageHint"></p>
+    <div class="actions">
+      <button class="btn ghost" data-go="mode">Back</button>
+      <button class="btn primary" id="makeIt" disabled>Make it</button>
+    </div>
+  </section>
+
+  <!-- Step 3: making -->
+  <section class="screen" id="making" hidden>
+    <div class="making">
+      <div class="ring"><svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="52" class="track"/><circle cx="60" cy="60" r="52" class="bar" id="ringBar"/></svg><b id="pct">0%</b></div>
+      <h2 id="stageMsg">Starting…</h2>
+      <p class="hint" id="stageDetail"></p>
+      <button class="btn ghost" id="cancel">Cancel</button>
+    </div>
+  </section>
+
+  <!-- Step 4: result -->
+  <section class="screen" id="result" hidden>
+    <h2>Your night, <em>edited.</em></h2>
+    <div class="player" id="playerWrap"><video id="resultVideo" controls playsinline preload="metadata"></video></div>
+    <p class="hint" id="resultInfo"></p>
+    <div class="actions">
+      <a class="btn primary" id="download" href="/api/v1/wizard/result" download>Download</a>
+      <button class="btn ghost" data-go="mode">New video</button>
+    </div>
+  </section>
+
+  <!-- Error -->
+  <section class="screen" id="failed" hidden>
+    <h2>Something went wrong</h2>
+    <p class="hint" id="errorText"></p>
+    <div class="actions"><button class="btn primary" data-go="footage">Back to footage</button></div>
+  </section>
+</main>
+
+<div class="toast" id="toast" hidden></div>
+<script src="montara.js"></script>
+</body>
+</html>
