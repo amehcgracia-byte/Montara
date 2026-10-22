@@ -1,0 +1,36 @@
+name: Montara end-to-end (Linux)
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  e2e:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install FFmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg fonts-dejavu-core
+      - name: Install Montara
+        run: |
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+      - name: Stage and Pulse through the real interface
+        run: python tests/e2e_journey.py --output e2e-output
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: montara-e2e
+          path: |
+            e2e-output/**/*.png
+            e2e-output/**/render.mp4
+            e2e-output/summary.json
+            e2e-output/server-*.log
