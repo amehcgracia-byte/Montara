@@ -1,9 +1,19 @@
 {
   "name": "Montara (Linux)",
   "image": "mcr.microsoft.com/devcontainers/python:1-3.11-bookworm",
-  "hostRequirements": { "cpus": 4, "memory": "8gb" },
-  "postCreateCommand": "sudo apt-get update && sudo apt-get install -y ffmpeg fonts-dejavu-core && git submodule update --init && pip install -r requirements.txt",
+  "hostRequirements": {
+    "cpus": 4,
+    "memory": "8gb"
+  },
+  "postCreateCommand": "sudo rm -f /etc/apt/sources.list.d/yarn.list; sudo apt-get update && sudo apt-get install -y ffmpeg fonts-dejavu-core && git submodule update --init && pip install -r requirements.txt",
   "postAttachCommand": "python app.py --host 0.0.0.0 --port 8080",
-  "forwardPorts": [8080],
-  "portsAttributes": { "8080": { "label": "Montara", "onAutoForward": "openBrowser" } }
+  "forwardPorts": [
+    8080
+  ],
+  "portsAttributes": {
+    "8080": {
+      "label": "Montara",
+      "onAutoForward": "openBrowser"
+    }
+  }
 }
