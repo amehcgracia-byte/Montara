@@ -66,9 +66,31 @@ $$(".mode[data-platform]").forEach((card) => card.addEventListener("click", () =
   $("#modeLabel").textContent = MODES[state.platform];
   $("#durationRow").hidden = state.platform !== "reel";
   if (!$("#videoName").value) $("#videoName").value = todayName();
+  state.files = state.files.filter((f) => !f.sample);
   renderFiles();
   show("footage");
+  loadSamples().catch((error) => console.warn("Samples unavailable", error));
 }));
+
+async function loadSamples() {
+  if (state.files.length) return;  // the person already added their own files
+  const response = await fetch(`/montara/samples?platform=${encodeURIComponent(state.platform)}`);
+  const data = response.ok ? await response.json() : { enabled: false };
+  if (!data.enabled) return;
+  for (const [group, kind] of [["videos", "video"], ["master", "master"], ["songs", "songs"]]) {
+    for (const item of data[group] || []) {
+      state.files.push({ id: crypto.randomUUID(), name: item.path.split("/").pop(), kind, path: item.path, sample: true });
+    }
+  }
+  $("#sampleNote").hidden = false;
+  renderFiles();
+}
+
+$("#clearSamples").addEventListener("click", () => {
+  state.files = state.files.filter((f) => !f.sample);
+  $("#sampleNote").hidden = true;
+  renderFiles();
+});
 
 function resetFlow() {
   state.platform = null;
@@ -88,6 +110,7 @@ $("#fileInput").addEventListener("change", (e) => { addFiles([...e.target.files]
 $("#reelDuration").addEventListener("input", (e) => { $("#reelDurationOut").textContent = `${e.target.value} s`; });
 
 function addFiles(list) {
+  if (state.files.some((f) => f.sample)) { state.files = state.files.filter((f) => !f.sample); $("#sampleNote").hidden = true; }
   for (const file of list) {
     const entry = { id: crypto.randomUUID(), name: file.name, kind: "uploading", progress: 0 };
     state.files.push(entry);

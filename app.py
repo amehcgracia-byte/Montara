@@ -20,6 +20,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 ENGINE = ROOT / "engine"
 WEB = ROOT / "web"
+SAMPLES = ROOT / "tests" / "fixtures" / "real"
+SAMPLE_SETS = {
+    "youtube": ["cam-fixed.mp4", "cam-360.mp4", "master.mp3"],
+    "reel": ["cam-fixed.mp4", "cam-360.mp4", "master.mp3"],
+    "show": ["talk.mp4"],
+}
 DEFAULT_DATA = Path.home() / "MontaraData"
 
 
@@ -34,16 +40,28 @@ def _prepare_environment(data_root: Path) -> None:
     os.chdir(ENGINE)
 
 
-def create_montara_app(data_root: Path = DEFAULT_DATA):
+def create_montara_app(data_root: Path = DEFAULT_DATA, samples: bool = True):
     _prepare_environment(data_root)
-    from flask import send_from_directory
+    from flask import jsonify, request, send_from_directory
     from server.api import create_app
+    from server.inbox import classify_paths
 
     app = create_app(dev=False)
     # Swap the interface: same engine API, Montara's own pages.
     app.static_folder = str(WEB)
     app.view_functions["index"] = lambda: send_from_directory(WEB, "index.html")
     app.config["MONTARA"] = True
+
+    @app.get("/montara/samples")
+    def montara_samples():
+        """Test footage that ships with the repo, preloaded while Montara is in testing."""
+        platform = request.args.get("platform", "")
+        names = SAMPLE_SETS.get(platform, [])
+        paths = [str(SAMPLES / name) for name in names if (SAMPLES / name).is_file()]
+        if not samples or not paths:
+            return jsonify({"enabled": False})
+        return jsonify({"enabled": True, **classify_paths(paths)})
+
     return app
 
 
@@ -52,9 +70,10 @@ def main() -> None:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8080)
     parser.add_argument("--data", type=Path, default=Path(os.environ.get("MONTARA_DATA", DEFAULT_DATA)))
+    parser.add_argument("--no-samples", action="store_true", help="do not preload the test footage")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
-    app = create_montara_app(args.data.expanduser().resolve())
+    app = create_montara_app(args.data.expanduser().resolve(), samples=not args.no_samples)
     logging.getLogger("montara").info("Montara on http://%s:%s (data: %s)", args.host, args.port, args.data)
     app.run(host=args.host, port=args.port, threaded=True, debug=False, use_reloader=False)
 

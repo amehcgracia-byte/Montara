@@ -82,6 +82,8 @@ em{font-style:normal;color:var(--accent)}
 input[type=range]{accent-color:var(--accent);width:180px}
 output{color:var(--fg);font-weight:600;min-width:42px}
 .actions{display:flex;gap:12px;margin-top:28px}
+.link{color:var(--accent);font-weight:600;text-decoration:underline;text-underline-offset:3px}
+.files .kind.sample{background:var(--panel)}
 
 /* making */
 .making{display:flex;flex-direction:column;align-items:center;text-align:center;padding:40px 0;gap:12px}
