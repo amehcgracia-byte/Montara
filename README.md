@@ -43,6 +43,7 @@ Data lives in `~/MontaraData` (change with `--data`), never in `~/ZuckerVideos`.
 * **Automatic:** every push runs `.github/workflows/e2e.yml` on GitHub's Ubuntu
   runners: Stage and Pulse are made through the real interface and the exported
   MP4s are checked and attached to the run.
-* **By hand in the browser:** *Code → Codespaces → Create*, then
-  `python app.py` and open the forwarded port 8080.
+* **By hand in the browser:** *Code → Codespaces → Create codespace on this branch*.
+  It installs everything, starts Montara and opens it in a new tab (port 8080).
+  Real test footage to upload is in `tests/fixtures/real/`.
 * **Locally:** `python tests/e2e_journey.py --output /tmp/montara-e2e`.

@@ -18,6 +18,7 @@ from pathlib import Path
 from urllib.request import urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
+REAL = ROOT / "tests" / "fixtures" / "real"
 MODES = {"stage": "youtube", "pulse": "reel"}
 
 
@@ -46,6 +47,12 @@ def free_port() -> int:
         return s.getsockname()[1]
 
 
+def media_files(media: Path) -> list[Path]:
+    if (media / "cam-fixed.mp4").exists():  # real jam excerpt (fixed camera + 360 + master)
+        return [media / "cam-fixed.mp4", media / "cam-360.mp4", media / "master.mp3"]
+    return [media / "camera-a.mp4", media / "camera-b.mp4", media / "master.wav"]
+
+
 def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
     shots = out / mode
     shots.mkdir(parents=True, exist_ok=True)
@@ -54,7 +61,8 @@ def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
     page.locator("#newVideo").click()
     page.locator(f'.mode[data-platform="{MODES[mode]}"]').click()
     page.locator("#videoName").fill(f"E2E {mode}")
-    page.locator("#fileInput").set_input_files([str(media / "camera-a.mp4"), str(media / "camera-b.mp4"), str(media / "master.wav")])
+    files = media_files(media)
+    page.locator("#fileInput").set_input_files([str(f) for f in files])
     page.wait_for_function("!document.querySelector('#makeIt').disabled", timeout=120_000)
     page.screenshot(path=str(shots / "02-footage.png"))
     page.locator("#makeIt").click()
@@ -75,18 +83,26 @@ def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
     video = next(s for s in probe["streams"] if s["codec_type"] == "video")
     has_audio = any(s["codec_type"] == "audio" for s in probe["streams"])
     (shots / "render.mp4").write_bytes(path.read_bytes())
-    return {"mode": mode, "passed": has_audio and float(probe["format"]["duration"]) > 0,
+    result = status["result"]
+    cameras = [f.name for f in files if f.suffix == ".mp4"]
+    used = result.get("camera_usage") or {}
+    # Stage must use every camera (the sync found all of them); Pulse may pick.
+    # (the engine may rename a camera to a cached proxy, so count cameras, not names)
+    all_used = mode != "stage" or (len([k for k, n in used.items() if n]) >= len(cameras) and not result.get("excluded_clips"))
+    return {"mode": mode, "media": media.name, "passed": has_audio and float(probe["format"]["duration"]) > 0 and all_used,
             "duration": float(probe["format"]["duration"]), "size": f"{video['width']}x{video['height']}",
-            "cuts": status["result"].get("cut_count")}
+            "cuts": result.get("cut_count"), "camera_usage": used, "excluded": result.get("excluded_clips")}
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--mode", choices=list(MODES))
+    parser.add_argument("--synthetic", action="store_true", help="use generated test patterns instead of the real jam excerpt")
     args = parser.parse_args()
     out = args.output.resolve()
-    media = fixtures(out / "fixtures")
+    out.mkdir(parents=True, exist_ok=True)
+    media = fixtures(out / "fixtures") if args.synthetic or not REAL.exists() else REAL
     reports = []
     from playwright.sync_api import sync_playwright
     for mode in ([args.mode] if args.mode else list(MODES)):
