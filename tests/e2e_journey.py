@@ -19,7 +19,7 @@ from urllib.request import urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
 REAL = ROOT / "tests" / "fixtures" / "much-to-me"
-MODES = {"stage": "youtube", "pulse": "reel"}
+MODES = {"stage": "youtube", "pulse": "reel", "mix": "youtube"}
 
 
 def run(cmd: list[str]) -> str:
@@ -53,7 +53,7 @@ def media_files(media: Path) -> list[Path]:
     return [media / "camera-a.mp4", media / "camera-b.mp4", media / "master.wav"]
 
 
-BRANDING = {"stage": "montara", "pulse": "none"}
+BRANDING = {"stage": "montara", "pulse": "none", "mix": "montara"}
 
 
 def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
@@ -65,7 +65,12 @@ def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
     page.locator(f'.mode[data-platform="{MODES[mode]}"]').click()
     page.locator("#videoName").fill(f"E2E {mode}")
     files = media_files(media)
-    if mode == "stage" and media == REAL:
+    if mode == "mix" and media == REAL:
+        # Same song as 14 separate tracks: the mixer makes the master.
+        page.wait_for_function("document.querySelectorAll('#files li').length > 0", timeout=30_000)
+        page.locator("#tracksSample").click()
+        page.wait_for_function("document.querySelectorAll('#files li').length === 17", timeout=30_000)
+    elif mode == "stage" and media == REAL:
         # The preloaded sample footage (what a tester sees), including its 360 viewpoints.
         page.wait_for_function(f"document.querySelectorAll('#files li').length === {len(files)}", timeout=30_000)
     else:
@@ -80,7 +85,20 @@ def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
         page.wait_for_timeout(3000)  # 360 frame + preview
         page.screenshot(path=str(shots / "03-cameras.png"), full_page=True)
         page.locator("#continueCameras").click()
-    page.locator("#making").wait_for(state="visible")
+    mixed = None
+    if mode == "mix":
+        page.locator("#mix").wait_for(state="visible")
+        page.wait_for_function("!document.querySelector('#useMix').disabled", timeout=300_000)
+        page.screenshot(path=str(shots / "03b-mix-auto.png"), full_page=True)
+        # Pull the first active fader down 6 dB, as a person would.
+        page.evaluate("""() => { const s = [...document.querySelectorAll('.strip:not(.off) input')][0];
+            s.value = -6; s.dispatchEvent(new Event('input', {bubbles: true})); }""")
+        page.locator("#playMix").click()
+        page.wait_for_timeout(1500)
+        page.locator("#playMix").click()
+        page.screenshot(path=str(shots / "03c-mix-moved.png"), full_page=True)
+        page.locator("#useMix").click()
+    page.locator("#making").wait_for(state="visible", timeout=300_000)
     page.wait_for_timeout(4000)
     page.screenshot(path=str(shots / "04-making.png"))
     page.wait_for_selector("#frames:not([hidden]), #result:not([hidden]), #failed:not([hidden])", timeout=900_000)
@@ -116,13 +134,16 @@ def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
         run(["ffmpeg", "-v", "error", "-y", "-ss", f"{second:.2f}", "-i", str(path), "-frames:v", "1",
              str(shots / f"frame-{int(second):03d}s.png")])
     result = status["result"]
+    if mode == "mix":
+        project = json.loads((Path(status["project_path"]) / "project.json").read_text())
+        mixed = ((project.get("inputs") or {}).get("master") or {}).get("path")
     cameras = [f.name for f in files if f.suffix == ".mp4"]
     used = result.get("camera_usage") or {}
     # Stage must use every camera (the sync found all of them); Pulse may pick.
     # (the engine may rename a camera to a cached proxy, so count cameras, not names)
-    all_used = mode != "stage" or (len([k for k, n in used.items() if n]) >= len(cameras) and not result.get("excluded_clips"))
-    return {"mode": mode, "media": media.name, "branding": BRANDING[mode], "passed": has_audio and duration > 0 and all_used,
-            "duration": duration, "size": f"{video['width']}x{video['height']}", "frames_swapped": swapped,
+    all_used = mode == "pulse" or (len([k for k, n in used.items() if n]) >= len(cameras) and not result.get("excluded_clips"))
+    return {"mode": mode, "media": media.name, "branding": BRANDING[mode], "passed": has_audio and duration > 0 and all_used and (mode != "mix" or bool(mixed and "Mixer" in mixed)),
+            "duration": duration, "size": f"{video['width']}x{video['height']}", "frames_swapped": swapped, "mixed_master": mixed,
             "cuts": result.get("cut_count"), "camera_usage": used, "excluded": result.get("excluded_clips")}
 
 

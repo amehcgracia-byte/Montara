@@ -63,7 +63,7 @@ function escapeHtml(text) {
   return String(text ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
-const STEP_ORDER = ["footage", "cameras", "making", "frames", "result"];
+const STEP_ORDER = ["footage", "cameras", "mix", "making", "frames", "result"];
 function show(id) {
   $$(".screen").forEach((s) => { s.hidden = s.id !== id; });
   const inFlow = STEP_ORDER.includes(id) || id === "failed" || id === "mode";
@@ -83,6 +83,9 @@ function todayName() {
 }
 
 const videos = () => state.files.filter((f) => f.kind === "video");
+const audioTracks = () => state.files.filter((f) => f.kind === "master" || f.kind === "songs");
+// Several audio files on Stage = separate instrument/mic tracks -> the mixer makes the master.
+const mixerMode = () => state.platform === "youtube" && audioTracks().length >= 2;
 const isSphere = (f) => f.projection === "equirect" || f.projection === "raw_insv" || /\.insv$/i.test(f.name);
 
 // ---------- navigation ----------
@@ -121,9 +124,10 @@ function resetFlow() {
 }
 
 // ---------- samples ----------
-async function loadSamples() {
-  if (state.files.length) return;  // the person already added their own files
-  const response = await fetch(`/montara/samples?platform=${encodeURIComponent(state.platform)}`);
+async function loadSamples(variant = "") {
+  if (state.files.some((f) => !f.sample)) return;  // the person already added their own files
+  state.files = state.files.filter((f) => !f.sample);
+  const response = await fetch(`/montara/samples?platform=${encodeURIComponent(state.platform)}&variant=${variant}`);
   const data = response.ok ? await response.json() : { enabled: false };
   if (!data.enabled) return;
   for (const [group, kind] of [["videos", "video"], ["master", "master"], ["songs", "songs"]]) {
@@ -133,8 +137,11 @@ async function loadSamples() {
   }
   for (const [path, slots] of Object.entries(data.viewpoints || {})) state.viewpoints[path] = structuredClone(slots);
   $("#sampleNote").hidden = false;
+  $("#tracksSampleRow").hidden = state.platform !== "youtube" || variant === "tracks";
   renderFiles();
 }
+
+$("#tracksSample").addEventListener("click", () => loadSamples("tracks").catch(console.warn));
 
 $("#clearSamples").addEventListener("click", () => {
   state.files = state.files.filter((f) => !f.sample);
@@ -204,7 +211,8 @@ function renderFiles() {
   const master = state.files.find((f) => f.kind === "master");
   let hint = "";
   let ready = videos().length > 0 && state.uploads === 0;
-  if (state.platform === "youtube" && !master) { hint = "Stage needs the master audio (one mixed track of the song) to sync every camera."; ready = false; }
+  if (mixerMode()) hint = `${audioTracks().length} separate tracks: Montara will mix them for you, then you can adjust every fader.`;
+  else if (state.platform === "youtube" && !master) { hint = "Stage needs the master audio (one mixed track of the song) to sync every camera."; ready = false; }
   if (state.platform === "reel" && !master && videos().length > 1) hint = "Tip: add the song so the reel cuts on the music.";
   if (state.uploads) hint = "Uploading…";
   if (state.branding === "mine" && !state.hasLogo) { hint = "Choose your logo, or pick another option."; ready = false; }
@@ -255,7 +263,7 @@ $("#logoInput").addEventListener("change", async (e) => {
 $("#continueFootage").addEventListener("click", () => registerProject().catch(fail));
 
 function inputs() {
-  const master = state.files.find((f) => f.kind === "master");
+  const master = mixerMode() ? (state.mixMaster ? { path: state.mixMaster } : null) : state.files.find((f) => f.kind === "master");
   return {
     master: master?.path || "",
     songs: state.files.find((f) => f.kind === "songs")?.path || "",
@@ -271,12 +279,13 @@ async function registerProject() {
     const data = inputs();
     await api("/wizard/projects/new", {});
     const draft = await api("/wizard/draft", { name, project_id: null, platform: state.platform, audio_paths: data.master ? [data.master] : [], ...data });
+    state.mixMaster = null;
     state.projectId = draft.project_id;
   } finally {
     $("#continueFootage").disabled = false;
   }
   const needsCameras = videos().length > 1 || videos().some(isSphere);
-  if (!needsCameras) return make();
+  if (!needsCameras) return afterCameras();
   renderCameras();
   show("cameras");
 }
@@ -386,7 +395,181 @@ function setupSphere(file, root) {
   preview();
 }
 
-$("#continueCameras").addEventListener("click", () => saveCameras().then(make).catch(fail));
+$("#continueCameras").addEventListener("click", () => saveCameras().then(afterCameras).catch(fail));
+
+function afterCameras() {
+  return mixerMode() ? openMixer() : make();
+}
+
+// ---------- mixer ----------
+const mix = { job: null, plan: null, ctx: null, nodes: {}, buffers: {}, playing: false, startedAt: 0, offset: 0, master: null, timer: null };
+
+async function openMixer() {
+  show("mix");
+  stopMix();
+  $("#mixStatus").classList.remove("done");
+  $("#mixStatusText").textContent = "Mixing your tracks automatically…";
+  $("#transport").hidden = true;
+  $("#referenceRow").hidden = true;
+  $("#useMix").disabled = true;
+  $("#strips").innerHTML = "";
+  const job = await api("/montara/mix", { tracks: audioTracks().map((f) => f.path) });
+  mix.job = job.id;
+  const ready = await pollMix((j) => j.status !== "analyzing");
+  if (ready.status === "failed") throw new Error(ready.error || "The automatic mix failed");
+  mix.plan = ready.plan;
+  renderStrips();
+  $("#mixStatusText").textContent = "Loading the tracks for the preview…";
+  await loadBuffers();
+  $("#mixStatus").classList.add("done");
+  $("#mixStatusText").textContent = "Auto-mix ready. Faders start where Montara put them.";
+  $("#transport").hidden = false;
+  $("#referenceRow").hidden = false;
+  $("#useMix").disabled = false;
+}
+
+async function pollMix(done) {
+  for (;;) {
+    const job = await api(`/montara/mix/${mix.job}`);
+    if (done(job) || job.status === "failed") return job;
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+}
+
+const dbToGain = (db) => Math.pow(10, db / 20);
+function trackGain(track) {
+  const fader = Number(track.fader_db || 0);
+  return track.mute ? 0 : dbToGain(Number(track.auto_gain_db || 0) + fader);
+}
+
+function renderStrips() {
+  $("#strips").innerHTML = mix.plan.tracks.map((t, i) => `
+    <div class="strip ${t.mute ? "off" : ""}" data-track="${i}" title="${escapeHtml(t.file)}">
+      <small>${escapeHtml(t.role)}</small>
+      <span class="db">${(t.fader_db >= 0 ? "+" : "") + Number(t.fader_db).toFixed(1)} dB</span>
+      <input type="range" min="-24" max="12" step="0.5" value="${t.fader_db}" aria-label="${escapeHtml(t.name)} fader">
+      <button class="mute ${t.mute ? "on" : ""}">${t.mute ? "OFF" : "ON"}</button>
+      <b>${escapeHtml(t.name)}</b>
+    </div>`).join("");
+  $$(".strip").forEach((strip) => {
+    const track = mix.plan.tracks[Number(strip.dataset.track)];
+    track.auto_mute = track.auto_mute ?? track.mute;
+    strip.querySelector("input").addEventListener("input", (e) => {
+      track.fader_db = Number(e.target.value);
+      strip.querySelector(".db").textContent = `${track.fader_db >= 0 ? "+" : ""}${track.fader_db.toFixed(1)} dB`;
+      applyGain(track);
+    });
+    strip.querySelector(".mute").addEventListener("click", (e) => {
+      track.mute = !track.mute;
+      e.target.classList.toggle("on", track.mute);
+      e.target.textContent = track.mute ? "OFF" : "ON";
+      strip.classList.toggle("off", track.mute);
+      applyGain(track);
+    });
+  });
+}
+
+function applyGain(track) {
+  const node = mix.nodes[track.file];
+  if (node && mix.ctx) node.gain.gain.setTargetAtTime(trackGain(track), mix.ctx.currentTime, 0.03);
+}
+
+async function loadBuffers() {
+  mix.ctx = mix.ctx || new (window.AudioContext || window.webkitAudioContext)();
+  await Promise.all(mix.plan.tracks.map(async (t) => {
+    if (mix.buffers[t.file]) return;
+    const response = await fetch(`/montara/mix/${mix.job}/track/${encodeURIComponent(t.file)}`);
+    mix.buffers[t.file] = await mix.ctx.decodeAudioData(await response.arrayBuffer());
+  }));
+  $("#mixSeek").max = String(mix.plan.duration || 60);
+}
+
+function startMix(offset) {
+  const ctx = mix.ctx;
+  mix.master = ctx.createDynamicsCompressor();  // keeps the preview from clipping
+  mix.master.connect(ctx.destination);
+  for (const t of mix.plan.tracks) {
+    const source = ctx.createBufferSource();
+    source.buffer = mix.buffers[t.file];
+    const gain = ctx.createGain();
+    gain.gain.value = trackGain(t);
+    const pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+    if (pan) pan.pan.value = Math.max(-1, Math.min(1, Number(t.pan || 0)));
+    source.connect(gain);
+    (pan ? gain.connect(pan) && pan : gain).connect(mix.master);
+    source.start(0, offset);
+    mix.nodes[t.file] = { source, gain };
+  }
+  mix.startedAt = ctx.currentTime - offset;
+  mix.playing = true;
+  $("#playMix").textContent = "Pause";
+  clearInterval(mix.timer);
+  mix.timer = setInterval(() => {
+    const now = mix.ctx.currentTime - mix.startedAt;
+    if (now >= (mix.plan.duration || 0)) { stopMix(); mix.offset = 0; return; }
+    $("#mixSeek").value = String(now);
+    $("#mixTime").textContent = `${Math.floor(now / 60)}:${String(Math.floor(now % 60)).padStart(2, "0")}`;
+  }, 200);
+}
+
+function stopMix() {
+  if (mix.playing && mix.ctx) mix.offset = mix.ctx.currentTime - mix.startedAt;
+  for (const node of Object.values(mix.nodes)) { try { node.source.stop(); } catch { /* already stopped */ } }
+  mix.nodes = {};
+  mix.playing = false;
+  clearInterval(mix.timer);
+  $("#playMix").textContent = "Play";
+}
+
+$("#playMix").addEventListener("click", async () => {
+  if (!mix.ctx) return;
+  await mix.ctx.resume();
+  if (mix.playing) stopMix(); else startMix(mix.offset || 0);
+});
+$("#mixSeek").addEventListener("input", (e) => {
+  const wasPlaying = mix.playing;
+  stopMix();
+  mix.offset = Number(e.target.value);
+  if (wasPlaying) startMix(mix.offset);
+});
+$("#resetMix").addEventListener("click", () => {
+  for (const t of mix.plan.tracks) { t.fader_db = 0; t.mute = t.auto_mute; applyGain(t); }
+  renderStrips();
+});
+$("#pickReference").addEventListener("click", () => $("#referenceInput").click());
+$("#referenceInput").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  e.target.value = "";
+  if (!file) return;
+  const form = new FormData();
+  form.append("file", file);
+  const response = await fetch(`/montara/mix/${mix.job}/reference`, { method: "POST", body: form });
+  if (!response.ok) return toast("Could not use that reference", true);
+  $("#referenceName").textContent = `Matched to: ${file.name}`;
+});
+$("#mixBack").addEventListener("click", () => { stopMix(); show(videos().length > 1 || videos().some(isSphere) ? "cameras" : "footage"); });
+
+$("#useMix").addEventListener("click", async () => {
+  try {
+    stopMix();
+    $("#useMix").disabled = true;
+    $("#mixStatus").classList.remove("done");
+    $("#mixStatusText").textContent = "Rendering the final mix and mastering it…";
+    const faders = Object.fromEntries(mix.plan.tracks.map((t) => [t.file, Number(t.fader_db || 0)]));
+    const mutes = Object.fromEntries(mix.plan.tracks.map((t) => [t.file, Boolean(t.mute)]));
+    await api(`/montara/mix/${mix.job}/render`, { faders, mutes });
+    const job = await pollMix((j) => j.status === "done");
+    if (job.status === "failed") throw new Error(job.error || "The final mix failed");
+    state.mixMaster = job.master_path;
+    // Register the mix as the project's master audio, then make the video.
+    const data = inputs();
+    await api("/wizard/draft", { name: $("#videoName").value.trim() || todayName(), project_id: state.projectId, platform: state.platform, audio_paths: [data.master], ...data });
+    await make();
+  } catch (error) {
+    $("#useMix").disabled = false;
+    fail(error);
+  }
+});
 
 async function saveCameras() {
   const flat = videos().filter((f) => !isSphere(f));

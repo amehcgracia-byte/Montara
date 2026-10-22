@@ -13,7 +13,7 @@
     <img src="mark.svg" alt="" width="34" height="28"><span>montara</span>
   </a>
   <nav class="steps" id="steps" hidden>
-    <span data-step="footage">Footage</span><span data-step="cameras">Cameras</span><span data-step="making">Edit</span><span data-step="frames">Frames</span><span data-step="result">Result</span>
+    <span data-step="footage">Footage</span><span data-step="cameras">Cameras</span><span data-step="mix">Mix</span><span data-step="making">Edit</span><span data-step="frames">Frames</span><span data-step="result">Result</span>
   </nav>
   <button class="btn primary" id="newVideo" data-go="mode">New video</button>
 </header>
@@ -66,7 +66,7 @@
       <span>or click to choose</span>
     </label>
     <div class="boxhelp" id="boxHelp"></div>
-    <p class="hint" id="sampleNote" hidden>Sample footage from a real jam is loaded so you can try Montara right away. <button class="link" id="clearSamples">Use my own files instead</button></p>
+    <p class="hint" id="sampleNote" hidden>Sample footage from a real jam is loaded so you can try Montara right away. <button class="link" id="clearSamples">Use my own files instead</button><span id="tracksSampleRow"> · <button class="link" id="tracksSample">Try the mixer: same song as 14 separate tracks</button></span></p>
     <ul class="files" id="files"></ul>
     <div class="form">
       <label>Video name <input id="videoName" type="text" maxlength="80"></label>
@@ -95,6 +95,30 @@
     <div class="actions">
       <button class="btn ghost" data-go="footage">Back</button>
       <button class="btn primary" id="continueCameras">Make the edit</button>
+    </div>
+  </section>
+
+  <!-- Step 3b: mixer -->
+  <section class="screen" id="mix" hidden>
+    <h2>Your mix</h2>
+    <p class="lead small">Montara mixed your tracks automatically. Press play and move any fader: you hear the change at once. When it sounds right, use this mix for the video.</p>
+    <div class="mixstatus" id="mixStatus"><span class="spin"></span><span id="mixStatusText">Mixing your tracks automatically…</span></div>
+    <div class="transport" id="transport" hidden>
+      <button class="btn primary small" id="playMix">Play</button>
+      <input type="range" id="mixSeek" min="0" max="100" step="0.1" value="0">
+      <span class="hint" id="mixTime">0:00</span>
+      <button class="btn ghost small" id="resetMix">Back to auto-mix</button>
+    </div>
+    <div class="strips" id="strips"></div>
+    <div class="reference" id="referenceRow" hidden>
+      <span><b>Mastering</b> <small class="hint">Optional: upload a song whose sound you like and the mix is mastered to match it.</small></span>
+      <span class="hint" id="referenceName">Automatic (no reference)</span>
+      <button class="btn ghost small" id="pickReference">Choose reference</button>
+      <input type="file" id="referenceInput" accept="audio/*" hidden>
+    </div>
+    <div class="actions">
+      <button class="btn ghost" id="mixBack">Back</button>
+      <button class="btn primary" id="useMix" disabled>Use this mix</button>
     </div>
   </section>
 

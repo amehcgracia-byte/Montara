@@ -3,6 +3,8 @@
 - `engine/` is the Zucker Editor submodule. NEVER edit, patch or commit files inside it.
   If the engine needs a change, it is made in the `zucker_videos` repo and the submodule
   pointer is moved here in a separate commit that names the new engine commit.
+- `mixer/` is the Zucker Mixer submodule, same rule as `engine/`. Montara uses it only through
+  `mixer_adapter/single_song.py` (one song, all tracks, no detection).
 - Montara talks to the engine only through its HTTP API (`/api/v1/...`).
 - The interface lives in `web/` (plain HTML/CSS/JS). Brand tokens are the CSS variables at
   the top of `web/montara.css`: black #0B0B0D, off-white #F5F3EF, accent #FF4F2E, Inter.

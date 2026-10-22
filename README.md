@@ -16,6 +16,8 @@ Zucker engine untouched and gives it a new interface and brand.
 ```
 montara/
 ├── engine/   Zucker Editor, git submodule pinned to one commit. Never edited here.
+├── mixer/    Zucker Mixer, git submodule pinned to one commit. Never edited here.
+├── mixer_adapter/  Single-song mode for the mixer: no song detection, one song = all tracks.
 ├── app.py    Starts the engine's API and serves Montara's interface.
 ├── web/      Montara interface (HTML/CSS/JS, no build step).
 └── tests/    End-to-end journey: real server, real browser, real renders.

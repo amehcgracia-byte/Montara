@@ -17,6 +17,8 @@ import json
 import logging
 import os
 import sys
+import threading
+import uuid
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -30,6 +32,10 @@ SAMPLE_SETS = {
     "youtube": ["much-to-me/cam-sony.mp4", "much-to-me/cam-fixed.mp4", "much-to-me/cam-360.mp4", "much-to-me/master.mp3"],
     "reel": ["much-to-me/cam-sony.mp4", "much-to-me/cam-fixed.mp4", "much-to-me/cam-360.mp4", "much-to-me/master.mp3"],
     "show": ["real/talk.mp4"],
+    # Same song, but as separate instrument tracks instead of the master: exercises the mixer.
+    "youtube_tracks": ["much-to-me/cam-sony.mp4", "much-to-me/cam-fixed.mp4", "much-to-me/cam-360.mp4"]
+    + [f"much-to-me/stems/{name}.mp3" for name in (
+        "Kick", "Snare", "HH", "OV", "Bass", "Guit", "KeysL", "Keys-R", "Synth", "Sax", "brass", "vox-1", "Vox-2", "Beatbox")],
 }
 DEFAULT_DATA = Path.home() / "MontaraData"
 BRANDING_MODES = {"montara", "mine", "none"}
@@ -40,6 +46,7 @@ def _prepare_environment(data_root: Path) -> None:
         raise SystemExit("The engine is missing. Run: git submodule update --init")
     # Montara never shares data with a local Zucker Editor install.
     os.environ.setdefault("ZUCKER_DATA_ROOT", str(data_root))
+    os.environ.setdefault("ZUCKER_MIXER_STATE_ROOT", str(data_root / "Mixer" / "state"))
     data_root.mkdir(parents=True, exist_ok=True)
     sys.path.insert(0, str(ENGINE))
     # The engine resolves bundled assets relative to its own folder.
@@ -85,7 +92,8 @@ def create_montara_app(data_root: Path = DEFAULT_DATA, samples: bool = True):
     def montara_samples():
         """Test footage that ships with the repo, preloaded while Montara is in testing."""
         platform = request.args.get("platform", "")
-        names = SAMPLE_SETS.get(platform, [])
+        variant = request.args.get("variant", "")
+        names = SAMPLE_SETS.get(f"{platform}_{variant}" if variant else platform, [])
         files = [FIXTURES / name for name in names if (FIXTURES / name).is_file()]
         if not samples or not files:
             return jsonify({"enabled": False})
@@ -129,6 +137,96 @@ def create_montara_app(data_root: Path = DEFAULT_DATA, samples: bool = True):
         image.thumbnail((1600, 1600))
         image.save(target)
         return jsonify({"has_logo": True, **_apply_branding("mine", data_root)})
+
+    # ---- mixer: one song, separate tracks -> auto-mix -> faders -> master MP3 ----
+    mix_jobs: dict[str, dict] = {}
+    mix_lock = threading.Lock()  # the mixer engine keeps module-level state: one job at a time
+
+    def _mix_worker(job_id: str, action: str, payload: dict) -> None:
+        job = mix_jobs[job_id]
+        with mix_lock:
+            try:
+                sys.path.insert(0, str(ROOT))
+                from mixer_adapter.single_song import SingleSongMix
+
+                mixer = job.get("mixer") or SingleSongMix(job["tracks_dir"], job["work_dir"])
+                job["mixer"] = mixer
+                if action == "analyze":
+                    job["plan"] = mixer.analyze()
+                else:
+                    reference = payload.get("reference")
+                    mixer.reference = Path(reference) if reference else None
+                    out = mixer.render(payload.get("faders") or {}, job["work_dir"] / "mix.wav", payload.get("mutes") or {})
+                    job["master"] = classify_paths([str(out)])
+                    job["master_path"] = str(out)
+                job["status"] = "ready" if action == "analyze" else "done"
+            except Exception as exc:  # report, never crash the server
+                logging.getLogger("montara.mixer").exception("Mix %s failed", action)
+                job["status"] = "failed"
+                job["error"] = str(exc) or exc.__class__.__name__
+
+    def _mix_public(job: dict) -> dict:
+        return {key: job.get(key) for key in ("id", "status", "error", "plan", "master_path", "reference")}
+
+    @app.post("/montara/mix")
+    def montara_mix_start():
+        """Start the auto-mix for a list of registered audio tracks (paths)."""
+        tracks = [str(p) for p in ((request.get_json(silent=True) or {}).get("tracks") or []) if isinstance(p, str)]
+        files = [Path(p) for p in tracks if Path(p).is_file()]
+        if len(files) < 2:
+            return jsonify({"error": {"message": "The mixer needs at least two tracks"}}), 400
+        job_id = uuid.uuid4().hex[:12]
+        work = data_root / "Mixer" / job_id
+        tracks_dir = work / "tracks"
+        tracks_dir.mkdir(parents=True, exist_ok=True)
+        for path in files:  # the mixer reads a folder; link, never copy big files
+            target = tracks_dir / path.name
+            if not target.exists():
+                try:
+                    target.symlink_to(path)
+                except OSError:
+                    import shutil
+                    shutil.copy2(path, target)
+        mix_jobs[job_id] = {"id": job_id, "status": "analyzing", "tracks_dir": tracks_dir, "work_dir": work}
+        threading.Thread(target=_mix_worker, args=(job_id, "analyze", {}), daemon=True).start()
+        return jsonify(_mix_public(mix_jobs[job_id])), 202
+
+    @app.get("/montara/mix/<job_id>")
+    def montara_mix_status(job_id: str):
+        job = mix_jobs.get(job_id)
+        return (jsonify(_mix_public(job)), 200) if job else (jsonify({"error": {"message": "unknown mix"}}), 404)
+
+    @app.get("/montara/mix/<job_id>/track/<path:name>")
+    def montara_mix_track(job_id: str, name: str):
+        """Serve one track to the browser for the live fader preview."""
+        job = mix_jobs.get(job_id)
+        if not job:
+            return jsonify({"error": {"message": "unknown mix"}}), 404
+        return send_from_directory(job["tracks_dir"], Path(name).name)
+
+    @app.post("/montara/mix/<job_id>/reference")
+    def montara_mix_reference(job_id: str):
+        """Optional reference song for Matchering mastering."""
+        job = mix_jobs.get(job_id)
+        storage = request.files.get("file")
+        if not job or not storage:
+            return jsonify({"error": {"message": "file is required"}}), 400
+        target = job["work_dir"] / ("reference" + (Path(storage.filename or "").suffix or ".wav"))
+        storage.save(target)
+        job["reference"] = str(target)
+        return jsonify(_mix_public(job))
+
+    @app.post("/montara/mix/<job_id>/render")
+    def montara_mix_render(job_id: str):
+        job = mix_jobs.get(job_id)
+        if not job or job.get("status") not in {"ready", "done", "failed"}:
+            return jsonify({"error": {"message": "The mix is not ready"}}), 409
+        body = request.get_json(silent=True) or {}
+        payload = {"faders": body.get("faders") or {}, "mutes": body.get("mutes") or {}, "reference": job.get("reference")}
+        job["status"] = "rendering"
+        job.pop("error", None)
+        threading.Thread(target=_mix_worker, args=(job_id, "render", payload), daemon=True).start()
+        return jsonify(_mix_public(job)), 202
 
     @app.get("/montara/logo")
     def montara_logo_get():
