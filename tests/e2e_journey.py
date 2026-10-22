@@ -18,7 +18,7 @@ from pathlib import Path
 from urllib.request import urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
-REAL = ROOT / "tests" / "fixtures" / "real"
+REAL = ROOT / "tests" / "fixtures" / "much-to-me"
 MODES = {"stage": "youtube", "pulse": "reel"}
 
 
@@ -48,33 +48,61 @@ def free_port() -> int:
 
 
 def media_files(media: Path) -> list[Path]:
-    if (media / "cam-fixed.mp4").exists():  # real jam excerpt (fixed camera + 360 + master)
-        return [media / "cam-fixed.mp4", media / "cam-360.mp4", media / "master.mp3"]
+    if (media / "cam-fixed.mp4").exists():  # real jam excerpt (Sony + fixed phone + 360 + master)
+        return [media / "cam-sony.mp4", media / "cam-fixed.mp4", media / "cam-360.mp4", media / "master.mp3"]
     return [media / "camera-a.mp4", media / "camera-b.mp4", media / "master.wav"]
+
+
+BRANDING = {"stage": "montara", "pulse": "none"}
 
 
 def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
     shots = out / mode
     shots.mkdir(parents=True, exist_ok=True)
     page.goto(url)
-    page.screenshot(path=str(shots / "01-home.png"))
+    page.screenshot(path=str(shots / "01-home.png"), full_page=True)
     page.locator("#newVideo").click()
     page.locator(f'.mode[data-platform="{MODES[mode]}"]').click()
     page.locator("#videoName").fill(f"E2E {mode}")
     files = media_files(media)
-    page.locator("#fileInput").set_input_files([str(f) for f in files])
-    page.wait_for_function("!document.querySelector('#makeIt').disabled", timeout=120_000)
-    page.screenshot(path=str(shots / "02-footage.png"))
-    page.locator("#makeIt").click()
+    if mode == "stage" and media == REAL:
+        # The preloaded sample footage (what a tester sees), including its 360 viewpoints.
+        page.wait_for_function(f"document.querySelectorAll('#files li').length === {len(files)}", timeout=30_000)
+    else:
+        page.locator("#fileInput").set_input_files([str(f) for f in files])
+    page.locator(f'input[name=branding][value="{BRANDING[mode]}"]').check()
+    page.wait_for_function("!document.querySelector('#continueFootage').disabled", timeout=120_000)
+    page.wait_for_timeout(300)
+    page.screenshot(path=str(shots / "02-footage.png"), full_page=True)
+    page.locator("#continueFootage").click()
+    page.wait_for_selector("#cameras:not([hidden]), #making:not([hidden])", timeout=120_000)
+    if page.locator("#cameras").is_visible():
+        page.wait_for_timeout(3000)  # 360 frame + preview
+        page.screenshot(path=str(shots / "03-cameras.png"), full_page=True)
+        page.locator("#continueCameras").click()
     page.locator("#making").wait_for(state="visible")
     page.wait_for_timeout(4000)
-    page.screenshot(path=str(shots / "03-making.png"))
-    page.wait_for_selector("#result:not([hidden]), #failed:not([hidden])", timeout=900_000)
+    page.screenshot(path=str(shots / "04-making.png"))
+    page.wait_for_selector("#frames:not([hidden]), #result:not([hidden]), #failed:not([hidden])", timeout=900_000)
+    swapped = False
+    if page.locator("#frames").is_visible():
+        page.wait_for_function("!document.querySelector('#framesHint').textContent.includes('Preparing')", timeout=300_000)
+        page.screenshot(path=str(shots / "05-frames.png"), full_page=True)
+        first = page.locator(".frame .swap:not([disabled])").first
+        if first.count():
+            before = first.locator("xpath=../div/img").get_attribute("src")
+            first.click()
+            page.wait_for_timeout(1000)
+            page.wait_for_function("!document.querySelector('.frame.busy')", timeout=180_000)
+            swapped = first.locator("xpath=../div/img").get_attribute("src") != before
+            page.screenshot(path=str(shots / "06-frames-swapped.png"), full_page=True)
+        page.locator("#renderFrames").click()
+        page.wait_for_selector("#result:not([hidden]), #failed:not([hidden])", timeout=900_000)
     if page.locator("#failed").is_visible():
         page.screenshot(path=str(shots / "99-failed.png"))
         return {"mode": mode, "passed": False, "error": page.locator("#errorText").inner_text()}
     page.wait_for_timeout(1500)
-    page.screenshot(path=str(shots / "04-result.png"))
+    page.screenshot(path=str(shots / "07-result.png"))
     with urlopen(url + "/api/v1/wizard/status", timeout=15) as response:
         status = json.load(response)
     path = Path(status["result"]["path"])
@@ -83,14 +111,18 @@ def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
     video = next(s for s in probe["streams"] if s["codec_type"] == "video")
     has_audio = any(s["codec_type"] == "audio" for s in probe["streams"])
     (shots / "render.mp4").write_bytes(path.read_bytes())
+    duration = float(probe["format"]["duration"])
+    for second in (2.0, duration / 2, max(0.0, duration - 2.0)):  # intro, body, outro: look at them
+        run(["ffmpeg", "-v", "error", "-y", "-ss", f"{second:.2f}", "-i", str(path), "-frames:v", "1",
+             str(shots / f"frame-{int(second):03d}s.png")])
     result = status["result"]
     cameras = [f.name for f in files if f.suffix == ".mp4"]
     used = result.get("camera_usage") or {}
     # Stage must use every camera (the sync found all of them); Pulse may pick.
     # (the engine may rename a camera to a cached proxy, so count cameras, not names)
     all_used = mode != "stage" or (len([k for k, n in used.items() if n]) >= len(cameras) and not result.get("excluded_clips"))
-    return {"mode": mode, "media": media.name, "passed": has_audio and float(probe["format"]["duration"]) > 0 and all_used,
-            "duration": float(probe["format"]["duration"]), "size": f"{video['width']}x{video['height']}",
+    return {"mode": mode, "media": media.name, "branding": BRANDING[mode], "passed": has_audio and duration > 0 and all_used,
+            "duration": duration, "size": f"{video['width']}x{video['height']}", "frames_swapped": swapped,
             "cuts": result.get("cut_count"), "camera_usage": used, "excluded": result.get("excluded_clips")}
 
 

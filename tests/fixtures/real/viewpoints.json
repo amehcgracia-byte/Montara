@@ -1,0 +1,9 @@
+{
+  "cam-360.mp4": {
+    "full_stage": {"yaw": 11.5, "pitch": -34.3, "fov": 110, "subject": "Stage", "enabled": true},
+    "singer": {"yaw": -23.2, "pitch": -28.8, "fov": 75, "subject": "Singer", "enabled": true},
+    "left": {"yaw": 47.6, "pitch": -15.9, "fov": 95, "subject": "Keys", "enabled": true},
+    "right": {"yaw": -37.9, "pitch": -15.0, "fov": 95, "subject": "Drums", "enabled": true},
+    "audience": {"yaw": -156.3, "pitch": -15.5, "fov": 95, "subject": "Audience", "enabled": true}
+  }
+}

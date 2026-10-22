@@ -13,7 +13,7 @@
     <img src="mark.svg" alt="" width="34" height="28"><span>montara</span>
   </a>
   <nav class="steps" id="steps" hidden>
-    <span data-step="mode">Mode</span><span data-step="footage">Footage</span><span data-step="making">Edit</span><span data-step="result">Result</span>
+    <span data-step="footage">Footage</span><span data-step="cameras">Cameras</span><span data-step="making">Edit</span><span data-step="frames">Frames</span><span data-step="result">Result</span>
   </nav>
   <button class="btn primary" id="newVideo" data-go="mode">New video</button>
 </header>
@@ -26,11 +26,13 @@
       <p class="lead">Multicam concerts, vertical reels and stories, edited on the beat from the material you already shot.</p>
       <button class="btn primary big" data-go="mode">Start a new video</button>
     </div>
-    <div class="modes mini">
-      <div><b>Stage</b><span>Full multicam, synced to the beat</span></div>
-      <div><b>Pulse</b><span>Vertical reels in one click</span></div>
-      <div><b>Story</b><span>Moments into stories</span></div>
-    </div>
+    <h2 class="small">How it works</h2>
+    <ol class="how">
+      <li><b>Drop</b><span>All your camera videos and the audio in one box: phone, camera, 360.</span></li>
+      <li><b>Name your cameras</b><span>Tell Montara who each camera shows. For 360 cameras, click the points of view you want.</span></li>
+      <li><b>Pick the frames</b><span>Montara cuts on the beat and shows you every shot. Swap the ones you don't like.</span></li>
+      <li><b>Render</b><span>With the Montara watermark, your own logo, or nothing at all.</span></li>
+    </ol>
   </section>
 
   <!-- Step 1: mode -->
@@ -39,13 +41,13 @@
     <div class="modes">
       <button class="mode" data-platform="youtube">
         <span class="dot"></span><h3>Stage</h3>
-        <p>Every camera synced to your master audio and cut on the beat. Horizontal, full length.</p>
-        <small>Needs: videos + master audio</small>
+        <p>Every camera synced to your audio and cut on the beat. Horizontal, full length.</p>
+        <small>Videos + master audio</small>
       </button>
       <button class="mode" data-platform="reel">
         <span class="dot"></span><h3>Pulse</h3>
         <p>A fast vertical reel from all your clips, ready to post.</p>
-        <small>Needs: videos (+ optional audio)</small>
+        <small>Videos (+ optional music)</small>
       </button>
       <button class="mode" data-platform="show" disabled>
         <span class="dot"></span><h3>Story</h3>
@@ -60,23 +62,43 @@
     <h2><span id="modeLabel">Stage</span> · Add your footage</h2>
     <label class="drop" id="drop">
       <input type="file" id="fileInput" multiple accept="video/*,audio/*,.insv,.wav,.mp3,.m4a,.aif,.aiff,.flac">
-      <strong>Drop camera files &amp; master audio</strong>
-      <span>or click to choose · MP4, MOV, WAV, MP3…</span>
+      <strong>Drop videos &amp; audio here</strong>
+      <span>or click to choose</span>
     </label>
+    <div class="boxhelp" id="boxHelp"></div>
+    <p class="hint" id="sampleNote" hidden>Sample footage from a real jam is loaded so you can try Montara right away. <button class="link" id="clearSamples">Use my own files instead</button></p>
     <ul class="files" id="files"></ul>
     <div class="form">
       <label>Video name <input id="videoName" type="text" maxlength="80"></label>
-      <label id="durationRow" hidden>Reel length <input id="reelDuration" type="range" min="15" max="60" step="5" value="30"> <output id="reelDurationOut">30 s</output></label>
+      <label id="durationRow" hidden>Reel length <span class="range"><input id="reelDuration" type="range" min="15" max="60" step="5" value="30"> <output id="reelDurationOut">30 s</output></span></label>
     </div>
-    <p class="hint" id="sampleNote" hidden>Sample footage from a real jam is loaded so you can try Montara right away. <button class="link" id="clearSamples">Use my own files instead</button></p>
+    <fieldset class="branding">
+      <legend>Logo</legend>
+      <label class="opt"><input type="radio" name="branding" value="montara" checked><span><b>Montara watermark</b><small>Small Montara mark in the corner, Montara logo at the start and end.</small></span></label>
+      <label class="opt"><input type="radio" name="branding" value="mine"><span><b>My logo</b><small>Your logo at the start, end and as watermark. PNG with transparent background works best.</small></span>
+        <span class="mylogo"><img id="myLogoPreview" alt="" hidden><button class="btn ghost small" id="pickLogo" type="button">Choose logo</button><input type="file" id="logoInput" accept="image/png,image/webp,image/jpeg" hidden></span></label>
+      <label class="opt"><input type="radio" name="branding" value="none"><span><b>No branding</b><small>No watermark, no intro, no outro. Just your video.</small></span></label>
+    </fieldset>
     <p class="hint" id="footageHint"></p>
     <div class="actions">
       <button class="btn ghost" data-go="mode">Back</button>
-      <button class="btn primary" id="makeIt" disabled>Make it</button>
+      <button class="btn primary" id="continueFootage" disabled>Continue</button>
     </div>
   </section>
 
-  <!-- Step 3: making -->
+  <!-- Step 3: cameras -->
+  <section class="screen" id="cameras" hidden>
+    <h2>Your cameras</h2>
+    <p class="lead small">Tell Montara what each camera shows. It uses this to pick close-ups and to never show the wrong person.</p>
+    <div id="cameraList" class="cameras"></div>
+    <div id="sphereList"></div>
+    <div class="actions">
+      <button class="btn ghost" data-go="footage">Back</button>
+      <button class="btn primary" id="continueCameras">Make the edit</button>
+    </div>
+  </section>
+
+  <!-- Step 4: making -->
   <section class="screen" id="making" hidden>
     <div class="making">
       <div class="ring"><svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="52" class="track"/><circle cx="60" cy="60" r="52" class="bar" id="ringBar"/></svg><b id="pct">0%</b></div>
@@ -86,7 +108,18 @@
     </div>
   </section>
 
-  <!-- Step 4: result -->
+  <!-- Step 5: frames -->
+  <section class="screen" id="frames" hidden>
+    <h2>Pick the frames</h2>
+    <p class="lead small">These are the shots Montara chose, in order. Press <b>Swap</b> on any you don't like and it brings another moment from the same part of the song.</p>
+    <div class="grid" id="frameGrid"></div>
+    <div class="actions sticky">
+      <span class="hint" id="framesHint"></span>
+      <button class="btn primary" id="renderFrames">Render video</button>
+    </div>
+  </section>
+
+  <!-- Step 6: result -->
   <section class="screen" id="result" hidden>
     <h2>Your night, <em>edited.</em></h2>
     <div class="player" id="playerWrap"><video id="resultVideo" controls playsinline preload="metadata"></video></div>

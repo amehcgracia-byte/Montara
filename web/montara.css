@@ -110,3 +110,67 @@ output{color:var(--fg);font-weight:600;min-width:42px}
   main{padding:32px 16px 64px}
   .modes{grid-template-columns:1fr}
 }
+
+/* ---- v0.2: how it works, box help, branding, cameras, 360, frames ---- */
+h2.small{font-size:22px;margin:8px 0 18px;color:var(--muted);font-weight:600;letter-spacing:-.01em}
+.lead.small{font-size:16px;margin:-12px 0 24px}
+.how{list-style:none;counter-reset:how;display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.how li{counter-increment:how;padding:22px;border-radius:18px;background:var(--surface);border:1px solid var(--line);display:flex;flex-direction:column;gap:8px}
+.how li::before{content:counter(how,decimal-leading-zero);color:var(--accent);font-weight:700;font-size:13px;letter-spacing:1px}
+.how b{font-size:17px}.how span{color:var(--muted);font-size:14px;line-height:1.45}
+.boxhelp{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:14px 0 4px}
+.boxhelp div{padding:14px 16px;border-radius:14px;border:1px solid var(--line);display:flex;flex-direction:column;gap:6px}
+.boxhelp b{font-size:13px;letter-spacing:.6px;text-transform:uppercase;color:var(--accent)}
+.boxhelp div:last-child b{color:var(--muted)}
+.boxhelp span{color:var(--muted);font-size:14px;line-height:1.45}
+.range{display:flex;align-items:center;gap:12px;height:46px}
+.branding{border:0;margin:18px 0 6px;display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.branding legend{font-size:13px;font-weight:600;color:var(--muted);letter-spacing:.3px;margin-bottom:10px}
+.opt{display:flex;gap:12px;align-items:flex-start;padding:16px;border-radius:16px;background:var(--surface);border:1px solid var(--line);cursor:pointer;flex-wrap:wrap}
+.opt:has(input:checked){border-color:var(--accent)}
+.opt input{accent-color:var(--accent);margin-top:3px}
+.opt span{display:flex;flex-direction:column;gap:4px;flex:1;min-width:0}
+.opt small{color:var(--muted);font-size:13px;line-height:1.4}
+.opt .mylogo{flex-direction:row;align-items:center;gap:10px;flex-basis:100%;padding-left:26px}
+.opt .mylogo img{height:34px;max-width:120px;object-fit:contain;background:#000;border-radius:6px;padding:4px}
+.btn.small{height:34px;padding:0 14px;font-size:13px}
+.cameras{display:flex;flex-direction:column;gap:8px;margin-bottom:22px}
+.cam{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:14px;padding:12px 16px;border-radius:14px;background:var(--surface);border:1px solid var(--line)}
+.cam .name{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cam label{display:flex;gap:10px;align-items:center;color:var(--muted);font-size:14px}
+select{height:38px;padding:0 12px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--fg);font:inherit;font-size:14px}
+.sphere{padding:20px;border-radius:var(--radius);background:var(--surface);border:1px solid var(--line);margin-bottom:16px}
+.sphere h3{display:flex;gap:10px;align-items:center;font-size:18px;margin-bottom:6px}
+.sphere-body{display:grid;grid-template-columns:280px 1fr;gap:18px;margin-top:14px}
+.slots{list-style:none;display:flex;flex-direction:column;gap:6px}
+.slot{display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center;padding:8px 10px;border-radius:12px;border:1px solid var(--line);cursor:pointer}
+.slot.on{border-color:var(--accent);background:var(--accent-soft)}
+.slot input[type=text]{height:32px;min-width:0;padding:0 8px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--fg);font:inherit;font-size:14px}
+.slot input[type=checkbox]{accent-color:var(--accent)}
+.slot select{height:32px;font-size:13px;padding:0 6px}
+.pano-wrap{display:flex;flex-direction:column;gap:12px;min-width:0}
+.pano{position:relative;border-radius:14px;overflow:hidden;background:#000;aspect-ratio:2/1;cursor:crosshair}
+.pano img{display:block;width:100%;height:100%;object-fit:fill;user-select:none}
+.pano .loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted)}
+.pin{position:absolute;transform:translate(-50%,-50%);padding:3px 8px;border-radius:999px;background:rgba(11,11,13,.8);border:2px solid var(--fg);font-size:12px;font-weight:600;white-space:nowrap;pointer-events:none}
+.pin.on{border-color:var(--accent);background:var(--accent);color:#fff}
+.preview{display:flex;align-items:center;gap:14px}
+.preview img{width:320px;aspect-ratio:16/9;border-radius:10px;background:#000;object-fit:cover}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}
+.frame{border-radius:16px;background:var(--surface);border:1px solid var(--line);overflow:hidden;display:flex;flex-direction:column}
+.frame .thumb{position:relative;aspect-ratio:16/9;background:#000}
+.frame .thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.frame.busy .thumb img{opacity:.35}
+.frame .spin{position:absolute;inset:0;margin:auto;width:28px;height:28px;border-radius:50%;border:3px solid var(--line);border-top-color:var(--accent);animation:spin 1s linear infinite;display:none}
+.frame.busy .spin{display:block}
+@keyframes spin{to{transform:rotate(360deg)}}
+.frame figcaption{padding:10px 12px 6px;font-size:13px;color:var(--muted);display:flex;gap:8px;align-items:baseline;overflow:hidden;white-space:nowrap}
+.frame figcaption b{color:var(--fg)}.frame .src{overflow:hidden;text-overflow:ellipsis;flex:1}
+.frame .swap{margin:0 12px 12px;align-self:flex-start}
+.actions.sticky{position:sticky;bottom:0;padding:16px 0;background:linear-gradient(transparent,var(--bg) 30%);align-items:center;justify-content:flex-end}
+.actions.sticky .hint{margin-right:auto}
+@media (max-width:760px){
+  .how,.boxhelp,.branding{grid-template-columns:1fr}
+  .sphere-body{grid-template-columns:1fr}
+  .preview img{width:100%}
+}
