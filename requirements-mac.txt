@@ -11,5 +11,6 @@ faster-whisper>=1.1.0
 openai>=1.0.0
 pillow>=10.0
 soundfile
+av==14.2.0  # faster-whisper still passes metadata_errors, removed in PyAV 15
 pyloudnorm
 matchering==2.0.6

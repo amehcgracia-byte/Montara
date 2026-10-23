@@ -169,32 +169,48 @@
   <!-- Step 5b: captions (Pulse) -->
   <section class="screen" id="captions" hidden>
     <h2>Captions &amp; title</h2>
-    <p class="lead small">Add the lyrics or any text over the reel. Play the video to see them in place. Skip this if you want the reel as it is.</p>
+    <p class="lead small">Write the lyrics, then shape each caption right on the video: drag it to place it, pull its corner to resize, and drag its bar below to change when it shows. Skip this if you want the reel as it is.</p>
     <div class="capwrap">
-      <div class="capstage" id="capStage">
-        <video id="capVideo" playsinline controls preload="metadata"></video>
-        <div class="captitle" id="capTitlePreview" hidden></div>
-        <div class="capline" id="capPreview" hidden></div>
+      <div class="capleft">
+        <div class="capstage" id="capStage">
+          <div class="capframe" id="capFrame">
+            <video id="capVideo" playsinline preload="metadata"></video>
+            <div class="caplayer" id="capLayer"><div class="captitle" id="capTitlePreview" hidden></div></div>
+          </div>
+        </div>
+        <div class="captransport">
+          <button class="btn primary small" id="capPlay" type="button">Play</button>
+          <span class="hint" id="capTime">0:00</span>
+          <span class="hint tiny-help">Double-click the timeline to add a caption there</span>
+        </div>
+        <div class="captimeline" id="capTimeline"><div class="capbars" id="capBars"></div><i class="playhead" id="capHead"></i></div>
       </div>
       <div class="cappanel">
         <label>Title <small class="hint">stays on top for the whole reel</small><input id="capTitle" type="text" maxlength="60" placeholder="Band, song or venue"></label>
-        <label>Text <small class="hint">one caption per line</small><textarea id="capText" rows="6" placeholder="First line of the lyrics&#10;Second line…"></textarea></label>
+        <label>Text <small class="hint">one caption per line</small><textarea id="capText" rows="5" placeholder="First line of the lyrics&#10;Second line…"></textarea></label>
         <div class="row">
           <button class="btn ghost small" id="capSpread" type="button">Spread over the video</button>
           <button class="btn ghost small" id="capRead" type="button">Read the lyrics for me</button>
         </div>
         <p class="hint" id="capReadStatus"></p>
-        <ol class="caplist" id="capList"></ol>
         <div class="capstyle">
-          <span class="label">Look</span>
+          <span class="label">Base look <small class="hint">all captions</small></span>
           <div class="chips" id="capStyles"></div>
         </div>
-        <div class="capstyle">
-          <span class="label">Position</span>
-          <div class="chips" id="capPositions">
-            <button type="button" class="chip" data-pos="15">Top</button><button type="button" class="chip" data-pos="50">Middle</button><button type="button" class="chip on" data-pos="80">Bottom</button>
-          </div>
+        <div class="capinspect" id="capInspect" hidden>
+          <div class="inspecthead"><b id="capWhich">Caption 1</b><button class="link" id="capDelete" type="button">Delete</button></div>
+          <input type="text" id="capEditText" maxlength="120" aria-label="Caption text">
+          <span class="label">Colour</span>
+          <div class="swatches" id="capColors"></div>
+          <span class="label">Font</span>
+          <div class="chips" id="capFonts"></div>
+          <span class="label">Size</span>
+          <input type="range" id="capSize" min="24" max="140" step="2">
+          <span class="label">Effect</span>
+          <div class="chips" id="capEffects"></div>
+          <button class="btn ghost small" id="capApplyAll" type="button">Use this look for every caption</button>
         </div>
+        <p class="hint" id="capNoneSelected">Click a caption on the video or on the timeline to change its colour, font, size and effect.</p>
       </div>
     </div>
     <div class="actions">

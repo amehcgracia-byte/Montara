@@ -35,11 +35,11 @@ SAMPLE_SETS = {
     "show": ["real/talk.mp4"],
     "youtube": ["much-to-me/cam-sony.mp4", "much-to-me/cam-fixed.mp4", "much-to-me/cam-360.mp4"]
     + [f"much-to-me/stems/{name}.mp3" for name in (
-        "Kick", "Snare", "HH", "OV", "Bass", "Guit", "KeysL", "Keys-R", "Synth", "Sax", "brass", "vox-1", "Vox-2", "Beatbox")],
+        "Kick", "Snare", "HH", "OV", "Bass", "Guit", "KeysL", "Keys-R", "vox-1")],
 }
 DEFAULT_DATA = Path.home() / "MontaraData"
 # Shown at the bottom of every page, so it is obvious which build is running.
-MONTARA_VERSION = "0.4 · 2026-10-23 · captions, formats, mixer"
+MONTARA_VERSION = "0.5 · 2026-10-23 · caption editor, bass fix"
 BRANDING_MODES = {"montara", "mine", "none"}
 
 

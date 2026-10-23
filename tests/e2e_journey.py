@@ -68,10 +68,10 @@ def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
     rows = "document.querySelectorAll('#videoFiles li, #audioFiles li').length"
     if mode == "mix" and media == REAL:
         # Default Stage sample: three cameras + the song as 14 separate tracks -> the mixer makes the master.
-        page.wait_for_function(f"{rows} === 17", timeout=30_000)
+        page.wait_for_function(f"{rows} === 12", timeout=30_000)
     elif mode == "stage" and media == REAL:
         # Same cameras with the finished master (the "Use the finished master instead" link).
-        page.wait_for_function(f"{rows} === 17", timeout=30_000)
+        page.wait_for_function(f"{rows} === 12", timeout=30_000)
         page.locator("#switchSample").click()
         page.wait_for_function(f"{rows} === {len(files)}", timeout=30_000)
     else:
@@ -124,6 +124,16 @@ def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
         page.locator("#capTitle").fill("Much to me")
         page.locator("#capText").fill("Much to me\nEvery night we play")
         page.locator('#capStyles [data-style="hard_shadow"]').click()
+        # Shape the second caption on its own: orange, Impact, pulse, moved up on the video.
+        page.locator('.capbar[data-i="1"]').click()
+        page.locator('#capColors [data-color="#FF4F2E"]').click()
+        page.locator('#capFonts [data-font="Impact"]').click()
+        page.locator('#capEffects [data-effect="pulse"]').click()
+        box = page.locator(".capline.sel").bounding_box()
+        page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+        page.mouse.down()
+        page.mouse.move(box["x"] + box["width"] / 2, box["y"] - 200, steps=5)
+        page.mouse.up()
         page.wait_for_timeout(500)
         page.screenshot(path=str(shots / "06b-captions.png"), full_page=True)
         page.locator("#capApply").click()

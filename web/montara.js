@@ -154,6 +154,7 @@ function resetFlow() {
   state.captioned = false;
   cap.list = [];
   cap.timed = false;
+  cap.selected = -1;
   $("#capText").value = "";
   $("#capTitle").value = "";
   state.viewpoints = {};
@@ -895,115 +896,226 @@ $("#renderFrames").addEventListener("click", async () => {
 
 // ---------- captions (Pulse) ----------
 // Same engine as Zucker's "Overlay & Captions": cues + style go to /wizard/compose,
-// which burns them onto a clean copy of the rendered reel.
+// which burns them onto a clean copy of the rendered reel. Every caption carries its
+// own place, size, colour, font and effect (engine style_override).
 const CAP_STYLES = [
-  ["clean_bottom", "Clean", ""], ["karaoke_word", "Karaoke", "karaoke"], ["bold_pop", "Bold", "big"],
-  ["hard_shadow", "Shadow", "shadow"], ["neon_glow", "Glow", "neon"], ["lyric_serif", "Serif", "serif"],
+  ["clean_bottom", "Clean", "", 52], ["karaoke_word", "Karaoke", "karaoke", 54], ["bold_pop", "Bold", "big", 64],
+  ["hard_shadow", "Shadow", "shadow", 58], ["neon_glow", "Glow", "neon", 64], ["lyric_serif", "Serif", "serif", 52],
 ];
-const cap = { list: [], style: "clean_bottom", pos: 80, timed: false, raf: 0 };
+const CAP_COLORS = ["#FFFFFF", "#0B0B0D", "#FF4F2E", "#FFE14D", "#3EE6C1", "#4DA3FF", "#FF5CC8"];
+const CAP_FONTS = [["", "Look's font"], ["Arial", "Sans"], ["Georgia", "Serif"], ["Impact", "Impact"], ["Courier New", "Mono"]];
+const CAP_EFFECTS = [
+  ["none", "None", { animation_in: "none", animation_out: "none", fun_effect: "none" }],
+  ["fade", "Fade", { animation_in: "fade", animation_out: "fade", fun_effect: "none" }],
+  ["pop", "Pop", { fun_effect: "pop" }], ["bounce", "Bounce", { fun_effect: "bounce" }],
+  ["pulse", "Pulse", { fun_effect: "pulse" }], ["shake", "Shake", { fun_effect: "shake" }],
+  ["fly", "Fly in", { fun_effect: "fly_left" }], ["drop", "Drop", { fun_effect: "drop" }],
+];
+const cap = { list: [], style: "clean_bottom", timed: false, raf: 0, selected: -1 };
 const capVideo = () => $("#capVideo");
 const capDuration = () => Number(capVideo().duration) || Number($("#reelDuration").value) || 30;
-const fmtSec = (x) => Number(x).toFixed(1);
+const capBaseSize = () => CAP_STYLES.find(([id]) => id === cap.style)[3];
+const outSize = () => (reelFormat() === "16:9" ? [1920, 1080] : [1080, 1920]);
+const fmtTime = (x) => `${Math.floor(x / 60)}:${String(Math.floor(x % 60)).padStart(2, "0")}`;
+const newCaption = (text, start, end) => ({ text, start, end, x: 50, y: 80, size: null, color: null, font: "", effect: "fade" });
 
 function openCaptions() {
   show("captions");
-  $("#capStage").classList.toggle("wide", reelFormat() === "16:9");
+  $("#capFrame").classList.toggle("wide", reelFormat() === "16:9");
   capVideo().src = `/api/v1/wizard/compose-base?t=${Date.now()}`;
   $("#capStyles").innerHTML = CAP_STYLES.map(([id, label]) => `<button type="button" class="chip${id === cap.style ? " on" : ""}" data-style="${id}">${label}</button>`).join("");
-  renderCapList();
-  previewCaption();
+  $("#capColors").innerHTML = CAP_COLORS.map((c) => `<button type="button" class="swatch" data-color="${c}" style="background:${c}" aria-label="${c}"></button>`).join("")
+    + `<label class="swatch custom" title="Any colour"><input type="color" id="capCustomColor" value="#ffffff"></label>`;
+  $("#capFonts").innerHTML = CAP_FONTS.map(([f, label]) => `<button type="button" class="chip" data-font="${f}" style="${f ? `font-family:'${f}'` : ""}">${label}</button>`).join("");
+  $("#capEffects").innerHTML = CAP_EFFECTS.map(([id, label]) => `<button type="button" class="chip" data-effect="${id}">${label}</button>`).join("");
+  renderCaps();
 }
+
+function textLines() { return $("#capText").value.split("\n").map((line) => line.trim()).filter(Boolean); }
+function syncText() { $("#capText").value = cap.list.map((c) => c.text).join("\n"); }
 
 function spreadCaptions(texts) {
   const duration = capDuration();
   const start = Math.min(1, duration * 0.05);
   const slot = (duration - start - 0.5) / Math.max(1, texts.length);
-  cap.list = texts.map((text, i) => ({ text, start: start + i * slot, end: start + (i + 1) * slot - 0.15 }));
+  const old = cap.list;
+  cap.list = texts.map((text, i) => ({ ...(old[i] || newCaption()), text, words: undefined, start: start + i * slot, end: start + (i + 1) * slot - 0.15 }));
 }
-
-function textLines() { return $("#capText").value.split("\n").map((line) => line.trim()).filter(Boolean); }
 
 $("#capText").addEventListener("input", () => {
   const lines = textLines();
   if (!cap.timed || lines.length !== cap.list.length) { cap.timed = false; spreadCaptions(lines); }
-  else lines.forEach((text, i) => { cap.list[i].text = text; cap.list[i].words = undefined; });
-  renderCapList();
-  previewCaption();
+  else lines.forEach((text, i) => { if (cap.list[i].text !== text) { cap.list[i].text = text; cap.list[i].words = undefined; } });
+  if (cap.selected >= cap.list.length) cap.selected = -1;
+  renderCaps();
 });
-$("#capSpread").addEventListener("click", () => { cap.timed = false; spreadCaptions(textLines()); renderCapList(); previewCaption(); });
+$("#capSpread").addEventListener("click", () => { cap.timed = false; spreadCaptions(textLines()); renderCaps(); });
+$("#capTitle").addEventListener("input", renderCaps);
 
-function renderCapList() {
-  $("#capList").innerHTML = cap.list.map((c, i) => `
-    <li data-i="${i}"><input type="text" value="${escapeHtml(c.text)}" data-f="text" aria-label="Caption ${i + 1}">
-      <input type="number" step="0.1" min="0" value="${fmtSec(c.start)}" data-f="start" aria-label="Starts at (s)">
-      <input type="number" step="0.1" min="0" value="${fmtSec(c.end)}" data-f="end" aria-label="Ends at (s)">
-      <button type="button" class="x" aria-label="Delete">✕</button></li>`).join("");
+// ---- what is on screen: captions over the video, bars on the timeline, the inspector ----
+function capScale() { return $("#capFrame").clientHeight / outSize()[1]; }
+function renderCaps() {
+  const t = capVideo().currentTime || 0;
+  const layer = $("#capLayer");
+  layer.querySelectorAll(".capline").forEach((el) => el.remove());
+  const look = CAP_STYLES.find(([id]) => id === cap.style)[2];
+  cap.list.forEach((c, i) => {
+    const visible = (t >= c.start && t < c.end) || i === cap.selected;
+    if (!visible) return;
+    const el = document.createElement("div");
+    el.className = `capline ${look} fx-${c.effect || "none"}${i === cap.selected ? " sel" : ""}${t >= c.start && t < c.end ? "" : " ghost"}`;
+    el.dataset.i = i;
+    el.style.left = `${c.x}%`;
+    el.style.top = `${c.y}%`;
+    el.style.fontSize = `${(c.size || capBaseSize()) * capScale()}px`;
+    if (c.color) el.style.color = c.color;
+    if (c.font) el.style.fontFamily = `'${c.font}'`;
+    el.textContent = c.text;
+    const grip = document.createElement("i");
+    grip.className = "grip";
+    el.append(grip);
+    layer.append(el);
+  });
+  const title = $("#capTitle").value.trim();
+  $("#capTitlePreview").hidden = !title;
+  $("#capTitlePreview").textContent = title;
+  // timeline
+  const d = capDuration();
+  $("#capBars").innerHTML = cap.list.map((c, i) => `<div class="capbar${i === cap.selected ? " sel" : ""}" data-i="${i}" style="left:${c.start / d * 100}%;width:${Math.max(0.5, (c.end - c.start) / d * 100)}%"><i class="edge l"></i><span>${escapeHtml(c.text)}</span><i class="edge r"></i></div>`).join("");
+  $("#capHead").style.left = `${Math.min(100, t / d * 100)}%`;
+  $("#capTime").textContent = `${fmtTime(t)} / ${fmtTime(d)}`;
+  renderInspector();
 }
 
-$("#capList").addEventListener("input", (event) => {
-  const li = event.target.closest("li");
-  const c = cap.list[Number(li.dataset.i)];
-  const field = event.target.dataset.f;
-  if (field === "text") { c.text = event.target.value; c.words = undefined; $("#capText").value = cap.list.map((x) => x.text).join("\n"); }
-  else { c[field] = Math.max(0, Number(event.target.value) || 0); cap.timed = true; }
-  previewCaption();
+function renderInspector() {
+  const c = cap.list[cap.selected];
+  $("#capInspect").hidden = !c;
+  $("#capNoneSelected").hidden = Boolean(c) || !cap.list.length;
+  if (!c) return;
+  $("#capWhich").textContent = `Caption ${cap.selected + 1} · ${fmtTime(c.start)}–${fmtTime(c.end)}`;
+  if (document.activeElement !== $("#capEditText")) $("#capEditText").value = c.text;
+  $$("#capColors .swatch[data-color]").forEach((b) => b.classList.toggle("on", (c.color || "#FFFFFF").toUpperCase() === b.dataset.color));
+  $$("#capFonts .chip").forEach((b) => b.classList.toggle("on", (c.font || "") === b.dataset.font));
+  $$("#capEffects .chip").forEach((b) => b.classList.toggle("on", (c.effect || "none") === b.dataset.effect));
+  $("#capSize").value = c.size || capBaseSize();
+}
+
+
+// ---- dragging: captions on the video (move / resize), bars on the timeline (move / trim) ----
+let capDrag = null;
+$("#capLayer").addEventListener("pointerdown", (e) => {
+  const el = e.target.closest(".capline");
+  if (!el) return;
+  e.preventDefault();
+  const i = Number(el.dataset.i);
+  const c = cap.list[i];
+  cap.selected = i;
+  capDrag = { kind: e.target.classList.contains("grip") ? "size" : "move", i, x0: e.clientX, y0: e.clientY, cx: c.x, cy: c.y, size: c.size || capBaseSize() };
+  $("#capLayer").setPointerCapture(e.pointerId);
+  renderInspector();
 });
-$("#capList").addEventListener("click", (event) => {
-  const li = event.target.closest("li");
-  if (!li) return;
-  const i = Number(li.dataset.i);
-  if (event.target.classList.contains("x")) {
-    cap.list.splice(i, 1);
-    $("#capText").value = cap.list.map((x) => x.text).join("\n");
-    renderCapList();
-  } else if (event.target.dataset.f !== "text") {
-    capVideo().currentTime = cap.list[i].start + 0.05;
+$("#capTimeline").addEventListener("pointerdown", (e) => {
+  const bar = e.target.closest(".capbar");
+  const rect = $("#capTimeline").getBoundingClientRect();
+  if (!bar) {  // seek
+    capVideo().currentTime = Math.max(0, (e.clientX - rect.left) / rect.width * capDuration());
+    renderCaps();
+    return;
   }
-  previewCaption();
+  e.preventDefault();
+  const i = Number(bar.dataset.i);
+  const c = cap.list[i];
+  cap.selected = i;
+  const kind = e.target.classList.contains("l") ? "start" : e.target.classList.contains("r") ? "end" : "slide";
+  capDrag = { kind, i, x0: e.clientX, start: c.start, end: c.end, width: rect.width };
+  $("#capTimeline").setPointerCapture(e.pointerId);
+  renderCaps();
 });
+$("#capTimeline").addEventListener("dblclick", (e) => {
+  if (e.target.closest(".capbar")) return;
+  const rect = $("#capTimeline").getBoundingClientRect();
+  const at = Math.max(0, (e.clientX - rect.left) / rect.width * capDuration());
+  const base = cap.list[cap.selected] || newCaption();
+  cap.list.push({ ...base, text: "New caption", words: undefined, start: at, end: Math.min(capDuration(), at + 2.5) });
+  cap.list.sort((a, b) => a.start - b.start);
+  cap.timed = true;
+  cap.selected = cap.list.findIndex((c) => c.start === at);
+  syncText();
+  renderCaps();
+  $("#capEditText").focus();
+  $("#capEditText").select();
+});
+function dragMove(e) {
+  if (!capDrag) return;
+  const c = cap.list[capDrag.i];
+  if (capDrag.kind === "move") {
+    const frame = $("#capFrame").getBoundingClientRect();
+    c.x = Math.round(Math.max(5, Math.min(95, capDrag.cx + (e.clientX - capDrag.x0) / frame.width * 100)) * 10) / 10;
+    c.y = Math.round(Math.max(4, Math.min(96, capDrag.cy + (e.clientY - capDrag.y0) / frame.height * 100)) * 10) / 10;
+  } else if (capDrag.kind === "size") {
+    const grow = ((e.clientX - capDrag.x0) + (e.clientY - capDrag.y0)) / capScale() / 3;
+    c.size = Math.round(Math.max(24, Math.min(140, capDrag.size + grow)));
+  } else {
+    const d = capDuration();
+    const dt = (e.clientX - capDrag.x0) / capDrag.width * d;
+    if (capDrag.kind === "slide") {
+      const len = capDrag.end - capDrag.start;
+      c.start = Math.max(0, Math.min(d - len, capDrag.start + dt));
+      c.end = c.start + len;
+    } else if (capDrag.kind === "start") c.start = Math.max(0, Math.min(c.end - 0.3, capDrag.start + dt));
+    else c.end = Math.min(d, Math.max(c.start + 0.3, capDrag.end + dt));
+    c.words = undefined;
+    cap.timed = true;
+  }
+  renderCaps();
+}
+function dragEnd() { if (capDrag?.kind && ["slide", "start", "end"].includes(capDrag.kind)) { cap.list.sort((a, b) => a.start - b.start); } capDrag = null; }
+["capLayer", "capTimeline"].forEach((id) => {
+  $(`#${id}`).addEventListener("pointermove", dragMove);
+  $(`#${id}`).addEventListener("pointerup", dragEnd);
+});
+
+// ---- inspector: this caption's own text, colour, font, size, effect ----
+const current = () => cap.list[cap.selected];
+$("#capEditText").addEventListener("input", (e) => { const c = current(); if (!c) return; c.text = e.target.value; c.words = undefined; syncText(); renderCaps(); });
+$("#capColors").addEventListener("click", (e) => { const b = e.target.closest("[data-color]"); if (b && current()) { current().color = b.dataset.color; renderCaps(); } });
+$("#capColors").addEventListener("input", (e) => { if (e.target.id === "capCustomColor" && current()) { current().color = e.target.value.toUpperCase(); renderCaps(); } });
+$("#capFonts").addEventListener("click", (e) => { const b = e.target.closest("[data-font]"); if (b && current()) { current().font = b.dataset.font; renderCaps(); } });
+$("#capEffects").addEventListener("click", (e) => { const b = e.target.closest("[data-effect]"); if (b && current()) { current().effect = b.dataset.effect; renderCaps(); replayEffect(); } });
+$("#capSize").addEventListener("input", (e) => { if (current()) { current().size = Number(e.target.value); renderCaps(); } });
+$("#capDelete").addEventListener("click", () => { if (!current()) return; cap.list.splice(cap.selected, 1); cap.selected = -1; syncText(); renderCaps(); });
+$("#capApplyAll").addEventListener("click", () => {
+  const c = current();
+  if (!c) return;
+  cap.list.forEach((other) => Object.assign(other, { x: c.x, y: c.y, size: c.size, color: c.color, font: c.font, effect: c.effect }));
+  renderCaps();
+  toast("Every caption now has this look.");
+});
+function replayEffect() { const el = $("#capLayer .capline.sel"); if (el) { el.style.animation = "none"; void el.offsetWidth; el.style.animation = ""; } }
 
 $("#capStyles").addEventListener("click", (event) => {
   const chip = event.target.closest("[data-style]");
   if (!chip) return;
   cap.style = chip.dataset.style;
   $$("#capStyles .chip").forEach((c) => c.classList.toggle("on", c === chip));
-  previewCaption();
+  renderCaps();
 });
-$("#capPositions").addEventListener("click", (event) => {
-  const chip = event.target.closest("[data-pos]");
-  if (!chip) return;
-  cap.pos = Number(chip.dataset.pos);
-  $$("#capPositions .chip").forEach((c) => c.classList.toggle("on", c === chip));
-  previewCaption();
-});
-$("#capTitle").addEventListener("input", previewCaption);
 
-// Approximate live preview over the player (the burn uses the engine's exact style).
-function previewCaption() {
-  const t = capVideo().currentTime || 0;
-  const index = cap.list.findIndex((c) => t >= c.start && t < c.end);
-  const line = $("#capPreview");
-  line.hidden = index < 0;
-  if (index >= 0) {
-    line.textContent = cap.list[index].text;
-    line.className = `capline ${CAP_STYLES.find(([id]) => id === cap.style)[2]}`;
-    line.style.top = `${cap.pos}%`;
-  }
-  $$("#capList li").forEach((li) => li.classList.toggle("now", Number(li.dataset.i) === index));
-  const title = $("#capTitle").value.trim();
-  $("#capTitlePreview").hidden = !title;
-  $("#capTitlePreview").textContent = title;
-}
-function previewLoop() { previewCaption(); cap.raf = capVideo().paused ? 0 : requestAnimationFrame(previewLoop); }
-capVideo().addEventListener("play", () => { cancelAnimationFrame(cap.raf); previewLoop(); });
-capVideo().addEventListener("seeked", previewCaption);
-capVideo().addEventListener("loadedmetadata", () => { if (!cap.timed && cap.list.length) spreadCaptions(textLines()); renderCapList(); });
+// ---- player ----
+function capLoop() { renderCaps(); cap.raf = capVideo().paused ? 0 : requestAnimationFrame(capLoop); }
+$("#capPlay").addEventListener("click", () => { if (capVideo().paused) capVideo().play().catch(() => toast("This browser cannot play the preview.", true)); else capVideo().pause(); });
+capVideo().addEventListener("play", () => { $("#capPlay").textContent = "Pause"; cancelAnimationFrame(cap.raf); capLoop(); });
+capVideo().addEventListener("pause", () => { $("#capPlay").textContent = "Play"; renderCaps(); });
+capVideo().addEventListener("seeked", renderCaps);
+capVideo().addEventListener("loadedmetadata", () => { if (!cap.timed && cap.list.length) spreadCaptions(textLines()); renderCaps(); });
+$("#capFrame").addEventListener("click", (e) => { if (!e.target.closest(".capline") && !capDrag) { cap.selected = -1; renderCaps(); } });
+new ResizeObserver(() => { if (!$("#captions").hidden) renderCaps(); }).observe($("#capFrame"));
 
 // Transcribe the reel's own audio (local Whisper in the engine) into timed captions.
 $("#capRead").addEventListener("click", async () => {
   const button = $("#capRead");
   button.disabled = true;
-  $("#capReadStatus").textContent = "Listening to the reel…";
+  $("#capReadStatus").textContent = "Listening to the reel… (the first time it also downloads the speech model)";
   try {
     await api("/captions/auto-read", { model: "small" });
     for (;;) {
@@ -1013,11 +1125,12 @@ $("#capRead").addEventListener("click", async () => {
       if (job.status === "done") {
         const cues = job.result?.cues || [];
         if (!cues.length) { $("#capReadStatus").textContent = "No words were heard in this reel."; break; }
-        cap.list = cues.map((c) => ({ text: (c.lines || []).join(" "), start: c.start, end: c.end, words: c.words }));
+        const base = cap.list[0] || newCaption();
+        cap.list = cues.map((c) => ({ ...base, text: (c.lines || []).join(" "), start: c.start, end: c.end, words: c.words }));
         cap.timed = true;
-        $("#capText").value = cap.list.map((c) => c.text).join("\n");
-        renderCapList();
-        previewCaption();
+        cap.selected = -1;
+        syncText();
+        renderCaps();
         $("#capReadStatus").textContent = `${cues.length} captions read. Check the words before adding them.`;
         break;
       }
@@ -1041,12 +1154,20 @@ function splitCaption(text) {
   return [words.slice(0, best).join(" "), words.slice(best).join(" ")];
 }
 
+function captionOverride(c) {
+  const effect = (CAP_EFFECTS.find(([id]) => id === (c.effect || "none")) || CAP_EFFECTS[0])[2];
+  return {
+    horizontal: c.x, vertical: c.y, ...effect,
+    ...(c.size ? { size: c.size } : {}), ...(c.color ? { color: c.color } : {}), ...(c.font ? { font: c.font } : {}),
+  };
+}
+
 $("#capSkip").addEventListener("click", async () => { capVideo().pause(); state.captioned = true; showResult(await status()); });
 $("#capApply").addEventListener("click", async () => {
   capVideo().pause();
   const title = $("#capTitle").value.trim();
   const cues = cap.list.filter((c) => c.text.trim() && c.end > c.start).map((c) => ({
-    lines: splitCaption(c.text.trim()), start: c.start, end: c.end, words: c.words || [], style_override: { vertical: cap.pos },
+    lines: splitCaption(c.text.trim()), start: c.start, end: c.end, words: c.words || [], style_override: captionOverride(c),
   }));
   state.captioned = true;
   if (!cues.length && !title) return showResult(await status());
