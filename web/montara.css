@@ -118,6 +118,13 @@ h2.small{font-size:22px;margin:8px 0 18px;color:var(--muted);font-weight:600;let
 .how li{counter-increment:how;padding:22px;border-radius:18px;background:var(--surface);border:1px solid var(--line);display:flex;flex-direction:column;gap:8px}
 .how li::before{content:counter(how,decimal-leading-zero);color:var(--accent);font-weight:700;font-size:13px;letter-spacing:1px}
 .how b{font-size:17px}.how span{color:var(--muted);font-size:14px;line-height:1.45}
+.boxes{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:6px}
+.box{display:flex;flex-direction:column;gap:0;min-width:0}
+.box .drop{min-height:170px}
+.box .drop span{max-width:340px}
+.box .files{margin:12px 0 0}
+.small-note{font-size:13px;margin-top:10px}
+@media (max-width:760px){.boxes{grid-template-columns:1fr}}
 .boxhelp{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:14px 0 4px}
 .boxhelp div{padding:14px 16px;border-radius:14px;border:1px solid var(--line);display:flex;flex-direction:column;gap:6px}
 .boxhelp b{font-size:13px;letter-spacing:.6px;text-transform:uppercase;color:var(--accent)}
@@ -194,3 +201,14 @@ select{height:38px;padding:0 12px;border-radius:10px;border:1px solid var(--line
 .strip .meter i{position:absolute;left:0;right:0;bottom:0;background:var(--accent);height:0}
 .reference{display:flex;align-items:center;gap:14px;margin-top:16px;padding:14px 16px;border-radius:14px;border:1px solid var(--line);flex-wrap:wrap}
 .reference span:first-child{display:flex;flex-direction:column;gap:4px;margin-right:auto}
+
+.files.compact{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.files.compact li{padding:8px 10px;gap:8px}
+.files.compact .state{display:none}
+.files.compact .kind{font-size:10px;padding:3px 6px}
+
+.pano-img{position:absolute;inset:0;background-repeat:repeat-x;cursor:grab;touch-action:none}
+.pano:active .pano-img{cursor:grabbing}
+.hint.tiny{font-size:12px;margin-top:-6px}
+.pv{position:relative;cursor:grab;touch-action:none}
+.pv img{display:block}

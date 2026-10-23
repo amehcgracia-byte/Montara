@@ -12,7 +12,15 @@ const VIEW_SLOTS = [
   ["full_stage", "Wide"], ["singer", "Singer"], ["drummer", "Drums"], ["pianist", "Piano"],
   ["left", "Left"], ["right", "Right"], ["audience", "Audience"],
 ];
-const ZOOMS = [["wide", "Wide", 115], ["normal", "Normal", 95], ["close", "Close", 75]];
+// 360 zoom levels. Rectilinear views stop at 110°; wider ones use the engine's stereographic presets.
+const ZOOMS = [
+  ["super_close", "Super close", 70, "linear"],
+  ["close", "Close", 90, "linear"],
+  ["normal", "Normal", 110, "linear"],
+  ["wide", "Wide", 140, "megaview"],
+  ["ultra_wide", "Ultra wide", 170, "ultrawide"],
+];
+const zoomOf = (view) => ZOOMS.reduce((best, z) => (Math.abs(z[2] - view.fov) < Math.abs(best[2] - view.fov) ? z : best), ZOOMS[2]);
 const BOX_HELP = {
   youtube: [
     ["Videos", "Every camera of the same performance: phone, camera, 360. They don't need to start at the same time; Montara syncs them by sound."],
@@ -104,7 +112,9 @@ $$(".mode[data-platform]").forEach((card) => card.addEventListener("click", () =
   $("#modeLabel").textContent = MODES[state.platform];
   $("#durationRow").hidden = state.platform !== "reel";
   if (!$("#videoName").value) $("#videoName").value = todayName();
-  $("#boxHelp").innerHTML = (BOX_HELP[state.platform] || []).map(([t, d]) => `<div><b>${t}</b><span>${d}</span></div>`).join("");
+  $("#audioSub").textContent = state.platform === "youtube"
+    ? "One track per instrument or mic and Montara mixes them for you, or one finished master."
+    : "Optional: the song the reel should cut on.";
   state.files = state.files.filter((f) => !f.sample);
   renderFiles();
   show("footage");
@@ -137,11 +147,13 @@ async function loadSamples(variant = "") {
   }
   for (const [path, slots] of Object.entries(data.viewpoints || {})) state.viewpoints[path] = structuredClone(slots);
   $("#sampleNote").hidden = false;
-  $("#tracksSampleRow").hidden = state.platform !== "youtube" || variant === "tracks";
+  state.sampleVariant = variant;
+  $("#variantRow").hidden = state.platform !== "youtube";
+  $("#switchSample").textContent = variant === "master" ? "Use the 14 separate tracks instead" : "Use the finished master instead";
   renderFiles();
 }
 
-$("#tracksSample").addEventListener("click", () => loadSamples("tracks").catch(console.warn));
+$("#switchSample").addEventListener("click", () => loadSamples(state.sampleVariant === "master" ? "" : "master").catch(console.warn));
 
 $("#clearSamples").addEventListener("click", () => {
   state.files = state.files.filter((f) => !f.sample);
@@ -150,11 +162,12 @@ $("#clearSamples").addEventListener("click", () => {
 });
 
 // ---------- footage ----------
-const drop = $("#drop");
-["dragenter", "dragover"].forEach((name) => drop.addEventListener(name, (e) => { e.preventDefault(); drop.classList.add("over"); }));
-["dragleave", "drop"].forEach((name) => drop.addEventListener(name, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
-drop.addEventListener("drop", (e) => addFiles([...e.dataTransfer.files]));
-$("#fileInput").addEventListener("change", (e) => { addFiles([...e.target.files]); e.target.value = ""; });
+$$("[data-drop]").forEach((drop) => {
+  ["dragenter", "dragover"].forEach((name) => drop.addEventListener(name, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+  ["dragleave", "drop"].forEach((name) => drop.addEventListener(name, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
+  drop.addEventListener("drop", (e) => addFiles([...e.dataTransfer.files]));
+  drop.querySelector("input").addEventListener("change", (e) => { addFiles([...e.target.files]); e.target.value = ""; });
+});
 $("#reelDuration").addEventListener("input", (e) => { $("#reelDurationOut").textContent = `${e.target.value} s`; });
 
 function addFiles(list) {
@@ -200,14 +213,25 @@ function upload(file, entry) {
 }
 
 const KIND_LABEL = { video: "VIDEO", master: "AUDIO", songs: "SONGS", ignored: "SKIPPED", uploading: "UPLOAD", error: "ERROR" };
-function renderFiles() {
-  $("#files").innerHTML = state.files.map((f) => `
+const isAudioEntry = (f) => f.kind === "master" || f.kind === "songs" || (f.kind !== "video" && /\.(wav|mp3|m4a|aiff?|flac|ogg)$/i.test(f.name));
+function fileLabel(f) {
+  if (f.kind === "video") return isSphere(f) ? "360" : "VIDEO";
+  if (f.kind === "master" || f.kind === "songs") return mixerMode() ? "TRACK" : "MASTER";
+  return KIND_LABEL[f.kind] || f.kind.toUpperCase();
+}
+function fileRow(f) {
+  return `
     <li>
-      <span class="kind ${f.kind}">${f.kind === "video" && isSphere(f) ? "360" : KIND_LABEL[f.kind] || f.kind.toUpperCase()}</span>
+      <span class="kind ${f.kind}">${fileLabel(f)}</span>
       <span class="name" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}</span>
       <span class="state">${f.kind === "uploading" ? Math.round(f.progress * 100) + "%" : f.kind === "error" ? escapeHtml(f.error) : f.kind === "ignored" ? escapeHtml(f.reason || "not used") : "Ready"}</span>
       ${f.kind === "uploading" ? `<span class="bar"><i style="width:${Math.round(f.progress * 100)}%"></i></span>` : ""}
-    </li>`).join("");
+    </li>`;
+}
+function renderFiles() {
+  $("#audioFiles").innerHTML = state.files.filter(isAudioEntry).map(fileRow).join("");
+  $("#audioFiles").classList.toggle("compact", state.files.filter(isAudioEntry).length > 4);
+  $("#videoFiles").innerHTML = state.files.filter((f) => !isAudioEntry(f)).map(fileRow).join("");
   const master = state.files.find((f) => f.kind === "master");
   let hint = "";
   let ready = videos().length > 0 && state.uploads === 0;
@@ -308,8 +332,9 @@ function renderCameras() {
       <div class="sphere-body">
         <ul class="slots"></ul>
         <div class="pano-wrap">
-          <div class="pano"><img alt="360 frame" draggable="false"><span class="loading">Loading 360 frame…</span></div>
-          <div class="preview"><img alt="" hidden><span class="hint">Preview of the selected point of view</span></div>
+          <div class="pano"><div class="pano-img"></div><span class="loading">Loading 360 frame…</span></div>
+          <p class="hint tiny">Drag the 360 image to turn it · click to place the selected point of view</p>
+          <div class="preview"><div class="pv"><img alt="" hidden draggable="false"></div><span class="hint">Preview. Drag it to aim, scroll to zoom.</span></div>
         </div>
       </div>
     </div>`).join("");
@@ -320,15 +345,28 @@ function setupSphere(file, root) {
   const views = state.viewpoints[file.path] ||= {};
   let active = Object.keys(views).find((slot) => views[slot].enabled) || "full_stage";
   const pano = root.querySelector(".pano");
-  const panoImg = pano.querySelector("img");
-  panoImg.onload = () => { pano.querySelector(".loading").hidden = true; drawMarkers(); };
-  panoImg.onerror = () => { pano.querySelector(".loading").textContent = "Could not load the 360 frame."; };
-  panoImg.src = `/api/v1/wizard/spherical-source-frame?source=${encodeURIComponent(file.path)}`;
+  const panoImg = pano.querySelector(".pano-img");
+  // The panorama scrolls sideways (it wraps around); start with the stage in the middle.
+  const anchor = views.full_stage || Object.values(views).find((v) => v.enabled);
+  let offset = anchor ? wrap(0.5 - (anchor.yaw + 180) / 360) : 0;
+  const frame = new Image();
+  frame.onload = () => { pano.querySelector(".loading").hidden = true; panoImg.style.backgroundImage = `url("${frame.src}")`; place(); };
+  frame.onerror = () => { pano.querySelector(".loading").textContent = "Could not load the 360 frame."; };
+  frame.src = `/api/v1/wizard/spherical-source-frame?source=${encodeURIComponent(file.path)}`;
+
+  function wrap(v) { return ((v % 1) + 1) % 1; }
+  new ResizeObserver(() => place()).observe(pano);
+  function place() {
+    // Percentages do nothing on a full-width background: shift it in pixels (it repeats sideways).
+    panoImg.style.backgroundPositionX = `${offset * panoImg.clientWidth}px`;
+    panoImg.style.backgroundSize = "100% 100%";
+    drawMarkers();
+  }
 
   function renderSlots() {
     root.querySelector(".slots").innerHTML = VIEW_SLOTS.map(([slot, fallback]) => {
       const view = views[slot];
-      const zoom = view ? (ZOOMS.find(([, , fov]) => Math.abs(fov - view.fov) < 12)?.[0] || "normal") : "normal";
+      const zoom = view ? zoomOf(view)[0] : "normal";
       return `<li class="slot ${slot === active ? "on" : ""} ${view?.enabled ? "set" : ""}" data-slot="${slot}">
         <input type="checkbox" ${view?.enabled ? "checked" : ""} title="Use this point of view">
         <input type="text" value="${escapeHtml(view?.subject || fallback)}" maxlength="24">
@@ -337,20 +375,23 @@ function setupSphere(file, root) {
     }).join("");
     root.querySelectorAll(".slot").forEach((li) => {
       const slot = li.dataset.slot;
-      li.addEventListener("click", (e) => { if (e.target.tagName !== "INPUT" && e.target.tagName !== "SELECT") { active = slot; renderSlots(); drawMarkers(); preview(); } });
+      li.addEventListener("click", (e) => { if (e.target.tagName !== "INPUT" && e.target.tagName !== "SELECT") { select(slot); } });
       li.querySelector("input[type=checkbox]").addEventListener("change", (e) => {
-        if (!views[slot]) { active = slot; renderSlots(); return toast("Now click in the 360 image where this view should look."); }
+        if (!views[slot]) { select(slot); return toast("Now click in the 360 image where this view should look."); }
         views[slot].enabled = e.target.checked; drawMarkers();
       });
-      li.querySelector("input[type=text]").addEventListener("input", (e) => { if (views[slot]) views[slot].subject = e.target.value; });
-      li.querySelector("input[type=text]").addEventListener("focus", () => { active = slot; root.querySelectorAll(".slot").forEach((x) => x.classList.toggle("on", x.dataset.slot === slot)); drawMarkers(); });
+      li.querySelector("input[type=text]").addEventListener("input", (e) => { if (views[slot]) { views[slot].subject = e.target.value; drawMarkers(); } });
+      li.querySelector("input[type=text]").addEventListener("focus", () => { active = slot; root.querySelectorAll(".slot").forEach((x) => x.classList.toggle("on", x.dataset.slot === slot)); drawMarkers(); preview(); });
       li.querySelector("select").addEventListener("change", (e) => {
         if (!views[slot]) return;
-        views[slot].fov = ZOOMS.find(([value]) => value === e.target.value)[2];
+        setZoom(slot, ZOOMS.find(([value]) => value === e.target.value));
         if (slot === active) preview();
       });
     });
   }
+
+  function select(slot) { active = slot; renderSlots(); drawMarkers(); preview(); }
+  function setZoom(slot, zoom) { views[slot].fov = zoom[2]; views[slot].projection_preset = zoom[3]; }
 
   function drawMarkers() {
     pano.querySelectorAll(".pin").forEach((pin) => pin.remove());
@@ -358,38 +399,81 @@ function setupSphere(file, root) {
       if (!view.enabled && slot !== active) continue;
       const pin = document.createElement("span");
       pin.className = "pin" + (slot === active ? " on" : "");
-      pin.style.left = `${(view.yaw + 180) / 360 * 100}%`;
+      pin.style.left = `${wrap((view.yaw + 180) / 360 + offset) * 100}%`;
       pin.style.top = `${(90 - view.pitch) / 180 * 100}%`;
       pin.textContent = view.subject || slot;
       pano.append(pin);
     }
   }
 
-  function preview() {
+  let previewTimer = null;
+  function preview(immediate = true) {
     const view = views[active];
     const img = root.querySelector(".preview img");
     if (!view) { img.hidden = true; return; }
-    const params = new URLSearchParams({ source: file.path, shot: active, yaw: view.yaw, pitch: view.pitch, fov: view.fov, time_sec: 20 });
-    img.src = `/api/v1/wizard/spherical-preview?${params}`;
-    img.hidden = false;
+    const load = () => {
+      const zoom = zoomOf(view);
+      const params = new URLSearchParams({ source: file.path, shot: active, yaw: view.yaw, pitch: view.pitch, fov: view.fov,
+        projection_preset: view.projection_preset || zoom[3], time_sec: 20 });
+      img.src = `/api/v1/wizard/spherical-preview?${params}`;
+      img.hidden = false;
+    };
+    clearTimeout(previewTimer);
+    if (immediate) load(); else previewTimer = setTimeout(load, 180);
   }
 
-  pano.addEventListener("click", (e) => {
-    const rect = panoImg.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width;
-    const y = (e.clientY - rect.top) / rect.height;
-    if (x < 0 || x > 1 || y < 0 || y > 1) return;
+  // Panorama: drag turns it, a click (no drag) places the selected point of view.
+  let drag = null;
+  pano.addEventListener("pointerdown", (e) => { drag = { x: e.clientX, start: offset, moved: false }; pano.setPointerCapture(e.pointerId); });
+  pano.addEventListener("pointermove", (e) => {
+    if (!drag) return;
+    const dx = (e.clientX - drag.x) / pano.getBoundingClientRect().width;
+    if (Math.abs(e.clientX - drag.x) > 4) drag.moved = true;
+    if (drag.moved) { offset = wrap(drag.start + dx); place(); }
+  });
+  pano.addEventListener("pointerup", (e) => {
+    const wasDrag = drag?.moved;
+    drag = null;
+    if (wasDrag) return;
+    const rect = pano.getBoundingClientRect();
+    const x = wrap((e.clientX - rect.left) / rect.width - offset);
+    const y = Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height));
     const label = VIEW_SLOTS.find(([slot]) => slot === active)[1];
     const previous = views[active];
     views[active] = {
       yaw: Math.round((x * 360 - 180) * 10) / 10,
       pitch: Math.round((90 - y * 180) * 10) / 10,
-      fov: previous?.fov || 95,
+      fov: previous?.fov || 110,
+      projection_preset: previous?.projection_preset || "linear",
       subject: previous?.subject || label,
       enabled: true,
     };
     renderSlots(); drawMarkers(); preview();
   });
+
+  // Preview: drag to aim the selected view, scroll to change the zoom level.
+  const pv = root.querySelector(".pv");
+  let aim = null;
+  pv.addEventListener("pointerdown", (e) => { const view = views[active]; if (!view) return; aim = { x: e.clientX, y: e.clientY, yaw: view.yaw, pitch: view.pitch }; pv.setPointerCapture(e.pointerId); });
+  pv.addEventListener("pointermove", (e) => {
+    const view = views[active];
+    if (!aim || !view) return;
+    const width = pv.getBoundingClientRect().width;
+    const degPerPx = Math.min(view.fov, 110) / width;
+    view.yaw = Math.round(((((aim.yaw - (e.clientX - aim.x) * degPerPx) + 180) % 360 + 360) % 360 - 180) * 10) / 10;
+    view.pitch = Math.round(Math.max(-89, Math.min(89, aim.pitch + (e.clientY - aim.y) * degPerPx)) * 10) / 10;
+    drawMarkers(); preview(false);
+  });
+  pv.addEventListener("pointerup", () => { if (aim) { aim = null; preview(); } });
+  pv.addEventListener("wheel", (e) => {
+    const view = views[active];
+    if (!view) return;
+    e.preventDefault();
+    const index = ZOOMS.indexOf(zoomOf(view));
+    const next = ZOOMS[Math.max(0, Math.min(ZOOMS.length - 1, index + (e.deltaY > 0 ? 1 : -1)))];
+    setZoom(active, next);
+    renderSlots(); preview(false);
+  }, { passive: false });
 
   renderSlots();
   preview();
@@ -660,6 +744,15 @@ $("#cancel").addEventListener("click", async () => {
 });
 
 // ---------- frames ----------
+const ENGINE_LABELS = { full_stage: "Wide", singer: "Singer", drummer: "Drums", pianist: "Piano", left: "Left", right: "Right",
+  audience: "Audience", audience_stage_wide: "Audience + stage", planet: "Planet" };
+function viewpointName(item) {
+  if (!item.landmark && !item.pose?.type) return "";
+  const type = String(item.pose?.type || "");
+  if (type.startsWith("review_local")) return "alternative angle";
+  for (const views of Object.values(state.viewpoints)) if (views[type]?.subject) return views[type].subject;
+  return ENGINE_LABELS[type] || "360 view";
+}
 const swapping = new Set();
 async function openFrames() {
   show("frames");
@@ -694,7 +787,7 @@ async function refreshFrames(first) {
       swapping.delete(item.index);
     }
     fig.classList.toggle("busy", !item.thumbnail || swapping.has(item.index));
-    const landmark = String(item.landmark || "").replace(/encuadre alternativo/i, "alternative angle");
+    const landmark = viewpointName(item);
     fig.querySelector(".src").textContent = landmark ? `360 · ${landmark}` : item.source;
     fig.querySelector(".dur").textContent = `${Number(item.duration_sec).toFixed(1)} s`;
     fig.querySelector(".swap").disabled = item.candidate_count !== undefined && item.candidate_count < 2;

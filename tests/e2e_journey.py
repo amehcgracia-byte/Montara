@@ -65,16 +65,17 @@ def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
     page.locator(f'.mode[data-platform="{MODES[mode]}"]').click()
     page.locator("#videoName").fill(f"E2E {mode}")
     files = media_files(media)
+    rows = "document.querySelectorAll('#videoFiles li, #audioFiles li').length"
     if mode == "mix" and media == REAL:
-        # Same song as 14 separate tracks: the mixer makes the master.
-        page.wait_for_function("document.querySelectorAll('#files li').length > 0", timeout=30_000)
-        page.locator("#tracksSample").click()
-        page.wait_for_function("document.querySelectorAll('#files li').length === 17", timeout=30_000)
+        # Default Stage sample: three cameras + the song as 14 separate tracks -> the mixer makes the master.
+        page.wait_for_function(f"{rows} === 17", timeout=30_000)
     elif mode == "stage" and media == REAL:
-        # The preloaded sample footage (what a tester sees), including its 360 viewpoints.
-        page.wait_for_function(f"document.querySelectorAll('#files li').length === {len(files)}", timeout=30_000)
+        # Same cameras with the finished master (the "Use the finished master instead" link).
+        page.wait_for_function(f"{rows} === 17", timeout=30_000)
+        page.locator("#switchSample").click()
+        page.wait_for_function(f"{rows} === {len(files)}", timeout=30_000)
     else:
-        page.locator("#fileInput").set_input_files([str(f) for f in files])
+        page.locator("[data-drop=video] input").set_input_files([str(f) for f in files])
     page.locator(f'input[name=branding][value="{BRANDING[mode]}"]').check()
     page.wait_for_function("!document.querySelector('#continueFootage').disabled", timeout=120_000)
     page.wait_for_timeout(300)

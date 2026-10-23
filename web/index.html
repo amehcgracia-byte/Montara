@@ -60,14 +60,26 @@
   <!-- Step 2: footage -->
   <section class="screen" id="footage" hidden>
     <h2><span id="modeLabel">Stage</span> · Add your footage</h2>
-    <label class="drop" id="drop">
-      <input type="file" id="fileInput" multiple accept="video/*,audio/*,.insv,.wav,.mp3,.m4a,.aif,.aiff,.flac">
-      <strong>Drop videos &amp; audio here</strong>
-      <span>or click to choose</span>
-    </label>
-    <div class="boxhelp" id="boxHelp"></div>
-    <p class="hint" id="sampleNote" hidden>Sample footage from a real jam is loaded so you can try Montara right away. <button class="link" id="clearSamples">Use my own files instead</button><span id="tracksSampleRow"> · <button class="link" id="tracksSample">Try the mixer: same song as 14 separate tracks</button></span></p>
-    <ul class="files" id="files"></ul>
+    <p class="hint" id="sampleNote" hidden>Sample material from a real jam is loaded so you can try Montara right away. <button class="link" id="clearSamples">Use my own files instead</button><span id="variantRow"> · <button class="link" id="switchSample"></button></span></p>
+    <div class="boxes">
+      <div class="box">
+        <label class="drop" data-drop="video">
+          <input type="file" multiple accept="video/*,.insv,.mov,.mp4,.mts">
+          <strong>Drop your videos</strong>
+          <span>Every camera of the performance: phone, camera, 360. They don't need to start together.</span>
+        </label>
+        <ul class="files" id="videoFiles"></ul>
+      </div>
+      <div class="box">
+        <label class="drop" data-drop="audio">
+          <input type="file" multiple accept="audio/*,.wav,.mp3,.m4a,.aif,.aiff,.flac">
+          <strong>Drop your audio tracks</strong>
+          <span id="audioSub"></span>
+        </label>
+        <ul class="files" id="audioFiles"></ul>
+      </div>
+    </div>
+    <p class="hint small-note">Photos are not used here (Story, coming soon, will take them).</p>
     <div class="form">
       <label>Video name <input id="videoName" type="text" maxlength="80"></label>
       <label id="durationRow" hidden>Reel length <span class="range"><input id="reelDuration" type="range" min="15" max="60" step="5" value="30"> <output id="reelDurationOut">30 s</output></span></label>

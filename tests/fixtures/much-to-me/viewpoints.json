@@ -1,9 +1,44 @@
 {
   "cam-360.mp4": {
-    "full_stage": {"yaw": 143, "pitch": -22, "fov": 115, "subject": "Stage", "enabled": true},
-    "drummer": {"yaw": 129, "pitch": -28, "fov": 75, "subject": "Drums", "enabled": true},
-    "right": {"yaw": 164, "pitch": -17, "fov": 75, "subject": "Guitar", "enabled": true},
-    "left": {"yaw": -110, "pitch": -17, "fov": 95, "subject": "Keys", "enabled": true},
-    "audience": {"yaw": -25, "pitch": -14, "fov": 95, "subject": "Audience", "enabled": true}
+    "full_stage": {
+      "yaw": 143,
+      "pitch": -22,
+      "fov": 140,
+      "subject": "Stage",
+      "enabled": true,
+      "projection_preset": "megaview"
+    },
+    "drummer": {
+      "yaw": 129,
+      "pitch": -28,
+      "fov": 90,
+      "subject": "Drums",
+      "enabled": true,
+      "projection_preset": "linear"
+    },
+    "right": {
+      "yaw": 164,
+      "pitch": -17,
+      "fov": 90,
+      "subject": "Guitar",
+      "enabled": true,
+      "projection_preset": "linear"
+    },
+    "left": {
+      "yaw": -110,
+      "pitch": -17,
+      "fov": 110,
+      "subject": "Keys",
+      "enabled": true,
+      "projection_preset": "linear"
+    },
+    "audience": {
+      "yaw": -25,
+      "pitch": -14,
+      "fov": 110,
+      "subject": "Audience",
+      "enabled": true,
+      "projection_preset": "linear"
+    }
   }
 }

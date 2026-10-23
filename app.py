@@ -29,11 +29,11 @@ FIXTURES = ROOT / "tests" / "fixtures"
 # Sample material preloaded per mode while Montara is in testing.
 # Stage and Pulse: three cameras + the mixed master (no separate tracks; those are for the mixer).
 SAMPLE_SETS = {
-    "youtube": ["much-to-me/cam-sony.mp4", "much-to-me/cam-fixed.mp4", "much-to-me/cam-360.mp4", "much-to-me/master.mp3"],
+    # Stage: the song as separate instrument tracks (Montara mixes them); variant "master": the finished mix.
+    "youtube_master": ["much-to-me/cam-sony.mp4", "much-to-me/cam-fixed.mp4", "much-to-me/cam-360.mp4", "much-to-me/master.mp3"],
     "reel": ["much-to-me/cam-sony.mp4", "much-to-me/cam-fixed.mp4", "much-to-me/cam-360.mp4", "much-to-me/master.mp3"],
     "show": ["real/talk.mp4"],
-    # Same song, but as separate instrument tracks instead of the master: exercises the mixer.
-    "youtube_tracks": ["much-to-me/cam-sony.mp4", "much-to-me/cam-fixed.mp4", "much-to-me/cam-360.mp4"]
+    "youtube": ["much-to-me/cam-sony.mp4", "much-to-me/cam-fixed.mp4", "much-to-me/cam-360.mp4"]
     + [f"much-to-me/stems/{name}.mp3" for name in (
         "Kick", "Snare", "HH", "OV", "Bass", "Guit", "KeysL", "Keys-R", "Synth", "Sax", "brass", "vox-1", "Vox-2", "Beatbox")],
 }
