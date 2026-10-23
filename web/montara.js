@@ -806,6 +806,7 @@ const angleGap = (a, b) => Math.abs((((a - b) % 360) + 540) % 360 - 180);
 function viewpointName(item) {
   const pose = item.pose || {};
   if (!item.landmark && !pose.type) return "";
+  if (pose.type === "planet") return "little planet";  // the engine's own round view of the whole stage
   if (Number.isFinite(pose.yaw)) {
     let best = null;
     for (const views of Object.values(state.viewpoints)) {
