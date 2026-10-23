@@ -270,3 +270,4 @@ select{height:38px;padding:0 12px;border-radius:10px;border:1px solid var(--line
 .slot{grid-template-columns:auto minmax(0,1fr) auto auto}
 @media (max-width:760px){.sphere-body{grid-template-columns:1fr}}
 .strip .mute:disabled{font-size:9px;opacity:.8;cursor:default}
+.version{text-align:center;color:var(--muted);font-size:12px;padding:0 0 18px}

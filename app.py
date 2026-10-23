@@ -38,6 +38,8 @@ SAMPLE_SETS = {
         "Kick", "Snare", "HH", "OV", "Bass", "Guit", "KeysL", "Keys-R", "Synth", "Sax", "brass", "vox-1", "Vox-2", "Beatbox")],
 }
 DEFAULT_DATA = Path.home() / "MontaraData"
+# Shown at the bottom of every page, so it is obvious which build is running.
+MONTARA_VERSION = "0.4 · 2026-10-23 · captions, formats, mixer"
 BRANDING_MODES = {"montara", "mine", "none"}
 
 
@@ -86,6 +88,18 @@ def create_montara_app(data_root: Path = DEFAULT_DATA, samples: bool = True):
     app.static_folder = str(WEB)
     app.view_functions["index"] = lambda: send_from_directory(WEB, "index.html")
     app.config["MONTARA"] = True
+    app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
+
+    @app.after_request
+    def montara_no_stale_interface(response):
+        # Never let a browser keep an older interface after an update.
+        if request.path in {"/", "/index.html"} or request.path.endswith((".js", ".css", ".html")):
+            response.headers["Cache-Control"] = "no-store"
+        return response
+
+    @app.get("/montara/version")
+    def montara_version():
+        return jsonify({"version": MONTARA_VERSION})
     _apply_branding(str(load_global_config().get("montara_branding_mode") or "montara"), data_root)
 
     @app.get("/montara/samples")

@@ -14,7 +14,16 @@ if [ ! -x .venv-mac/bin/python ] || [ requirements-mac.txt -nt .venv-mac/.instal
   "$PY" -m venv .venv-mac && .venv-mac/bin/pip install -q -U pip && .venv-mac/bin/pip install -r requirements-mac.txt \
     && touch .venv-mac/.installed || { echo "Installation failed (see above)."; pause; exit 1; }
 fi
-(sleep 5; open "http://127.0.0.1:8080") &
-echo "Montara is running at http://127.0.0.1:8080  ·  close this window to stop it."
-.venv-mac/bin/python app.py --port 8080
+# Use 8080, or the next free port if something else already uses it.
+PORT=$(.venv-mac/bin/python -c 'import socket
+for p in range(8080, 8100):
+    s = socket.socket()
+    try:
+        s.bind(("127.0.0.1", p)); print(p); break
+    except OSError: pass
+    finally: s.close()')
+URL="http://127.0.0.1:$PORT"
+(sleep 5; open "$URL") &
+echo "Montara is running at $URL  ·  close this window to stop it."
+.venv-mac/bin/python app.py --port "$PORT"
 pause

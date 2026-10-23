@@ -1083,4 +1083,5 @@ function fail(error) {
 }
 
 loadBranding();
+api("/montara/version").then((v) => { $("#version").textContent = `Montara ${v.version}`; }).catch(() => {});
 show("home");
