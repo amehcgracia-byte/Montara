@@ -13,7 +13,7 @@
     <img src="mark.svg" alt="" width="34" height="28"><span>montara</span>
   </a>
   <nav class="steps" id="steps" hidden>
-    <span data-step="footage">Footage</span><span data-step="cameras">Cameras</span><span data-step="mix">Mix</span><span data-step="making">Edit</span><span data-step="frames">Frames</span><span data-step="result">Result</span>
+    <span data-step="footage">Footage</span><span data-step="cameras">Cameras</span><span data-step="mix">Mix</span><span data-step="making">Edit</span><span data-step="frames">Frames</span><span data-step="captions">Captions</span><span data-step="result">Result</span>
   </nav>
   <button class="btn primary" id="newVideo" data-go="mode">New video</button>
 </header>
@@ -46,7 +46,7 @@
       </button>
       <button class="mode" data-platform="reel">
         <span class="dot"></span><h3>Pulse</h3>
-        <p>A fast vertical reel from all your clips, ready to post.</p>
+        <p>A short, fast reel from all your clips: vertical, horizontal or mixed, with captions.</p>
         <small>Videos (+ optional music)</small>
       </button>
       <button class="mode" data-platform="show" disabled>
@@ -82,6 +82,17 @@
     <p class="hint small-note">Photos are not used here (Story, coming soon, will take them).</p>
     <div class="form">
       <label>Video name <input id="videoName" type="text" maxlength="80"></label>
+      <div id="formatRow" class="formats" hidden>
+        <span class="label">Format</span>
+        <div class="formatgrid">
+          <label class="fmt"><input type="radio" name="format" value="9:16" checked><span><i class="shape v"></i><b>Vertical</b><small>Full screen 9:16. Reels, TikTok, Shorts.</small></span></label>
+          <label class="fmt"><input type="radio" name="format" value="16:9"><span><i class="shape h"></i><b>Horizontal</b><small>16:9 for YouTube or a website.</small></span></label>
+          <label class="fmt"><input type="radio" name="format" value="mix"><span><i class="shape v framed"></i><b>Vertical, framed</b><small>Vertical, every shot shown whole over a soft blurred background.</small></span></label>
+          <label class="fmt"><input type="radio" name="format" value="mix_vertical_horizontal"><span><i class="shape v half"></i><b>Mixed</b><small>Vertical, alternating full-screen and framed shots.</small></span></label>
+        </div>
+        <label id="mixShareRow" class="inline" hidden>Full-screen shots
+          <select id="mixShare"><option value="auto">Automatic</option><option value="0.75">Mostly full screen</option><option value="0.5">Half and half</option><option value="0.25">Mostly framed</option></select></label>
+      </div>
       <label id="durationRow" hidden>Reel length <span class="range"><input id="reelDuration" type="range" min="15" max="60" step="5" value="30"> <output id="reelDurationOut">30 s</output></span></label>
     </div>
     <fieldset class="branding">
@@ -152,6 +163,43 @@
     <div class="actions sticky">
       <span class="hint" id="framesHint"></span>
       <button class="btn primary" id="renderFrames">Render video</button>
+    </div>
+  </section>
+
+  <!-- Step 5b: captions (Pulse) -->
+  <section class="screen" id="captions" hidden>
+    <h2>Captions &amp; title</h2>
+    <p class="lead small">Add the lyrics or any text over the reel. Play the video to see them in place. Skip this if you want the reel as it is.</p>
+    <div class="capwrap">
+      <div class="capstage" id="capStage">
+        <video id="capVideo" playsinline controls preload="metadata"></video>
+        <div class="captitle" id="capTitlePreview" hidden></div>
+        <div class="capline" id="capPreview" hidden></div>
+      </div>
+      <div class="cappanel">
+        <label>Title <small class="hint">stays on top for the whole reel</small><input id="capTitle" type="text" maxlength="60" placeholder="Band, song or venue"></label>
+        <label>Text <small class="hint">one caption per line</small><textarea id="capText" rows="6" placeholder="First line of the lyrics&#10;Second line…"></textarea></label>
+        <div class="row">
+          <button class="btn ghost small" id="capSpread" type="button">Spread over the video</button>
+          <button class="btn ghost small" id="capRead" type="button">Read the lyrics for me</button>
+        </div>
+        <p class="hint" id="capReadStatus"></p>
+        <ol class="caplist" id="capList"></ol>
+        <div class="capstyle">
+          <span class="label">Look</span>
+          <div class="chips" id="capStyles"></div>
+        </div>
+        <div class="capstyle">
+          <span class="label">Position</span>
+          <div class="chips" id="capPositions">
+            <button type="button" class="chip" data-pos="15">Top</button><button type="button" class="chip" data-pos="50">Middle</button><button type="button" class="chip on" data-pos="80">Bottom</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="btn ghost" id="capSkip">Skip</button>
+      <button class="btn primary" id="capApply">Add to video</button>
     </div>
   </section>
 

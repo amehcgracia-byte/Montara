@@ -116,6 +116,18 @@ def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
             swapped = first.locator("xpath=../div/img").get_attribute("src") != before
             page.screenshot(path=str(shots / "06-frames-swapped.png"), full_page=True)
         page.locator("#renderFrames").click()
+        page.wait_for_selector("#captions:not([hidden]), #result:not([hidden]), #failed:not([hidden])", timeout=900_000)
+    captioned = False
+    if page.locator("#captions").is_visible():
+        # Pulse: title + two typed captions, spread over the reel, burned by the engine.
+        # (headless Chromium cannot decode H.264: the player stays empty here, captions still work)
+        page.locator("#capTitle").fill("Much to me")
+        page.locator("#capText").fill("Much to me\nEvery night we play")
+        page.locator('#capStyles [data-style="hard_shadow"]').click()
+        page.wait_for_timeout(500)
+        page.screenshot(path=str(shots / "06b-captions.png"), full_page=True)
+        page.locator("#capApply").click()
+        captioned = True
         page.wait_for_selector("#result:not([hidden]), #failed:not([hidden])", timeout=900_000)
     if page.locator("#failed").is_visible():
         page.screenshot(path=str(shots / "99-failed.png"))
@@ -129,6 +141,8 @@ def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
     run(["ffmpeg", "-v", "error", "-i", str(path), "-f", "null", "-"])  # decode the whole file
     video = next(s for s in probe["streams"] if s["codec_type"] == "video")
     has_audio = any(s["codec_type"] == "audio" for s in probe["streams"])
+    if mode == "pulse":
+        assert not captioned or "caption" in path.name, f"captions were not burned: {path.name}"
     (shots / "render.mp4").write_bytes(path.read_bytes())
     duration = float(probe["format"]["duration"])
     for second in (2.0, duration / 2, max(0.0, duration - 2.0)):  # intro, body, outro: look at them
@@ -144,7 +158,7 @@ def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
     # (the engine may rename a camera to a cached proxy, so count cameras, not names)
     all_used = mode == "pulse" or (len([k for k, n in used.items() if n]) >= len(cameras) and not result.get("excluded_clips"))
     return {"mode": mode, "media": media.name, "branding": BRANDING[mode], "passed": has_audio and duration > 0 and all_used and (mode != "mix" or bool(mixed and "Mixer" in mixed)),
-            "duration": duration, "size": f"{video['width']}x{video['height']}", "frames_swapped": swapped, "mixed_master": mixed,
+            "duration": duration, "captioned": captioned, "size": f"{video['width']}x{video['height']}", "frames_swapped": swapped, "mixed_master": mixed,
             "cuts": result.get("cut_count"), "camera_usage": used, "excluded": result.get("excluded_clips")}
 
 

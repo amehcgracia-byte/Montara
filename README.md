@@ -8,7 +8,7 @@ Zucker engine untouched and gives it a new interface and brand.
 | Mode  | What it makes                                   | Engine mode |
 |-------|-------------------------------------------------|-------------|
 | Stage | Full multicam video, synced and cut on the beat | `youtube`   |
-| Pulse | Vertical reel from all your clips               | `reel`      |
+| Pulse | Reel from all your clips: vertical, horizontal or mixed, with captions | `reel`      |
 | Story | Scenes, text and motion (coming soon)           | `show`      |
 
 ## How it is built

@@ -20,6 +20,21 @@ const ZOOMS = [
   ["wide", "Wide", 140, "megaview"],
   ["ultra_wide", "Ultra wide", 170, "ultrawide"],
 ];
+// Who a 360 view shows. The same person filmed by a camera and a 360 view must share
+// one identity so the edit never shows them twice in a row.
+const WHO = [["general", "Wide"], ["singer", "Singer"], ["drummer", "Drums"], ["pianist", "Keys"],
+  ["guitarist", "Guitar"], ["bassist", "Bass"], ["audience", "Audience"]];
+const WHO_WORDS = { stage: "general", wide: "general", everyone: "general", band: "general", singer: "singer", vocals: "singer",
+  voice: "singer", drums: "drummer", drummer: "drummer", keys: "pianist", piano: "pianist", guitar: "guitarist",
+  bass: "bassist", audience: "audience", crowd: "audience" };
+const SLOT_WHO = { full_stage: "general", singer: "singer", drummer: "drummer", pianist: "pianist", audience: "audience" };
+function whoOf(slot, view) {
+  if (view?.who) return view.who;
+  const word = String(view?.subject || "").trim().toLowerCase();
+  return WHO_WORDS[word] || SLOT_WHO[slot] || "general";
+}
+// How a flat camera was filmed; the engine only scores steadiness on handheld cameras.
+const guessRole = (f) => (/fixed|tripod|static|iphone|\.mov$/i.test(f.name) ? "fixed_rear" : "handheld");
 const zoomOf = (view) => ZOOMS.reduce((best, z) => (Math.abs(z[2] - view.fov) < Math.abs(best[2] - view.fov) ? z : best), ZOOMS[2]);
 const BOX_HELP = {
   youtube: [
@@ -43,6 +58,7 @@ const state = {
   framesPoll: null,
   viewpoints: {},     // path -> {slot: {yaw, pitch, fov, subject, enabled}}
   subjects: {},       // path -> subject
+  roles: {},          // path -> fixed_rear | handheld
   branding: "montara",
   hasLogo: false,
 };
@@ -71,7 +87,14 @@ function escapeHtml(text) {
   return String(text ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
-const STEP_ORDER = ["footage", "cameras", "mix", "making", "frames", "result"];
+const STEP_ORDER = ["footage", "cameras", "mix", "making", "frames", "captions", "result"];
+// Steps that apply to this video: no Mix step without separate tracks, no Captions outside Pulse.
+function stepApplies(step) {
+  if (step === "cameras") return !state.files.length || videos().length > 1 || videos().some(isSphere);
+  if (step === "mix") return mixerMode();
+  if (step === "captions") return state.platform === "reel";
+  return true;
+}
 function show(id) {
   $$(".screen").forEach((s) => { s.hidden = s.id !== id; });
   const inFlow = STEP_ORDER.includes(id) || id === "failed" || id === "mode";
@@ -79,6 +102,7 @@ function show(id) {
   $("#newVideo").hidden = inFlow;
   const current = STEP_ORDER.indexOf(id === "failed" ? "making" : id === "mode" ? "footage" : id);
   $$("#steps span").forEach((span, index) => {
+    span.hidden = !stepApplies(span.dataset.step);
     span.classList.toggle("on", index === current);
     span.classList.toggle("done", index < current);
   });
@@ -111,6 +135,7 @@ $$(".mode[data-platform]").forEach((card) => card.addEventListener("click", () =
   state.platform = card.dataset.platform;
   $("#modeLabel").textContent = MODES[state.platform];
   $("#durationRow").hidden = state.platform !== "reel";
+  $("#formatRow").hidden = state.platform !== "reel";
   if (!$("#videoName").value) $("#videoName").value = todayName();
   $("#audioSub").textContent = state.platform === "youtube"
     ? "One track per instrument or mic and Montara mixes them for you, or one finished master."
@@ -126,8 +151,14 @@ function resetFlow() {
   state.platform = null;
   state.files = [];
   state.projectId = null;
+  state.captioned = false;
+  cap.list = [];
+  cap.timed = false;
+  $("#capText").value = "";
+  $("#capTitle").value = "";
   state.viewpoints = {};
   state.subjects = {};
+  state.roles = {};
   $("#videoName").value = "";
   $("#sampleNote").hidden = true;
   renderFiles();
@@ -286,6 +317,12 @@ $("#logoInput").addEventListener("change", async (e) => {
 // ---------- continue: register the project, then cameras ----------
 $("#continueFootage").addEventListener("click", () => registerProject().catch(fail));
 
+// Pulse format: the engine's reel_aspect (9:16, 16:9, mix = framed, mix_vertical_horizontal = mixed).
+const reelFormat = () => document.querySelector("input[name=format]:checked")?.value || "9:16";
+$$("input[name=format]").forEach((radio) => radio.addEventListener("change", () => {
+  $("#mixShareRow").hidden = reelFormat() !== "mix_vertical_horizontal";
+}));
+
 function inputs() {
   const master = mixerMode() ? (state.mixMaster ? { path: state.mixMaster } : null) : state.files.find((f) => f.kind === "master");
   return {
@@ -321,9 +358,11 @@ function renderCameras() {
   $("#cameraList").innerHTML = flat.map((f) => `
     <div class="cam">
       <span class="kind video">VIDEO</span><span class="name">${escapeHtml(f.name)}</span>
-      <label>Shows <select data-subject="${escapeHtml(f.path)}">${SUBJECTS.map(([value, label]) =>
+      <span class="camsel"><label>Shows <select data-subject="${escapeHtml(f.path)}">${SUBJECTS.map(([value, label]) =>
         `<option value="${value}" ${(state.subjects[f.path] || "general") === value ? "selected" : ""}>${label}</option>`).join("")}</select></label>
+      <label>Filmed <select data-role="${escapeHtml(f.path)}"><option value="fixed_rear" ${(state.roles[f.path] || guessRole(f)) === "fixed_rear" ? "selected" : ""}>On a tripod</option><option value="handheld" ${(state.roles[f.path] || guessRole(f)) === "handheld" ? "selected" : ""}>Handheld</option></select></label></span>
     </div>`).join("");
+  $$("[data-role]").forEach((select) => select.addEventListener("change", () => { state.roles[select.dataset.role] = select.value; }));
   $$("[data-subject]").forEach((select) => select.addEventListener("change", () => { state.subjects[select.dataset.subject] = select.value; }));
   $("#sphereList").innerHTML = spheres.map((f, index) => `
     <div class="sphere" data-sphere="${index}">
@@ -369,8 +408,9 @@ function setupSphere(file, root) {
       const zoom = view ? zoomOf(view)[0] : "normal";
       return `<li class="slot ${slot === active ? "on" : ""} ${view?.enabled ? "set" : ""}" data-slot="${slot}">
         <input type="checkbox" ${view?.enabled ? "checked" : ""} title="Use this point of view">
-        <input type="text" value="${escapeHtml(view?.subject || fallback)}" maxlength="24">
-        <select title="Zoom">${ZOOMS.map(([value, label]) => `<option value="${value}" ${zoom === value ? "selected" : ""}>${label}</option>`).join("")}</select>
+        <input type="text" value="${escapeHtml(view?.subject || fallback)}" maxlength="24" title="Name">
+        <select class="who" title="Who it shows">${WHO.map(([value, label]) => `<option value="${value}" ${whoOf(slot, view) === value ? "selected" : ""}>${label}</option>`).join("")}</select>
+        <select class="zoom" title="Zoom">${ZOOMS.map(([value, label]) => `<option value="${value}" ${zoom === value ? "selected" : ""}>${label}</option>`).join("")}</select>
       </li>`;
     }).join("");
     root.querySelectorAll(".slot").forEach((li) => {
@@ -382,7 +422,8 @@ function setupSphere(file, root) {
       });
       li.querySelector("input[type=text]").addEventListener("input", (e) => { if (views[slot]) { views[slot].subject = e.target.value; drawMarkers(); } });
       li.querySelector("input[type=text]").addEventListener("focus", () => { active = slot; root.querySelectorAll(".slot").forEach((x) => x.classList.toggle("on", x.dataset.slot === slot)); drawMarkers(); preview(); });
-      li.querySelector("select").addEventListener("change", (e) => {
+      li.querySelector("select.who").addEventListener("change", (e) => { if (views[slot]) views[slot].who = e.target.value; });
+      li.querySelector("select.zoom").addEventListener("change", (e) => {
         if (!views[slot]) return;
         setZoom(slot, ZOOMS.find(([value]) => value === e.target.value));
         if (slot === active) preview();
@@ -523,16 +564,16 @@ async function pollMix(done) {
 const dbToGain = (db) => Math.pow(10, db / 20);
 function trackGain(track) {
   const fader = Number(track.fader_db || 0);
-  return track.mute ? 0 : dbToGain(Number(track.auto_gain_db || 0) + fader);
+  return track.mute || track.active === false ? 0 : dbToGain(Number(track.auto_gain_db || 0) + fader);
 }
 
 function renderStrips() {
   $("#strips").innerHTML = mix.plan.tracks.map((t, i) => `
-    <div class="strip ${t.mute ? "off" : ""}" data-track="${i}" title="${escapeHtml(t.file)}">
+    <div class="strip ${t.mute || t.active === false ? "off" : ""}" data-track="${i}" title="${escapeHtml(t.active === false ? `${t.file}: almost no signal, so the mix leaves it out` : t.file)}">
       <small>${escapeHtml(t.role)}</small>
       <span class="db">${(t.fader_db >= 0 ? "+" : "") + Number(t.fader_db).toFixed(1)} dB</span>
       <input type="range" min="-24" max="12" step="0.5" value="${t.fader_db}" aria-label="${escapeHtml(t.name)} fader">
-      <button class="mute ${t.mute ? "on" : ""}">${t.mute ? "OFF" : "ON"}</button>
+      ${t.active === false ? `<button class="mute" disabled>NO SIGNAL</button>` : `<button class="mute ${t.mute ? "on" : ""}">${t.mute ? "OFF" : "ON"}</button>`}
       <b>${escapeHtml(t.name)}</b>
     </div>`).join("");
   $$(".strip").forEach((strip) => {
@@ -543,6 +584,7 @@ function renderStrips() {
       strip.querySelector(".db").textContent = `${track.fader_db >= 0 ? "+" : ""}${track.fader_db.toFixed(1)} dB`;
       applyGain(track);
     });
+    if (track.active === false) return;
     strip.querySelector(".mute").addEventListener("click", (e) => {
       track.mute = !track.mute;
       e.target.classList.toggle("on", track.mute);
@@ -659,10 +701,20 @@ async function saveCameras() {
   const flat = videos().filter((f) => !isSphere(f));
   const subjects = Object.fromEntries(flat.map((f) => [f.path, state.subjects[f.path] || "general"]));
   if (flat.length) await api("/settings/camera-subjects", { camera_subjects: subjects });
+  const roles = Object.fromEntries(flat.map((f) => [f.path, state.roles[f.path] || guessRole(f)]));
+  if (flat.length) await api("/settings/camera-roles", { camera_roles: roles });
   for (const file of videos().filter(isSphere)) {
     const views = state.viewpoints[file.path] || {};
     if (!Object.keys(views).length) continue;
-    await api("/settings/spherical-landmarks", { spherical_landmarks: views, spherical_source_path: file.path });
+    // The engine identifies people by subject; the free name stays in Montara (frames, pins).
+    const landmarks = Object.fromEntries(Object.entries(views).map(([slot, view]) => {
+      const { who, ...rest } = view;
+      return [slot, { ...rest, subject: whoOf(slot, view) }];
+    }));
+    for (const slot of [...VIEW_SLOTS.map(([key]) => key), "audience_stage_wide", "planet"]) {
+      if (!landmarks[slot]) landmarks[slot] = { yaw: 0, pitch: 0, enabled: false, weight: 0 };
+    }
+    await api("/settings/spherical-landmarks", { spherical_landmarks: landmarks, spherical_source_path: file.path });
   }
 }
 
@@ -680,7 +732,10 @@ async function make() {
   await api("/wizard/start", {
     project_id: state.projectId, name, platform, ...data,
     reel_duration_sec: platform === "reel" ? Number($("#reelDuration").value) : undefined,
+    reel_aspect: platform === "reel" ? reelFormat() : undefined,
+    reel_mix_vertical_ratio: platform === "reel" && reelFormat() === "mix_vertical_horizontal" ? $("#mixShare").value : undefined,
   });
+  state.captioned = false;
   startPolling();
 }
 
@@ -711,7 +766,8 @@ function startPolling() {
         openFrames();
       } else if (s.status === "done") {
         stopPolling();
-        showResult(s);
+        if (state.platform === "reel" && !state.captioned) openCaptions();
+        else showResult(s);
       } else if (s.status === "failed" || s.status === "cancelled") {
         stopPolling();
         fail(new Error(s.error || s.message || "The edit stopped"));
@@ -744,14 +800,27 @@ $("#cancel").addEventListener("click", async () => {
 });
 
 // ---------- frames ----------
-const ENGINE_LABELS = { full_stage: "Wide", singer: "Singer", drummer: "Drums", pianist: "Piano", left: "Left", right: "Right",
-  audience: "Audience", audience_stage_wide: "Audience + stage", planet: "Planet" };
+// Name a 360 shot by where it really looks: the person's view closest to the shot's
+// direction. The engine's slot type alone can be a variant aimed elsewhere.
+const angleGap = (a, b) => Math.abs((((a - b) % 360) + 540) % 360 - 180);
 function viewpointName(item) {
-  if (!item.landmark && !item.pose?.type) return "";
-  const type = String(item.pose?.type || "");
-  if (type.startsWith("review_local")) return "alternative angle";
-  for (const views of Object.values(state.viewpoints)) if (views[type]?.subject) return views[type].subject;
-  return ENGINE_LABELS[type] || "360 view";
+  const pose = item.pose || {};
+  if (!item.landmark && !pose.type) return "";
+  if (Number.isFinite(pose.yaw)) {
+    let best = null;
+    for (const views of Object.values(state.viewpoints)) {
+      for (const view of Object.values(views)) {
+        if (!view?.enabled) continue;
+        const gap = angleGap(pose.yaw, view.yaw) + 0.5 * Math.abs((pose.pitch ?? view.pitch) - view.pitch);
+        if (!best || gap < best.gap) best = { gap, name: view.subject };
+      }
+    }
+    if (best && best.gap <= 20) return best.name;
+    return "other angle";
+  }
+  const type = String(pose.type || "");
+  for (const views of Object.values(state.viewpoints)) if (views[type]?.enabled && views[type].subject) return views[type].subject;
+  return "360 view";
 }
 const swapping = new Set();
 async function openFrames() {
@@ -781,14 +850,17 @@ async function refreshFrames(first) {
   for (const item of items) {
     const fig = grid.querySelector(`[data-index="${item.index}"]`);
     const img = fig.querySelector("img");
+    const landmark = viewpointName(item);
+    const label = landmark ? `360 · ${landmark}` : item.source;
     if (item.thumbnail && img.getAttribute("src") !== item.thumbnail) {
       img.src = item.thumbnail;
       img.hidden = false;
       swapping.delete(item.index);
+      fig.querySelector(".src").textContent = label;
+    } else if (!fig.querySelector(".src").textContent) {
+      fig.querySelector(".src").textContent = label;
     }
     fig.classList.toggle("busy", !item.thumbnail || swapping.has(item.index));
-    const landmark = viewpointName(item);
-    fig.querySelector(".src").textContent = landmark ? `360 · ${landmark}` : item.source;
     fig.querySelector(".dur").textContent = `${Number(item.duration_sec).toFixed(1)} s`;
     fig.querySelector(".swap").disabled = item.candidate_count !== undefined && item.candidate_count < 2;
   }
@@ -820,11 +892,179 @@ $("#renderFrames").addEventListener("click", async () => {
   } catch (error) { fail(error); }
 });
 
+// ---------- captions (Pulse) ----------
+// Same engine as Zucker's "Overlay & Captions": cues + style go to /wizard/compose,
+// which burns them onto a clean copy of the rendered reel.
+const CAP_STYLES = [
+  ["clean_bottom", "Clean", ""], ["karaoke_word", "Karaoke", "karaoke"], ["bold_pop", "Bold", "big"],
+  ["hard_shadow", "Shadow", "shadow"], ["neon_glow", "Glow", "neon"], ["lyric_serif", "Serif", "serif"],
+];
+const cap = { list: [], style: "clean_bottom", pos: 80, timed: false, raf: 0 };
+const capVideo = () => $("#capVideo");
+const capDuration = () => Number(capVideo().duration) || Number($("#reelDuration").value) || 30;
+const fmtSec = (x) => Number(x).toFixed(1);
+
+function openCaptions() {
+  show("captions");
+  $("#capStage").classList.toggle("wide", reelFormat() === "16:9");
+  capVideo().src = `/api/v1/wizard/compose-base?t=${Date.now()}`;
+  $("#capStyles").innerHTML = CAP_STYLES.map(([id, label]) => `<button type="button" class="chip${id === cap.style ? " on" : ""}" data-style="${id}">${label}</button>`).join("");
+  renderCapList();
+  previewCaption();
+}
+
+function spreadCaptions(texts) {
+  const duration = capDuration();
+  const start = Math.min(1, duration * 0.05);
+  const slot = (duration - start - 0.5) / Math.max(1, texts.length);
+  cap.list = texts.map((text, i) => ({ text, start: start + i * slot, end: start + (i + 1) * slot - 0.15 }));
+}
+
+function textLines() { return $("#capText").value.split("\n").map((line) => line.trim()).filter(Boolean); }
+
+$("#capText").addEventListener("input", () => {
+  const lines = textLines();
+  if (!cap.timed || lines.length !== cap.list.length) { cap.timed = false; spreadCaptions(lines); }
+  else lines.forEach((text, i) => { cap.list[i].text = text; cap.list[i].words = undefined; });
+  renderCapList();
+  previewCaption();
+});
+$("#capSpread").addEventListener("click", () => { cap.timed = false; spreadCaptions(textLines()); renderCapList(); previewCaption(); });
+
+function renderCapList() {
+  $("#capList").innerHTML = cap.list.map((c, i) => `
+    <li data-i="${i}"><input type="text" value="${escapeHtml(c.text)}" data-f="text" aria-label="Caption ${i + 1}">
+      <input type="number" step="0.1" min="0" value="${fmtSec(c.start)}" data-f="start" aria-label="Starts at (s)">
+      <input type="number" step="0.1" min="0" value="${fmtSec(c.end)}" data-f="end" aria-label="Ends at (s)">
+      <button type="button" class="x" aria-label="Delete">✕</button></li>`).join("");
+}
+
+$("#capList").addEventListener("input", (event) => {
+  const li = event.target.closest("li");
+  const c = cap.list[Number(li.dataset.i)];
+  const field = event.target.dataset.f;
+  if (field === "text") { c.text = event.target.value; c.words = undefined; $("#capText").value = cap.list.map((x) => x.text).join("\n"); }
+  else { c[field] = Math.max(0, Number(event.target.value) || 0); cap.timed = true; }
+  previewCaption();
+});
+$("#capList").addEventListener("click", (event) => {
+  const li = event.target.closest("li");
+  if (!li) return;
+  const i = Number(li.dataset.i);
+  if (event.target.classList.contains("x")) {
+    cap.list.splice(i, 1);
+    $("#capText").value = cap.list.map((x) => x.text).join("\n");
+    renderCapList();
+  } else if (event.target.dataset.f !== "text") {
+    capVideo().currentTime = cap.list[i].start + 0.05;
+  }
+  previewCaption();
+});
+
+$("#capStyles").addEventListener("click", (event) => {
+  const chip = event.target.closest("[data-style]");
+  if (!chip) return;
+  cap.style = chip.dataset.style;
+  $$("#capStyles .chip").forEach((c) => c.classList.toggle("on", c === chip));
+  previewCaption();
+});
+$("#capPositions").addEventListener("click", (event) => {
+  const chip = event.target.closest("[data-pos]");
+  if (!chip) return;
+  cap.pos = Number(chip.dataset.pos);
+  $$("#capPositions .chip").forEach((c) => c.classList.toggle("on", c === chip));
+  previewCaption();
+});
+$("#capTitle").addEventListener("input", previewCaption);
+
+// Approximate live preview over the player (the burn uses the engine's exact style).
+function previewCaption() {
+  const t = capVideo().currentTime || 0;
+  const index = cap.list.findIndex((c) => t >= c.start && t < c.end);
+  const line = $("#capPreview");
+  line.hidden = index < 0;
+  if (index >= 0) {
+    line.textContent = cap.list[index].text;
+    line.className = `capline ${CAP_STYLES.find(([id]) => id === cap.style)[2]}`;
+    line.style.top = `${cap.pos}%`;
+  }
+  $$("#capList li").forEach((li) => li.classList.toggle("now", Number(li.dataset.i) === index));
+  const title = $("#capTitle").value.trim();
+  $("#capTitlePreview").hidden = !title;
+  $("#capTitlePreview").textContent = title;
+}
+function previewLoop() { previewCaption(); cap.raf = capVideo().paused ? 0 : requestAnimationFrame(previewLoop); }
+capVideo().addEventListener("play", () => { cancelAnimationFrame(cap.raf); previewLoop(); });
+capVideo().addEventListener("seeked", previewCaption);
+capVideo().addEventListener("loadedmetadata", () => { if (!cap.timed && cap.list.length) spreadCaptions(textLines()); renderCapList(); });
+
+// Transcribe the reel's own audio (local Whisper in the engine) into timed captions.
+$("#capRead").addEventListener("click", async () => {
+  const button = $("#capRead");
+  button.disabled = true;
+  $("#capReadStatus").textContent = "Listening to the reel…";
+  try {
+    await api("/captions/auto-read", { model: "small" });
+    for (;;) {
+      await new Promise((r) => setTimeout(r, 1500));
+      const job = await api("/captions/auto-read/status");
+      if (job.status === "failed") throw new Error(job.error || "Could not read the lyrics");
+      if (job.status === "done") {
+        const cues = job.result?.cues || [];
+        if (!cues.length) { $("#capReadStatus").textContent = "No words were heard in this reel."; break; }
+        cap.list = cues.map((c) => ({ text: (c.lines || []).join(" "), start: c.start, end: c.end, words: c.words }));
+        cap.timed = true;
+        $("#capText").value = cap.list.map((c) => c.text).join("\n");
+        renderCapList();
+        previewCaption();
+        $("#capReadStatus").textContent = `${cues.length} captions read. Check the words before adding them.`;
+        break;
+      }
+      $("#capReadStatus").textContent = `Listening to the reel… ${job.progress || 0}%`;
+    }
+  } catch (error) {
+    $("#capReadStatus").textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+});
+
+function splitCaption(text) {
+  const words = text.split(/\s+/).filter(Boolean);
+  if (text.length <= 32 || words.length < 2) return [text];
+  let best = 1;
+  for (let i = 1; i < words.length; i += 1) {
+    const diff = (k) => Math.abs(words.slice(0, k).join(" ").length - words.slice(k).join(" ").length);
+    if (diff(i) < diff(best)) best = i;
+  }
+  return [words.slice(0, best).join(" "), words.slice(best).join(" ")];
+}
+
+$("#capSkip").addEventListener("click", async () => { capVideo().pause(); state.captioned = true; showResult(await status()); });
+$("#capApply").addEventListener("click", async () => {
+  capVideo().pause();
+  const title = $("#capTitle").value.trim();
+  const cues = cap.list.filter((c) => c.text.trim() && c.end > c.start).map((c) => ({
+    lines: splitCaption(c.text.trim()), start: c.start, end: c.end, words: c.words || [], style_override: { vertical: cap.pos },
+  }));
+  state.captioned = true;
+  if (!cues.length && !title) return showResult(await status());
+  try {
+    await api("/wizard/compose", {
+      cues, style: cap.style, lang: "und", texts: [], images: [], videos: [], letterbox: { enabled: false },
+      header: { title_enabled: Boolean(title), title, logo_source: "none" },
+    });
+    setProgress(0, "Adding your captions…", "");
+    show("making");
+    startPolling();
+  } catch (error) { fail(error); }
+});
+
 // ---------- result ----------
 function showResult(s) {
   const result = s.result || {};
   const url = `/api/v1/wizard/result?t=${Date.now()}`;
-  $("#resultVideo").classList.toggle("vertical", state.platform === "reel");
+  $("#resultVideo").classList.toggle("vertical", state.platform === "reel" && reelFormat() !== "16:9");
   $("#resultVideo").src = url;
   $("#download").href = url;
   if (result.filename) $("#download").setAttribute("download", result.filename);
