@@ -10,10 +10,10 @@
 <body>
 <header class="top">
   <a class="brand" href="#" data-go="home" aria-label="Montara home">
-    <img src="mark.svg" alt="" width="34" height="28"><span>montara</span>
+    <img src="mark.svg" alt="" width="34" height="28"><span>ontara</span>
   </a>
   <nav class="steps" id="steps" hidden>
-    <span data-step="footage">Footage</span><span data-step="cameras">Cameras</span><span data-step="mix">Mix</span><span data-step="making">Edit</span><span data-step="frames">Frames</span><span data-step="captions">Captions</span><span data-step="result">Result</span>
+    <span data-step="footage">Footage</span><span data-step="cameras">Cameras</span><span data-step="mix">Mix</span><span data-step="making">Edit</span><span data-step="frames">Frames</span><span data-step="showReview">Review</span><span data-step="captions">Captions</span><span data-step="result">Result</span>
   </nav>
   <button class="btn primary" id="newVideo" data-go="mode">New video</button>
 </header>
@@ -42,19 +42,48 @@
       <button class="mode" data-platform="youtube">
         <span class="dot"></span><h3>Stage</h3>
         <p>Every camera synced to your audio and cut on the beat. Horizontal, full length.</p>
-        <small>Videos + master audio</small>
+        <small>Videos + audio, or audio on its own</small>
       </button>
       <button class="mode" data-platform="reel">
         <span class="dot"></span><h3>Pulse</h3>
         <p>A short, fast reel from all your clips: vertical, horizontal or mixed, with captions.</p>
         <small>Videos (+ optional music)</small>
       </button>
-      <button class="mode" data-platform="show" disabled>
-        <span class="dot"></span><h3>Story</h3>
-        <p>Scenes, text and motion that turn moments into a story.</p>
-        <small class="soon">Coming soon</small>
+      <button class="mode" data-platform="show">
+        <span class="dot"></span><h3>Show</h3>
+        <p>Talking videos, stories and podcasts.</p>
+        <small>Fast · Normal · Storytelling · Podcast</small>
       </button>
     </div>
+  </section>
+
+  <section class="screen" id="showSetup" hidden>
+    <div class="show-heading"><p class="eyebrow">SHOW</p><h2>Your voice. Your edit.</h2><p class="lead small">Choose the pace. Montara takes care of the cuts.</p></div>
+    <div class="show-layout">
+      <div><div class="show-player"><video id="showInputVideo" controls playsinline preload="metadata"></video></div>
+        <div class="show-source"><span class="hint" id="showInputStatus" role="status">Loading your reference video…</span><label class="btn ghost small">Change video<input id="showInputFile" type="file" accept="video/*,.mp4,.mov" hidden></label></div>
+      </div>
+      <div><h3 class="show-label">How should it feel?</h3>
+        <div class="show-paces" role="group" aria-label="Editing style">
+          <button class="pace-card" data-show-pace="fast" aria-pressed="false"><b>Fast</b><span>1.5–2 second cuts. Quick and energetic.</span></button>
+          <button class="pace-card on" data-show-pace="normal" aria-pressed="true"><b>Normal</b><span>Longer shots. A natural, relaxed rhythm.</span></button>
+          <button class="pace-card" data-show-pace="storytelling" aria-pressed="false"><b>Storytelling</b><span>Room for your story and its pauses.</span></button>
+          <button class="pace-card" data-show-pace="podcast" aria-pressed="false"><b>Podcast</b><span>Long, steady shots for conversation.</span></button>
+        </div>
+        <p class="hint" id="showPaceHint">The original voice stays with your video.</p>
+        <button class="btn primary" id="showMake" disabled>Make my edit</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="screen" id="showReview" hidden>
+    <p class="eyebrow">SHOW · REVIEW</p><h2>Your video, shaped.</h2>
+    <p class="lead small">Watch each part. Keep the suggested effects, or leave it clean.</p>
+    <div class="show-review-layout">
+      <div><div class="show-player"><video id="showSceneVideo" controls playsinline preload="metadata"></video></div><p class="hint" id="showPreviewStatus" role="status">Preparing preview…</p><div class="show-scenes" id="showSceneTabs" aria-label="Video parts"></div></div>
+      <div class="show-scene-details"><p class="hint" id="showSceneTime"></p><p id="showSceneText"></p><div id="showSceneEffects"></div><button class="btn ghost small" id="showCleanScene">Remove effects from this part</button></div>
+    </div>
+    <div class="actions"><button class="btn ghost" id="showStartOver">Change the pace</button><button class="btn primary" id="showExport">Export video</button></div>
   </section>
 
   <!-- Step 2: footage -->
@@ -124,8 +153,15 @@
   <!-- Step 3b: mixer -->
   <section class="screen" id="mix" hidden>
     <h2>Your mix</h2>
-    <p class="lead small">Montara mixed your tracks automatically. Press play and move any fader: you hear the change at once. When it sounds right, use this mix for the video.</p>
-    <div class="mixstatus" id="mixStatus"><span class="spin"></span><span id="mixStatusText">Mixing your tracks automatically…</span></div>
+    <p class="lead small">Montara mixed your tracks automatically. Press play and move any fader: you hear the change at once. When it sounds right, use this mix for your video or download the mastered audio.</p>
+    <div class="mixstatus" id="mixStatus"><svg class="loading-mark" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 100">
+  <rect x="4" y="4" width="18" height="92" rx="9" fill="#F5F3EF"/>
+  <rect x="27" y="4" width="18" height="62" rx="9" fill="#F5F3EF"/>
+  <rect x="51" y="4" width="18" height="40" rx="9" fill="#FF4F2E"/>
+  <rect x="75" y="4" width="18" height="62" rx="9" fill="#F5F3EF"/>
+  <rect x="98" y="4" width="18" height="92" rx="9" fill="#F5F3EF"/>
+</svg>
+<span class="spin"></span><span id="mixStatusText">Mixing your tracks automatically…</span></div>
     <div class="transport" id="transport" hidden>
       <button class="btn primary small" id="playMix">Play</button>
       <input type="range" id="mixSeek" min="0" max="100" step="0.1" value="0">
@@ -148,7 +184,15 @@
   <!-- Step 4: making -->
   <section class="screen" id="making" hidden>
     <div class="making">
-      <div class="ring"><svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="52" class="track"/><circle cx="60" cy="60" r="52" class="bar" id="ringBar"/></svg><b id="pct">0%</b></div>
+
+
+      <div class="ring"><svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="52" class="track"/><circle cx="60" cy="60" r="52" class="bar" id="ringBar"/></svg><div class="ring-brand"><svg class="loading-mark" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 100">
+  <rect x="4" y="4" width="18" height="92" rx="9" fill="#F5F3EF"/>
+  <rect x="27" y="4" width="18" height="62" rx="9" fill="#F5F3EF"/>
+  <rect x="51" y="4" width="18" height="40" rx="9" fill="#FF4F2E"/>
+  <rect x="75" y="4" width="18" height="62" rx="9" fill="#F5F3EF"/>
+  <rect x="98" y="4" width="18" height="92" rx="9" fill="#F5F3EF"/>
+</svg><b id="pct">0%</b></div></div>
       <h2 id="stageMsg">Starting…</h2>
       <p class="hint" id="stageDetail"></p>
       <button class="btn ghost" id="cancel">Cancel</button>
@@ -192,7 +236,7 @@
           <button class="btn ghost small" id="capSpread" type="button">Spread over the video</button>
           <button class="btn ghost small" id="capRead" type="button">Read the lyrics for me</button>
         </div>
-        <p class="hint" id="capReadStatus"></p>
+        <p class="hint" id="capReadStatus" role="status" aria-live="polite"></p>
         <div class="capstyle">
           <span class="label">Base look <small class="hint">all captions</small></span>
           <div class="chips" id="capStyles"></div>
@@ -221,8 +265,9 @@
 
   <!-- Step 6: result -->
   <section class="screen" id="result" hidden>
-    <h2>Your night, <em>edited.</em></h2>
+    <h2 id="resultTitle">Your night, <em>edited.</em></h2>
     <div class="player" id="playerWrap"><video id="resultVideo" controls playsinline preload="metadata"></video></div>
+    <audio id="resultAudio" controls hidden></audio>
     <p class="hint" id="resultInfo"></p>
     <div class="actions">
       <a class="btn primary" id="download" href="/api/v1/wizard/result" download>Download</a>

@@ -2,7 +2,7 @@
 // Montara's own small endpoints at /montara/*.
 "use strict";
 
-const MODES = { youtube: "Stage", reel: "Pulse", show: "Story" };
+const MODES = { youtube: "Stage", reel: "Pulse", show: "Show" };
 const SUBJECTS = [
   ["general", "Everyone / wide"], ["singer", "Singer"], ["drummer", "Drums"], ["pianist", "Keys"],
   ["guitarist", "Guitar"], ["bassist", "Bass"], ["audience", "Audience"],
@@ -87,9 +87,11 @@ function escapeHtml(text) {
   return String(text ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
-const STEP_ORDER = ["footage", "cameras", "mix", "making", "frames", "captions", "result"];
+const STEP_ORDER = ["footage", "showSetup", "cameras", "mix", "making", "frames", "showReview", "captions", "result"];
 // Steps that apply to this video: no Mix step without separate tracks, no Captions outside Pulse.
 function stepApplies(step) {
+  if (state.platform === "show") return ["footage", "making", "showReview", "result"].includes(step);
+  if (step === "showReview") return false;
   if (step === "cameras") return !state.files.length || videos().length > 1 || videos().some(isSphere);
   if (step === "mix") return mixerMode();
   if (step === "captions") return state.platform === "reel";
@@ -100,11 +102,12 @@ function show(id) {
   const inFlow = STEP_ORDER.includes(id) || id === "failed" || id === "mode";
   $("#steps").hidden = !inFlow;
   $("#newVideo").hidden = inFlow;
-  const current = STEP_ORDER.indexOf(id === "failed" ? "making" : id === "mode" ? "footage" : id);
+  const current = STEP_ORDER.indexOf(id === "failed" ? "making" : id === "mode" || id === "showSetup" ? "footage" : id);
   $$("#steps span").forEach((span, index) => {
     span.hidden = !stepApplies(span.dataset.step);
-    span.classList.toggle("on", index === current);
-    span.classList.toggle("done", index < current);
+    const position = STEP_ORDER.indexOf(span.dataset.step);
+    span.classList.toggle("on", position === current);
+    span.classList.toggle("done", position < current);
   });
   window.scrollTo({ top: 0 });
 }
@@ -117,7 +120,8 @@ function todayName() {
 const videos = () => state.files.filter((f) => f.kind === "video");
 const audioTracks = () => state.files.filter((f) => f.kind === "master" || f.kind === "songs");
 // Several audio files on Stage = separate instrument/mic tracks -> the mixer makes the master.
-const mixerMode = () => state.platform === "youtube" && audioTracks().length >= 2;
+const audioOnly = () => state.platform === "youtube" && videos().length === 0 && audioTracks().length > 0;
+const mixerMode = () => state.platform === "youtube" && (audioTracks().length >= 2 || audioOnly());
 const isSphere = (f) => f.projection === "equirect" || f.projection === "raw_insv" || /\.insv$/i.test(f.name);
 
 // ---------- navigation ----------
@@ -125,7 +129,7 @@ document.addEventListener("click", (event) => {
   const go = event.target.closest("[data-go]");
   if (!go) return;
   event.preventDefault();
-  const target = go.dataset.go;
+  const target = go.dataset.go === "footage" && state.platform === "show" ? "showSetup" : go.dataset.go;
   if ((target === "mode" || target === "home") && state.polling) return toast("A video is still being made.");
   if (target === "mode") resetFlow();
   show(target);
@@ -133,6 +137,7 @@ document.addEventListener("click", (event) => {
 
 $$(".mode[data-platform]").forEach((card) => card.addEventListener("click", () => {
   state.platform = card.dataset.platform;
+  if (state.platform === "show") { openShowSetup().catch(fail); return; }
   $("#modeLabel").textContent = MODES[state.platform];
   $("#durationRow").hidden = state.platform !== "reel";
   $("#formatRow").hidden = state.platform !== "reel";
@@ -266,14 +271,15 @@ function renderFiles() {
   $("#videoFiles").innerHTML = state.files.filter((f) => !isAudioEntry(f)).map(fileRow).join("");
   const master = state.files.find((f) => f.kind === "master");
   let hint = "";
-  let ready = videos().length > 0 && state.uploads === 0;
+  let ready = (videos().length > 0 || audioOnly()) && state.uploads === 0;
   if (mixerMode()) hint = `${audioTracks().length} separate tracks: Montara will mix them for you, then you can adjust every fader.`;
   else if (state.platform === "youtube" && !master) { hint = "Stage needs the master audio (one mixed track of the song) to sync every camera."; ready = false; }
   if (state.platform === "reel" && !master && videos().length > 1) hint = "Tip: add the song so the reel cuts on the music.";
   if (state.uploads) hint = "Uploading…";
-  if (state.branding === "mine" && !state.hasLogo) { hint = "Choose your logo, or pick another option."; ready = false; }
+  if (!audioOnly() && state.branding === "mine" && !state.hasLogo) { hint = "Choose your logo, or pick another option."; ready = false; }
   $("#footageHint").textContent = hint;
   $("#continueFootage").disabled = !ready;
+  if (state.platform === "show") renderShowInput();
 }
 
 // ---------- branding ----------
@@ -336,6 +342,7 @@ function inputs() {
 async function registerProject() {
   $("#continueFootage").disabled = true;
   try {
+    if (audioOnly()) { state.mixMaster = null; state.projectId = null; return await openMixer(); }
     await api("/montara/branding", { mode: state.branding });
     const name = $("#videoName").value.trim() || todayName();
     const data = inputs();
@@ -346,6 +353,7 @@ async function registerProject() {
   } finally {
     $("#continueFootage").disabled = false;
   }
+  if (state.platform === "show") return makeShow();
   const needsCameras = videos().length > 1 || videos().some(isSphere);
   if (!needsCameras) return afterCameras();
   renderCameras();
@@ -688,6 +696,7 @@ $("#useMix").addEventListener("click", async () => {
     const job = await pollMix((j) => j.status === "done");
     if (job.status === "failed") throw new Error(job.error || "The final mix failed");
     state.mixMaster = job.master_path;
+    if (audioOnly()) return showResult({ result: { audio: true, url: `/montara/mix/${mix.job}/result` } });
     // Register the mix as the project's master audio, then make the video.
     const data = inputs();
     await api("/wizard/draft", { name: $("#videoName").value.trim() || todayName(), project_id: state.projectId, platform: state.platform, audio_paths: [data.master], ...data });
@@ -758,30 +767,43 @@ async function waitFor(predicate) {
 
 function startPolling() {
   stopPolling();
-  state.polling = setInterval(async () => {
+  const generation = state.pollGeneration;
+  const poll = async () => {
     try {
       const s = await status();
+      if (generation !== state.pollGeneration) return;
       renderStatus(s);
-      if (s.status === "waiting_review") {
-        stopPolling();
-        openFrames();
+      if (s.status === "waiting_show_review" && state.platform === "show") {
+        stopPolling(); await openShowReview();
+      } else if (s.status === "waiting_review") {
+        stopPolling(); openFrames();
       } else if (s.status === "done") {
         stopPolling();
-        if (state.platform === "reel" && !state.captioned) openCaptions();
-        else showResult(s);
+        if (state.platform === "reel" && !state.captioned) openCaptions(); else showResult(s);
       } else if (s.status === "failed" || s.status === "cancelled") {
-        stopPolling();
-        fail(new Error(s.error || s.message || "The edit stopped"));
+        stopPolling(); fail(new Error(s.error || s.message || "The edit stopped"));
       }
     } catch (error) {
-      console.warn(error);
+      if (generation === state.pollGeneration) { console.warn(error); if (state.platform === "show") fail(error); }
     }
-  }, 1000);
+    if (generation === state.pollGeneration) state.polling = setTimeout(poll, 1000);
+  };
+  state.polling = setTimeout(poll, 0);
 }
 
-function stopPolling() { clearInterval(state.polling); state.polling = null; clearInterval(state.framesPoll); state.framesPoll = null; }
+function stopPolling() {
+  state.pollGeneration = (state.pollGeneration || 0) + 1;
+  clearTimeout(showEdit.previewTimer); clearTimeout(state.polling); state.polling = null;
+  clearInterval(state.framesPoll); state.framesPoll = null;
+}
 
 function renderStatus(s) {
+  if (state.platform === "show") {
+    const p = Number(s.progress || 0);
+    const exporting = s.stage === "export";
+    setProgress(p, exporting ? "Finishing your video…" : p < 40 ? "Listening and finding the cuts…" : "Shaping your edit…", exporting ? "Keeping the choices from your preview." : "Preparing the framing and the rhythm you chose.");
+    return;
+  }
   const task = (s.tasks || [])[0] || {};
   setProgress(Number(s.progress || 0), task.label || s.message || "Working…", s.detail || "");
 }
@@ -797,7 +819,7 @@ function setProgress(percent, message, detail) {
 $("#cancel").addEventListener("click", async () => {
   try { await api("/wizard/cancel", {}); } catch (error) { toast(error.message, true); }
   stopPolling();
-  show("footage");
+  show(state.platform === "show" ? "showSetup" : "footage");
 });
 
 // ---------- frames ----------
@@ -905,6 +927,7 @@ const CAP_STYLES = [
 const CAP_COLORS = ["#FFFFFF", "#0B0B0D", "#FF4F2E", "#FFE14D", "#3EE6C1", "#4DA3FF", "#FF5CC8"];
 const CAP_FONTS = [["", "Look's font"], ["Arial", "Sans"], ["Georgia", "Serif"], ["Impact", "Impact"], ["Courier New", "Mono"]];
 const CAP_EFFECTS = [
+  ["word", "Word by word", { animation_in: "none", animation_out: "none", fun_effect: "none" }],
   ["none", "None", { animation_in: "none", animation_out: "none", fun_effect: "none" }],
   ["fade", "Fade", { animation_in: "fade", animation_out: "fade", fun_effect: "none" }],
   ["pop", "Pop", { fun_effect: "pop" }], ["bounce", "Bounce", { fun_effect: "bounce" }],
@@ -931,7 +954,10 @@ function openCaptions() {
   renderCaps();
 }
 
-function textLines() { return $("#capText").value.split("\n").map((line) => line.trim()).filter(Boolean); }
+function splitCaptionPhrases(text) {
+  return (String(text).match(/[^.!?¿¡,;\n]+[.!?,;]*/g) || []).map(line => line.trim()).filter(Boolean);
+}
+function textLines() { return splitCaptionPhrases($("#capText").value); }
 function syncText() { $("#capText").value = cap.list.map((c) => c.text).join("\n"); }
 
 function spreadCaptions(texts) {
@@ -953,16 +979,31 @@ $("#capSpread").addEventListener("click", () => { cap.timed = false; spreadCapti
 $("#capTitle").addEventListener("input", renderCaps);
 
 // ---- what is on screen: captions over the video, bars on the timeline, the inspector ----
+// Speech timestamps take priority; typed/spread lines use evenly spaced words.
+function captionWords(c) {
+  const words = (c.words || []).map(w => ({ text: String(w.text || w.word || "").trim(), start: Math.max(c.start, Number(w.start ?? w.start_sec)), end: Math.min(c.end, Number(w.end ?? w.end_sec)) }))
+    .filter(w => w.text && Number.isFinite(w.start) && Number.isFinite(w.end) && w.end > w.start);
+  if (words.length) return words;
+  const text = c.text.trim().split(/\s+/).filter(Boolean);
+  return text.map((word, i) => ({ text: word, start: c.start + (c.end - c.start) * i / text.length, end: c.start + (c.end - c.start) * (i + 1) / text.length }));
+}
+function captionCues(c) {
+  const style_override = captionOverride(c);
+  if (c.effect === "word") return captionWords(c).map(w => ({ lines: [w.text], start: w.start, end: w.end, words: [], style_override }));
+  return [{ lines: splitCaption(c.text.trim()), start: c.start, end: c.end, words: c.words || [], style_override }];
+}
+
 function capScale() { return $("#capFrame").clientHeight / outSize()[1]; }
 function renderCaps() {
   const t = capVideo().currentTime || 0;
   const layer = $("#capLayer");
-  layer.querySelectorAll(".capline").forEach((el) => el.remove());
+  const previous = new Map([...layer.querySelectorAll(".capline")].map(el => [Number(el.dataset.i), el]));
   const look = CAP_STYLES.find(([id]) => id === cap.style)[2];
   cap.list.forEach((c, i) => {
-    const visible = (t >= c.start && t < c.end) || i === cap.selected;
+    const visible = (t >= c.start && t < c.end) || (capVideo().paused && i === cap.selected);
     if (!visible) return;
-    const el = document.createElement("div");
+    const el = previous.get(i) || document.createElement("div");
+    previous.delete(i);
     el.className = `capline ${look} fx-${c.effect || "none"}${i === cap.selected ? " sel" : ""}${t >= c.start && t < c.end ? "" : " ghost"}`;
     el.dataset.i = i;
     el.style.left = `${c.x}%`;
@@ -970,12 +1011,17 @@ function renderCaps() {
     el.style.fontSize = `${(c.size || capBaseSize()) * capScale()}px`;
     if (c.color) el.style.color = c.color;
     if (c.font) el.style.fontFamily = `'${c.font}'`;
-    el.textContent = c.text;
+    el.style.animationDelay = `-${Math.max(0, t - c.start)}s`;
+    el.style.animationPlayState = "paused";
+    el.style.color = c.color || (cap.style === "neon_glow" ? "#FFE14D" : "");
+    el.style.fontFamily = c.font ? `'${c.font}'` : "";
+    el.textContent = c.effect === "word" ? (captionWords(c).find(w => t >= w.start && t < w.end)?.text || (capVideo().paused ? c.text : "")) : c.text;
     const grip = document.createElement("i");
     grip.className = "grip";
     el.append(grip);
     layer.append(el);
   });
+  previous.forEach(el => el.remove());
   const title = $("#capTitle").value.trim();
   $("#capTitlePreview").hidden = !title;
   $("#capTitlePreview").textContent = title;
@@ -994,7 +1040,7 @@ function renderInspector() {
   if (!c) return;
   $("#capWhich").textContent = `Caption ${cap.selected + 1} · ${fmtTime(c.start)}–${fmtTime(c.end)}`;
   if (document.activeElement !== $("#capEditText")) $("#capEditText").value = c.text;
-  $$("#capColors .swatch[data-color]").forEach((b) => b.classList.toggle("on", (c.color || "#FFFFFF").toUpperCase() === b.dataset.color));
+  $$("#capColors .swatch[data-color]").forEach((b) => b.classList.toggle("on", (c.color || (cap.style === "neon_glow" ? "#FFE14D" : "#FFFFFF")).toUpperCase() === b.dataset.color));
   $$("#capFonts .chip").forEach((b) => b.classList.toggle("on", (c.font || "") === b.dataset.font));
   $$("#capEffects .chip").forEach((b) => b.classList.toggle("on", (c.effect || "none") === b.dataset.effect));
   $("#capSize").value = c.size || capBaseSize();
@@ -1111,36 +1157,53 @@ capVideo().addEventListener("loadedmetadata", () => { if (!cap.timed && cap.list
 $("#capFrame").addEventListener("click", (e) => { if (!e.target.closest(".capline") && !capDrag) { cap.selected = -1; renderCaps(); } });
 new ResizeObserver(() => { if (!$("#captions").hidden) renderCaps(); }).observe($("#capFrame"));
 
-// Transcribe the reel's own audio (local Whisper in the engine) into timed captions.
+// Do not mistake Whisper's music-only markers for recognised lyrics.
+function isLyricCue(cue) {
+  const text = (cue.lines || []).join(" ").trim();
+  const bare = text.replace(/[♪♫♬♩🎵🎶\s.,!?:;()[\]{}—_-]/gu, "");
+  return /[\p{L}\p{N}]/u.test(bare) && !/^(music|instrumental|música|musica|musique|applause|silence)$/iu.test(bare);
+}
+function lyricReadProgress(value) {
+  const percent = Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
+  return percent > 0 ? `Listening to your song… ${percent}%` : "Listening to your song…";
+}
 $("#capRead").addEventListener("click", async () => {
   const button = $("#capRead");
   button.disabled = true;
-  $("#capReadStatus").textContent = "Listening to the reel… (the first time it also downloads the speech model)";
+  const statusText = $("#capReadStatus");
   try {
-    await api("/captions/auto-read", { model: "small" });
-    for (;;) {
-      await new Promise((r) => setTimeout(r, 1500));
-      const job = await api("/captions/auto-read/status");
-      if (job.status === "failed") throw new Error(job.error || "Could not read the lyrics");
-      if (job.status === "done") {
-        const cues = job.result?.cues || [];
-        if (!cues.length) { $("#capReadStatus").textContent = "No words were heard in this reel."; break; }
-        const base = cap.list[0] || newCaption();
-        cap.list = cues.map((c) => ({ ...base, text: (c.lines || []).join(" "), start: c.start, end: c.end, words: c.words }));
-        cap.timed = true;
-        cap.selected = -1;
-        syncText();
-        renderCaps();
-        $("#capReadStatus").textContent = `${cues.length} captions read. Check the words before adding them.`;
-        break;
+    let cues = [];
+    for (const model of ["small", "medium"]) {
+      statusText.textContent = "Listening to your song…";
+      await api("/captions/auto-read", { model });
+      for (;;) {
+        await new Promise(r => setTimeout(r, 1500));
+        const job = await api("/captions/auto-read/status");
+        if (job.status === "failed") throw new Error(job.error || "Could not read the lyrics");
+        statusText.textContent = lyricReadProgress(job.progress);
+        if (job.status === "done") {
+          cues = (job.result?.cues || []).filter(isLyricCue);
+          break;
+        }
+
       }
-      $("#capReadStatus").textContent = `Listening to the reel… ${job.progress || 0}%`;
+      if (cues.length) break;
     }
+    if (!cues.length) {
+      statusText.textContent = "Whisper could not make out the sung words. Your captions are unchanged. Paste the lyrics and use Spread captions instead.";
+      return;
+    }
+    const base = cap.list[0] || newCaption();
+    cap.list = cues.map(c => ({ ...base, text: (c.lines || []).join(" "), start: c.start, end: c.end,
+      words: (c.words || []).map(w => ({ ...w, start: w.start ?? w.start_sec, end: w.end ?? w.end_sec })) }));
+    cap.timed = true;
+    cap.selected = -1;
+    syncText();
+    renderCaps();
+    statusText.textContent = `${cues.length} captions read. Check the words before adding them.`;
   } catch (error) {
-    $("#capReadStatus").textContent = error.message;
-  } finally {
-    button.disabled = false;
-  }
+    statusText.textContent = `Could not read the lyrics: ${error.message}. Your captions are unchanged.`;
+  } finally { button.disabled = false; }
 });
 
 function splitCaption(text) {
@@ -1158,7 +1221,8 @@ function captionOverride(c) {
   const effect = (CAP_EFFECTS.find(([id]) => id === (c.effect || "none")) || CAP_EFFECTS[0])[2];
   return {
     horizontal: c.x, vertical: c.y, ...effect,
-    ...(c.size ? { size: c.size } : {}), ...(c.color ? { color: c.color } : {}), ...(c.font ? { font: c.font } : {}),
+    ...(cap.style === "neon_glow" ? { color: c.color || "#FFE14D", glow_color: "#FFE14D" } : (c.color ? { color: c.color } : {})),
+    ...(c.size ? { size: c.size } : {}), ...(c.font ? { font: c.font } : {}),
   };
 }
 
@@ -1166,9 +1230,7 @@ $("#capSkip").addEventListener("click", async () => { capVideo().pause(); state.
 $("#capApply").addEventListener("click", async () => {
   capVideo().pause();
   const title = $("#capTitle").value.trim();
-  const cues = cap.list.filter((c) => c.text.trim() && c.end > c.start).map((c) => ({
-    lines: splitCaption(c.text.trim()), start: c.start, end: c.end, words: c.words || [], style_override: captionOverride(c),
-  }));
+  const cues = cap.list.filter((c) => c.text.trim() && c.end > c.start).flatMap(captionCues);
   state.captioned = true;
   if (!cues.length && !title) return showResult(await status());
   try {
@@ -1182,18 +1244,175 @@ $("#capApply").addEventListener("click", async () => {
   } catch (error) { fail(error); }
 });
 
+// ---------- Show: one video, four rhythms, a short scene review ----------
+const showEdit = { pace: "normal", scenes: [], proposals: [], selected: 0, previewTimer: null, previewToken: 0, blob: null };
+async function openShowSetup() {
+  stopPolling();
+  state.platform = "show";
+  show("showSetup");
+  if (!state.projectId) {
+    const current = await api("/wizard/status");
+    if (["running", "waiting_show_review"].includes(current.status) && current.project_path) {
+      const saved = await api("/project");
+      const wizard = saved.settings?.wizard || {};
+      if (wizard.platform === "show") {
+        state.projectId = current.project_path;
+        state.files = (saved.inputs?.videos || []).map(f => ({ id: crypto.randomUUID(), name: f.path.split("/").pop(), kind: "video", path: f.path, showSource: true }));
+        $("#videoName").value = saved.name || todayName();
+        showEdit.pace = wizard.show?.style || "normal";
+        if (videos()[0]) $("#showInputVideo").src = `/api/v1/show/source?path=${encodeURIComponent(videos()[0].path)}`;
+        if (current.status === "waiting_show_review") return openShowReview();
+        renderStatus(current); show("making"); startPolling(); return;
+      }
+    }
+  }
+  if (!videos().length || !state.files.some(f => f.showSource)) {
+    state.files = [];
+    $("#showInputVideo").src = "/montara/show/sample";
+    await loadSamples();
+    state.files.forEach(f => { f.showSource = true; });
+  }
+  renderShowInput();
+}
+function renderShowInput() {
+  const file = videos()[0];
+  const busy = state.uploads > 0;
+  const error = state.files.find(f => f.kind === "error");
+  $("#showInputStatus").textContent = busy ? `Uploading… ${Math.round((state.files[0]?.progress || 0) * 100)}%` : error ? error.error : file ? (file.sample ? "Your reference video" : file.name) : "Choose your talking video.";
+  $("#showMake").disabled = busy || !file;
+}
+$("#showInputFile").addEventListener("change", event => {
+  const file = event.target.files[0]; event.target.value = "";
+  if (!file) return;
+  if (showEdit.blob) URL.revokeObjectURL(showEdit.blob);
+  showEdit.blob = URL.createObjectURL(file);
+  $("#showInputVideo").src = showEdit.blob;
+  state.files = [];
+  addFiles([file]);
+  state.files.forEach(f => { f.showSource = true; });
+});
+$$("[data-show-pace]").forEach(button => button.addEventListener("click", () => {
+  showEdit.pace = button.dataset.showPace;
+  $$("[data-show-pace]").forEach(b => { b.classList.toggle("on", b === button); b.setAttribute("aria-pressed", String(b === button)); });
+  $("#showPaceHint").textContent = showEdit.pace === "podcast" ? "Uses this video's audio. Separate microphones and automatic speaker switching are not available yet." : "The original voice stays with your video.";
+}));
+$("#showMake").addEventListener("click", () => {
+  $("#showMake").disabled = true;
+  $("#showInputVideo").pause();
+  $("#videoName").value = videos()[0]?.name.replace(/\.[^.]+$/, "") || todayName();
+  state.branding = "montara";
+  registerProject().catch(fail).finally(renderShowInput);
+});
+async function makeShow() {
+  setProgress(0, "Listening to your video…", "Finding the natural cuts and preparing your preview.");
+  show("making");
+  await api("/wizard/start", { project_id: state.projectId, name: $("#videoName").value, platform: "show", videos: videos().map(f => f.path), show_main: videos()[0].path,
+    show_style: showEdit.pace, show_review: true, show_idea_mode: "automatic", show_gags: showEdit.pace === "podcast" ? "off" : "keywords", show_auto_research: true });
+  startPolling();
+}
+async function showPatch(path, body) {
+  const response = await fetch(`/api/v1${path}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error?.message || "Could not save your change.");
+  return data;
+}
+async function openShowReview() {
+  const data = await api("/show/scenes");
+  showEdit.scenes = data.scenes || [];
+  showEdit.proposals = data.proposals || [];
+  if (!showEdit.scenes.length) throw new Error("No scenes were found in this video.");
+  // Ready automatic effects are kept; no drawing or provider sign-in is triggered here.
+  for (const scene of showEdit.scenes) if (scene.decision === "pending") {
+    await api(`/show/scenes/${encodeURIComponent(scene.id)}/decision`, { decision: "modified" });
+    scene.decision = "modified";
+  }
+  showEdit.selected = 0;
+  show("showReview");
+  renderShowScene();
+}
+function renderShowScene() {
+  clearTimeout(showEdit.previewTimer);
+  const token = ++showEdit.previewToken;
+  const scene = showEdit.scenes[showEdit.selected];
+  $("#showSceneTabs").innerHTML = showEdit.scenes.map((s, i) => `<button class="chip${i === showEdit.selected ? " on" : ""}" data-scene-index="${i}">Part ${i + 1}</button>`).join("");
+  $("#showSceneTime").textContent = `Part ${showEdit.selected + 1} · ${fmtTime(scene.start)}–${fmtTime(scene.end)}`;
+  $("#showSceneText").textContent = scene.text || "";
+  $("#showSceneVideo").pause();
+  $("#showSceneVideo").removeAttribute("src"); $("#showSceneVideo").load();
+  const labels = {word:"On-screen text",drawing:"Illustration",cutaway:"Close-up",warp:"Visual accent",steam:"Visual accent",math:"Visual accent",character:"Character",jingle:"Music",clip:"Video insert",background:"Background"};
+  const effects = showEdit.proposals.filter(p => (scene.effects || []).includes(p.id) && !(p.needs || []).length && !(p.kind === "drawing" && !p.params?.picture));
+  $("#showSceneEffects").innerHTML = effects.length ? effects.map(p => `<label class="show-effect"><input type="checkbox" data-show-effect="${escapeHtml(p.id)}" ${p.status !== "discarded" && !(p.needs || []).length ? "checked" : ""} ${(p.needs || []).length ? "disabled" : ""}><span class="show-effect-text">${escapeHtml(labels[p.kind] || "Visual effect")}${(p.needs || []).length ? "<small>Not ready · left out of the export</small>" : ""}${p.kind === "word" ? `<input type="text" data-show-text="${escapeHtml(p.id)}" aria-label="On-screen text" value="${escapeHtml(p.params?.text || "")}" maxlength="120">` : ""}</span></label>`).join("") : '<p class="hint">A clean edit. Your voice takes the lead.</p>';
+  $("#showCleanScene").hidden = !effects.length;
+  $("#showPreviewStatus").textContent = "Preparing this part…";
+  api(`/show/scenes/${encodeURIComponent(scene.id)}/preview`, { next: [] }).then(() => pollShowScene(scene.id, token)).catch(error => { if (token === showEdit.previewToken) $("#showPreviewStatus").textContent = error.message; });
+}
+async function pollShowScene(id, token) {
+  if (token !== showEdit.previewToken || $("#showReview").hidden) return;
+  try {
+    const data = await api("/show/scenes");
+    const scene = (data.scenes || []).find(s => s.id === id);
+    if (!scene) throw new Error("This part is no longer available.");
+    if (token !== showEdit.previewToken) return;
+    if (scene.preview?.status === "ready") {
+      $("#showSceneVideo").src = scene.preview.url;
+      $("#showPreviewStatus").textContent = "Preview ready.";
+      return;
+    }
+    if (scene.preview?.status === "failed") throw new Error(scene.preview.error || "Could not prepare this preview.");
+    $("#showPreviewStatus").textContent = "Preparing this part…";
+    showEdit.previewTimer = setTimeout(() => pollShowScene(id, token), 1200);
+  } catch (error) { if (token === showEdit.previewToken) $("#showPreviewStatus").textContent = error.message; }
+}
+$("#showSceneTabs").addEventListener("click", event => { const button = event.target.closest("[data-scene-index]"); if (button) { showEdit.selected = Number(button.dataset.sceneIndex); renderShowScene(); } });
+$("#showSceneEffects").addEventListener("change", async event => {
+  const id = event.target.dataset.showEffect || event.target.dataset.showText;
+  if (!id) return;
+  const item = showEdit.proposals.find(p => p.id === id);
+  if (!item) return;
+  try {
+    const changes = event.target.dataset.showEffect ? { status: event.target.checked ? "approved" : "discarded" } : { text: event.target.value };
+    await showPatch(`/show/review/${encodeURIComponent(id)}`, changes);
+    if (changes.status) item.status = changes.status;
+    else { item.params ||= {}; item.params.text = changes.text; }
+    renderShowScene();
+  } catch (error) { toast(error.message, true); renderShowScene(); }
+});
+$("#showCleanScene").addEventListener("click", async () => {
+  const scene = showEdit.scenes[showEdit.selected];
+  try { await api(`/show/scenes/${encodeURIComponent(scene.id)}/decision`, { decision: "plain" });
+    showEdit.proposals.filter(p => (scene.effects || []).includes(p.id)).forEach(p => { p.status = "discarded"; });
+    renderShowScene();
+  } catch (error) { toast(error.message, true); }
+});
+$("#showStartOver").addEventListener("click", () => { clearTimeout(showEdit.previewTimer); ++showEdit.previewToken; $("#showSceneVideo").pause(); show("showSetup"); });
+$("#showExport").addEventListener("click", async () => {
+  const button = $("#showExport");button.disabled = true;
+  try {
+    clearTimeout(showEdit.previewTimer);++showEdit.previewToken;$("#showSceneVideo").pause();
+    await api("/show/review/render", {});
+    setProgress(0, "Finishing your video…", "Keeping the edits you chose.");show("making");startPolling();
+  } catch (error) { toast(error.message, true); } finally { button.disabled = false; }
+});
+
 // ---------- result ----------
 function showResult(s) {
   const result = s.result || {};
-  const url = `/api/v1/wizard/result?t=${Date.now()}`;
+  const url = result.url || `/api/v1/wizard/result?t=${Date.now()}`;
+  $("#resultVideo").hidden = Boolean(result.audio);
+  $("#resultAudio").hidden = !result.audio;
+  $("#resultAudio").src = result.audio ? url : "";
+  $("#resultTitle").textContent = result.audio ? "Your master is ready." : state.platform === "show" ? "Your video is ready." : "Your night, edited.";
+  const sourceName = result.filename || $("#videoName").value.trim() || todayName();
+  const baseName = sourceName.replace(/\.[a-z0-9]+$/i, "").replace(/[\/\\]/g, "-");
+  const downloadName = `${baseName}${/montara/i.test(baseName) ? "" : "-Montara"}${result.audio ? ".mp3" : ".mp4"}`;
   $("#resultVideo").classList.toggle("vertical", state.platform === "reel" && reelFormat() !== "16:9");
-  $("#resultVideo").src = url;
-  $("#download").href = url;
-  if (result.filename) $("#download").setAttribute("download", result.filename);
+  $("#resultVideo").src = result.audio ? "" : url;
+  $("#download").href = `${url}${url.includes("?") ? "&" : "?"}download_name=${encodeURIComponent(downloadName)}`;
+  $("#download").setAttribute("download", downloadName);
   const bits = [];
   if (result.cut_count) bits.push(`${result.cut_count} cuts`);
   if (result.camera_usage) bits.push(`${Object.keys(result.camera_usage).length} camera${Object.keys(result.camera_usage).length === 1 ? "" : "s"}`);
-  $("#resultInfo").textContent = bits.join(" · ");
+  $("#resultInfo").textContent = result.audio ? "Your mastered audio is ready." : bits.join(" · ");
   show("result");
 }
 
@@ -1206,3 +1425,4 @@ function fail(error) {
 loadBranding();
 api("/montara/version").then((v) => { $("#version").textContent = `Montara ${v.version}`; }).catch(() => {});
 show("home");
+if (new URLSearchParams(location.search).get("mode") === "show") { state.platform = "show"; openShowSetup().catch(fail); }

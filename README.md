@@ -9,7 +9,7 @@ Zucker engine untouched and gives it a new interface and brand.
 |-------|-------------------------------------------------|-------------|
 | Stage | Full multicam video, synced and cut on the beat | `youtube`   |
 | Pulse | Reel from all your clips: vertical, horizontal or mixed, with captions | `reel`      |
-| Story | Scenes, text and motion (coming soon)           | `show`      |
+| Show  | Talking videos, stories and podcasts (Fast · Normal · Storytelling · Podcast) | `show` |
 
 ## How it is built
 

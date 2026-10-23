@@ -251,7 +251,7 @@ select{height:38px;padding:0 12px;border-radius:10px;border:1px solid var(--line
 .captitle{left:50%;top:7%;background:#fff;color:#000;text-shadow:none;padding:4px 12px;border-radius:4px;font-size:clamp(11px,2.4cqh,26px);text-transform:uppercase;letter-spacing:.04em;pointer-events:none}
 .capstage{container-type:size}
 .capline.shadow{text-shadow:4px 4px 0 #000}
-.capline.neon{text-shadow:0 0 8px var(--accent),0 0 18px var(--accent)}
+.capline.neon{color:#FFE14D;text-shadow:0 0 8px #FFE14D,0 0 18px #FFE14D}
 .capline.serif{font-family:Georgia,serif;font-weight:400}
 .capline.big{text-transform:uppercase}
 .capline.karaoke{color:#ffe14d}
@@ -306,3 +306,33 @@ select{height:38px;padding:0 12px;border-radius:10px;border:1px solid var(--line
 @media (max-width:760px){.sphere-body{grid-template-columns:1fr}}
 .strip .mute:disabled{font-size:9px;opacity:.8;cursor:default}
 .version{text-align:center;color:var(--muted);font-size:12px;padding:0 0 18px}
+
+/* The brand bars travel together as a loading wave. */
+.loading-mark{width:100px;height:84px;overflow:visible;margin-bottom:12px}
+.loading-mark rect{transform-box:fill-box;transform-origin:center;animation:brandwave 1.4s ease-in-out infinite}
+.loading-mark rect:nth-child(2){animation-delay:-1.12s}.loading-mark rect:nth-child(3){animation-delay:-.84s}.loading-mark rect:nth-child(4){animation-delay:-.56s}.loading-mark rect:nth-child(5){animation-delay:-.28s}
+@keyframes brandwave{0%,100%{transform:translateY(7px) scaleY(.8)}50%{transform:translateY(-7px) scaleY(1.12)}}
+@media(prefers-reduced-motion:reduce){.loading-mark rect{animation:none}}
+
+.mixstatus .loading-mark{width:42px;height:36px;margin:0}.mixstatus.done .loading-mark{display:none}
+#resultAudio{width:min(100%,680px);margin:20px auto;display:block}#resultAudio[hidden]{display:none}
+
+/* One wordmark: the symbol is the initial M. Progress surrounds that same mark. */
+.brand{gap:2px}.brand img{width:30px;height:28px}.brand span{letter-spacing:-.8px}
+.ring .ring-brand{position:absolute;inset:25px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;animation:brandbreathe 2.2s ease-in-out infinite}
+.ring .loading-mark{width:62px;height:52px;transform:none;overflow:visible;margin:0}
+.ring .ring-brand b{position:static;font-size:25px;inset:auto}
+@keyframes brandbreathe{0%,100%{transform:scale(.94)}50%{transform:scale(1.09)}}
+.mixstatus .loading-mark{animation:brandbreathe 2.2s ease-in-out infinite}
+@media(prefers-reduced-motion:reduce){.ring .ring-brand,.mixstatus .loading-mark{animation:none}}
+
+
+/* Show shares Montara's short flow, not the desktop editing workspace. */
+.eyebrow{font-size:12px;letter-spacing:.16em;font-weight:600;color:var(--accent);margin:4px 0 12px}
+.show-heading{margin-bottom:28px}.show-heading h2{font-size:clamp(30px,4vw,46px);letter-spacing:-.04em}.show-heading .lead{margin-top:8px}
+.show-layout,.show-review-layout{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(260px,1fr);gap:32px;align-items:start}
+.show-player{background:#111114;border:1px solid var(--line);border-radius:14px;overflow:hidden;aspect-ratio:16/9}.show-player video{width:100%;height:100%;object-fit:contain;display:block}
+.show-source{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:14px}.show-label{font-size:15px;font-weight:500;margin:0 0 14px}
+.show-paces{display:grid;grid-template-columns:1fr 1fr;gap:10px}.pace-card{display:flex;flex-direction:column;text-align:left;gap:8px;background:var(--panel);border:1px solid var(--line);padding:18px 16px;border-radius:12px;color:var(--fg);cursor:pointer;min-height:114px}.pace-card b{font-size:17px;font-weight:600}.pace-card span{font-size:13px;line-height:1.5;color:var(--muted)}.pace-card.on{border-color:var(--accent);background:#251714}.pace-card:hover{border-color:var(--muted)}.pace-card:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+#showMake{width:100%;margin-top:8px}.show-scenes{display:flex;gap:8px;overflow:auto;padding:10px 0}.show-scenes button{flex:0 0 auto}.show-scene-details{font-size:15px;line-height:1.65}.show-effect{display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid var(--line)}.show-effect input[type=checkbox]{accent-color:var(--accent)}.show-effect-text{min-width:0;width:100%}.show-effect-text input{width:100%;margin-top:8px}.show-effect small{display:block;color:var(--muted)}
+@media(max-width:760px){.show-layout,.show-review-layout{grid-template-columns:1fr;gap:24px}.show-paces{gap:8px}.pace-card{min-height:100px}.show-source{align-items:flex-start}}

@@ -39,7 +39,7 @@ SAMPLE_SETS = {
 }
 DEFAULT_DATA = Path.home() / "MontaraData"
 # Shown at the bottom of every page, so it is obvious which build is running.
-MONTARA_VERSION = "0.5 · 2026-10-23 · caption editor, bass fix"
+MONTARA_VERSION = "0.10 · 2026-10-23 · simple Show"
 BRANDING_MODES = {"montara", "mine", "none"}
 
 
@@ -95,7 +95,26 @@ def create_montara_app(data_root: Path = DEFAULT_DATA, samples: bool = True):
         # Never let a browser keep an older interface after an update.
         if request.path in {"/", "/index.html"} or request.path.endswith((".js", ".css", ".html")):
             response.headers["Cache-Control"] = "no-store"
+        if request.path == "/api/v1/wizard/result" or (request.path.startswith("/montara/mix/") and request.path.endswith("/result")):
+            from werkzeug.http import parse_options_header
+            from werkzeug.utils import secure_filename
+            _, options = parse_options_header(response.headers.get("Content-Disposition", ""))
+            name = secure_filename(request.args.get("download_name") or options.get("filename") or "master.mp3")
+            file = Path(name)
+            stem = file.stem or "master"
+            if "montara" not in stem.lower():
+                stem += "-Montara"
+            response.headers.set("Content-Disposition", "inline", filename=stem + file.suffix)
         return response
+
+    @app.get("/montara/show-studio")
+    def montara_show_studio():
+        from flask import redirect
+        return redirect("/?mode=show")
+
+    @app.get("/montara/show/sample")
+    def montara_show_sample():
+        return send_from_directory(FIXTURES / "real", "talk.mp4")
 
     @app.get("/montara/version")
     def montara_version():
@@ -187,8 +206,8 @@ def create_montara_app(data_root: Path = DEFAULT_DATA, samples: bool = True):
         """Start the auto-mix for a list of registered audio tracks (paths)."""
         tracks = [str(p) for p in ((request.get_json(silent=True) or {}).get("tracks") or []) if isinstance(p, str)]
         files = [Path(p) for p in tracks if Path(p).is_file()]
-        if len(files) < 2:
-            return jsonify({"error": {"message": "The mixer needs at least two tracks"}}), 400
+        if len(files) < 1:
+            return jsonify({"error": {"message": "Add at least one audio track"}}), 400
         job_id = uuid.uuid4().hex[:12]
         work = data_root / "Mixer" / job_id
         tracks_dir = work / "tracks"
@@ -217,6 +236,14 @@ def create_montara_app(data_root: Path = DEFAULT_DATA, samples: bool = True):
         if not job:
             return jsonify({"error": {"message": "unknown mix"}}), 404
         return send_from_directory(job["tracks_dir"], Path(name).name)
+
+    @app.get("/montara/mix/<job_id>/result")
+    def montara_mix_result(job_id: str):
+        job = mix_jobs.get(job_id)
+        if not job or job.get("status") != "done":
+            return jsonify({"error": {"message": "The master is not ready"}}), 404
+        master = Path(job["master_path"])
+        return send_from_directory(master.parent, master.name, mimetype="audio/mpeg")
 
     @app.post("/montara/mix/<job_id>/reference")
     def montara_mix_reference(job_id: str):
