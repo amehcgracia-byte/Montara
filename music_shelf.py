@@ -88,7 +88,7 @@ def register_music_shelf(app, data_root: Path, bundled: Path):
         with engine_client(app) as engine:
             response=engine.get('/api/v1/music/file/'+track_id,headers={'Range':request.headers.get('Range','')})
             result=proxy(response)
-            for key in ['Accept-Ranges','Content-Range','Content-Length']: 
+            for key in ['Accept-Ranges','Content-Range','Content-Length']:
                 if key in response.headers:result.headers[key]=response.headers[key]
             return result
     @app.post('/montara/music/import')
