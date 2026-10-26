@@ -1,0 +1,15 @@
+# Show workspace and music expansion
+
+Review groups part tabs, video, playback and timeline. Supporting controls and the collapsible transcript follow it. The redundant effect list is hidden while the existing timeline/inspector handlers, clear effects, music, undo, camera and subtitle controls remain. Bounded video and timeline heights keep them together beneath the fixed header.
+
+The initial music selection has six creator classics plus Face The Facts in Retro (chiptune, not a MIDI file). Our Expanse is retired from browsing, preserving project copies. A one-time migration hides the old All Minds test upload without affecting its assets or the Push master. Explicit reupload unhides own music. Existing bundled metadata updates to the new labels.
+
+More creator classics imports three complete songs per click from a reviewed pool of fifteen official Kevin MacLeod CC BY 4.0 tracks. Fixed HTTPS source, no redirects, maximum 50 MB per file, checked HTTP response, temporary-file cleanup and engine audio validation. No API key or purchase. Up to 21 creator tracks plus one retro track can be browsed. Existing YouTube entry remains; public-provider verification failures are reported and audio upload remains available.
+
+Music attribution opens an explanatory dialog with copy/download rather than a blank text attachment. Only approved music effects still referenced in current scenes contribute attribution. Removed songs disappear from credits; own uploads/CC0 have an explanatory empty state. The final result links attribution when necessary and shows a single publication responsibility reminder. Push pack delivery shows the same final reminder. Licence labels remain visible without repeated warning banners.
+
+The separate plan simulator (/planes/ publicly, /montara/plans in app) is explicitly non-billing. It demonstrates free/15/30/50 shared allowances, reservation and failed-job refund. Actual account/payment enforcement is not implemented or implied. See PLANS_DRAFT.md for production prerequisites and usage-accounting design.
+
+Verification: five real-media tests pass, including render audio, active attribution/removal, public-host validation, metadata, and more-music imports. Browser: downloaded three real Incompetech songs, placed Fluffing a Duck, inspected correct attribution, verified the compact workspace and plan reservation/refund. Engine/mixer code unchanged.
+
+Reload follow-up: final public verification revealed that worker restart did not reopen last_project_path, and an idle saved Show was not offered for review even when its scenes existed. Montara now starts the engine with the validated last project inside the session data root. Show setup accepts persisted scenes on an idle/recovered project and resumes review through the normal input/style pages. A sixth test checks startup recovery without processing. An inadvertently started example analysis was cancelled; the original Gamer project containing 022 AllMinds remains intact and was reopened through the engine HTTP project API before updating the user session.

@@ -1,0 +1,39 @@
+{
+  "version": 2,
+  "functions": {
+    "api/session.js": {
+      "maxDuration": 300,
+      "includeFiles": "{overlay.json,overlay-assets/**}"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/planes/",
+      "destination": "/planes/index.html"
+    },
+    {
+      "source": "/anuncios/",
+      "destination": "/anuncios/index.html"
+    },
+    {
+      "source": "/",
+      "destination": "/index.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "no-referrer"
+        }
+      ]
+    }
+  ],
+  "outputDirectory": "public"
+}

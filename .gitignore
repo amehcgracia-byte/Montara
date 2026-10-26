@@ -3,3 +3,14 @@ __pycache__/
 *.pyc
 /e2e-output/
 tests/fixtures/**/ZuckerMixer/
+
+# Local environments, provider credentials and generated deployment artifacts
+.env*
+.vercel/
+.venv-mac/
+.pytest_cache/
+node_modules/
+tools/asset-selector/data/
+deployment/vercel/overlay.json
+deployment/vercel/overlay-assets/
+*.log

@@ -65,16 +65,17 @@ def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
     page.locator(f'.mode[data-platform="{MODES[mode]}"]').click()
     page.locator("#videoName").fill(f"E2E {mode}")
     files = media_files(media)
+    rows = "document.querySelectorAll('#videoFiles li, #audioFiles li').length"
     if mode == "mix" and media == REAL:
-        # Same song as 14 separate tracks: the mixer makes the master.
-        page.wait_for_function("document.querySelectorAll('#files li').length > 0", timeout=30_000)
-        page.locator("#tracksSample").click()
-        page.wait_for_function("document.querySelectorAll('#files li').length === 17", timeout=30_000)
+        # Default Stage sample: three cameras + the song as 14 separate tracks -> the mixer makes the master.
+        page.wait_for_function(f"{rows} === 12", timeout=30_000)
     elif mode == "stage" and media == REAL:
-        # The preloaded sample footage (what a tester sees), including its 360 viewpoints.
-        page.wait_for_function(f"document.querySelectorAll('#files li').length === {len(files)}", timeout=30_000)
+        # Same cameras with the finished master (the "Use the finished master instead" link).
+        page.wait_for_function(f"{rows} === 12", timeout=30_000)
+        page.locator("#switchSample").click()
+        page.wait_for_function(f"{rows} === {len(files)}", timeout=30_000)
     else:
-        page.locator("#fileInput").set_input_files([str(f) for f in files])
+        page.locator("[data-drop=video] input").set_input_files([str(f) for f in files])
     page.locator(f'input[name=branding][value="{BRANDING[mode]}"]').check()
     page.wait_for_function("!document.querySelector('#continueFootage').disabled", timeout=120_000)
     page.wait_for_timeout(300)
@@ -115,6 +116,28 @@ def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
             swapped = first.locator("xpath=../div/img").get_attribute("src") != before
             page.screenshot(path=str(shots / "06-frames-swapped.png"), full_page=True)
         page.locator("#renderFrames").click()
+        page.wait_for_selector("#captions:not([hidden]), #result:not([hidden]), #failed:not([hidden])", timeout=900_000)
+    captioned = False
+    if page.locator("#captions").is_visible():
+        # Pulse: title + two typed captions, spread over the reel, burned by the engine.
+        # (headless Chromium cannot decode H.264: the player stays empty here, captions still work)
+        page.locator("#capTitle").fill("Much to me")
+        page.locator("#capText").fill("Much to me\nEvery night we play")
+        page.locator('#capStyles [data-style="hard_shadow"]').click()
+        # Shape the second caption on its own: orange, Impact, pulse, moved up on the video.
+        page.locator('.capbar[data-i="1"]').click()
+        page.locator('#capColors [data-color="#FF4F2E"]').click()
+        page.locator('#capFonts [data-font="Impact"]').click()
+        page.locator('#capEffects [data-effect="pulse"]').click()
+        box = page.locator(".capline.sel").bounding_box()
+        page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+        page.mouse.down()
+        page.mouse.move(box["x"] + box["width"] / 2, box["y"] - 200, steps=5)
+        page.mouse.up()
+        page.wait_for_timeout(500)
+        page.screenshot(path=str(shots / "06b-captions.png"), full_page=True)
+        page.locator("#capApply").click()
+        captioned = True
         page.wait_for_selector("#result:not([hidden]), #failed:not([hidden])", timeout=900_000)
     if page.locator("#failed").is_visible():
         page.screenshot(path=str(shots / "99-failed.png"))
@@ -128,6 +151,8 @@ def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
     run(["ffmpeg", "-v", "error", "-i", str(path), "-f", "null", "-"])  # decode the whole file
     video = next(s for s in probe["streams"] if s["codec_type"] == "video")
     has_audio = any(s["codec_type"] == "audio" for s in probe["streams"])
+    if mode == "pulse":
+        assert not captioned or "caption" in path.name, f"captions were not burned: {path.name}"
     (shots / "render.mp4").write_bytes(path.read_bytes())
     duration = float(probe["format"]["duration"])
     for second in (2.0, duration / 2, max(0.0, duration - 2.0)):  # intro, body, outro: look at them
@@ -143,7 +168,7 @@ def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
     # (the engine may rename a camera to a cached proxy, so count cameras, not names)
     all_used = mode == "pulse" or (len([k for k, n in used.items() if n]) >= len(cameras) and not result.get("excluded_clips"))
     return {"mode": mode, "media": media.name, "branding": BRANDING[mode], "passed": has_audio and duration > 0 and all_used and (mode != "mix" or bool(mixed and "Mixer" in mixed)),
-            "duration": duration, "size": f"{video['width']}x{video['height']}", "frames_swapped": swapped, "mixed_master": mixed,
+            "duration": duration, "captioned": captioned, "size": f"{video['width']}x{video['height']}", "frames_swapped": swapped, "mixed_master": mixed,
             "cuts": result.get("cut_count"), "camera_usage": used, "excluded": result.get("excluded_clips")}
 
 

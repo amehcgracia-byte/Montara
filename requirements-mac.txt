@@ -1,0 +1,16 @@
+# Montara on a Mac (Intel or Apple silicon): same as requirements.txt, without
+# the Linux-only pins and the test tools.
+flask>=3.0
+numpy>=1.26,<2
+scipy>=1.11
+llvmlite==0.45.1  # last release with Intel-Mac wheels
+numba==0.62.1
+librosa>=0.11
+opencv-python-headless>=4.9,<4.12
+faster-whisper>=1.1.0
+openai>=1.0.0
+pillow>=10.0
+soundfile
+av==14.2.0  # faster-whisper still passes metadata_errors, removed in PyAV 15
+pyloudnorm
+matchering==2.0.6

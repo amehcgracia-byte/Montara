@@ -1,0 +1,20 @@
+services:
+  montara:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8090:8080"
+    environment:
+      MONTARA_PREVIEW_PASSWORD: ${MONTARA_PREVIEW_PASSWORD:?Set a private preview password}
+      MONTARA_DATA: /data
+    volumes:
+      - montara-data:/data
+    mem_limit: 8g
+    cpus: 2
+    pids_limit: 256
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+volumes:
+  montara-data:

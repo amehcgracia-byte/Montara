@@ -1,0 +1,51 @@
+1
+00:00:01,200 --> 00:00:02,580
+Has grabado una actuación.
+
+2
+00:00:03,630 --> 00:00:06,330
+Tienes las pistas de los instrumentos, las voces
+
+3
+00:00:06,330 --> 00:00:07,310
+y varios vídeos.
+
+4
+00:00:08,360 --> 00:00:09,740
+Ahora toca juntarlo.
+
+5
+00:00:10,240 --> 00:00:13,160
+En Stage puedes preparar la mezcla, ajustar cada
+
+6
+00:00:13,160 --> 00:00:14,840
+pista y añadir efectos.
+
+7
+00:00:15,820 --> 00:00:18,040
+Puedes quedarte solo con el audio o seguir
+
+8
+00:00:18,040 --> 00:00:18,660
+con el vídeo.
+
+9
+00:00:19,710 --> 00:00:22,570
+Revisa los cortes, elige las tomas y ajusta
+
+10
+00:00:22,570 --> 00:00:24,010
+el plano donde lo necesites.
+
+11
+00:00:25,050 --> 00:00:27,010
+De lo que grabaste a lo que quieres
+
+12
+00:00:27,010 --> 00:00:27,650
+enseñar.
+
+13
+00:00:28,590 --> 00:00:30,010
+Montara, Stage.

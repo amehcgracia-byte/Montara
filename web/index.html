@@ -6,14 +6,15 @@
 <title>Montara</title>
 <link rel="icon" href="mark.svg" type="image/svg+xml">
 <link rel="stylesheet" href="montara.css">
+<link rel="stylesheet" href="push-pack.css">
 </head>
 <body>
 <header class="top">
   <a class="brand" href="#" data-go="home" aria-label="Montara home">
-    <img src="mark.svg" alt="" width="34" height="28"><span>montara</span>
+    <img src="mark.svg" alt="" width="34" height="28"><span>ontara</span>
   </a>
   <nav class="steps" id="steps" hidden>
-    <span data-step="footage">Footage</span><span data-step="cameras">Cameras</span><span data-step="mix">Mix</span><span data-step="making">Edit</span><span data-step="frames">Frames</span><span data-step="result">Result</span>
+    <span data-step="footage">Footage</span><span data-step="cameras">Cameras</span><span data-step="mix">Mix</span><span data-step="making">Edit</span><span data-step="frames">Frames</span><span data-step="showReview">Review</span><span data-step="captions">Captions</span><span data-step="result">Result</span>
   </nav>
   <button class="btn primary" id="newVideo" data-go="mode">New video</button>
 </header>
@@ -21,55 +22,116 @@
 <main>
   <!-- Home -->
   <section class="screen" id="home">
-    <div class="hero">
-      <h1>Drop your footage.<br><em>Get the edit.</em></h1>
-      <p class="lead">Multicam concerts, vertical reels and stories, edited on the beat from the material you already shot.</p>
-      <button class="btn primary big" data-go="mode">Start a new video</button>
-    </div>
-    <h2 class="small">How it works</h2>
-    <ol class="how">
-      <li><b>Drop</b><span>All your camera videos and the audio in one box: phone, camera, 360.</span></li>
-      <li><b>Name your cameras</b><span>Tell Montara who each camera shows. For 360 cameras, click the points of view you want.</span></li>
-      <li><b>Pick the frames</b><span>Montara cuts on the beat and shows you every shot. Swap the ones you don't like.</span></li>
-      <li><b>Render</b><span>With the Montara watermark, your own logo, or nothing at all.</span></li>
-    </ol>
+    <h1 class="intro-name" aria-label="Montara"><span aria-hidden="true" style="--letter:0"><svg class="intro-mark" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 100">
+  <rect x="4" y="4" width="18" height="92" rx="9" fill="#F5F3EF"/>
+  <rect x="27" y="4" width="18" height="62" rx="9" fill="#F5F3EF"/>
+  <rect x="51" y="4" width="18" height="40" rx="9" fill="#FF4F2E"/>
+  <rect x="75" y="4" width="18" height="62" rx="9" fill="#F5F3EF"/>
+  <rect x="98" y="4" width="18" height="92" rx="9" fill="#F5F3EF"/>
+</svg></span><span aria-hidden="true" style="--letter:1">o</span><span aria-hidden="true" style="--letter:2">n</span><span aria-hidden="true" style="--letter:3">t</span><span aria-hidden="true" style="--letter:4">a</span><span aria-hidden="true" style="--letter:5">r</span><span aria-hidden="true" style="--letter:6">a</span></h1>
   </section>
 
   <!-- Step 1: mode -->
   <section class="screen" id="mode" hidden>
-    <h2>What are we making?</h2>
+    <h2>How</h2>
     <div class="modes">
       <button class="mode" data-platform="youtube">
-        <span class="dot"></span><h3>Stage</h3>
-        <p>Every camera synced to your audio and cut on the beat. Horizontal, full length.</p>
-        <small>Videos + master audio</small>
+        <h3>Stage</h3><small class="mode-hint">Mix your music. Cut your video.</small>
       </button>
       <button class="mode" data-platform="reel">
-        <span class="dot"></span><h3>Pulse</h3>
-        <p>A fast vertical reel from all your clips, ready to post.</p>
-        <small>Videos (+ optional music)</small>
+        <h3>Push</h3><small class="mode-hint">Create reels from your videos.</small>
       </button>
-      <button class="mode" data-platform="show" disabled>
-        <span class="dot"></span><h3>Story</h3>
-        <p>Scenes, text and motion that turn moments into a story.</p>
-        <small class="soon">Coming soon</small>
+      <button class="mode" data-platform="show">
+        <h3>Show</h3><small class="mode-hint">Creators, stories and podcasts.</small>
       </button>
     </div>
+  </section>
+
+  <nav id="showNavigation" class="actions" aria-label="Show steps" hidden><button class="btn ghost small" data-show-step="showSetup">1 · Videos</button><button class="btn ghost small" data-show-step="showStyle">2 · Edit type</button><button class="btn ghost small" data-show-step="showReview" disabled>3 · Review</button></nav>
+  <section class="screen" id="showSetup" hidden>
+    <div class="show-heading"><p class="eyebrow">SHOW · 1 / 3</p><h2>Add your videos.</h2><p class="lead small">Choose your footage, then continue to the type of edit.</p></div>
+    <div class="show-layout">
+      <div><div class="show-drop" id="showDrop"><label class="show-drop-prompt"><strong id="showDropTitle">Drop your videos here</strong><span id="showDropHint">or click to choose your footage</span><input id="showInputFile" type="file" multiple accept="video/*,audio/*,image/*,.mp4,.mov" aria-label="Choose Show videos and audio"></label><ul id="showVideoMaterials" class="show-materials" aria-label="Your separate source files"></ul></div><div id="showSetupInputs"></div><div class="show-player"><video id="showInputVideo" controls playsinline preload="metadata"></video></div>
+        <div class="show-source"><span class="hint" id="showInputStatus" role="status">Loading your reference video…</span></div>
+        <details id="showExamples" hidden><summary>Try a short example</summary><label>Test video<select id="showExampleChoice" aria-label="Test video"></select></label><p class="hint" id="showExampleInfo"></p><div class="actions"><button class="btn ghost small" id="showUseExample" type="button">Use this example</button><a class="link" id="showExampleGuide" target="_blank" rel="noopener">Test guide</a><a class="link" id="showExampleKit" download>Video and support files</a></div><p class="hint" id="showExampleGuideText"></p></details>
+      </div>
+    </div>
+    <div class="actions"><button class="btn ghost" id="showBackHome" type="button">Back</button><button class="btn primary" id="showChooseType" type="button">Continue</button></div>
+  </section>
+  <section class="screen" id="showStyle" hidden>
+    <div class="show-heading"><p class="eyebrow">SHOW · 2 / 3</p><h2>Choose your edit.</h2><p class="hint" id="showChosenVideo"></p></div>
+      <div><h3 class="show-label">How should it feel?</h3>
+        <div class="show-paces" role="group" aria-label="Editing style">
+          <button class="pace-card" data-show-pace="fast" aria-pressed="false"><b>Gamer</b><span>1.5–2 second cuts. Quick and energetic.</span></button>
+          <button class="pace-card on" data-show-pace="normal" aria-pressed="true"><b>Influencer</b><span>Longer shots. A natural, relaxed rhythm.</span></button>
+          <button class="pace-card" data-show-pace="storytelling" aria-pressed="false"><b>Story</b><span>Room for your story and its pauses.</span></button>
+          <button class="pace-card" data-show-pace="podcast" aria-pressed="false"><b>Podcast</b><span>Podcast. Long, steady shots for conversation.</span></button>
+        </div>
+        <p class="hint" id="showPaceHint">The original voice stays with your video.</p>
+        <div id="showStyleInputs"></div><div id="showModeInputs">
+<section id="showPodcastInputs" hidden><h3>Microphones and cameras</h3><p class="hint" id="showPodcastKitInfo"></p><div class="show-drop" id="showMicDrop"><label class="show-drop-prompt"><strong>Drop your microphones here</strong><span>One track per person or shared microphone</span><input id="showPodcastMics" type="file" accept="audio/*" multiple aria-label="Choose podcast microphones"></label><div id="showPodcastPeople"></div></div><label class="btn ghost small">Add cameras<input id="showPodcastCameras" type="file" accept="video/*" multiple hidden></label><div id="showPodcastCameraList"></div></section>
+<section id="showStoryInputs" hidden><h3>Narration and material</h3><p class="hint" id="showStoryKitInfo"></p><div class="actions"><label class="btn ghost small">Choose narration<input id="showStoryNarration" type="file" accept="audio/*" hidden></label><label class="btn ghost small">Add pictures and clips<input id="showStoryClips" type="file" accept="image/*,video/*" multiple hidden></label></div><ul hidden id="showStoryMaterials" class="files" aria-label="Narration and separate clips"></ul></section>
+<p class="hint" id="showModeInputStatus" role="status"></p></div><div class="actions"><button class="btn ghost" id="showStyleBack" type="button">Back to videos</button><button class="btn primary" id="showMake" disabled>Continue</button></div>
+      </div>
+  </section>
+
+  <section class="screen" id="showReview" hidden>
+    <p class="eyebrow">SHOW · REVIEW</p><h2>Your video, shaped.</h2>
+    <p class="lead small">Watch each part. Keep the suggested effects, or leave it clean.</p>
+    <div class="show-picture-console">
+      <div class="show-scenes" id="showSceneTabs" aria-label="Video parts"></div>
+      <div class="show-player"><video id="showSceneVideo" playsinline preload="metadata"></video><div id="showLiveLayer" aria-label="Effects on the video"></div><div id="showCaptionLayer" aria-label="Subtitle preview"></div></div>
+      <div class="editor-transport" aria-label="Playback and editing tools"><button class="icon-btn" id="showLivePlay" type="button" aria-label="Play or pause" title="Play / pause">▶</button><button class="icon-btn" id="showUndoEdit" type="button" aria-label="Undo" title="Undo" disabled>↶</button><button class="icon-btn" id="showRedoEdit" type="button" aria-label="Redo" title="Redo" disabled>↷</button><span id="showCutToolsHost"></span><button class="icon-btn" id="showMute" type="button" aria-label="Mute" title="Mute">♪</button><input id="showPlaybackVolume" aria-label="Playback volume" type="range" min="0" max="1" step=".01" value="1"><span id="showPreviewStatus" class="hint" role="status"></span></div>
+      <div id="showEditorTimeline" class="show-editor-timeline" aria-label="Video, narrator and effects timeline"></div>
+    </div>
+    <div class="show-edit-actions" hidden><button id="showCleanScene">Remove effects from this part</button><button id="showOpenEffects" type="button">Add an effect</button><button id="showMusicOpen" type="button">Music</button><button id="showLiveEdit" type="button">Edit on video</button><button id="showPreviewPart" type="button">Preview this part</button><span id="showEditorStatus" role="status"></span></div>
+    <details class="show-transcript"><summary>Transcript · select words to add an effect</summary><div class="show-scene-details"><p class="hint" id="showSceneTime"></p><p id="showSceneText" tabindex="0" aria-label="Transcript. Select words to add an effect."></p><button type="button" class="btn ghost small" id="showSelectionEffect" hidden>Add an effect to these words</button></div></details>
+    <div id="showSceneEffects" hidden></div>
+    <div id="showCaptionTools" class="actions"><label><input id="showCaptionsOn" type="checkbox"> Subtitles</label><label>Style<select id="showCaptionPreset"><option value="clean">Clean</option><option value="bold">Bold</option><option value="pop">Pop</option></select></label><label>Size<input id="showCaptionSize" type="range" min="24" max="140" step="2" value="58"></label><span class="hint" id="showCaptionStatus">Drag a subtitle on the video to move it; drag its corner to resize.</span></div>
+    <div id="showProgramTools" class="actions"><button id="showCameraEdit" class="btn ghost small" type="button" hidden>Change this camera shot</button><button id="showDecisionsOpen" class="btn ghost small" type="button">Decisions and history</button><span id="showProgramStatus" class="hint" role="status"></span></div>
+    <div class="actions"><button class="btn ghost" id="showStartOver">Back to edit type</button><button class="btn primary" id="showExport">Export video</button></div>
   </section>
 
   <!-- Step 2: footage -->
   <section class="screen" id="footage" hidden>
     <h2><span id="modeLabel">Stage</span> · Add your footage</h2>
-    <label class="drop" id="drop">
-      <input type="file" id="fileInput" multiple accept="video/*,audio/*,.insv,.wav,.mp3,.m4a,.aif,.aiff,.flac">
-      <strong>Drop videos &amp; audio here</strong>
-      <span>or click to choose</span>
-    </label>
-    <div class="boxhelp" id="boxHelp"></div>
-    <p class="hint" id="sampleNote" hidden>Sample footage from a real jam is loaded so you can try Montara right away. <button class="link" id="clearSamples">Use my own files instead</button><span id="tracksSampleRow"> · <button class="link" id="tracksSample">Try the mixer: same song as 14 separate tracks</button></span></p>
-    <ul class="files" id="files"></ul>
+    <p class="hint" id="sampleNote" hidden>Sample material from a real jam is loaded so you can try Montara right away. <button class="link" id="clearSamples">Use my own files instead</button><span id="variantRow"> · <button class="link" id="switchSample"></button></span></p>
+    <div class="boxes">
+      <div class="box">
+        <div class="drop" data-drop="video">
+        <label class="drop-prompt">
+          <input type="file" multiple accept="video/*,.mov,.mp4,.mts">
+          <strong>Drop your videos</strong>
+          <span>Every camera of the performance: phone, camera, 360. They don't need to start together.</span>
+        </label>
+        <ul class="files" id="videoFiles" aria-label="Loaded videos"></ul>
+        </div>
+      </div>
+      <div class="box">
+        <div class="drop" data-drop="audio">
+        <label class="drop-prompt">
+          <input type="file" multiple accept="audio/*,.wav,.mp3,.m4a,.aif,.aiff,.flac">
+          <strong>Drop your audio tracks</strong>
+          <span id="audioSub"></span>
+        </label>
+        <ul class="files" id="audioFiles" aria-label="Loaded audio tracks"></ul>
+        </div>
+      </div>
+    </div>
+    <p class="hint small-note">Photos are not used here (Story, coming soon, will take them).</p>
     <div class="form">
       <label>Video name <input id="videoName" type="text" maxlength="80"></label>
+      <div id="formatRow" class="formats" hidden>
+        <span class="label">Format</span>
+        <div class="formatgrid">
+          <label class="fmt"><input type="radio" name="format" value="9:16" checked><span><i class="shape v"></i><b>Vertical</b><small>Full screen 9:16. Reels, TikTok, Shorts.</small></span></label>
+          <label class="fmt"><input type="radio" name="format" value="16:9"><span><i class="shape v framed"></i><b>Horizontal</b><small>Whole picture inside a vertical reel, over a soft background.</small></span></label>
+          <label class="fmt"><input type="radio" name="format" value="mix"><span><i class="shape v framed"></i><b>Mix</b><small>Vertical and horizontal views inside every reel.</small></span></label>
+          <label class="fmt"><input type="radio" name="format" value="mix_vertical_horizontal"><span><i class="shape v half"></i><b>Mix alternate</b><small>Alternate the framing between reels or shots.</small></span></label>
+        </div>
+        <label id="mixShareRow" class="inline" hidden>Vertical / horizontal
+          <select id="mixShare"><option value="auto">Automatic</option><option value="0.75">75% vertical · 25% horizontal</option><option value="0.5">50% vertical · 50% horizontal</option><option value="0.25">25% vertical · 75% horizontal</option></select></label>
+      </div>
       <label id="durationRow" hidden>Reel length <span class="range"><input id="reelDuration" type="range" min="15" max="60" step="5" value="30"> <output id="reelDurationOut">30 s</output></span></label>
     </div>
     <fieldset class="branding">
@@ -89,7 +151,7 @@
   <!-- Step 3: cameras -->
   <section class="screen" id="cameras" hidden>
     <h2>Your cameras</h2>
-    <p class="lead small">Tell Montara what each camera shows. It uses this to pick close-ups and to never show the wrong person.</p>
+    <p class="lead small">Choose each camera’s type: 360, fixed or moving. For 360 cameras, name the places or people each viewpoint shows.</p>
     <div id="cameraList" class="cameras"></div>
     <div id="sphereList"></div>
     <div class="actions">
@@ -101,8 +163,15 @@
   <!-- Step 3b: mixer -->
   <section class="screen" id="mix" hidden>
     <h2>Your mix</h2>
-    <p class="lead small">Montara mixed your tracks automatically. Press play and move any fader: you hear the change at once. When it sounds right, use this mix for the video.</p>
-    <div class="mixstatus" id="mixStatus"><span class="spin"></span><span id="mixStatusText">Mixing your tracks automatically…</span></div>
+    <p class="lead small">Montara mixed your tracks automatically. Press play and move any fader: you hear the change at once. When it sounds right, use this mix for your video or download the mastered audio.</p>
+    <div class="mixstatus" id="mixStatus"><svg class="loading-mark" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 100">
+  <rect x="4" y="4" width="18" height="92" rx="9" fill="#F5F3EF"/>
+  <rect x="27" y="4" width="18" height="62" rx="9" fill="#F5F3EF"/>
+  <rect x="51" y="4" width="18" height="40" rx="9" fill="#FF4F2E"/>
+  <rect x="75" y="4" width="18" height="62" rx="9" fill="#F5F3EF"/>
+  <rect x="98" y="4" width="18" height="92" rx="9" fill="#F5F3EF"/>
+</svg>
+<span class="spin"></span><span id="mixStatusText">Mixing your tracks automatically…</span></div>
     <div class="transport" id="transport" hidden>
       <button class="btn primary small" id="playMix">Play</button>
       <input type="range" id="mixSeek" min="0" max="100" step="0.1" value="0">
@@ -111,10 +180,12 @@
     </div>
     <div class="strips" id="strips"></div>
     <div class="reference" id="referenceRow" hidden>
-      <span><b>Mastering</b> <small class="hint">Optional: upload a song whose sound you like and the mix is mastered to match it.</small></span>
+      <span><b>Mastering reference</b> <small class="hint">Choose a song from your computer or paste an audio or video link.</small></span>
       <span class="hint" id="referenceName">Automatic (no reference)</span>
       <button class="btn ghost small" id="pickReference">Choose reference</button>
       <input type="file" id="referenceInput" accept="audio/*" hidden>
+      <form id="referenceLinkForm" class="reference-link"><input type="url" id="referenceUrl" aria-label="Mastering reference link" placeholder="Paste a song link" required><button class="btn ghost small" id="useReferenceLink" type="submit">Use link</button></form>
+      <p class="hint" id="referenceStatus" role="status" hidden></p>
     </div>
     <div class="actions">
       <button class="btn ghost" id="mixBack">Back</button>
@@ -125,7 +196,15 @@
   <!-- Step 4: making -->
   <section class="screen" id="making" hidden>
     <div class="making">
-      <div class="ring"><svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="52" class="track"/><circle cx="60" cy="60" r="52" class="bar" id="ringBar"/></svg><b id="pct">0%</b></div>
+
+
+      <div class="ring"><svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="52" class="track"/><circle cx="60" cy="60" r="52" class="bar" id="ringBar"/></svg><div class="ring-brand"><svg class="loading-mark" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 100">
+  <rect x="4" y="4" width="18" height="92" rx="9" fill="#F5F3EF"/>
+  <rect x="27" y="4" width="18" height="62" rx="9" fill="#F5F3EF"/>
+  <rect x="51" y="4" width="18" height="40" rx="9" fill="#FF4F2E"/>
+  <rect x="75" y="4" width="18" height="62" rx="9" fill="#F5F3EF"/>
+  <rect x="98" y="4" width="18" height="92" rx="9" fill="#F5F3EF"/>
+</svg><b id="pct">0%</b></div></div>
       <h2 id="stageMsg">Starting…</h2>
       <p class="hint" id="stageDetail"></p>
       <button class="btn ghost" id="cancel">Cancel</button>
@@ -136,18 +215,74 @@
   <section class="screen" id="frames" hidden>
     <h2>Pick the frames</h2>
     <p class="lead small">These are the shots Montara chose, in order. Press <b>Swap</b> on any you don't like and it brings another moment from the same part of the song.</p>
-    <div class="grid" id="frameGrid"></div>
+    <div id="musicCuts"></div><p class="hint" id="musicCutStatus">Drag a cut line to move it. Right-click a shot to choose its camera or viewpoint.</p><div class="grid" id="frameGrid"></div>
     <div class="actions sticky">
       <span class="hint" id="framesHint"></span>
       <button class="btn primary" id="renderFrames">Render video</button>
     </div>
   </section>
 
+  <!-- Step 5b: captions (Pulse) -->
+  <section class="screen" id="captions" hidden>
+    <h2>Captions &amp; title</h2>
+    <p class="lead small">Write the lyrics, then shape each caption right on the video: drag it to place it, pull its corner to resize, and drag its bar below to change when it shows. Skip this if you want the reel as it is.</p>
+    <div class="capwrap">
+      <div class="capleft">
+        <div class="capstage" id="capStage">
+          <div class="capframe" id="capFrame">
+            <video id="capVideo" playsinline preload="metadata"></video>
+            <div class="caplayer" id="capLayer"><div class="captitle" id="capTitlePreview" hidden></div></div>
+          </div>
+        </div>
+        <div class="captransport">
+          <button class="btn primary small" id="capPlay" type="button">Play</button>
+          <span class="hint" id="capTime">0:00</span>
+          <span class="hint tiny-help">Double-click the timeline to add a caption there</span>
+        </div>
+        <div class="captimeline" id="capTimeline"><div class="capbars" id="capBars"></div><i class="playhead" id="capHead"></i></div>
+      </div>
+      <div class="cappanel">
+        <label>Title <small class="hint">stays on top for the whole reel</small><input id="capTitle" type="text" maxlength="60" placeholder="Band, song or venue"></label>
+        <label>Text <small class="hint">one caption per line</small><textarea id="capText" rows="5" placeholder="First line of the lyrics&#10;Second line…"></textarea></label>
+        <div class="row">
+          <button class="btn ghost small" id="capSpread" type="button">Spread over the video</button>
+          <button class="btn ghost small" id="capRead" type="button">Read the lyrics for me</button>
+        </div>
+        <p class="hint" id="capReadStatus" role="status" aria-live="polite"></p>
+        <div class="capstyle">
+          <span class="label">Base look <small class="hint">all captions</small></span>
+          <div class="chips" id="capStyles"></div>
+        </div>
+        <div class="capinspect" id="capInspect" hidden>
+          <div class="inspecthead"><b id="capWhich">Caption 1</b><button class="link" id="capDelete" type="button">Delete</button></div>
+          <input type="text" id="capEditText" maxlength="120" aria-label="Caption text">
+          <span class="label">Colour</span>
+          <div class="swatches" id="capColors"></div>
+          <span class="label">Font</span>
+          <div class="chips" id="capFonts"></div>
+          <span class="label">Size</span>
+          <input type="range" id="capSize" min="24" max="140" step="2">
+          <span class="label">Effect</span>
+          <div class="chips" id="capEffects"></div>
+          <button class="btn ghost small" id="capApplyAll" type="button">Use this look for every caption</button>
+        </div>
+        <p class="hint" id="capNoneSelected">Click a caption on the video or on the timeline to change its colour, font, size and effect.</p>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="btn ghost" id="capSkip">Skip</button>
+      <button class="btn primary" id="capApply">Add to video</button>
+    </div>
+  </section>
+
   <!-- Step 6: result -->
   <section class="screen" id="result" hidden>
-    <h2>Your night, <em>edited.</em></h2>
+    <h2 id="resultTitle">Your night, <em>edited.</em></h2>
     <div class="player" id="playerWrap"><video id="resultVideo" controls playsinline preload="metadata"></video></div>
+    <audio id="resultAudio" controls hidden></audio>
     <p class="hint" id="resultInfo"></p>
+    <p class="hint publication-note">Before publishing, make sure you have permission to use the music, images, video and people featured. You are responsible for what you publish.</p>
+    <div id="resultMusicCredits" hidden><button class="btn ghost small" id="resultMusicCreditsOpen" type="button">Music attribution</button></div>
     <div class="actions">
       <a class="btn primary" id="download" href="/api/v1/wizard/result" download>Download</a>
       <button class="btn ghost" data-go="mode">New video</button>
@@ -161,8 +296,54 @@
     <div class="actions"><button class="btn primary" data-go="footage">Back to footage</button></div>
   </section>
 </main>
+<p class="version"><span id="version"></span> · <a href="/montara/plans" target="_blank" rel="noopener">Plans · preview</a></p>
+
+
+<dialog id="showEffectDialog" class="show-effect-dialog" aria-labelledby="showEffectTitle">
+  <div class="show-dialog-heading"><h3 id="showEffectTitle">Add at this moment</h3><button class="btn ghost small" id="showCloseEffects" type="button" aria-label="Close effects">Close</button></div>
+  <div class="show-placement"><label>Start in this part (seconds)<input id="showEffectAt" type="number" min="0" step="0.1" value="0" required></label><label>Duration (seconds)<input id="showEffectDuration" type="number" min="0.1" step="0.1" value="2" required></label></div>
+  <div class="actions"><button class="chip on" id="showSimpleTab" type="button">Text &amp; effects</button><button class="chip" id="showMediaTab" type="button">Videos &amp; images</button></div>
+  <form id="showAddEffect" class="show-effect-form">
+    <label>Effect<select id="showEffectKind"><option value="word">Animated text</option><option value="warp">Wave</option><option value="math">Formulas</option></select></label>
+    <label id="showEffectTextLabel">Your words<input id="showEffectText" type="text" maxlength="40" placeholder="Make this moment stand out"></label>
+    <button class="btn primary small" type="submit">Add to this part</button><p class="hint" id="showEffectStatus" role="status"></p>
+  </form>
+  <div id="showMediaPanel" hidden>
+    <label class="show-drop">Add a video, photo or drawing<input id="showMediaFile" type="file" accept="video/*,image/png,image/jpeg,image/webp,.mp4,.mov"><span>ChatGPT drawings can be uploaded here too.</span></label>
+    <details><summary>Import a video link</summary><label>Video link<input id="showMediaURL" type="url" placeholder="https://…"></label><div class="show-placement"><label>From (seconds)<input id="showLinkStart" type="number" min="0" step="0.1" value="0"></label><label>To (seconds)<input id="showLinkEnd" type="number" min="0.1" step="0.1" value="5"></label></div><button type="button" class="btn ghost small" id="showImportLink">Import these seconds</button><p class="hint">YouTube, Vimeo, Twitch clips and other supported sites. Up to 30 seconds; availability depends on the site.</p></details>
+    <button class="btn ghost small" id="showRefreshLibrary" type="button">My library</button><label><input id="showShelfHidden" type="checkbox"> Show hidden reusable clips</label><div id="showLibraryCategories" class="library-categories" role="group" aria-label="Media categories"><button type="button" data-green-category="mine" aria-pressed="true">My library</button><button type="button" data-green-category="quotes">Quotes</button><button type="button" data-green-category="scenes">Escenas</button><button type="button" data-green-category="paint">Pinturas</button><button type="button" data-green-category="text">Textos</button></div><div id="showMediaLibrary" class="show-media-library"></div>
+    <div id="showAssetEditor" hidden>
+      <h4 id="showAssetName"></h4><a class="hint" id="showAssetSource" target="_blank" rel="noopener noreferrer" hidden>Source video</a><img id="showAssetImage" alt="Selected image" hidden><video id="showAssetVideo" controls playsinline hidden></video>
+      <div class="show-placement"><label>Size<select id="showAssetSize"><option value="0.3">Small</option><option value="0.5" selected>Medium</option><option value="0.8">Large</option><option value="1">Full frame</option></select></label><label>Position<select id="showAssetPosition"><option value="left">Left</option><option value="center">Centre</option><option value="right">Right</option></select></label></div>
+      <details><summary>Crop edges</summary><div class="show-crop-fields"><label>Left %<input data-show-crop="0" type="number" min="0" max="90" value="0"></label><label>Top %<input data-show-crop="1" type="number" min="0" max="90" value="0"></label><label>Right %<input data-show-crop="2" type="number" min="0" max="90" value="0"></label><label>Bottom %<input data-show-crop="3" type="number" min="0" max="90" value="0"></label></div><button class="btn ghost small" id="showCropImage" type="button">Save cropped image</button></details>
+      <div id="showVideoOptions" hidden><label>Start inside the clip (seconds)<input id="showClipStart" type="number" min="0" step="0.1" value="0"></label><label>Library excerpt duration (seconds)<input id="showLibraryLength" type="number" min="0.1" step="0.1" value="2"></label><label>Excerpt name<input id="showExcerptName" type="text" maxlength="120" placeholder="Name this effect"></label><button class="btn ghost small" id="showSaveExcerpt" type="button">Keep excerpt for other videos</button><button class="btn ghost small" id="showHideShelf" type="button" hidden>Hide from reusable library</button><label>Background<select id="showClipMatte"><option value="none">Keep background</option><option value="green">Remove green screen</option><option value="black">Remove black background</option><option value="green-light">Remove green · rain, snow, smoke</option><option value="person">Cut out moving person</option></select></label><label><input id="showClipSound" type="checkbox"> Include clip sound with the narrator</label></div>
+      <div class="actions" id="showImageOptions"><button class="btn ghost small" id="showCutImage" type="button">Cut out subject</button><button class="btn ghost small" id="showAnimateImage" type="button">Move eyes &amp; mouth</button><button class="btn ghost small" id="showUseBackground" type="button">Use as background</button><button class="btn ghost small" id="showHideImage" type="button">Hide from library</button></div>
+      <button class="btn primary small" id="showPlaceAsset" type="button">Add to this part</button>
+      <div id="showFaceEditor" hidden><h4>Mark the parts that move</h4><p class="hint">Choose a part, then drag a box around it on the image. You can replace each box by drawing it again.</p><label>Mark<select id="showFacePart"><option value="mouth">Mouth</option><option value="leftEye">Left eye</option><option value="rightEye">Right eye</option></select></label><canvas id="showFaceCanvas" width="600" height="400" aria-label="Draw mouth and eye areas on this image"></canvas><button class="btn ghost small" id="showFaceClear" type="button">Clear marks</button><label>Voice<select id="showFaceVoiceMode"><option value="mine">Narrator — follows your video</option><option value="own">Another voice</option></select></label><div id="showOtherVoice" hidden><label>Voice file<input id="showFaceVoice" type="file" accept="audio/*,.wav,.mp3"></label><label>Start in the voice recording (seconds)<input id="showVoiceStart" type="number" value="0" min="0" step="0.1"></label><button class="btn ghost small" id="showRecordVoice" type="button">Record with microphone</button><p class="hint" id="showVoiceRecordStatus" role="status"></p><details><summary>Voice from an internet video</summary><label>Link<input id="showVoiceURL" type="url" placeholder="https://…"></label><label>Start in the source (seconds)<input id="showVoiceURLStart" type="number" min="0" step="0.1" value="0"></label><button class="btn ghost small" id="showImportVoiceLink" type="button">Import voice excerpt</button></details></div><button class="btn ghost small" id="showFacePreview" type="button">Preview talking image</button><video id="showFaceVideo" controls playsinline hidden></video><p class="hint">The cutout stays over your video. With Narrator selected, its mouth follows your voice automatically.</p><button class="btn primary small" id="showPlaceFace" type="button" hidden>Save animated image</button></div>
+    </div>
+    <p class="hint" id="showMediaStatus" role="status"></p>
+    <div id="showMediaRecovery" hidden><button class="btn ghost small" id="showMediaUploadInstead" type="button">Upload a video file</button><a class="btn ghost small" id="showMediaOpenSource" target="_blank" rel="noopener noreferrer">Open source video</a><p class="hint">YouTube verification cannot be completed inside Montara for a server download.</p></div>
+  </div>
+</dialog>
+<dialog id="showInspector" class="show-effect-dialog" aria-labelledby="showInspectorTitle"><div class="show-dialog-heading"><h3 id="showInspectorTitle">Edit effect</h3><button class="btn ghost small" type="button" id="showInspectorClose">Close</button></div><form id="showInspectorForm"><div id="showInspectorFields"></div><div class="actions"><button class="btn primary small" type="submit">Save changes</button><button class="btn ghost small" type="submit" id="showInspectorPreview" data-preview-effect="true">Preview this effect</button><button class="btn ghost small" type="button" id="showInspectorMedia">Edit image or video</button><button class="btn ghost small" type="button" id="showInspectorDelete">Remove effect</button></div><video id="showInspectorVideo" controls playsinline hidden></video><p class="hint" id="showInspectorStatus" role="status"></p></form></dialog>
+<div id="showPlacedMenu" class="show-context-menu" role="menu" aria-label="Selected effect" hidden></div>
+<div id="showContextMenu" class="show-context-menu" role="menu" aria-label="Add an effect at this moment" hidden><button role="menuitem" data-show-context="word">Animated text</button><button role="menuitem" data-show-context="media">Videos &amp; images</button><button role="menuitem" data-show-context="background">Change background</button><div id="showContextEdits"></div><button role="menuitem" data-show-context="warp">Wave</button><button role="menuitem" data-show-context="math">Formulas</button></div>
 
 <div class="toast" id="toast" hidden></div>
+<script src="mix-levels.js"></script>
 <script src="montara.js"></script>
+<script src="show-media.js"></script>
+<script src="show-editor.js"></script>
+<script src="show-geometry.js"></script>
+<script src="show-chroma.js"></script><script src="show-live.js"></script>
+<dialog id="showCameraDialog" class="show-effect-dialog"><h3>Camera shot</h3><p id="showCameraShotInfo" class="hint"></p><label>Camera / viewpoint<select id="showCameraView"></select></label><div id="showFlatCamera" hidden></div><div id="showCameraStage"><img id="showCameraFrame" alt="Drag this 360 viewpoint to aim the camera" draggable="false"></div><label id="showSphereZoomLabel">Zoom<input id="showCameraZoom" type="range" min="20" max="120" value="70"></label><p id="showSphereHint" class="hint">Drag the picture to aim a 360 camera. Changes apply only to this shot.</p><label>Why change it?<input id="showCameraReason" placeholder="For example: the other person is speaking"></label><div class="actions"><button id="showCameraCancel" class="btn ghost" type="button">Cancel</button><button id="showCameraSave" class="btn primary" type="button">Save camera shot</button></div><p id="showCameraStatus" class="hint" role="status"></p></dialog>
+<dialog id="showDecisionsDialog" class="show-effect-dialog"><h3>Decisions and history</h3><p class="hint">Saved analysis, choices and corrections. These records can be replayed and compared.</p><div id="showDecisionsList"></div><button id="showDecisionsClose" class="btn ghost" type="button">Close</button></dialog>
+<script src="show-modes.js"></script>
+<script src="show-music.js"></script>
+<script src="flat-camera.js"></script>
+<script src="spherical-preview.js"></script>
+<script src="cut-editor.js"></script>
+<script src="compact-editor.js"></script>
+<script src="push-pack.js"></script>
 </body>
 </html>
