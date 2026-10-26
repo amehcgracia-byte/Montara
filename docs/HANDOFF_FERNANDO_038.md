@@ -23,7 +23,7 @@ git switch -c fernando/continuacion-montara
 ```
 
 Si ya está clonado, inspecciona primero rama, cambios y remotos; actualiza únicamente con `git pull --ff-only` cuando proceda. No hagas reset ni sobrescribas cambios locales.
-3. Lee `README.md` y `docs/HANDOFF_FERNANDO_038.md` en esa rama. Trabaja en tu rama `fernando/continuacion-montara`, con cambios pequeños. Los cambios del motor están fijados a un commit existente; el mixer lleva un commit separado para preservar pistas musicales de bajo nivel. No edites directamente los submódulos desde Montara: las correcciones del motor o mixer deben tener su propio commit y después actualizar la referencia del proyecto padre.
+3. Lee `README.md` y `docs/HANDOFF_FERNANDO_038.md` en esa rama. Trabaja en tu rama `fernando/continuacion-montara`, con cambios pequeños. El motor está fijado a `60a7b7e9a39077b36f45057811abd6a833a168ef`, publicado en `codex/montara-camera-engine-038` de zucker_videos. El mixer usa el commit ya publicado `c7a46a6d8388c6e0703ef54983f2d627ea189f32`, que conserva pistas musicales de bajo nivel. No edites directamente los submódulos desde Montara: las correcciones del motor o mixer deben tener su propio commit y después actualizar la referencia del proyecto padre.
 4. Para arrancar el repositorio, necesitas Python 3.11, FFmpeg y ffprobe. Crea un entorno virtual, revisa `requirements.txt` y `requirements-mac.txt` según el sistema, e instala las dependencias apropiadas. Arranque habitual:
 
 ```bash
@@ -84,4 +84,4 @@ Se creó una herramienta SEPARADA, local, ahora en `tools/asset-selector/`, norm
 
 No rediseñes ni simplifiques eliminando funciones que ya gustaban. No sustituyas las pruebas con fuentes separadas por un vídeo ya montado. Conserva ejemplos, micros, stems y cámaras necesarios. No borres ni sobrescribas ediciones del propietario durante las pruebas: usa proyectos de prueba separados.
 
-Empieza entregando: versión local y remota encontradas, acceso de Fernando, qué has podido arrancar y una lista corta de problemas pendientes de 0.38. Después propón una integración por cambios pequeños. Prioridad inmediata: continuar la selección humana de recursos, comprobar transparencia en edición/preview/exportación y revisar la integración de la rama 0.38 con main. No declarar terminado un flujo solo porque su botón aparece o su API devuelve 200.
+Empieza entregando: versión local y remota encontradas, acceso de Fernando, qué has podido arrancar y una lista corta de problemas pendientes de 0.38. Después continúa mediante cambios pequeños. La rama ya incorpora el historial de main; mantén las versiones probadas de los submódulos. Prioridad inmediata: continuar la selección humana de recursos, comprobar transparencia en edición/preview/exportación y revisar la integración de la rama 0.38 con main. No declarar terminado un flujo solo porque su botón aparece o su API devuelve 200.

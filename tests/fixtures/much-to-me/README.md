@@ -9,7 +9,7 @@ all aligned to the same moment. 640x360, pixelated on purpose. Private repo only
 | cam-sony.mp4    | raw/video/Sony6000/C0186.MP4 (handheld Sony)                       | 2–95 s           |
 | cam-fixed.mp4   | raw/video/Iphone/IMG_0043.MOV (fixed phone)                        | 400–495 s        |
 | cam-360.mp4     | raw/video/360/Camera01/VID_20260824_203343_00_003.mp4 (equirect)   | 404–500 s        |
-| stems/*.mp3     | raw/sound/24.08.26 ZZS Waves/*_1.wav (14 tracks)                   | 1305–1385 s      |
+| stems/*.mp3     | raw/sound/24.08.26 ZZS Waves/*_1.wav (9 tracks with signal)        | 1305–1385 s      |
 
 Alignment was measured by onset correlation against the overhead track (OV_1.wav),
 every file agreeing in three separate windows: master 814.50 s, Sony 1298.29 s,
