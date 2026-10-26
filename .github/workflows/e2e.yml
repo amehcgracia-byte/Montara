@@ -23,7 +23,7 @@ jobs:
         run: |
           pip install -r requirements.txt
           python -m playwright install --with-deps chromium
-      - name: Stage and Pulse through the real interface
+      - name: Stage, Push and mixer through the real interface
         run: python tests/e2e_journey.py --output e2e-output
       - uses: actions/upload-artifact@v4
         if: always()
