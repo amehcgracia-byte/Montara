@@ -1,0 +1,970 @@
+{
+  "language": "es",
+  "segments": [
+    {
+      "start": 0.0,
+      "end": 3.92,
+      "text": " Tuve la oportunidad de hablar con el protagonista de una de las masacres más terribles en la",
+      "words": [
+        {
+          "text": " Tuve",
+          "start": 0.0,
+          "end": 0.18
+        },
+        {
+          "text": " la",
+          "start": 0.18,
+          "end": 0.26
+        },
+        {
+          "text": " oportunidad",
+          "start": 0.26,
+          "end": 0.52
+        },
+        {
+          "text": " de",
+          "start": 0.52,
+          "end": 0.96
+        },
+        {
+          "text": " hablar",
+          "start": 0.96,
+          "end": 0.96
+        },
+        {
+          "text": " con",
+          "start": 0.96,
+          "end": 1.12
+        },
+        {
+          "text": " el",
+          "start": 1.12,
+          "end": 1.24
+        },
+        {
+          "text": " protagonista",
+          "start": 1.24,
+          "end": 1.84
+        },
+        {
+          "text": " de",
+          "start": 1.84,
+          "end": 1.98
+        },
+        {
+          "text": " una",
+          "start": 1.98,
+          "end": 2.12
+        },
+        {
+          "text": " de",
+          "start": 2.12,
+          "end": 2.22
+        },
+        {
+          "text": " las",
+          "start": 2.22,
+          "end": 2.34
+        },
+        {
+          "text": " masacres",
+          "start": 2.34,
+          "end": 2.76
+        },
+        {
+          "text": " más",
+          "start": 2.76,
+          "end": 2.98
+        },
+        {
+          "text": " terribles",
+          "start": 2.98,
+          "end": 3.56
+        },
+        {
+          "text": " en",
+          "start": 3.56,
+          "end": 3.82
+        },
+        {
+          "text": " la",
+          "start": 3.82,
+          "end": 3.92
+        }
+      ]
+    },
+    {
+      "start": 3.92,
+      "end": 7.24,
+      "text": " historia reciente argentina y esto fue lo que me dijo.",
+      "words": [
+        {
+          "text": " historia",
+          "start": 3.92,
+          "end": 4.38
+        },
+        {
+          "text": " reciente",
+          "start": 4.38,
+          "end": 5.08
+        },
+        {
+          "text": " argentina",
+          "start": 5.08,
+          "end": 5.96
+        },
+        {
+          "text": " y",
+          "start": 5.96,
+          "end": 6.22
+        },
+        {
+          "text": " esto",
+          "start": 6.22,
+          "end": 6.44
+        },
+        {
+          "text": " fue",
+          "start": 6.44,
+          "end": 6.66
+        },
+        {
+          "text": " lo",
+          "start": 6.66,
+          "end": 6.78
+        },
+        {
+          "text": " que",
+          "start": 6.78,
+          "end": 6.88
+        },
+        {
+          "text": " me",
+          "start": 6.88,
+          "end": 7.0
+        },
+        {
+          "text": " dijo.",
+          "start": 7.0,
+          "end": 7.24
+        }
+      ]
+    },
+    {
+      "start": 7.52,
+      "end": 11.56,
+      "text": " Fíjate que en los últimos años siempre lo que se vio de este caso fue verme a mí",
+      "words": [
+        {
+          "text": " Fíjate",
+          "start": 7.52,
+          "end": 7.76
+        },
+        {
+          "text": " que",
+          "start": 7.76,
+          "end": 7.88
+        },
+        {
+          "text": " en",
+          "start": 7.88,
+          "end": 7.96
+        },
+        {
+          "text": " los",
+          "start": 7.96,
+          "end": 8.08
+        },
+        {
+          "text": " últimos",
+          "start": 8.08,
+          "end": 8.36
+        },
+        {
+          "text": " años",
+          "start": 8.36,
+          "end": 8.78
+        },
+        {
+          "text": " siempre",
+          "start": 8.78,
+          "end": 9.44
+        },
+        {
+          "text": " lo",
+          "start": 9.44,
+          "end": 9.62
+        },
+        {
+          "text": " que",
+          "start": 9.62,
+          "end": 9.74
+        },
+        {
+          "text": " se",
+          "start": 9.74,
+          "end": 9.88
+        },
+        {
+          "text": " vio",
+          "start": 9.88,
+          "end": 10.06
+        },
+        {
+          "text": " de",
+          "start": 10.06,
+          "end": 10.2
+        },
+        {
+          "text": " este",
+          "start": 10.2,
+          "end": 10.34
+        },
+        {
+          "text": " caso",
+          "start": 10.34,
+          "end": 10.62
+        },
+        {
+          "text": " fue",
+          "start": 10.62,
+          "end": 10.9
+        },
+        {
+          "text": " verme",
+          "start": 10.9,
+          "end": 11.24
+        },
+        {
+          "text": " a",
+          "start": 11.24,
+          "end": 11.42
+        },
+        {
+          "text": " mí",
+          "start": 11.42,
+          "end": 11.56
+        }
+      ]
+    },
+    {
+      "start": 11.56,
+      "end": 17.06,
+      "text": " en un programa contando cómo salí esa noche y pidiendo a los jueces que no liben al asesino",
+      "words": [
+        {
+          "text": " en",
+          "start": 11.56,
+          "end": 12.06
+        },
+        {
+          "text": " un",
+          "start": 12.06,
+          "end": 12.22
+        },
+        {
+          "text": " programa",
+          "start": 12.22,
+          "end": 12.48
+        },
+        {
+          "text": " contando",
+          "start": 12.48,
+          "end": 13.58
+        },
+        {
+          "text": " cómo",
+          "start": 13.58,
+          "end": 13.76
+        },
+        {
+          "text": " salí",
+          "start": 13.76,
+          "end": 14.18
+        },
+        {
+          "text": " esa",
+          "start": 14.18,
+          "end": 14.4
+        },
+        {
+          "text": " noche",
+          "start": 14.4,
+          "end": 14.7
+        },
+        {
+          "text": " y",
+          "start": 14.7,
+          "end": 15.14
+        },
+        {
+          "text": " pidiendo",
+          "start": 15.14,
+          "end": 15.6
+        },
+        {
+          "text": " a",
+          "start": 15.6,
+          "end": 15.72
+        },
+        {
+          "text": " los",
+          "start": 15.72,
+          "end": 15.86
+        },
+        {
+          "text": " jueces",
+          "start": 15.86,
+          "end": 16.06
+        },
+        {
+          "text": " que",
+          "start": 16.06,
+          "end": 16.22
+        },
+        {
+          "text": " no",
+          "start": 16.22,
+          "end": 16.3
+        },
+        {
+          "text": " liben",
+          "start": 16.3,
+          "end": 16.52
+        },
+        {
+          "text": " al",
+          "start": 16.52,
+          "end": 16.72
+        },
+        {
+          "text": " asesino",
+          "start": 16.72,
+          "end": 17.06
+        }
+      ]
+    },
+    {
+      "start": 17.06,
+      "end": 17.58,
+      "text": " de mi familia.",
+      "words": [
+        {
+          "text": " de",
+          "start": 17.06,
+          "end": 17.16
+        },
+        {
+          "text": " mi",
+          "start": 17.16,
+          "end": 17.22
+        },
+        {
+          "text": " familia.",
+          "start": 17.22,
+          "end": 17.58
+        }
+      ]
+    },
+    {
+      "start": 17.78,
+      "end": 22.78,
+      "text": " No nos conocen nada, no saben todo lo que fue verdaderamente vivir estos 32 años",
+      "words": [
+        {
+          "text": " No",
+          "start": 17.78,
+          "end": 17.84
+        },
+        {
+          "text": " nos",
+          "start": 17.84,
+          "end": 17.94
+        },
+        {
+          "text": " conocen",
+          "start": 17.94,
+          "end": 18.28
+        },
+        {
+          "text": " nada,",
+          "start": 18.28,
+          "end": 18.6
+        },
+        {
+          "text": " no",
+          "start": 18.96,
+          "end": 19.08
+        },
+        {
+          "text": " saben",
+          "start": 19.08,
+          "end": 19.74
+        },
+        {
+          "text": " todo",
+          "start": 19.74,
+          "end": 20.02
+        },
+        {
+          "text": " lo",
+          "start": 20.02,
+          "end": 20.22
+        },
+        {
+          "text": " que",
+          "start": 20.22,
+          "end": 20.32
+        },
+        {
+          "text": " fue",
+          "start": 20.32,
+          "end": 20.58
+        },
+        {
+          "text": " verdaderamente",
+          "start": 20.58,
+          "end": 21.34
+        },
+        {
+          "text": " vivir",
+          "start": 21.34,
+          "end": 21.64
+        },
+        {
+          "text": " estos",
+          "start": 21.64,
+          "end": 21.96
+        },
+        {
+          "text": " 32",
+          "start": 21.96,
+          "end": 22.32
+        },
+        {
+          "text": " años",
+          "start": 22.32,
+          "end": 22.78
+        }
+      ]
+    },
+    {
+      "start": 22.78,
+      "end": 28.06,
+      "text": " y yo aflojaba, no había manera de continuar esta lucha.",
+      "words": [
+        {
+          "text": " y",
+          "start": 22.78,
+          "end": 22.98
+        },
+        {
+          "text": " yo",
+          "start": 22.98,
+          "end": 23.2
+        },
+        {
+          "text": " aflojaba,",
+          "start": 23.2,
+          "end": 25.2
+        },
+        {
+          "text": " no",
+          "start": 25.72,
+          "end": 26.64
+        },
+        {
+          "text": " había",
+          "start": 26.64,
+          "end": 26.76
+        },
+        {
+          "text": " manera",
+          "start": 26.76,
+          "end": 27.04
+        },
+        {
+          "text": " de",
+          "start": 27.04,
+          "end": 27.22
+        },
+        {
+          "text": " continuar",
+          "start": 27.22,
+          "end": 27.56
+        },
+        {
+          "text": " esta",
+          "start": 27.56,
+          "end": 27.8
+        },
+        {
+          "text": " lucha.",
+          "start": 27.8,
+          "end": 28.06
+        }
+      ]
+    },
+    {
+      "start": 28.06,
+      "end": 29.72,
+      "text": " Pero no nos adelantemos.",
+      "words": [
+        {
+          "text": " Pero",
+          "start": 28.06,
+          "end": 28.68
+        },
+        {
+          "text": " no",
+          "start": 28.68,
+          "end": 28.86
+        },
+        {
+          "text": " nos",
+          "start": 28.86,
+          "end": 29.16
+        },
+        {
+          "text": " adelantemos.",
+          "start": 29.16,
+          "end": 29.72
+        }
+      ]
+    },
+    {
+      "start": 30.32,
+      "end": 35.24,
+      "text": " Durante meses una familia de Buenos Aires vive aterrorizada por un hombre que llama por teléfono,",
+      "words": [
+        {
+          "text": " Durante",
+          "start": 30.32,
+          "end": 30.88
+        },
+        {
+          "text": " meses",
+          "start": 30.88,
+          "end": 31.18
+        },
+        {
+          "text": " una",
+          "start": 31.18,
+          "end": 31.48
+        },
+        {
+          "text": " familia",
+          "start": 31.48,
+          "end": 31.8
+        },
+        {
+          "text": " de",
+          "start": 31.8,
+          "end": 31.96
+        },
+        {
+          "text": " Buenos",
+          "start": 31.96,
+          "end": 32.1
+        },
+        {
+          "text": " Aires",
+          "start": 32.1,
+          "end": 32.42
+        },
+        {
+          "text": " vive",
+          "start": 32.42,
+          "end": 32.62
+        },
+        {
+          "text": " aterrorizada",
+          "start": 32.62,
+          "end": 33.52
+        },
+        {
+          "text": " por",
+          "start": 33.52,
+          "end": 33.76
+        },
+        {
+          "text": " un",
+          "start": 33.76,
+          "end": 33.9
+        },
+        {
+          "text": " hombre",
+          "start": 33.9,
+          "end": 34.16
+        },
+        {
+          "text": " que",
+          "start": 34.16,
+          "end": 34.34
+        },
+        {
+          "text": " llama",
+          "start": 34.34,
+          "end": 34.56
+        },
+        {
+          "text": " por",
+          "start": 34.56,
+          "end": 34.78
+        },
+        {
+          "text": " teléfono,",
+          "start": 34.78,
+          "end": 35.24
+        }
+      ]
+    },
+    {
+      "start": 35.32,
+      "end": 39.48,
+      "text": " distorsiona su voz y anuncia que todos van a morir quemados.",
+      "words": [
+        {
+          "text": " distorsiona",
+          "start": 35.32,
+          "end": 35.94
+        },
+        {
+          "text": " su",
+          "start": 35.94,
+          "end": 36.2
+        },
+        {
+          "text": " voz",
+          "start": 36.2,
+          "end": 36.48
+        },
+        {
+          "text": " y",
+          "start": 36.48,
+          "end": 36.7
+        },
+        {
+          "text": " anuncia",
+          "start": 36.7,
+          "end": 37.12
+        },
+        {
+          "text": " que",
+          "start": 37.12,
+          "end": 37.34
+        },
+        {
+          "text": " todos",
+          "start": 37.34,
+          "end": 37.78
+        },
+        {
+          "text": " van",
+          "start": 37.78,
+          "end": 38.12
+        },
+        {
+          "text": " a",
+          "start": 38.12,
+          "end": 38.22
+        },
+        {
+          "text": " morir",
+          "start": 38.22,
+          "end": 38.56
+        },
+        {
+          "text": " quemados.",
+          "start": 38.56,
+          "end": 39.48
+        }
+      ]
+    },
+    {
+      "start": 39.52,
+      "end": 44.54,
+      "text": " Los chicos conocen su identidad, pero sus apariciones telefónicas tienen algo tan perturbador",
+      "words": [
+        {
+          "text": " Los",
+          "start": 39.52,
+          "end": 39.72
+        },
+        {
+          "text": " chicos",
+          "start": 39.72,
+          "end": 39.9
+        },
+        {
+          "text": " conocen",
+          "start": 39.9,
+          "end": 40.52
+        },
+        {
+          "text": " su",
+          "start": 40.52,
+          "end": 40.7
+        },
+        {
+          "text": " identidad,",
+          "start": 40.7,
+          "end": 41.22
+        },
+        {
+          "text": " pero",
+          "start": 41.46,
+          "end": 41.66
+        },
+        {
+          "text": " sus",
+          "start": 41.66,
+          "end": 41.86
+        },
+        {
+          "text": " apariciones",
+          "start": 41.86,
+          "end": 42.36
+        },
+        {
+          "text": " telefónicas",
+          "start": 42.36,
+          "end": 43.04
+        },
+        {
+          "text": " tienen",
+          "start": 43.04,
+          "end": 43.32
+        },
+        {
+          "text": " algo",
+          "start": 43.32,
+          "end": 43.56
+        },
+        {
+          "text": " tan",
+          "start": 43.56,
+          "end": 43.78
+        },
+        {
+          "text": " perturbador",
+          "start": 43.78,
+          "end": 44.54
+        }
+      ]
+    },
+    {
+      "start": 44.54,
+      "end": 47.74,
+      "text": " que empiezan a referirse a él como el monstruo.",
+      "words": [
+        {
+          "text": " que",
+          "start": 44.54,
+          "end": 45.0
+        },
+        {
+          "text": " empiezan",
+          "start": 45.0,
+          "end": 45.46
+        },
+        {
+          "text": " a",
+          "start": 45.46,
+          "end": 45.54
+        },
+        {
+          "text": " referirse",
+          "start": 45.54,
+          "end": 46.1
+        },
+        {
+          "text": " a",
+          "start": 46.1,
+          "end": 46.28
+        },
+        {
+          "text": " él",
+          "start": 46.28,
+          "end": 46.4
+        },
+        {
+          "text": " como",
+          "start": 46.4,
+          "end": 46.66
+        },
+        {
+          "text": " el",
+          "start": 46.66,
+          "end": 47.08
+        },
+        {
+          "text": " monstruo.",
+          "start": 47.08,
+          "end": 47.74
+        }
+      ]
+    },
+    {
+      "start": 48.1,
+      "end": 51.98,
+      "text": " Sus padres denuncian las amenazas y esperan que alguien consiga detenerlo.",
+      "words": [
+        {
+          "text": " Sus",
+          "start": 48.1,
+          "end": 48.24
+        },
+        {
+          "text": " padres",
+          "start": 48.24,
+          "end": 48.6
+        },
+        {
+          "text": " denuncian",
+          "start": 48.6,
+          "end": 49.12
+        },
+        {
+          "text": " las",
+          "start": 49.12,
+          "end": 49.26
+        },
+        {
+          "text": " amenazas",
+          "start": 49.26,
+          "end": 49.74
+        },
+        {
+          "text": " y",
+          "start": 49.74,
+          "end": 50.1
+        },
+        {
+          "text": " esperan",
+          "start": 50.1,
+          "end": 50.44
+        },
+        {
+          "text": " que",
+          "start": 50.44,
+          "end": 50.58
+        },
+        {
+          "text": " alguien",
+          "start": 50.58,
+          "end": 50.8
+        },
+        {
+          "text": " consiga",
+          "start": 50.8,
+          "end": 51.4
+        },
+        {
+          "text": " detenerlo.",
+          "start": 51.4,
+          "end": 51.98
+        }
+      ]
+    },
+    {
+      "start": 52.24,
+      "end": 56.92,
+      "text": " Sin embargo el hombre continúa hostigándolos hasta que durante la madrugada del 17",
+      "words": [
+        {
+          "text": " Sin",
+          "start": 52.24,
+          "end": 52.38
+        },
+        {
+          "text": " embargo",
+          "start": 52.38,
+          "end": 52.58
+        },
+        {
+          "text": " el",
+          "start": 52.58,
+          "end": 52.78
+        },
+        {
+          "text": " hombre",
+          "start": 52.78,
+          "end": 53.0
+        },
+        {
+          "text": " continúa",
+          "start": 53.0,
+          "end": 53.54
+        },
+        {
+          "text": " hostigándolos",
+          "start": 53.54,
+          "end": 54.52
+        },
+        {
+          "text": " hasta",
+          "start": 54.52,
+          "end": 54.94
+        },
+        {
+          "text": " que",
+          "start": 54.94,
+          "end": 55.1
+        },
+        {
+          "text": " durante",
+          "start": 55.1,
+          "end": 55.3
+        },
+        {
+          "text": " la",
+          "start": 55.3,
+          "end": 55.52
+        },
+        {
+          "text": " madrugada",
+          "start": 55.52,
+          "end": 56.04
+        },
+        {
+          "text": " del",
+          "start": 56.04,
+          "end": 56.3
+        },
+        {
+          "text": " 17",
+          "start": 56.3,
+          "end": 56.92
+        }
+      ]
+    },
+    {
+      "start": 56.92,
+      "end": 59.26,
+      "text": " de febrero de 1994.",
+      "words": [
+        {
+          "text": " de",
+          "start": 56.92,
+          "end": 57.2
+        },
+        {
+          "text": " febrero",
+          "start": 57.2,
+          "end": 57.72
+        },
+        {
+          "text": " de",
+          "start": 57.72,
+          "end": 57.82
+        },
+        {
+          "text": " 1994.",
+          "start": 57.82,
+          "end": 59.26
+        }
+      ]
+    }
+  ]
+}

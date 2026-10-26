@@ -1,0 +1,619 @@
+{
+  "version": 1,
+  "method": "local-audio-levels-and-reference-seat-map",
+  "external_llm": false,
+  "duration": 90.0,
+  "people": [
+    {
+      "name": "Person 1",
+      "mic": "mic-1.mp3",
+      "offset": -0.0,
+      "sync_confidence": 1.0
+    },
+    {
+      "name": "Person 2",
+      "mic": "mic-2.mp3",
+      "offset": -0.0,
+      "sync_confidence": 57.925
+    },
+    {
+      "name": "Person 3",
+      "mic": "mic-3.mp3",
+      "offset": -0.0,
+      "sync_confidence": 58.096
+    },
+    {
+      "name": "Person 4",
+      "mic": "mic-4.mp3",
+      "offset": -0.0,
+      "sync_confidence": 57.78
+    },
+    {
+      "name": "Person 5",
+      "mic": "mic-5.mp3",
+      "offset": -0.0,
+      "sync_confidence": 58.005
+    }
+  ],
+  "cameras": [
+    {
+      "kind": "360",
+      "path": "roundtable-360.mp4",
+      "seats": [
+        {
+          "yaw": -145.1,
+          "pitch": 20.7,
+          "seen": 1.0,
+          "person": 0
+        },
+        {
+          "yaw": -35.3,
+          "pitch": 19.6,
+          "seen": 0.36,
+          "person": 1
+        },
+        {
+          "yaw": -11.1,
+          "pitch": 17.0,
+          "seen": 1.0,
+          "person": 2
+        },
+        {
+          "yaw": 33.3,
+          "pitch": 19.7,
+          "seen": 1.0,
+          "person": 3
+        },
+        {
+          "yaw": 139.7,
+          "pitch": 24.3,
+          "seen": 0.42,
+          "person": 4
+        }
+      ],
+      "offset": -0.0,
+      "confidence": 57.135,
+      "duration": 90.005
+    },
+    {
+      "kind": "flat",
+      "path": "camera-1.mp4",
+      "people": [
+        1,
+        2
+      ],
+      "offset": -0.0,
+      "confidence": 57.302,
+      "duration": 90.005
+    },
+    {
+      "kind": "flat",
+      "path": "camera-2.mp4",
+      "people": [
+        2,
+        3
+      ],
+      "offset": -3.2,
+      "confidence": 54.778,
+      "duration": 90.005
+    },
+    {
+      "kind": "flat",
+      "path": "camera-3.mp4",
+      "people": [
+        4,
+        0
+      ],
+      "offset": -7.5,
+      "confidence": 55.391,
+      "duration": 90.005
+    }
+  ],
+  "views": [
+    {
+      "camera": 0,
+      "people": [
+        0
+      ],
+      "kind": "single",
+      "yaw": -145.1,
+      "pitch": 20.7,
+      "fov": 58.0,
+      "projection": "flat"
+    },
+    {
+      "camera": 0,
+      "people": [
+        1
+      ],
+      "kind": "single",
+      "yaw": -35.3,
+      "pitch": 19.6,
+      "fov": 58.0,
+      "projection": "flat"
+    },
+    {
+      "camera": 0,
+      "people": [
+        2
+      ],
+      "kind": "single",
+      "yaw": -11.1,
+      "pitch": 17.0,
+      "fov": 58.0,
+      "projection": "flat"
+    },
+    {
+      "camera": 0,
+      "people": [
+        3
+      ],
+      "kind": "single",
+      "yaw": 33.3,
+      "pitch": 19.7,
+      "fov": 58.0,
+      "projection": "flat"
+    },
+    {
+      "camera": 0,
+      "people": [
+        4
+      ],
+      "kind": "single",
+      "yaw": 139.7,
+      "pitch": 24.3,
+      "fov": 58.0,
+      "projection": "flat"
+    },
+    {
+      "camera": 0,
+      "people": [
+        0,
+        1
+      ],
+      "kind": "pair",
+      "yaw": -90.19999999999999,
+      "pitch": 20.15,
+      "fov": 120.0,
+      "projection": "flat"
+    },
+    {
+      "camera": 0,
+      "people": [
+        1,
+        2
+      ],
+      "kind": "pair",
+      "yaw": -23.19999999999999,
+      "pitch": 18.3,
+      "fov": 79.19999999999999,
+      "projection": "flat"
+    },
+    {
+      "camera": 0,
+      "people": [
+        2,
+        3
+      ],
+      "kind": "pair",
+      "yaw": 11.099999999999994,
+      "pitch": 18.35,
+      "fov": 99.4,
+      "projection": "flat"
+    },
+    {
+      "camera": 0,
+      "people": [
+        3,
+        4
+      ],
+      "kind": "pair",
+      "yaw": 86.5,
+      "pitch": 22.0,
+      "fov": 120.0,
+      "projection": "flat"
+    },
+    {
+      "camera": 0,
+      "people": [
+        4,
+        0
+      ],
+      "kind": "pair",
+      "yaw": 177.3,
+      "pitch": 22.5,
+      "fov": 120.0,
+      "projection": "flat"
+    },
+    {
+      "camera": 0,
+      "people": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "kind": "table",
+      "yaw": 0.0,
+      "pitch": -90.0,
+      "fov": 250.0,
+      "projection": "planet"
+    },
+    {
+      "camera": 1,
+      "people": [
+        1,
+        2
+      ],
+      "kind": "pair",
+      "yaw": null,
+      "pitch": 0.0,
+      "fov": 0.0,
+      "projection": "flat"
+    },
+    {
+      "camera": 2,
+      "people": [
+        2,
+        3
+      ],
+      "kind": "pair",
+      "yaw": null,
+      "pitch": 0.0,
+      "fov": 0.0,
+      "projection": "flat"
+    },
+    {
+      "camera": 3,
+      "people": [
+        4,
+        0
+      ],
+      "kind": "pair",
+      "yaw": null,
+      "pitch": 0.0,
+      "fov": 0.0,
+      "projection": "flat"
+    }
+  ],
+  "turns": [
+    {
+      "start": 0.0,
+      "end": 3.3,
+      "speaker": null,
+      "together": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ]
+    },
+    {
+      "start": 3.3,
+      "end": 5.1,
+      "speaker": null,
+      "together": []
+    },
+    {
+      "start": 5.1,
+      "end": 8.6,
+      "speaker": 2,
+      "together": []
+    },
+    {
+      "start": 8.6,
+      "end": 9.6,
+      "speaker": null,
+      "together": []
+    },
+    {
+      "start": 9.6,
+      "end": 11.8,
+      "speaker": null,
+      "together": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ]
+    },
+    {
+      "start": 11.8,
+      "end": 13.4,
+      "speaker": 1,
+      "together": []
+    },
+    {
+      "start": 13.4,
+      "end": 15.6,
+      "speaker": 0,
+      "together": []
+    },
+    {
+      "start": 15.6,
+      "end": 16.6,
+      "speaker": 3,
+      "together": []
+    },
+    {
+      "start": 16.6,
+      "end": 22.1,
+      "speaker": 4,
+      "together": []
+    },
+    {
+      "start": 22.1,
+      "end": 24.8,
+      "speaker": null,
+      "together": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ]
+    },
+    {
+      "start": 24.8,
+      "end": 29.5,
+      "speaker": 4,
+      "together": []
+    },
+    {
+      "start": 29.5,
+      "end": 31.1,
+      "speaker": null,
+      "together": []
+    },
+    {
+      "start": 31.1,
+      "end": 35.1,
+      "speaker": 4,
+      "together": []
+    },
+    {
+      "start": 35.1,
+      "end": 36.3,
+      "speaker": 2,
+      "together": []
+    },
+    {
+      "start": 36.3,
+      "end": 40.9,
+      "speaker": 4,
+      "together": []
+    },
+    {
+      "start": 40.9,
+      "end": 42.0,
+      "speaker": 3,
+      "together": []
+    },
+    {
+      "start": 42.0,
+      "end": 46.5,
+      "speaker": 4,
+      "together": []
+    },
+    {
+      "start": 46.5,
+      "end": 47.5,
+      "speaker": null,
+      "together": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ]
+    },
+    {
+      "start": 47.5,
+      "end": 51.4,
+      "speaker": 4,
+      "together": []
+    },
+    {
+      "start": 51.4,
+      "end": 52.4,
+      "speaker": null,
+      "together": []
+    },
+    {
+      "start": 52.4,
+      "end": 53.9,
+      "speaker": 2,
+      "together": []
+    },
+    {
+      "start": 53.9,
+      "end": 56.8,
+      "speaker": 3,
+      "together": []
+    },
+    {
+      "start": 56.8,
+      "end": 58.1,
+      "speaker": 4,
+      "together": []
+    },
+    {
+      "start": 58.1,
+      "end": 60.2,
+      "speaker": 2,
+      "together": []
+    },
+    {
+      "start": 60.2,
+      "end": 63.8,
+      "speaker": null,
+      "together": []
+    },
+    {
+      "start": 63.8,
+      "end": 67.4,
+      "speaker": null,
+      "together": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ]
+    },
+    {
+      "start": 67.4,
+      "end": 76.2,
+      "speaker": 3,
+      "together": []
+    },
+    {
+      "start": 76.2,
+      "end": 77.9,
+      "speaker": 2,
+      "together": []
+    },
+    {
+      "start": 77.9,
+      "end": 78.9,
+      "speaker": null,
+      "together": []
+    },
+    {
+      "start": 78.9,
+      "end": 82.0,
+      "speaker": 4,
+      "together": []
+    },
+    {
+      "start": 82.0,
+      "end": 83.5,
+      "speaker": null,
+      "together": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ]
+    },
+    {
+      "start": 83.5,
+      "end": 88.5,
+      "speaker": 3,
+      "together": []
+    },
+    {
+      "start": 88.5,
+      "end": 90.0,
+      "speaker": null,
+      "together": []
+    }
+  ],
+  "shots": [
+    {
+      "start": 0.0,
+      "end": 5.35,
+      "view": 10,
+      "why": "several at once"
+    },
+    {
+      "start": 5.35,
+      "end": 9.85,
+      "view": 11,
+      "why": "speaks"
+    },
+    {
+      "start": 9.85,
+      "end": 13.65,
+      "view": 10,
+      "why": "several at once"
+    },
+    {
+      "start": 13.65,
+      "end": 22.35,
+      "view": 13,
+      "why": "speaks"
+    },
+    {
+      "start": 22.35,
+      "end": 25.05,
+      "view": 10,
+      "why": "several at once"
+    },
+    {
+      "start": 25.05,
+      "end": 31.35,
+      "view": 13,
+      "why": "speaks"
+    },
+    {
+      "start": 31.35,
+      "end": 36.55,
+      "view": 4,
+      "why": "speaks"
+    },
+    {
+      "start": 36.55,
+      "end": 47.5,
+      "view": 13,
+      "why": "speaks"
+    },
+    {
+      "start": 47.5,
+      "end": 54.15,
+      "view": 4,
+      "why": "another angle"
+    },
+    {
+      "start": 54.15,
+      "end": 58.35,
+      "view": 12,
+      "why": "speaks"
+    },
+    {
+      "start": 58.35,
+      "end": 60.45,
+      "view": 11,
+      "why": "speaks"
+    },
+    {
+      "start": 60.45,
+      "end": 67.65,
+      "view": 10,
+      "why": "nobody speaks"
+    },
+    {
+      "start": 67.65,
+      "end": 76.45,
+      "view": 12,
+      "why": "speaks"
+    },
+    {
+      "start": 76.45,
+      "end": 79.15,
+      "view": 11,
+      "why": "speaks"
+    },
+    {
+      "start": 79.15,
+      "end": 83.75,
+      "view": 13,
+      "why": "speaks"
+    },
+    {
+      "start": 83.75,
+      "end": 90.0,
+      "view": 12,
+      "why": "speaks"
+    }
+  ],
+  "notes": [
+    "Seat/person associations are supplied by the existing reference kit, not inferred again.",
+    "Microphone tracks are the pre-existing test separation, not five independently recorded microphones.",
+    "This is an initial automatic plan; human verification of speaker/view accuracy is still required."
+  ]
+}

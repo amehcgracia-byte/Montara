@@ -2,8 +2,13 @@ name: Montara end-to-end (Linux)
 
 on:
   push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
+
+concurrency:
+  group: montara-e2e-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   e2e:
@@ -23,6 +28,8 @@ jobs:
         run: |
           pip install -r requirements.txt
           python -m playwright install --with-deps chromium
+      - name: Montara regression tests
+        run: python -m pytest tests -q
       - name: Stage, Push and mixer through the real interface
         run: python tests/e2e_journey.py --output e2e-output
       - uses: actions/upload-artifact@v4

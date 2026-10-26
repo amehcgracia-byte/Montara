@@ -1,6 +1,6 @@
 # Montara 0.38
 
-Web editor for music, reels and creator videos. This continuation branch captures
+Web editor for music, reels and creator videos. The shared `main` branch contains
 the working public prototype and the separate asset-selection tool.
 
 - **Stage:** multicamera music video and track mixing/mastering.
@@ -9,14 +9,15 @@ the working public prototype and the separate asset-selection tool.
 
 Full context, current limitations and Fernando's onboarding are in
 [docs/HANDOFF_FERNANDO_038.md](docs/HANDOFF_FERNANDO_038.md).
-The private repository's main branch was still at 0.10 when this branch was prepared.
+The common base for Fernando, Codex and Claude is `main`. See
+[CONTRIBUTING.md](CONTRIBUTING.md) for the branch and integration workflow.
 
 ## Run locally
 
-Clone this branch with submodules, use Python 3.11, and install FFmpeg/ffprobe.
+Clone `main` with submodules, use Python 3.11, and install FFmpeg/ffprobe.
 
 ```sh
-git clone --branch codex/montara-038-handoff --recurse-submodules https://github.com/amehcgracia-byte/Montara.git
+git clone --branch main --recurse-submodules https://github.com/amehcgracia-byte/Montara.git
 cd Montara
 python3.11 -m venv .venv
 source .venv/bin/activate
@@ -43,7 +44,7 @@ FFmpeg and ffprobe must be on PATH. YouTube embedding/downloading may be restric
 ## Checks
 
 ```sh
-python -m pytest tests/test_chroma_library.py tests/test_green_library.py tests/test_source_cache.py tests/test_private_access.py tests/test_mixer_fx_levels.py -q
+python -m pytest tests -q
 python tools/asset-selector/check_selector.py
 ```
 
