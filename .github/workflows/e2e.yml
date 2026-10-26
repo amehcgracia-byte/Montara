@@ -44,8 +44,11 @@ jobs:
         run: python tests/e2e_journey.py --mode ${{ matrix.mode }} --output e2e-output
       - uses: actions/upload-artifact@v4
         if: always()
+        # Diagnostic storage is optional; test and export failures remain fatal.
+        continue-on-error: true
         with:
           name: montara-e2e-${{ matrix.mode }}
+          retention-days: 3
           path: |
             e2e-output/**/*.png
             e2e-output/**/render.mp4
