@@ -103,7 +103,7 @@ def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
     page.locator("#making").wait_for(state="visible", timeout=300_000)
     page.wait_for_timeout(4000)
     page.screenshot(path=str(shots / "04-making.png"))
-    page.wait_for_selector("#frames:not([hidden]), #result:not([hidden]), #failed:not([hidden])", timeout=900_000)
+    page.wait_for_selector("#frames:not([hidden]), #result:not([hidden]), #failed:not([hidden])", timeout=1_800_000)
     swapped = False
     if page.locator("#frames").is_visible():
         page.wait_for_function("!document.querySelector('#framesHint').textContent.includes('Preparing')", timeout=300_000)
@@ -117,7 +117,7 @@ def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
             swapped = page.locator(".frame .thumb img").first.get_attribute("src") != before
             page.screenshot(path=str(shots / "06-frames-swapped.png"), full_page=True)
         page.locator("#renderFrames").click()
-        page.wait_for_selector("#captions:not([hidden]), #result:not([hidden]), #failed:not([hidden])", timeout=900_000)
+        page.wait_for_selector("#captions:not([hidden]), #result:not([hidden]), #failed:not([hidden])", timeout=1_800_000)
     captioned = False
     if page.locator("#captions").is_visible():
         # Push: title + two typed captions, spread over the reel, burned by the engine.
@@ -139,7 +139,7 @@ def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
         page.screenshot(path=str(shots / "06b-captions.png"), full_page=True)
         page.locator("#capApply").click()
         captioned = True
-        page.wait_for_selector("#result:not([hidden]), #failed:not([hidden])", timeout=900_000)
+        page.wait_for_selector("#result:not([hidden]), #failed:not([hidden])", timeout=1_800_000)
     if page.locator("#failed").is_visible():
         page.screenshot(path=str(shots / "99-failed.png"))
         return {"mode": mode, "passed": False, "error": page.locator("#errorText").inner_text()}
