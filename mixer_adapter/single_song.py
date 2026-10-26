@@ -13,6 +13,8 @@ Usage from Montara:
 from __future__ import annotations
 
 import json
+import hashlib
+import math
 import os
 import subprocess
 import sys
@@ -21,6 +23,22 @@ from pathlib import Path
 from typing import Any
 
 MIXER = Path(__file__).resolve().parents[1] / "mixer"
+
+
+def validate_effects(effects, names):
+    if not isinstance(effects, dict) or set(effects) - set(names):
+        raise ValueError("Unknown track or invalid FX settings")
+    result = {}
+    for name, settings in effects.items():
+        if not isinstance(settings, dict) or set(settings) - {"reverb", "delay"}:
+            raise ValueError("Only reverb and delay are available")
+        result[name] = {}
+        for effect in ("reverb", "delay"):
+            value = settings.get(effect, 0)
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or not 0 <= value <= 1:
+                raise ValueError("FX intensity must be between 0 and 1")
+            result[name][effect] = float(value)
+    return result
 
 
 def _load_mixer(work_dir: Path):
@@ -42,6 +60,12 @@ class SingleSongMix:
         self.reference = Path(reference).resolve() if reference else None
         self.app, self.pipeline = _load_mixer(self.work_dir)
         self.state: dict[str, Any] | None = None
+
+    def _activate(self) -> None:
+        # The vendor keeps its active folder in module globals. Every operation
+        # must restore this job, even when another mix was analyzed meanwhile.
+        self.app.configure_source_folder(self.tracks_dir)
+        self.pipeline.configure_detection_cache(self.tracks_dir, self.work_dir / "cache")
 
     # -- one song, no detection --------------------------------------------
     def _register(self) -> dict[str, Any]:
@@ -82,7 +106,8 @@ class SingleSongMix:
     def analyze(self) -> dict[str, Any]:
         """Run the mixer's auto-mix and return one fader per track."""
         state = self.state or self._register()
-        plan = self.app.apply_overrides_for_song(1, 1, state_snapshot=state)
+        self._activate()
+        plan = self.app.apply_overrides_for_song(1, 1, state_snapshot=state, overrides_snapshot={"songs": {}})
         tracks = []
         for stem in state["stems"]:
             params = (plan.get("stems") or {}).get(stem.path.name) or {}
@@ -102,11 +127,78 @@ class SingleSongMix:
         tracks.sort(key=lambda t: (order.index(t["role"]) if t["role"] in order else len(order), t["name"].lower()))
         return {"duration": state["segments"][0].duration, "target_lufs": plan.get("target_lufs", -14.0), "tracks": tracks}
 
-    def render(self, faders_db: dict[str, float], output: Path, mutes: dict[str, bool] | None = None) -> Path:
+    def effect_track(self, name: str, effect: str) -> Path:
+        """Cache a wet-only track using the original mixer's fixed DSP, for preview and export."""
+        import numpy as np
+        import soundfile as sf
+        if effect not in {"reverb", "delay"}:
+            raise ValueError("Unknown effect")
+        state = self.state or self._register()
+        stem = next((s for s in state["stems"] if s.path.name == name), None)
+        if stem is None:
+            raise ValueError("Unknown track")
+        stamp = f"fx017-native-channels:{stem.path}:{stem.path.stat().st_mtime_ns}:{stem.path.stat().st_size}:{effect}"
+        target = self.work_dir / "fx" / (hashlib.sha256(stamp.encode()).hexdigest() + ".wav")
+        target.parent.mkdir(exist_ok=True)
+        if target.exists():
+            return target
+        temporary = target.with_suffix(".tmp.wav")
+        memory = {}
+        try:
+            with sf.SoundFile(stem.path) as source, sf.SoundFile(temporary, "w", samplerate=source.samplerate, channels=min(stem.channels, 2), subtype="FLOAT") as dest:
+                while True:
+                    block = source.read(65536, dtype="float32", always_2d=True)
+                    if not len(block):
+                        break
+                    stereo = np.repeat(block, 2, axis=1) if block.shape[1] == 1 else block[:, :2]
+                    wet = self.pipeline.plate_reverb_streaming(stereo, source.samplerate, 1.7, memory) if effect == "reverb" else self.pipeline.slap_delay_streaming(stereo, source.samplerate, 90.0, memory)
+                    # Keep mono tracks mono: duplicating them into stereo
+                    # changes the vendor pan law and boosts their dry signal 3 dB.
+                    dest.write(wet.mean(axis=1, keepdims=True) if stem.channels == 1 else wet)
+            temporary.replace(target)
+        finally:
+            temporary.unlink(missing_ok=True)
+        return target
+
+    def _effect_stems(self, effects):
+        import numpy as np
+        import soundfile as sf
+        state = self.state or self._register()
+        result = []
+        for stem in state["stems"]:
+            settings = effects.get(stem.path.name, {})
+            wet_paths = [(self.effect_track(stem.path.name, key), amount) for key, amount in settings.items() if amount > 0]
+            if not wet_paths:
+                result.append(stem)
+                continue
+            target = self.work_dir / "fx-input" / stem.path.name
+            # Use WAV containers even when the registered name ends in .mp3.
+            target.parent.mkdir(exist_ok=True)
+            from contextlib import ExitStack
+            with ExitStack() as stack:
+                source = stack.enter_context(sf.SoundFile(stem.path))
+                readers = [(stack.enter_context(sf.SoundFile(path)), amount) for path, amount in wet_paths]
+                dest = stack.enter_context(sf.SoundFile(target, "w", format="WAV", samplerate=source.samplerate, channels=min(stem.channels, 2), subtype="FLOAT"))
+                while True:
+                    block = source.read(65536, dtype="float32", always_2d=True)
+                    if not len(block):
+                        break
+                    stereo = block[:, :min(stem.channels, 2)].copy()
+                    for reader, amount in readers:
+                        stereo += reader.read(len(block), dtype="float32", always_2d=True) * amount
+                    dest.write(stereo)
+            result.append(replace(stem, path=target, channels=min(stem.channels, 2)))
+        return result
+
+    def render(self, faders_db: dict[str, float], output: Path, mutes: dict[str, bool] | None = None, effects: dict | None = None) -> Path:
         """Render the song with the person's faders (dB on top of the auto-mix)."""
         app, pipeline = self.app, self.pipeline
         state = self.state or self._register()
-        overrides = app.load_json(app.OVERRIDES_PATH, {"songs": {}})
+        self._activate()
+        if effects is not None:
+            effects = validate_effects(effects, [s.path.name for s in state["stems"]])
+        settings_path = self.work_dir / "montara_mix_settings.json"
+        overrides = app.load_json(settings_path, {"songs": {}})
         song = overrides.setdefault("songs", {}).setdefault("1", {})
         stems = song.setdefault("stems", {})
         for name, value in (faders_db or {}).items():
@@ -116,13 +208,18 @@ class SingleSongMix:
             entry["user_fader_confirmed"] = True
         for name, muted in (mutes or {}).items():
             stems.setdefault(name, {})["mute"] = bool(muted)
+        if effects is not None:
+            for stem in state["stems"]:
+                # Explicit controls replace automatic sends; never apply the effects twice.
+                stems.setdefault(stem.path.name, {}).update(effects_user_confirmed=True, space_enabled=False, echo_enabled=False)
         app.save_json(app.OVERRIDES_PATH, overrides)
+        app.save_json(settings_path, overrides)
+        plan = app.apply_overrides_for_song(1, 1, state_snapshot=state, overrides_snapshot=overrides)
         pipeline.MATCHERING_REFERENCE = str(self.reference) if self.reference else None
-        plan = app.apply_overrides_for_song(1, 1, state_snapshot=state)
         output = Path(output).resolve()
         output.parent.mkdir(parents=True, exist_ok=True)
         result = pipeline.render_segment(
-            state["stems"], state["segments"][0], 1, self.work_dir / "renders",
+            self._effect_stems(effects) if effects is not None else state["stems"], state["segments"][0], 1, self.work_dir / "renders",
             output_path=output, verify_announcement=False, prepared_plan=plan, retain_diagnostic_audio=False,
         )
         produced = Path(str(result.get("output_path") or result.get("path") or output))

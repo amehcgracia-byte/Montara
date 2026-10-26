@@ -9,8 +9,13 @@
 - The interface lives in `web/` (plain HTML/CSS/JS). Brand tokens are the CSS variables at
   the top of `web/montara.css`: black #0B0B0D, off-white #F5F3EF, accent #FF4F2E, Inter.
   Minimal, professional; no mascots; one accent colour.
-- Mode names shown to users: Stage (engine `youtube`), Pulse (`reel`), Show (`show`; paces Fast, Normal, Storytelling, Podcast).
-  Never show "YouTube", "Reel", "Zucker" or "Einstein" in the interface.
+- Mode names shown to users: Stage (engine `youtube`), Push (`reel`), Show (`show`).
+  Push descriptions must mention reels; provider names may appear where useful.
+  Show subtypes are Gamer, Influencer, Story, Podcast.
 - Montara data lives in `~/MontaraData` (or `--data`). Never read or write `~/ZuckerVideos`.
 - Done means: `python tests/e2e_journey.py --output <dir>` passes on Linux and the
   screenshots it saves have been looked at.
+
+- Read docs/HANDOFF_FERNANDO_038.md for current context. Older docs with Pulse/Story as top-level modes are historical.
+- Keep tools/asset-selector separate from Montara; its candidates and decisions are not automatic production-library approvals.
+- Report exactly which checks ran; do not claim full E2E or production readiness from targeted tests.

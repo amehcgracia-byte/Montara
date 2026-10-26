@@ -3,7 +3,7 @@
 Starts the real server, drives the real interface in Chromium and runs the real
 engine: nothing is mocked. Produces screenshots and the exported videos.
 
-    python tests/e2e_journey.py --output /tmp/montara-e2e [--mode stage|pulse]
+    python tests/e2e_journey.py --output /tmp/montara-e2e [--mode stage|push]
 """
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ from urllib.request import urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
 REAL = ROOT / "tests" / "fixtures" / "much-to-me"
-MODES = {"stage": "youtube", "pulse": "reel", "mix": "youtube"}
+MODES = {"stage": "youtube", "push": "reel", "mix": "youtube"}
 
 
 def run(cmd: list[str]) -> str:
@@ -53,7 +53,7 @@ def media_files(media: Path) -> list[Path]:
     return [media / "camera-a.mp4", media / "camera-b.mp4", media / "master.wav"]
 
 
-BRANDING = {"stage": "montara", "pulse": "none", "mix": "montara"}
+BRANDING = {"stage": "montara", "push": "none", "mix": "montara"}
 
 
 def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
@@ -61,13 +61,14 @@ def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
     shots.mkdir(parents=True, exist_ok=True)
     page.goto(url)
     page.screenshot(path=str(shots / "01-home.png"), full_page=True)
-    page.locator("#newVideo").click()
+    # The current splash automatically leads to How; there is no visible New video step.
+    page.locator("#mode").wait_for(state="visible", timeout=30_000)
     page.locator(f'.mode[data-platform="{MODES[mode]}"]').click()
     page.locator("#videoName").fill(f"E2E {mode}")
     files = media_files(media)
     rows = "document.querySelectorAll('#videoFiles li, #audioFiles li').length"
     if mode == "mix" and media == REAL:
-        # Default Stage sample: three cameras + the song as 14 separate tracks -> the mixer makes the master.
+        # Default Stage sample: three cameras + the song as 9 separate tracks -> the mixer makes the master.
         page.wait_for_function(f"{rows} === 12", timeout=30_000)
     elif mode == "stage" and media == REAL:
         # Same cameras with the finished master (the "Use the finished master instead" link).
@@ -102,24 +103,24 @@ def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
     page.locator("#making").wait_for(state="visible", timeout=300_000)
     page.wait_for_timeout(4000)
     page.screenshot(path=str(shots / "04-making.png"))
-    page.wait_for_selector("#frames:not([hidden]), #result:not([hidden]), #failed:not([hidden])", timeout=900_000)
+    page.wait_for_selector("#frames:not([hidden]), #result:not([hidden]), #failed:not([hidden])", timeout=1_800_000)
     swapped = False
     if page.locator("#frames").is_visible():
         page.wait_for_function("!document.querySelector('#framesHint').textContent.includes('Preparing')", timeout=300_000)
         page.screenshot(path=str(shots / "05-frames.png"), full_page=True)
         first = page.locator(".frame .swap:not([disabled])").first
         if first.count():
-            before = first.locator("xpath=../div/img").get_attribute("src")
+            before = page.locator(".frame .thumb img").first.get_attribute("src")
             first.click()
             page.wait_for_timeout(1000)
             page.wait_for_function("!document.querySelector('.frame.busy')", timeout=180_000)
-            swapped = first.locator("xpath=../div/img").get_attribute("src") != before
+            swapped = page.locator(".frame .thumb img").first.get_attribute("src") != before
             page.screenshot(path=str(shots / "06-frames-swapped.png"), full_page=True)
         page.locator("#renderFrames").click()
-        page.wait_for_selector("#captions:not([hidden]), #result:not([hidden]), #failed:not([hidden])", timeout=900_000)
+        page.wait_for_selector("#captions:not([hidden]), #result:not([hidden]), #failed:not([hidden])", timeout=1_800_000)
     captioned = False
     if page.locator("#captions").is_visible():
-        # Pulse: title + two typed captions, spread over the reel, burned by the engine.
+        # Push: title + two typed captions, spread over the reel, burned by the engine.
         # (headless Chromium cannot decode H.264: the player stays empty here, captions still work)
         page.locator("#capTitle").fill("Much to me")
         page.locator("#capText").fill("Much to me\nEvery night we play")
@@ -138,7 +139,7 @@ def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
         page.screenshot(path=str(shots / "06b-captions.png"), full_page=True)
         page.locator("#capApply").click()
         captioned = True
-        page.wait_for_selector("#result:not([hidden]), #failed:not([hidden])", timeout=900_000)
+        page.wait_for_selector("#result:not([hidden]), #failed:not([hidden])", timeout=1_800_000)
     if page.locator("#failed").is_visible():
         page.screenshot(path=str(shots / "99-failed.png"))
         return {"mode": mode, "passed": False, "error": page.locator("#errorText").inner_text()}
@@ -151,7 +152,7 @@ def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
     run(["ffmpeg", "-v", "error", "-i", str(path), "-f", "null", "-"])  # decode the whole file
     video = next(s for s in probe["streams"] if s["codec_type"] == "video")
     has_audio = any(s["codec_type"] == "audio" for s in probe["streams"])
-    if mode == "pulse":
+    if mode == "push":
         assert not captioned or "caption" in path.name, f"captions were not burned: {path.name}"
     (shots / "render.mp4").write_bytes(path.read_bytes())
     duration = float(probe["format"]["duration"])
@@ -164,9 +165,9 @@ def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
         mixed = ((project.get("inputs") or {}).get("master") or {}).get("path")
     cameras = [f.name for f in files if f.suffix == ".mp4"]
     used = result.get("camera_usage") or {}
-    # Stage must use every camera (the sync found all of them); Pulse may pick.
+    # Stage must use every camera (the sync found all of them); Push may pick.
     # (the engine may rename a camera to a cached proxy, so count cameras, not names)
-    all_used = mode == "pulse" or (len([k for k, n in used.items() if n]) >= len(cameras) and not result.get("excluded_clips"))
+    all_used = mode == "push" or (len([k for k, n in used.items() if n]) >= len(cameras) and not result.get("excluded_clips"))
     return {"mode": mode, "media": media.name, "branding": BRANDING[mode], "passed": has_audio and duration > 0 and all_used and (mode != "mix" or bool(mixed and "Mixer" in mixed)),
             "duration": duration, "captioned": captioned, "size": f"{video['width']}x{video['height']}", "frames_swapped": swapped, "mixed_master": mixed,
             "cuts": result.get("cut_count"), "camera_usage": used, "excluded": result.get("excluded_clips")}

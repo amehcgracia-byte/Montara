@@ -1,0 +1,89 @@
+{
+  "people": [
+    {
+      "name": "Person 1",
+      "mic": "mic-1.mp3"
+    },
+    {
+      "name": "Person 2",
+      "mic": "mic-2.mp3"
+    },
+    {
+      "name": "Person 3",
+      "mic": "mic-3.mp3"
+    },
+    {
+      "name": "Person 4",
+      "mic": "mic-4.mp3"
+    },
+    {
+      "name": "Person 5",
+      "mic": "mic-5.mp3"
+    }
+  ],
+  "cameras": [
+    {
+      "kind": "360",
+      "path": "roundtable-360.mp4",
+      "seats": [
+        {
+          "yaw": -145.1,
+          "pitch": 20.7,
+          "seen": 1.0,
+          "person": 0
+        },
+        {
+          "yaw": -35.3,
+          "pitch": 19.6,
+          "seen": 0.36,
+          "person": 1
+        },
+        {
+          "yaw": -11.1,
+          "pitch": 17.0,
+          "seen": 1.0,
+          "person": 2
+        },
+        {
+          "yaw": 33.3,
+          "pitch": 19.7,
+          "seen": 1.0,
+          "person": 3
+        },
+        {
+          "yaw": 139.7,
+          "pitch": 24.3,
+          "seen": 0.42,
+          "person": 4
+        }
+      ]
+    },
+    {
+      "kind": "flat",
+      "path": "camera-1.mp4",
+      "people": [
+        1,
+        2
+      ]
+    },
+    {
+      "kind": "flat",
+      "path": "camera-2.mp4",
+      "people": [
+        2,
+        3
+      ]
+    },
+    {
+      "kind": "flat",
+      "path": "camera-3.mp4",
+      "people": [
+        4,
+        0
+      ]
+    }
+  ],
+  "source": "roundtable-360.mp4",
+  "duration": 90,
+  "start": 0
+}

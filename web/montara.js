@@ -2,7 +2,7 @@
 // Montara's own small endpoints at /montara/*.
 "use strict";
 
-const MODES = { youtube: "Stage", reel: "Pulse", show: "Show" };
+const MODES = { youtube: "Stage", reel: "Push", show: "Show" };
 const SUBJECTS = [
   ["general", "Everyone / wide"], ["singer", "Singer"], ["drummer", "Drums"], ["pianist", "Keys"],
   ["guitarist", "Guitar"], ["bassist", "Bass"], ["audience", "Audience"],
@@ -34,7 +34,7 @@ function whoOf(slot, view) {
   return WHO_WORDS[word] || SLOT_WHO[slot] || "general";
 }
 // How a flat camera was filmed; the engine only scores steadiness on handheld cameras.
-const guessRole = (f) => (/fixed|tripod|static|iphone|\.mov$/i.test(f.name) ? "fixed_rear" : "handheld");
+const guessRole = (f) => (/fixed|tripod|static/i.test(f.name) ? "fixed_rear" : "handheld");
 const zoomOf = (view) => ZOOMS.reduce((best, z) => (Math.abs(z[2] - view.fov) < Math.abs(best[2] - view.fov) ? z : best), ZOOMS[2]);
 const BOX_HELP = {
   youtube: [
@@ -70,10 +70,23 @@ async function api(path, body) {
   const options = body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
   const response = await fetch(path.startsWith("/montara") ? path : `/api/v1${path}`, options);
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error?.message || `Request failed (${response.status})`);
+  if (!response.ok) {
+    if(response.status===410 || location.hostname.endsWith('.vercel.run') && (response.status===401 || [502,503,504].includes(response.status) && !data.error)){
+      showPausedPreview();throw new Error('Your preview paused. Reopen Montara to resume your saved project.');
+    }
+    const error=new Error(data.error?.message || `Request failed (${response.status})`);error.code=data.error?.code;throw error;
+  }
+  if(body && /^\/show\/(narrator\/framing|captions\/(enabled|style)|scenes\/.+\/(overlays|decision)|review\/)/.test(path))document.dispatchEvent(new Event('montara:edit-saved'));
   return data;
 }
 
+function showPausedPreview(){
+  const existing=document.querySelector('#pausedPreview');if(existing){if(!existing.open)existing.showModal();return;}
+  const dialog=document.createElement('dialog');dialog.id='pausedPreview';dialog.className='cut-dialog';
+  const title=document.createElement('h3');title.textContent='Your preview paused';
+  const text=document.createElement('p');text.textContent='The test session stopped. Reopen Montara to resume your saved project, then check your last edit.';
+  const link=document.createElement('a');link.className='btn primary';link.href='https://montara-tau.vercel.app/';link.textContent='Resume Montara';dialog.append(title,text,link);document.body.append(dialog);dialog.showModal();
+}
 function toast(text, error = false) {
   const el = $("#toast");
   el.textContent = text;
@@ -87,20 +100,34 @@ function escapeHtml(text) {
   return String(text ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
-const STEP_ORDER = ["footage", "showSetup", "cameras", "mix", "making", "frames", "showReview", "captions", "result"];
+const STEP_ORDER = ["footage", "showSetup", "showStyle", "cameras", "mix", "making", "frames", "showReview", "captions", "result"];
 // Steps that apply to this video: no Mix step without separate tracks, no Captions outside Pulse.
 function stepApplies(step) {
   if (state.platform === "show") return ["footage", "making", "showReview", "result"].includes(step);
   if (step === "showReview") return false;
-  if (step === "cameras") return !state.files.length || videos().length > 1 || videos().some(isSphere);
+  if (step === "cameras") return !state.files.length || videos().length > 0;
   if (step === "mix") return mixerMode();
   if (step === "captions") return state.platform === "reel";
   return true;
 }
+let showNavigating=false;
+let introTimer = null;
+function finishIntro() {
+  if (!$("#home").hidden) { resetFlow(); show("mode"); }
+}
 function show(id) {
+  clearTimeout(introTimer);
+  stopFrameHover();
+  document.body.classList.toggle("is-intro", id === "home");
+  if (id === "home") introTimer = setTimeout(finishIntro, matchMedia("(prefers-reduced-motion: reduce)").matches ? 650 : 2450);
+  if(state.platform==='show' && id!=='showReview'){$('#showSceneVideo').pause();clearTimeout(showEdit.previewTimer);showEdit.previewToken++;$('#showPreviewPart').disabled=false;showSmoothRequest++;$('#showLivePlay').disabled=false;if(['showSetup','showStyle'].includes(id))stopPolling();}
+  const showStep=state.platform==='show' && ['showSetup','showStyle','making','showReview','result'].includes(id);
+  $("#showNavigation").hidden=!showStep;
+  $$("[data-show-step]").forEach(b=>b.classList.toggle('on',b.dataset.showStep===id));
+  if(showStep && !showNavigating && history.state?.montaraStep!==id)history.pushState({montaraStep:id},'',location.href);
   $$(".screen").forEach((s) => { s.hidden = s.id !== id; });
   const inFlow = STEP_ORDER.includes(id) || id === "failed" || id === "mode";
-  $("#steps").hidden = !inFlow;
+  $("#steps").hidden = !inFlow || id === "mode" || state.platform==='show';
   $("#newVideo").hidden = inFlow;
   const current = STEP_ORDER.indexOf(id === "failed" ? "making" : id === "mode" || id === "showSetup" ? "footage" : id);
   $$("#steps span").forEach((span, index) => {
@@ -109,8 +136,13 @@ function show(id) {
     span.classList.toggle("on", position === current);
     span.classList.toggle("done", position < current);
   });
+  if(['showSetup','showStyle'].includes(id)&&typeof renderShowModeInputs==='function'){const anchor=$('#'+(id==='showSetup'?'showSetupInputs':'showStyleInputs'));anchor.append($('#showModeInputs'));renderShowModeInputs();}
   window.scrollTo({ top: 0 });
 }
+$("#home").addEventListener("click", finishIntro);
+document.addEventListener("keydown", (event) => {
+  if (!$("#home").hidden && ["Enter", "Escape", " "].includes(event.key)) { event.preventDefault(); finishIntro(); }
+});
 
 function todayName() {
   const d = new Date();
@@ -122,7 +154,7 @@ const audioTracks = () => state.files.filter((f) => f.kind === "master" || f.kin
 // Several audio files on Stage = separate instrument/mic tracks -> the mixer makes the master.
 const audioOnly = () => state.platform === "youtube" && videos().length === 0 && audioTracks().length > 0;
 const mixerMode = () => state.platform === "youtube" && (audioTracks().length >= 2 || audioOnly());
-const isSphere = (f) => f.projection === "equirect" || f.projection === "raw_insv" || /\.insv$/i.test(f.name);
+const isSphere = (f) => f.cameraType ? f.cameraType === "360" : f.projection === "equirect" || f.projection === "raw_insv" || /\.insv$/i.test(f.name);
 
 // ---------- navigation ----------
 document.addEventListener("click", (event) => {
@@ -171,22 +203,35 @@ function resetFlow() {
 }
 
 // ---------- samples ----------
+let sampleLoadToken=0;
 async function loadSamples(variant = "") {
+  if(state.platform === "show" && !variant)variant=showEdit.pace;
   if (state.files.some((f) => !f.sample)) return;  // the person already added their own files
-  state.files = state.files.filter((f) => !f.sample);
+  const token=++sampleLoadToken;
   const response = await fetch(`/montara/samples?platform=${encodeURIComponent(state.platform)}&variant=${variant}`);
-  const data = response.ok ? await response.json() : { enabled: false };
-  if (!data.enabled) return;
+  const data = await response.json().catch(() => ({enabled:false}));
+  if (!response.ok) { $("#footageHint").textContent=data.error?.message || "The example could not load. Try again."; return; }
+  if (!data.enabled || token!==sampleLoadToken || state.files.some(f=>!f.sample)) return;
+  state.files=state.files.filter(f=>!f.sample);
   for (const [group, kind] of [["videos", "video"], ["master", "master"], ["songs", "songs"]]) {
     for (const item of data[group] || []) {
-      state.files.push({ id: crypto.randomUUID(), name: item.path.split("/").pop(), kind, path: item.path, projection: item.projection, sample: true });
+      state.files.push({ id: crypto.randomUUID(), name: kind === "master" && state.platform === "reel" ? "Song master · Much to Me" : item.path.split("/").pop(), kind, path: item.path, projection: item.projection, sample: true, showSource: state.platform === "show", ...(data.example ? {name:data.example.title,exampleDuration:data.example.duration}: {}) });
     }
   }
   for (const [path, slots] of Object.entries(data.viewpoints || {})) state.viewpoints[path] = structuredClone(slots);
   $("#sampleNote").hidden = false;
   state.sampleVariant = variant;
+  if(state.platform === "show"){
+    resetShowSources();
+    if(data.inputs?.podcast)showSources.podcast=structuredClone(data.inputs.podcast);
+    if(data.inputs?.story)showSources.story=structuredClone(data.inputs.story);
+    showEdit.resume=null;
+    $("#showInputVideo").src=`/montara/show/sample?variant=${encodeURIComponent(variant)}`;
+    if($("#showExampleChoice").querySelector(`option[value="${variant}"]`))$("#showExampleChoice").value=variant;
+    renderShowExample();
+  }
   $("#variantRow").hidden = state.platform !== "youtube";
-  $("#switchSample").textContent = variant === "master" ? "Use the 14 separate tracks instead" : "Use the finished master instead";
+  $("#switchSample").textContent = variant === "master" ? "Use the separate tracks instead" : "Use the finished master instead";
   renderFiles();
 }
 
@@ -208,6 +253,7 @@ $$("[data-drop]").forEach((drop) => {
 $("#reelDuration").addEventListener("input", (e) => { $("#reelDurationOut").textContent = `${e.target.value} s`; });
 
 function addFiles(list) {
+  if (rejectRaw360(list)) return;
   if (state.files.some((f) => f.sample)) { state.files = state.files.filter((f) => !f.sample); $("#sampleNote").hidden = true; }
   for (const file of list) {
     const entry = { id: crypto.randomUUID(), name: file.name, kind: "uploading", progress: 0 };
@@ -275,6 +321,8 @@ function renderFiles() {
   if (mixerMode()) hint = `${audioTracks().length} separate tracks: Montara will mix them for you, then you can adjust every fader.`;
   else if (state.platform === "youtube" && !master) { hint = "Stage needs the master audio (one mixed track of the song) to sync every camera."; ready = false; }
   if (state.platform === "reel" && !master && videos().length > 1) hint = "Tip: add the song so the reel cuts on the music.";
+  if (state.platform === "reel" && master) hint = "The reel uses your song master. Camera sound is muted.";
+  if (state.platform === "reel" && state.files.some(f=>f.sample) && !master) { hint = "The example song master is missing. Reopen the example."; ready = false; }
   if (state.uploads) hint = "Uploading…";
   if (!audioOnly() && state.branding === "mine" && !state.hasLogo) { hint = "Choose your logo, or pick another option."; ready = false; }
   $("#footageHint").textContent = hint;
@@ -326,8 +374,9 @@ $("#continueFootage").addEventListener("click", () => registerProject().catch(fa
 
 // Pulse format: the engine's reel_aspect (9:16, 16:9, mix = framed, mix_vertical_horizontal = mixed).
 const reelFormat = () => document.querySelector("input[name=format]:checked")?.value || "9:16";
+const engineReelFormat = () => ({"16:9":"mix",mix:"mix_vertical_horizontal",mix_vertical_horizontal:"mix_vertical_horizontal"})[reelFormat()] || "9:16";
 $$("input[name=format]").forEach((radio) => radio.addEventListener("change", () => {
-  $("#mixShareRow").hidden = reelFormat() !== "mix_vertical_horizontal";
+  $("#mixShareRow").hidden = reelFormat() !== "mix";
 }));
 
 function inputs() {
@@ -354,39 +403,20 @@ async function registerProject() {
     $("#continueFootage").disabled = false;
   }
   if (state.platform === "show") return makeShow();
-  const needsCameras = videos().length > 1 || videos().some(isSphere);
+  const needsCameras = videos().length > 0;
   if (!needsCameras) return afterCameras();
   renderCameras();
   show("cameras");
 }
 
 // ---------- cameras & 360 viewpoints ----------
+function cameraTypeOf(f){return f.cameraType || (isSphere(f)?'360':(state.roles[f.path] || guessRole(f))==='fixed_rear'?'fixed':'moving');}
 function renderCameras() {
-  const flat = videos().filter((f) => !isSphere(f));
-  const spheres = videos().filter(isSphere);
-  $("#cameraList").innerHTML = flat.map((f) => `
-    <div class="cam">
-      <span class="kind video">VIDEO</span><span class="name">${escapeHtml(f.name)}</span>
-      <span class="camsel"><label>Shows <select data-subject="${escapeHtml(f.path)}">${SUBJECTS.map(([value, label]) =>
-        `<option value="${value}" ${(state.subjects[f.path] || "general") === value ? "selected" : ""}>${label}</option>`).join("")}</select></label>
-      <label>Filmed <select data-role="${escapeHtml(f.path)}"><option value="fixed_rear" ${(state.roles[f.path] || guessRole(f)) === "fixed_rear" ? "selected" : ""}>On a tripod</option><option value="handheld" ${(state.roles[f.path] || guessRole(f)) === "handheld" ? "selected" : ""}>Handheld</option></select></label></span>
-    </div>`).join("");
-  $$("[data-role]").forEach((select) => select.addEventListener("change", () => { state.roles[select.dataset.role] = select.value; }));
-  $$("[data-subject]").forEach((select) => select.addEventListener("change", () => { state.subjects[select.dataset.subject] = select.value; }));
-  $("#sphereList").innerHTML = spheres.map((f, index) => `
-    <div class="sphere" data-sphere="${index}">
-      <h3><span class="kind video">360</span> ${escapeHtml(f.name)}</h3>
-      <p class="hint">Choose a point of view on the left, then click where it should look in the 360 image. Name it as you like.</p>
-      <div class="sphere-body">
-        <ul class="slots"></ul>
-        <div class="pano-wrap">
-          <div class="pano"><div class="pano-img"></div><span class="loading">Loading 360 frame…</span></div>
-          <p class="hint tiny">Drag the 360 image to turn it · click to place the selected point of view</p>
-          <div class="preview"><div class="pv"><img alt="" hidden draggable="false"></div><span class="hint">Preview. Drag it to aim, scroll to zoom.</span></div>
-        </div>
-      </div>
-    </div>`).join("");
-  spheres.forEach((f, index) => setupSphere(f, $(`[data-sphere="${index}"]`)));
+  $('#cameraList').innerHTML=videos().map((f,index)=>`<div class="cam"><span class="kind video">${String(index+1).padStart(2,'0')}</span><span class="name">${escapeHtml(f.name)}</span><span class="camsel"><label>Camera type<select data-camera-type="${escapeHtml(f.path)}" aria-label="Camera type for ${escapeHtml(f.name)}">${[['360','360'],['fixed','Fixed camera'],['moving','Moving camera']].map(([value,label])=>`<option value="${value}" ${cameraTypeOf(f)===value?'selected':''}>${label}</option>`).join('')}</select></label></span></div>`).join('');
+  $$('[data-camera-type]').forEach(select=>select.onchange=()=>{const f=videos().find(v=>v.path===select.dataset.cameraType);f.cameraType=select.value;if(select.value!=='360')state.roles[f.path]=select.value==='fixed'?'fixed_rear':'handheld';renderCameras();});
+  const spheres=videos().filter(isSphere);
+  $('#sphereList').innerHTML=spheres.map((f,index)=>`<div class="sphere" data-sphere="${index}"><h3><span class="kind video">360</span> ${escapeHtml(f.name)}</h3><p class="hint">Choose a viewpoint, click where it should look, and give it a name.</p><div class="sphere-body"><ul class="slots"></ul><div class="pano-wrap"><div class="pano"><div class="pano-img"></div><span class="loading">Loading 360 frame…</span></div><p class="hint tiny">Drag to turn · click to place the viewpoint</p><div class="preview"><div class="pv"><img alt="" hidden draggable="false"></div><span class="hint">Drag to aim, scroll to zoom.</span></div></div></div></div>`).join('');
+  spheres.forEach((f,index)=>setupSphere(f,$(`[data-sphere="${index}"]`)));
 }
 
 function setupSphere(file, root) {
@@ -549,12 +579,20 @@ async function openMixer() {
   $("#strips").innerHTML = "";
   const job = await api("/montara/mix", { tracks: audioTracks().map((f) => f.path) });
   mix.job = job.id;
+  $("#referenceName").textContent = "Automatic (no reference)";
+  $("#referenceStatus").hidden = true;
+  $("#referenceUrl").value = "";
+  $("#useReferenceLink").disabled = false;
+  $("#pickReference").disabled = false;
+  mix.buffers = {};
+  mix.fxBuffers = {};
   const ready = await pollMix((j) => j.status !== "analyzing");
   if (ready.status === "failed") throw new Error(ready.error || "The automatic mix failed");
-  mix.plan = ready.plan;
+  mix.plan = { ...ready.plan, tracks: ready.plan.tracks.map(MixLevels.prepare) };
   renderStrips();
   $("#mixStatusText").textContent = "Loading the tracks for the preview…";
   await loadBuffers();
+  await animateMixFaders();
   $("#mixStatus").classList.add("done");
   $("#mixStatusText").textContent = "Auto-mix ready. Faders start where Montara put them.";
   $("#transport").hidden = false;
@@ -572,8 +610,7 @@ async function pollMix(done) {
 
 const dbToGain = (db) => Math.pow(10, db / 20);
 function trackGain(track) {
-  const fader = Number(track.fader_db || 0);
-  return track.mute || track.active === false ? 0 : dbToGain(Number(track.auto_gain_db || 0) + fader);
+  return MixLevels.gain(track);
 }
 
 function renderStrips() {
@@ -581,13 +618,39 @@ function renderStrips() {
     <div class="strip ${t.mute || t.active === false ? "off" : ""}" data-track="${i}" title="${escapeHtml(t.active === false ? `${t.file}: almost no signal, so the mix leaves it out` : t.file)}">
       <small>${escapeHtml(t.role)}</small>
       <span class="db">${(t.fader_db >= 0 ? "+" : "") + Number(t.fader_db).toFixed(1)} dB</span>
-      <input type="range" min="-24" max="12" step="0.5" value="${t.fader_db}" aria-label="${escapeHtml(t.name)} fader">
+      <input type="range" min="${Math.min(-60, Math.floor(t.fader_db))}" max="${Math.max(12, Math.ceil(t.fader_db))}" step="0.01" value="${t.fader_db}" aria-label="${escapeHtml(t.name)} fader">
       ${t.active === false ? `<button class="mute" disabled>NO SIGNAL</button>` : `<button class="mute ${t.mute ? "on" : ""}">${t.mute ? "OFF" : "ON"}</button>`}
       <b>${escapeHtml(t.name)}</b>
+      <button class="fx-toggle" aria-expanded="false">FX</button>
+      <div class="track-fx" hidden>
+        ${["reverb", "delay"].map((effect) => `<label><input type="checkbox" data-effect="${effect}" ${t.fx?.[effect]?.enabled ? "checked" : ""}>${effect === "reverb" ? "Reverb" : "Delay"}</label><input class="fx-amount" data-effect="${effect}" type="range" min="0" max="100" value="${t.fx?.[effect]?.amount ?? 35}" aria-label="${escapeHtml(t.name)} ${effect} intensity"><output data-effect="${effect}">${t.fx?.[effect]?.amount ?? 35}%</output>`).join("")}
+      </div>
     </div>`).join("");
   $$(".strip").forEach((strip) => {
     const track = mix.plan.tracks[Number(strip.dataset.track)];
     track.auto_mute = track.auto_mute ?? track.mute;
+    track.fx ||= { reverb: { enabled: false, amount: 35 }, delay: { enabled: false, amount: 35 } };
+    strip.querySelector(".fx-toggle").addEventListener("click", (e) => {
+      const panel = strip.querySelector(".track-fx");
+      panel.hidden = !panel.hidden;
+      e.target.setAttribute("aria-expanded", String(!panel.hidden));
+    });
+    strip.querySelectorAll(".track-fx input").forEach((input) => input.addEventListener("input", async () => {
+      const effect = input.dataset.effect;
+      const setting = track.fx[effect];
+      if (input.type === "checkbox") setting.enabled = input.checked;
+      else setting.amount = Number(input.value);
+      strip.querySelector(`output[data-effect="${effect}"]`).textContent = `${setting.amount}%`;
+      strip.querySelector(".fx-toggle").classList.toggle("active", Object.values(track.fx).some((s) => s.enabled));
+      try {
+        if (setting.enabled) await loadFxBuffer(track, effect);
+        await syncTrackFx(track);
+      } catch (error) {
+        setting.enabled = false;
+        strip.querySelector(`input[type=checkbox][data-effect="${effect}"]`).checked = false;
+        toast(error.message || "Could not prepare the effect", true);
+      }
+    }));
     strip.querySelector("input").addEventListener("input", (e) => {
       track.fader_db = Number(e.target.value);
       strip.querySelector(".db").textContent = `${track.fader_db >= 0 ? "+" : ""}${track.fader_db.toFixed(1)} dB`;
@@ -607,6 +670,41 @@ function renderStrips() {
 function applyGain(track) {
   const node = mix.nodes[track.file];
   if (node && mix.ctx) node.gain.gain.setTargetAtTime(trackGain(track), mix.ctx.currentTime, 0.03);
+}
+
+async function loadFxBuffer(track, effect) {
+  const cache = mix.fxBuffers;
+  const key = `${track.file}:${effect}`;
+  if (!cache[key]) cache[key] = (async () => {
+    const response = await fetch(`/montara/mix/${mix.job}/fx/${effect}/${encodeURIComponent(track.file)}`);
+    if (!response.ok) throw new Error("Could not prepare the effect");
+    return mix.ctx.decodeAudioData(await response.arrayBuffer());
+  })();
+  try { return await cache[key]; } catch (error) { delete cache[key]; throw error; }
+}
+
+async function syncTrackFx(track) {
+  const node = mix.nodes[track.file];
+  if (!node || !mix.playing) return;
+  for (const effect of ["reverb", "delay"]) {
+    const setting = track.fx?.[effect];
+    if (!setting?.enabled) {
+      if (node.fx[effect]) node.fx[effect].gain.gain.setTargetAtTime(0, mix.ctx.currentTime, 0.03);
+      continue;
+    }
+    const buffer = await loadFxBuffer(track, effect);
+    if (mix.nodes[track.file] !== node || !mix.playing) return;
+    if (!node.fx[effect]) {
+      const source = mix.ctx.createBufferSource(); source.buffer = buffer;
+      const gain = mix.ctx.createGain(); gain.gain.value = 0;
+      source.connect(gain); gain.connect(node.gain);
+      const offset = mix.ctx.currentTime - mix.startedAt;
+      if (offset >= buffer.duration) continue;
+      source.start(0, offset);
+      node.fx[effect] = { source, gain };
+    }
+    node.fx[effect].gain.gain.setTargetAtTime(track.fx[effect].enabled ? track.fx[effect].amount / 100 : 0, mix.ctx.currentTime, 0.03);
+  }
 }
 
 async function loadBuffers() {
@@ -633,10 +731,11 @@ function startMix(offset) {
     source.connect(gain);
     (pan ? gain.connect(pan) && pan : gain).connect(mix.master);
     source.start(0, offset);
-    mix.nodes[t.file] = { source, gain };
+    mix.nodes[t.file] = { source, gain, fx: {} };
   }
   mix.startedAt = ctx.currentTime - offset;
   mix.playing = true;
+  for (const t of mix.plan.tracks) syncTrackFx(t).catch((error) => toast(error.message, true));
   $("#playMix").textContent = "Pause";
   clearInterval(mix.timer);
   mix.timer = setInterval(() => {
@@ -649,7 +748,15 @@ function startMix(offset) {
 
 function stopMix() {
   if (mix.playing && mix.ctx) mix.offset = mix.ctx.currentTime - mix.startedAt;
-  for (const node of Object.values(mix.nodes)) { try { node.source.stop(); } catch { /* already stopped */ } }
+  for (const node of Object.values(mix.nodes)) {
+    for (const part of [node, ...Object.values(node.fx || {})]) {
+      try { part.source.stop(); } catch { /* already stopped */ }
+      part.source.disconnect();
+    }
+    node.gain.disconnect();
+    for (const part of Object.values(node.fx || {})) part.gain.disconnect();
+  }
+  mix.master?.disconnect();
   mix.nodes = {};
   mix.playing = false;
   clearInterval(mix.timer);
@@ -667,9 +774,15 @@ $("#mixSeek").addEventListener("input", (e) => {
   mix.offset = Number(e.target.value);
   if (wasPlaying) startMix(mix.offset);
 });
-$("#resetMix").addEventListener("click", () => {
-  for (const t of mix.plan.tracks) { t.fader_db = 0; t.mute = t.auto_mute; applyGain(t); }
+$("#resetMix").addEventListener("click", async () => {
+  stopMix();
+  for (const t of mix.plan.tracks) {
+    t.fader_db = t.auto_fader_db; t.mute = t.auto_mute;
+    t.fx = { reverb: { enabled: false, amount: 35 }, delay: { enabled: false, amount: 35 } };
+    applyGain(t); syncTrackFx(t).catch((error) => toast(error.message, true));
+  }
   renderStrips();
+  await animateMixFaders();
 });
 $("#pickReference").addEventListener("click", () => $("#referenceInput").click());
 $("#referenceInput").addEventListener("change", async (e) => {
@@ -682,6 +795,25 @@ $("#referenceInput").addEventListener("change", async (e) => {
   if (!response.ok) return toast("Could not use that reference", true);
   $("#referenceName").textContent = `Matched to: ${file.name}`;
 });
+$("#referenceLinkForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const jobId = mix.job, button = $("#useReferenceLink"), status = $("#referenceStatus");
+  button.disabled = true; $("#useMix").disabled = true;
+  $("#pickReference").disabled = true;
+  status.hidden = false; status.textContent = "Preparing reference audio…";
+  try {
+    let result = await api(`/montara/mix/${jobId}/reference/link`, { url: $("#referenceUrl").value.trim() });
+    while (result.status === "importing") {
+      await new Promise((resolve) => setTimeout(resolve, 900));
+      result = await api(`/montara/mix/${jobId}/reference/link`);
+      if (mix.job !== jobId) return;
+    }
+    if (result.status !== "ready") throw new Error(result.message || "Could not use this reference.");
+    $("#referenceName").textContent = `Matched to: ${result.title}`;
+    status.textContent = "Reference ready.";
+  } catch (error) { status.textContent = error.message; }
+  finally { if (mix.job === jobId) { button.disabled = false; $("#pickReference").disabled = false; $("#useMix").disabled = false; } }
+});
 $("#mixBack").addEventListener("click", () => { stopMix(); show(videos().length > 1 || videos().some(isSphere) ? "cameras" : "footage"); });
 
 $("#useMix").addEventListener("click", async () => {
@@ -690,10 +822,13 @@ $("#useMix").addEventListener("click", async () => {
     $("#useMix").disabled = true;
     $("#mixStatus").classList.remove("done");
     $("#mixStatusText").textContent = "Rendering the final mix and mastering it…";
-    const faders = Object.fromEntries(mix.plan.tracks.map((t) => [t.file, Number(t.fader_db || 0)]));
+    const faders = Object.fromEntries(mix.plan.tracks.map((t) => [t.file, MixLevels.offset(t)]));
     const mutes = Object.fromEntries(mix.plan.tracks.map((t) => [t.file, Boolean(t.mute)]));
-    await api(`/montara/mix/${mix.job}/render`, { faders, mutes });
+    const effects = Object.fromEntries(mix.plan.tracks.map((t) => [t.file, Object.fromEntries(["reverb", "delay"].map((key) => [key, t.fx?.[key]?.enabled ? t.fx[key].amount / 100 : 0]))]));
+    const animation = animateMixFaders(true);
+    await api(`/montara/mix/${mix.job}/render`, { faders, mutes, effects });
     const job = await pollMix((j) => j.status === "done");
+    await animation;
     if (job.status === "failed") throw new Error(job.error || "The final mix failed");
     state.mixMaster = job.master_path;
     if (audioOnly()) return showResult({ result: { audio: true, url: `/montara/mix/${mix.job}/result` } });
@@ -708,6 +843,7 @@ $("#useMix").addEventListener("click", async () => {
 });
 
 async function saveCameras() {
+  await api("/settings/camera-types",{project_id:state.projectId,camera_types:Object.fromEntries(videos().map(f=>[f.path,cameraTypeOf(f)]))});
   const flat = videos().filter((f) => !isSphere(f));
   const subjects = Object.fromEntries(flat.map((f) => [f.path, state.subjects[f.path] || "general"]));
   if (flat.length) await api("/settings/camera-subjects", { camera_subjects: subjects });
@@ -742,8 +878,8 @@ async function make() {
   await api("/wizard/start", {
     project_id: state.projectId, name, platform, ...data,
     reel_duration_sec: platform === "reel" ? Number($("#reelDuration").value) : undefined,
-    reel_aspect: platform === "reel" ? reelFormat() : undefined,
-    reel_mix_vertical_ratio: platform === "reel" && reelFormat() === "mix_vertical_horizontal" ? $("#mixShare").value : undefined,
+    reel_aspect: platform === "reel" ? engineReelFormat() : undefined,
+    reel_mix_vertical_ratio: platform === "reel" ? (reelFormat() === "mix" ? $("#mixShare").value : "auto") : undefined,
   });
   state.captioned = false;
   startPolling();
@@ -798,14 +934,16 @@ function stopPolling() {
 }
 
 function renderStatus(s) {
+  if(state.platform==='show' && (!$('#showSetup').hidden || !$('#showStyle').hidden))return;
   if (state.platform === "show") {
     const p = Number(s.progress || 0);
     const exporting = s.stage === "export";
-    setProgress(p, exporting ? "Finishing your video…" : p < 40 ? "Listening and finding the cuts…" : "Shaping your edit…", exporting ? "Keeping the choices from your preview." : "Preparing the framing and the rhythm you chose.");
+    setProgress(exporting && s.status !== "done" ? Math.min(99, p) : p, exporting ? "Finishing your video…" : p < 40 ? "Listening and finding the cuts…" : "Shaping your edit…", exporting && p >= 99 ? "Joining, checking playback and saving the final file. This can take a little longer." : exporting ? "Keeping the choices from your preview." : "Preparing the framing and the rhythm you chose.");
     return;
   }
   const task = (s.tasks || [])[0] || {};
-  setProgress(Number(s.progress || 0), task.label || s.message || "Working…", s.detail || "");
+  const finalizing = s.status !== "done" && Number(s.progress || 0) >= 99;
+  setProgress(finalizing ? 99 : Number(s.progress || 0), finalizing ? "Finishing your video…" : task.label || s.message || "Working…", finalizing ? "Joining, checking playback and saving the final file. This can take a little longer." : s.detail || "");
 }
 
 function setProgress(percent, message, detail) {
@@ -840,18 +978,48 @@ function viewpointName(item) {
       }
     }
     if (best && best.gap <= 20) return best.name;
-    return "other angle";
+    return item.landmark || "other angle";
   }
   const type = String(pose.type || "");
   for (const views of Object.values(state.viewpoints)) if (views[type]?.enabled && views[type].subject) return views[type].subject;
-  return "360 view";
+  return item.landmark || "360 view";
 }
 const swapping = new Set();
+let frameHover = null;
+function stopFrameHover() {
+  if (!frameHover) return;
+  clearTimeout(frameHover.timer);
+  const { video, thumb } = frameHover;
+  video.pause(); video.removeAttribute("src"); video.load(); video.hidden = true;
+  thumb.querySelector(".hover-status").hidden = true;
+  frameHover = null;
+}
+function startFrameHover(thumb) {
+  if (frameHover?.thumb === thumb) return;
+  stopFrameHover();
+  if (thumb.closest(".frame").classList.contains("busy")) return;
+  const video = thumb.querySelector("video"), label = thumb.querySelector(".hover-status");
+  const entry = { thumb, video, timer: null }; frameHover = entry;
+  entry.timer = setTimeout(() => {
+    if (frameHover !== entry || $("#frames").hidden) return;
+    label.textContent = "Preparing preview…"; label.hidden = false;
+    video.oncanplay = () => {
+      if (frameHover !== entry) return;
+      video.hidden = false; label.hidden = true;
+      video.play().catch(() => { label.textContent = "Tap the picture to play"; label.hidden = false; });
+    };
+    video.onerror = () => { if (frameHover === entry) { label.textContent = "Preview unavailable"; label.hidden = false; } };
+    video.preload = "auto";
+    video.src = thumb.dataset.preview;
+    video.load();
+  }, 250);
+}
 async function openFrames() {
   show("frames");
   $("#frameGrid").innerHTML = "";
   $("#framesHint").textContent = "Preparing the shots…";
   await refreshFrames(true);
+  await loadMusicCuts();
   clearInterval(state.framesPoll);
   state.framesPoll = setInterval(() => refreshFrames(false).catch(console.warn), 1500);
 }
@@ -865,17 +1033,33 @@ async function refreshFrames(first) {
   if (grid.children.length !== items.length) {
     grid.innerHTML = items.map((item) => `
       <figure class="frame" data-index="${item.index}">
-        <div class="thumb"><img alt="" hidden><span class="spin"></span></div>
+        <div class="thumb" tabindex="0" aria-label="Preview shot ${item.index + 1}"><img alt="" hidden><video muted playsinline loop preload="none" hidden></video><span class="spin"></span><span class="hover-status" role="status" hidden></span></div><div class="frame-actions"><button class="btn ghost small swap">Swap</button><button class="btn ghost small shot-edit">Edit</button></div>
         <figcaption><b>${String(item.index + 1).padStart(2, "0")}</b> <span class="src"></span> <span class="dur"></span></figcaption>
-        <button class="btn ghost small swap">Swap</button>
       </figure>`).join("");
+    grid.querySelectorAll(".shot-edit").forEach(button=>button.onclick=()=>{stopFrameHover();openMusicShot(Number(button.closest(".frame").dataset.index));});
     grid.querySelectorAll(".swap").forEach((button) => button.addEventListener("click", () => swap(Number(button.closest(".frame").dataset.index))));
+    grid.querySelectorAll(".thumb").forEach((thumb) => {
+      thumb.onpointerenter = (event) => { if (event.pointerType !== "touch") startFrameHover(thumb); };
+      thumb.onpointerleave = () => { if (frameHover?.thumb === thumb) stopFrameHover(); };
+      thumb.onfocus = () => startFrameHover(thumb);
+      thumb.onblur = () => { if (!thumb.matches(":hover") && frameHover?.thumb === thumb) stopFrameHover(); };
+      thumb.onclick = (event) => {
+        if (event.target.closest("button")) return;
+        if (frameHover?.thumb === thumb && frameHover.video.readyState >= 2) frameHover.video.play().catch(() => {});
+        else startFrameHover(thumb);
+      };
+      thumb.onkeydown = (event) => { if (event.target === thumb && ["Enter", " "].includes(event.key)) { event.preventDefault(); startFrameHover(thumb); } };
+    });
   }
   for (const item of items) {
     const fig = grid.querySelector(`[data-index="${item.index}"]`);
     const img = fig.querySelector("img");
+    const thumb = fig.querySelector(".thumb");
+    if (thumb.dataset.preview !== item.preview && frameHover?.thumb === thumb) stopFrameHover();
+    thumb.dataset.preview = item.preview || `/api/v1/wizard/review/preview/${item.index}`;
     const landmark = viewpointName(item);
-    const label = landmark ? `360 · ${landmark}` : item.source;
+    const type=item.camera_type || (item.pose && Object.keys(item.pose).length?"360":"moving");
+    const label = `${{fixed:"Fixed",moving:"Moving","360":"360"}[type]}${type==="360" && landmark?" · "+landmark:""}`;
     if (item.thumbnail && img.getAttribute("src") !== item.thumbnail) {
       img.src = item.thumbnail;
       img.hidden = false;
@@ -884,6 +1068,8 @@ async function refreshFrames(first) {
     } else if (!fig.querySelector(".src").textContent) {
       fig.querySelector(".src").textContent = label;
     }
+    fig.querySelector(".src").textContent=label;
+    if(!item.thumbnail)img.hidden=true;
     fig.classList.toggle("busy", !item.thumbnail || swapping.has(item.index));
     fig.querySelector(".dur").textContent = `${Number(item.duration_sec).toFixed(1)} s`;
     fig.querySelector(".swap").disabled = item.candidate_count !== undefined && item.candidate_count < 2;
@@ -892,6 +1078,7 @@ async function refreshFrames(first) {
 }
 
 async function swap(index) {
+  stopFrameHover();
   swapping.add(index);
   $(`.frame[data-index="${index}"]`)?.classList.add("busy");
   try {
@@ -904,6 +1091,7 @@ async function swap(index) {
   clearInterval(state.framesPoll);
   state.framesPoll = setInterval(() => refreshFrames(false).catch(console.warn), 1500);
   await refreshFrames(false);
+  await loadMusicCuts();
 }
 
 $("#renderFrames").addEventListener("click", async () => {
@@ -938,13 +1126,13 @@ const cap = { list: [], style: "clean_bottom", timed: false, raf: 0, selected: -
 const capVideo = () => $("#capVideo");
 const capDuration = () => Number(capVideo().duration) || Number($("#reelDuration").value) || 30;
 const capBaseSize = () => CAP_STYLES.find(([id]) => id === cap.style)[3];
-const outSize = () => (reelFormat() === "16:9" ? [1920, 1080] : [1080, 1920]);
+const outSize = () => [1080, 1920];
 const fmtTime = (x) => `${Math.floor(x / 60)}:${String(Math.floor(x % 60)).padStart(2, "0")}`;
 const newCaption = (text, start, end) => ({ text, start, end, x: 50, y: 80, size: null, color: null, font: "", effect: "fade" });
 
 function openCaptions() {
   show("captions");
-  $("#capFrame").classList.toggle("wide", reelFormat() === "16:9");
+  $("#capFrame").classList.remove("wide");
   capVideo().src = `/api/v1/wizard/compose-base?t=${Date.now()}`;
   $("#capStyles").innerHTML = CAP_STYLES.map(([id, label]) => `<button type="button" class="chip${id === cap.style ? " on" : ""}" data-style="${id}">${label}</button>`).join("");
   $("#capColors").innerHTML = CAP_COLORS.map((c) => `<button type="button" class="swatch" data-color="${c}" style="background:${c}" aria-label="${c}"></button>`).join("")
@@ -1250,19 +1438,24 @@ async function openShowSetup() {
   stopPolling();
   state.platform = "show";
   show("showSetup");
+  await loadShowExamples();
   if (!state.projectId) {
     const current = await api("/wizard/status");
-    if (["running", "waiting_show_review"].includes(current.status) && current.project_path) {
+    if (current.project_path) {
       const saved = await api("/project");
       const wizard = saved.settings?.wizard || {};
-      if (wizard.platform === "show") {
+      let resumeStatus=current.status;
+      if(wizard.platform==='show' && !['running','waiting_show_review','done','completed'].includes(resumeStatus)){
+        try{const savedScenes=await api('/show/scenes');if(savedScenes.scenes?.length)resumeStatus='waiting_show_review';}catch{}
+      }
+      if (wizard.platform === "show" && ['running','waiting_show_review','done','completed'].includes(resumeStatus)) {
         state.projectId = current.project_path;
         state.files = (saved.inputs?.videos || []).map(f => ({ id: crypto.randomUUID(), name: f.path.split("/").pop(), kind: "video", path: f.path, showSource: true }));
         $("#videoName").value = saved.name || todayName();
-        showEdit.pace = wizard.show?.style || "normal";
+        showEdit.pace = ({choe:"fast",calm:"normal"})[wizard.show?.style] || wizard.show?.style || "normal";
+        await restoreShowModeSources(showEdit.pace);
         if (videos()[0]) $("#showInputVideo").src = `/api/v1/show/source?path=${encodeURIComponent(videos()[0].path)}`;
-        if (current.status === "waiting_show_review") return openShowReview();
-        renderStatus(current); show("making"); startPolling(); return;
+        showEdit.resume={projectId:current.project_path,style:showEdit.pace,source:videos()[0]?.path,status:resumeStatus};
       }
     }
   }
@@ -1272,31 +1465,62 @@ async function openShowSetup() {
     await loadSamples();
     state.files.forEach(f => { f.showSource = true; });
   }
+  if(showExampleList.some(item=>item.id===showEdit.pace)){$("#showExampleChoice").value=showEdit.pace;renderShowExample();}
+  $$("[data-show-pace]").forEach(b=>{const on=b.dataset.showPace===showEdit.pace;b.classList.toggle("on",on);b.setAttribute("aria-pressed",String(on));});
   renderShowInput();
 }
 function renderShowInput() {
   const file = videos()[0];
   const busy = state.uploads > 0;
   const error = state.files.find(f => f.kind === "error");
-  $("#showInputStatus").textContent = busy ? `Uploading… ${Math.round((state.files[0]?.progress || 0) * 100)}%` : error ? error.error : file ? (file.sample ? "Your reference video" : file.name) : "Choose your talking video.";
+  $("#showInputStatus").textContent = busy ? `Uploading… ${Math.round((state.files[0]?.progress || 0) * 100)}%` : error ? error.error : file ? (file.sample ? `Example · ${file.name}${file.exampleDuration ? " · "+file.exampleDuration+"s" : ""}` : file.name) : "Choose your talking video.";
   $("#showMake").disabled = busy || !file;
+  $("#showChooseType").disabled=busy || !file;
+  if(typeof renderShowModeInputs==='function')renderShowModeInputs();
+  if(typeof renderShowMaterialBoxes==='function')renderShowMaterialBoxes();
+  $("#showChosenVideo").textContent=file?.name || "Choose a video first.";
 }
+async function chooseShowVideo(files) {
+  if(rejectRaw360(files)||state.uploads||!files.length)return;
+  try{
+    const wasKit=state.files.some(f=>f.sample);
+    if(wasKit){state.files=[];resetShowSources();state.sampleVariant='';}
+    showEdit.resume=null;
+    const items=await uploadShowSupport(files);
+    for(const item of items){
+      const audio=/\.(wav|mp3|m4a|flac|ogg|aac)$/i.test(item.name);
+      const image=/\.(png|jpe?g|webp|gif)$/i.test(item.name);
+      if(audio){if(showEdit.pace==='podcast')showSources.podcast.people.push({name:item.name.replace(/\.[^.]+$/,''),mic:item.path});else showSources.story.narration=item;}
+      else {
+        if(!image)state.files.push({...item,id:crypto.randomUUID(),kind:'video',showSource:true});
+        if(showEdit.pace==='storytelling')showSources.story.clips.push(item);
+      }
+    }
+    if(videos()[0])$('#showInputVideo').src=showInputURL(videos()[0].path);
+    renderShowInput();
+  }catch(error){toast(error.message,true);}
+}
+
 $("#showInputFile").addEventListener("change", event => {
-  const file = event.target.files[0]; event.target.value = "";
-  if (!file) return;
-  if (showEdit.blob) URL.revokeObjectURL(showEdit.blob);
-  showEdit.blob = URL.createObjectURL(file);
-  $("#showInputVideo").src = showEdit.blob;
-  state.files = [];
-  addFiles([file]);
-  state.files.forEach(f => { f.showSource = true; });
+  chooseShowVideo([...event.target.files]);
+  event.target.value = "";
 });
-$$("[data-show-pace]").forEach(button => button.addEventListener("click", () => {
+["dragenter", "dragover"].forEach(name => $("#showDrop").addEventListener(name, event => {
+  event.preventDefault(); $("#showDrop").classList.add("over");
+}));
+["dragleave", "drop"].forEach(name => $("#showDrop").addEventListener(name, event => {
+  event.preventDefault(); $("#showDrop").classList.remove("over");
+  if (name === "drop") chooseShowVideo([...event.dataTransfer.files]);
+}));
+$$("[data-show-pace]").forEach(button => button.addEventListener("click", async () => {
   showEdit.pace = button.dataset.showPace;
   $$("[data-show-pace]").forEach(b => { b.classList.toggle("on", b === button); b.setAttribute("aria-pressed", String(b === button)); });
-  $("#showPaceHint").textContent = showEdit.pace === "podcast" ? "Uses this video's audio. Separate microphones and automatic speaker switching are not available yet." : "The original voice stays with your video.";
+  $("#showExampleChoice").value=showEdit.pace;renderShowExample();
+  $("#showPaceHint").textContent=showEdit.pace==='podcast'?"One microphone per person. Cameras follow the speakers; every shot stays editable.":showEdit.pace==='storytelling'?"Narration and matching pictures, with a saved, editable montage plan.":"The original voice stays with your video.";
+  if(state.files.length&&state.files.every(f=>f.sample)&&state.sampleVariant!==showEdit.pace){state.files=[];state.projectId=null;await loadSamples(showEdit.pace);renderShowInput();}else renderShowModeInputs();
 }));
 $("#showMake").addEventListener("click", () => {
+  if(['waiting_show_review','running','done','completed'].includes(showEdit.resume?.status) && state.projectId===showEdit.resume.projectId && videos()[0]?.path===showEdit.resume.source && showEdit.pace===showEdit.resume.style){if(showEdit.resume.status==='running'){show('making');startPolling();}else openShowReview().catch(fail);return;}
   $("#showMake").disabled = true;
   $("#showInputVideo").pause();
   $("#videoName").value = videos()[0]?.name.replace(/\.[^.]+$/, "") || todayName();
@@ -1304,22 +1528,35 @@ $("#showMake").addEventListener("click", () => {
   registerProject().catch(fail).finally(renderShowInput);
 });
 async function makeShow() {
+  await prepareShowSources();
   setProgress(0, "Listening to your video…", "Finding the natural cuts and preparing your preview.");
   show("making");
   await api("/wizard/start", { project_id: state.projectId, name: $("#videoName").value, platform: "show", videos: videos().map(f => f.path), show_main: videos()[0].path,
-    show_style: showEdit.pace, show_review: true, show_idea_mode: "automatic", show_gags: showEdit.pace === "podcast" ? "off" : "keywords", show_auto_research: true });
+    show_style: showEdit.pace, show_review: true, captions_english:false, show_captions:true, show_idea_mode: "automatic", show_gags: ["podcast","storytelling"].includes(showEdit.pace) ? "off" : "keywords", show_auto_research: !["podcast","storytelling"].includes(showEdit.pace) });
   startPolling();
 }
 async function showPatch(path, body) {
   const response = await fetch(`/api/v1${path}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   const data = await response.json();
   if (!response.ok) throw new Error(data.error?.message || "Could not save your change.");
+  document.dispatchEvent(new Event('montara:edit-saved'));
   return data;
 }
 async function openShowReview() {
+  showEdit.direction = await api("/montara/show/direction", {});
   const data = await api("/show/scenes");
+  const fast=await api("/montara/show/editor");showEdit.timelineCache=fast.timeline;showEdit.narratorCache=fast.narrator;
   showEdit.scenes = data.scenes || [];
   showEdit.proposals = data.proposals || [];
+  showEdit.source = data.source;
+  showEdit.sourceUrl = data.source_url;
+  $('[data-show-step="showReview"]').disabled=false;
+  if(!videos().length && data.source_url){
+    const path=new URL(data.source_url,location.origin).searchParams.get('path');
+    if(path)state.files=[{id:crypto.randomUUID(),name:path.split('/').pop(),kind:'video',path,showSource:true}];
+  }
+  showEdit.resources = data.resources || [];
+  await loadShowModeReview(data);
   if (!showEdit.scenes.length) throw new Error("No scenes were found in this video.");
   // Ready automatic effects are kept; no drawing or provider sign-in is triggered here.
   for (const scene of showEdit.scenes) if (scene.decision === "pending") {
@@ -1328,23 +1565,35 @@ async function openShowReview() {
   }
   showEdit.selected = 0;
   show("showReview");
+  requestAnimationFrame(()=>document.querySelector(".show-picture-console").scrollIntoView({block:"start"}));
   renderShowScene();
+  drawShowCaptions();renderShowProgramTimeline();
 }
 function renderShowScene() {
+  const resumeOffset=showEdit.seekAfterEdit || 0;delete showEdit.seekAfterEdit;
   clearTimeout(showEdit.previewTimer);
   const token = ++showEdit.previewToken;
   const scene = showEdit.scenes[showEdit.selected];
   $("#showSceneTabs").innerHTML = showEdit.scenes.map((s, i) => `<button class="chip${i === showEdit.selected ? " on" : ""}" data-scene-index="${i}">Part ${i + 1}</button>`).join("");
   $("#showSceneTime").textContent = `Part ${showEdit.selected + 1} · ${fmtTime(scene.start)}–${fmtTime(scene.end)}`;
   $("#showSceneText").textContent = scene.text || "";
+  $("#showSelectionEffect").hidden = true;
+  $("#showSelectionEffect").dataset.text = "";
+  const sceneLength = Math.max(0, scene.end - scene.start);
+  $("#showEffectAt").value = "0";
+  $("#showEffectAt").max = String(Math.max(0, sceneLength - 0.1));
+  $("#showEffectDuration").value = String(Math.min(2, sceneLength));
+  $("#showEffectDuration").max = String(sceneLength);
+  $("#showEffectStatus").textContent = "";
   $("#showSceneVideo").pause();
-  $("#showSceneVideo").removeAttribute("src"); $("#showSceneVideo").load();
-  const labels = {word:"On-screen text",drawing:"Illustration",cutaway:"Close-up",warp:"Visual accent",steam:"Visual accent",math:"Visual accent",character:"Character",jingle:"Music",clip:"Video insert",background:"Background"};
-  const effects = showEdit.proposals.filter(p => (scene.effects || []).includes(p.id) && !(p.needs || []).length && !(p.kind === "drawing" && !p.params?.picture));
-  $("#showSceneEffects").innerHTML = effects.length ? effects.map(p => `<label class="show-effect"><input type="checkbox" data-show-effect="${escapeHtml(p.id)}" ${p.status !== "discarded" && !(p.needs || []).length ? "checked" : ""} ${(p.needs || []).length ? "disabled" : ""}><span class="show-effect-text">${escapeHtml(labels[p.kind] || "Visual effect")}${(p.needs || []).length ? "<small>Not ready · left out of the export</small>" : ""}${p.kind === "word" ? `<input type="text" data-show-text="${escapeHtml(p.id)}" aria-label="On-screen text" value="${escapeHtml(p.params?.text || "")}" maxlength="120">` : ""}</span></label>`).join("") : '<p class="hint">A clean edit. Your voice takes the lead.</p>';
-  $("#showCleanScene").hidden = !effects.length;
-  $("#showPreviewStatus").textContent = "Preparing this part…";
-  api(`/show/scenes/${encodeURIComponent(scene.id)}/preview`, { next: [] }).then(() => pollShowScene(scene.id, token)).catch(error => { if (token === showEdit.previewToken) $("#showPreviewStatus").textContent = error.message; });
+  $("#showSceneVideo").hidden = true;
+
+  renderShowEffectRows(scene);
+  document.dispatchEvent(new CustomEvent("montara:show-scene"));
+  $("#showPreviewPart").disabled = false;
+  showPlayback(scene,false,resumeOffset);
+  if(!showEdit.skipAutoPreviewOnce && scene.preview?.status!=='ready')scheduleShowAutoPreview();
+  showEdit.skipAutoPreviewOnce=false;
 }
 async function pollShowScene(id, token) {
   if (token !== showEdit.previewToken || $("#showReview").hidden) return;
@@ -1354,14 +1603,16 @@ async function pollShowScene(id, token) {
     if (!scene) throw new Error("This part is no longer available.");
     if (token !== showEdit.previewToken) return;
     if (scene.preview?.status === "ready") {
-      $("#showSceneVideo").src = scene.preview.url;
-      $("#showPreviewStatus").textContent = "Preview ready.";
+      const storedScene = showEdit.scenes.find(s => s.id === id);
+      if (storedScene) storedScene.preview = scene.preview;
+      $("#showPreviewPart").disabled = false;
+      showPlayback(storedScene || scene);
       return;
     }
     if (scene.preview?.status === "failed") throw new Error(scene.preview.error || "Could not prepare this preview.");
     $("#showPreviewStatus").textContent = "Preparing this part…";
     showEdit.previewTimer = setTimeout(() => pollShowScene(id, token), 1200);
-  } catch (error) { if (token === showEdit.previewToken) $("#showPreviewStatus").textContent = error.message; }
+  } catch (error) { if (token === showEdit.previewToken) { $("#showPreviewStatus").textContent = error.message; $("#showPreviewPart").disabled = false; } }
 }
 $("#showSceneTabs").addEventListener("click", event => { const button = event.target.closest("[data-scene-index]"); if (button) { showEdit.selected = Number(button.dataset.sceneIndex); renderShowScene(); } });
 $("#showSceneEffects").addEventListener("change", async event => {
@@ -1377,18 +1628,60 @@ $("#showSceneEffects").addEventListener("change", async event => {
     renderShowScene();
   } catch (error) { toast(error.message, true); renderShowScene(); }
 });
-$("#showCleanScene").addEventListener("click", async () => {
-  const scene = showEdit.scenes[showEdit.selected];
-  try { await api(`/show/scenes/${encodeURIComponent(scene.id)}/decision`, { decision: "plain" });
-    showEdit.proposals.filter(p => (scene.effects || []).includes(p.id)).forEach(p => { p.status = "discarded"; });
-    renderShowScene();
-  } catch (error) { toast(error.message, true); }
+document.addEventListener("selectionchange", () => {
+  if ($("#showReview").hidden) return;
+  const selection = window.getSelection();
+  const transcript = $("#showSceneText");
+  const text = selection && transcript.contains(selection.anchorNode) && transcript.contains(selection.focusNode) ? selection.toString().trim() : "";
+  const button = $("#showSelectionEffect");
+  // Keep the choice while the button takes focus; a new selection replaces it.
+  if (text) { button.dataset.text = text; button.hidden = false; }
 });
-$("#showStartOver").addEventListener("click", () => { clearTimeout(showEdit.previewTimer); ++showEdit.previewToken; $("#showSceneVideo").pause(); show("showSetup"); });
+$("#showSelectionEffect").addEventListener("click", () => {
+  const text = $("#showSelectionEffect").dataset.text || "";
+  if (!text) return;
+  $("#showEffectKind").value = "word";
+  $("#showEffectTextLabel").hidden = false;
+  $("#showEffectText").value = text.slice(0, 40);
+  $("#showEffectStatus").textContent = text.length > 40 ? "Shortened to 40 characters. Choose the moment and duration below." : "Choose the moment and duration for these words.";
+  openShowEffectTools("word", false);
+  $("#showEffectText").focus({preventScroll: true});
+});
+$("#showEffectKind").addEventListener("change", () => {
+  $("#showEffectTextLabel").hidden = $("#showEffectKind").value !== "word";
+});
+$("#showAddEffect").addEventListener("submit", async event => {
+  event.preventDefault();
+  const scene = showEdit.scenes[showEdit.selected];
+  const offset = Number($("#showEffectAt").value);
+  const duration = Number($("#showEffectDuration").value);
+  const kind = $("#showEffectKind").value;
+  const text = $("#showEffectText").value.trim();
+  if (!scene || !Number.isFinite(offset) || !Number.isFinite(duration) || offset < 0 || duration < 0.1 || offset + duration > scene.end - scene.start + 0.001) {
+    $("#showEffectStatus").textContent = "Keep the effect inside this part."; return;
+  }
+  if (kind === "word" && !text) { $("#showEffectStatus").textContent = "Write the words for your effect."; return; }
+  const button = event.currentTarget.querySelector("button[type=submit]");
+  button.disabled = true;
+  try {
+    const item = await api("/show/review/add", {kind, text, at: scene.start + offset, duration, warp: "wave"});
+    await showPatch(`/show/review/${encodeURIComponent(item.id)}`, {status: "approved"});
+    showPushUndo({type:'proposal',id:item.id,sceneId:scene.id,changes:{status:'discarded'}});
+    await refreshShowEditor(scene.id);
+    $("#showEffectDialog").close();
+  } catch (error) { $("#showEffectStatus").textContent = error.message; }
+  finally { button.disabled = false; }
+});
+$("#showCleanScene").addEventListener("click", async () => {
+  const scene=showEdit.scenes[showEdit.selected];
+  try{await clearShowSceneEffects(scene);}catch(error){toast(error.message,true);}
+});
+$("#showStartOver").addEventListener("click",()=>{clearTimeout(showEdit.previewTimer);++showEdit.previewToken;$("#showSceneVideo").pause();show('showStyle');renderShowInput();});
 $("#showExport").addEventListener("click", async () => {
   const button = $("#showExport");button.disabled = true;
   try {
     clearTimeout(showEdit.previewTimer);++showEdit.previewToken;$("#showSceneVideo").pause();
+    await prepareShowProgramPreview();
     await api("/show/review/render", {});
     setProgress(0, "Finishing your video…", "Keeping the edits you chose.");show("making");startPolling();
   } catch (error) { toast(error.message, true); } finally { button.disabled = false; }
@@ -1405,7 +1698,7 @@ function showResult(s) {
   const sourceName = result.filename || $("#videoName").value.trim() || todayName();
   const baseName = sourceName.replace(/\.[a-z0-9]+$/i, "").replace(/[\/\\]/g, "-");
   const downloadName = `${baseName}${/montara/i.test(baseName) ? "" : "-Montara"}${result.audio ? ".mp3" : ".mp4"}`;
-  $("#resultVideo").classList.toggle("vertical", state.platform === "reel" && reelFormat() !== "16:9");
+  $("#resultVideo").classList.toggle("vertical", state.platform === "reel");
   $("#resultVideo").src = result.audio ? "" : url;
   $("#download").href = `${url}${url.includes("?") ? "&" : "?"}download_name=${encodeURIComponent(downloadName)}`;
   $("#download").setAttribute("download", downloadName);
@@ -1414,6 +1707,7 @@ function showResult(s) {
   if (result.camera_usage) bits.push(`${Object.keys(result.camera_usage).length} camera${Object.keys(result.camera_usage).length === 1 ? "" : "s"}`);
   $("#resultInfo").textContent = result.audio ? "Your mastered audio is ready." : bits.join(" · ");
   show("result");
+  refreshResultAttribution().catch(console.warn);
 }
 
 function fail(error) {
@@ -1422,7 +1716,86 @@ function fail(error) {
   show("failed");
 }
 
+document.addEventListener("DOMContentLoaded", () => {
 loadBranding();
 api("/montara/version").then((v) => { $("#version").textContent = `Montara ${v.version}`; }).catch(() => {});
 show("home");
 if (new URLSearchParams(location.search).get("mode") === "show") { state.platform = "show"; openShowSetup().catch(fail); }
+
+});
+
+let showExampleList=[];
+async function loadShowExamples(){
+  const response=await api('/montara/show/examples');showExampleList=response.items || [];
+  $("#showExamples").hidden=!showExampleList.length;
+  $("#showExampleChoice").replaceChildren(...showExampleList.map(item=>new Option(item.title,item.id)));
+  if(showExampleList.some(item=>item.id===showEdit.pace))$("#showExampleChoice").value=showEdit.pace;
+  renderShowExample();
+}
+function renderShowExample(){
+  const item=showExampleList.find(item=>item.id===$("#showExampleChoice").value);if(!item)return;
+  $("#showExampleInfo").textContent=`${item.duration} seconds · ${(item.bytes/1024/1024).toFixed(1)} MB including support files`;
+  $("#showExampleGuide").href=item.guide_url;$("#showExampleKit").href=item.kit_url;
+  $("#showExampleGuideText").textContent=item.id==='podcast' ? "Includes 4 cameras and 5 microphones, with a saved seat map for the first test." : item.id==='storytelling' ? "Includes narration, matching clips and a reference-guided montage plan for the first test." : "Use the same example with Gamer or Influencer to compare the cuts.";
+}
+$("#showExampleChoice").addEventListener('change',renderShowExample);
+$("#showUseExample").addEventListener('click',async()=>{
+  if(state.uploads)return;
+  const variant=$("#showExampleChoice").value;
+  showEdit.pace=variant;
+  $$("[data-show-pace]").forEach(button=>{const on=button.dataset.showPace===variant;button.classList.toggle('on',on);button.setAttribute('aria-pressed',String(on));});
+  $("#showPaceHint").textContent=variant==='podcast' ? "Microphones and cameras are loaded from the example kit. Every camera shot stays editable." : "The original voice stays with your video.";
+  $("#showUseExample").disabled=true;
+  try{
+    state.files=[];state.projectId=null;
+    if(showEdit.blob){URL.revokeObjectURL(showEdit.blob);showEdit.blob=null;}
+    await loadSamples(variant);renderShowInput();
+  }catch(error){fail(error);}finally{$("#showUseExample").disabled=false;}
+});
+
+$("#showChooseType").addEventListener('click',()=>{if(!videos().length)return;$("#showInputVideo").pause();show('showStyle');renderShowInput();});
+$("#showStyleBack").addEventListener('click',()=>{show('showSetup');renderShowInput();});
+$("#showBackHome").addEventListener('click',()=>show('mode'));
+$$("[data-show-step]").forEach(button=>button.addEventListener('click',()=>{if(button.dataset.showStep==='showReview')openShowReview().catch(fail);else{show(button.dataset.showStep);renderShowInput();}}));
+window.addEventListener('popstate',event=>{
+  const step=event.state?.montaraStep;
+  if(state.platform==='show' && ['showSetup','showStyle','showReview','making','result'].includes(step)){
+    if(step==='showReview' && !showEdit.scenes.length){showNavigating=true;show('showSetup');showNavigating=false;return;}
+    if(['showSetup','showStyle'].includes(step))stopPolling();
+    $("#showSceneVideo").pause();showNavigating=true;show(step);showNavigating=false;renderShowInput();
+  }else if(state.platform==='show'){showNavigating=true;show('mode');showNavigating=false;}
+});
+
+function rejectRaw360(files) {
+  if (!Array.from(files).some(f => /\.(insv|msv|insp|lrv|360)$/i.test(f.name))) return false;
+  toast("Export a stitched 360 MP4 (equirectangular) from your camera app first. Camera-original INSV/MSV files cannot be edited here.", true);
+  return true;
+}
+async function animateMixFaders(keepLocked = false) {
+  const strips = Array.from($("#strips").children), duration = matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 1050;
+  const job = mix.job;
+  strips.forEach(strip => strip.querySelectorAll("input,button").forEach(el => el.disabled = true));
+  $("#playMix").disabled = true; $("#useMix").disabled = true;
+  $("#resetMix").disabled = true;
+  if (keepLocked) { $("#mixBack").disabled = true; $("#pickReference").disabled = true; $("#useReferenceLink").disabled = true; }
+  await new Promise(resolve => {
+    const start = performance.now();
+    const frame = now => {
+      if (mix.job !== job || $("#mix").hidden) { resolve(); return; }
+      const p = duration ? Math.min(1, (now - start) / duration) : 1;
+      strips.forEach((strip, i) => {
+        const t = mix.plan.tracks[i], amount = 1 - Math.pow(1 - p, 3);
+        const value = -60 + (t.fader_db + 60) * amount;
+        strip.querySelector('input[type=range]').value = value;
+        strip.querySelector('.db').textContent = `${value >= 0 ? '+' : ''}${value.toFixed(1)} dB`;
+      });
+      if (p < 1) requestAnimationFrame(frame); else resolve();
+    };
+    requestAnimationFrame(frame);
+  });
+  if (mix.job === job && !keepLocked) {
+    strips.forEach((strip, i) => strip.querySelectorAll("input,button").forEach(el => el.disabled = mix.plan.tracks[i].active === false));
+    $("#playMix").disabled = false; $("#useMix").disabled = false;
+    $("#resetMix").disabled = false; $("#mixBack").disabled = false;
+  }
+}

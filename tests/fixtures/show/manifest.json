@@ -1,0 +1,34 @@
+{
+  "fast": {
+    "id": "fast",
+    "title": "Gamer",
+    "video": "fast/video.mp4",
+    "duration": 60,
+    "bytes": 1998323,
+    "guide": "Vídeo con voz para comprobar cortes rápidos, zooms y efectos. Elige Gamer y continúa. Para comparar, vuelve al tipo de edición y selecciona Influencer conservando el mismo vídeo."
+  },
+  "normal": {
+    "id": "normal",
+    "title": "Influencer",
+    "video": "normal/video.mp4",
+    "duration": 60,
+    "bytes": 1641494,
+    "guide": "Vídeo con voz para comprobar cortes más largos y naturales. Elige Influencer y continúa. También puedes comparar este mismo vídeo con Gamer."
+  },
+  "storytelling": {
+    "id": "storytelling",
+    "title": "Story",
+    "video": "storytelling/video.mp4",
+    "duration": 60,
+    "bytes": 3638384,
+    "guide": "Incluye narración, diez clips, transcripción local y un primer plan de trece momentos revisado con ayuda del montaje de referencia. No es una prueba ciega de selección automática. Las entrevistas conservan su velocidad original para no desincronizar los labios; tres huecos breves de los recursos se cubren con insertos y quedan marcados para revisión. En Decisiones e historial puedes ver los motivos y sustituir un recurso. Preview actualiza el vídeo cuando lo pides."
+  },
+  "podcast": {
+    "id": "podcast",
+    "title": "Podcast",
+    "video": "podcast/camera-1.mp4",
+    "duration": 90,
+    "bytes": 11763609,
+    "guide": "Incluye una cámara 360, tres cámaras normales y cinco micrófonos. Todos abarcan 0–90 s: no desplaces una pista por separado. setup.json conserva las asociaciones con rutas relativas. El primer ensayo usa ese mapa de asientos, analiza el sonido localmente y propone 16 tomas a partir de 33 turnos. Botón derecho en el vídeo o en una toma permite cambiar cámara o apuntar la 360; guarda y pulsa Preview. Hay subtítulos opcionales, estilos, tamaño y arrastre sobre la imagen. Los micrófonos del kit proceden de la separación de audio existente; hará falta una prueba con cinco grabaciones físicas independientes."
+  }
+}

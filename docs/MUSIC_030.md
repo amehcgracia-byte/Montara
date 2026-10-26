@@ -1,0 +1,11 @@
+# Inline music audition and cinematic moods
+
+Each song row is its play/pause control. Selecting a new song immediately calls play inside the user gesture; selecting the playing song pauses it. Only one hidden media element exists. The separate native audio transport is removed, and a subtle fill shows current position in the selected row. Switching songs, pausing, ending, closing or searching keep the row state coherent. A blocked playback attempt reports a retry hint. Audition does not render or add music to the timeline.
+
+Six full Kevin MacLeod CC BY 4.0 tracks from the official Incompetech catalogue are added to the existing bundle: Tension (Long Note Three, The Escalation), Horror (Unseen Horrors, Darkest Child), Emotional piano (Heartbreaking, Touching Moments Four - Melody). Official metadata is retained as cinematic-catalog-evidence.json. MP3s are loudness-normalised and re-encoded at 96 kbps; original composition and tempo remain. Attribution is retained through the existing project credits.
+
+The initial library now contains 13 songs, with the same additional 15 reviewed downloads: 28 total library tracks. More music shows a remaining count and becomes a disabled All 28 library tracks loaded button at exhaustion. Uploaded songs do not inflate this catalogue total.
+
+Text-to-music research: ACE-Step 1.5 official GitHub and model card carry MIT licensing; the model card explicitly states commercial output use. Requires suitable compute; no models were installed, no songs generated and no GPU subscribed. MusicGen/AudioCraft code is MIT but published weights are CC BY-NC 4.0, making it unsuitable as the straightforward commercial-generation choice. Generated output still needs review; licensing a model does not guarantee exclusive rights or that every output is original.
+
+Verification: six real-media backend tests passed with 13 initial tracks, two per cinematic mood, licence counts and catalogue totals. Browser checks confirmed media time advancing after selecting Heartbreaking, paused=true after a second click, switching to Long Note Three, controls=false/hidden=true on the media element, nonzero row progress, and paused=true on dialog close. No timeline effect was created during audition.

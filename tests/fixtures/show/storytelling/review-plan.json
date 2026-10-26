@@ -1,0 +1,329 @@
+{
+  "version": 1,
+  "method": "reference-guided-agent-review",
+  "reference_guided": true,
+  "external_llm": false,
+  "language": "es",
+  "render_width": 640,
+  "render_height": 360,
+  "catalogue": [
+    {
+      "path": "clips/clip-001.mp4",
+      "kind": "presenter",
+      "shows": "Presentador de pelo oscuro en estudio con luz azul",
+      "reviewed_by": "agent-visual-review"
+    },
+    {
+      "path": "clips/clip-016.mp4",
+      "kind": "interview",
+      "shows": "Entrevistado de pelo gris y traje claro sentado ante un cartel documental",
+      "reviewed_by": "agent-visual-review"
+    },
+    {
+      "path": "clips/clip-018.mp4",
+      "kind": "interview",
+      "shows": "Mismo entrevistado en plano medio",
+      "reviewed_by": "agent-visual-review"
+    },
+    {
+      "path": "clips/clip-020.mp4",
+      "kind": "interview",
+      "shows": "Entrevistado y texto de cierre de su testimonio",
+      "reviewed_by": "agent-visual-review"
+    },
+    {
+      "path": "clips/clip-021.mp4",
+      "kind": "transition",
+      "shows": "Texto y controles sobre la entrevista desenfocada",
+      "reviewed_by": "agent-visual-review"
+    },
+    {
+      "path": "clips/clip-022.mp4",
+      "kind": "illustration",
+      "shows": "Ilustración de un hombre usando un teléfono",
+      "reviewed_by": "agent-visual-review"
+    },
+    {
+      "path": "clips/clip-023.mp4",
+      "kind": "illustration",
+      "shows": "Ilustración de un niño con un auricular",
+      "reviewed_by": "agent-visual-review"
+    },
+    {
+      "path": "clips/clip-024.mp4",
+      "kind": "object",
+      "shows": "Teléfono público en exterior",
+      "reviewed_by": "agent-visual-review"
+    },
+    {
+      "path": "clips/clip-025.mp4",
+      "kind": "archive",
+      "shows": "Interior de una vivienda quemada",
+      "reviewed_by": "agent-visual-review"
+    },
+    {
+      "path": "clips/clip-026.mp4",
+      "kind": "archive",
+      "shows": "Fachada y restos quemados de una vivienda",
+      "reviewed_by": "agent-visual-review"
+    }
+  ],
+  "moments": [
+    {
+      "start": 0.0,
+      "end": 7.16,
+      "original": "Tuve la oportunidad de hablar con el protagonista de una de las masacres más terribles en la historia reciente argentina y esto fue lo que me dijo.",
+      "text": "Tuve la oportunidad de hablar con el protagonista de una de las masacres más terribles en la historia reciente argentina y esto fue lo que me dijo.",
+      "voice_role": "narrator",
+      "pictures": [
+        {
+          "path": "clips/clip-001.mp4",
+          "start": 0,
+          "end": 7.16,
+          "interval": 0
+        }
+      ],
+      "reason": "Introduce la conversación; conservar al narrador antes de la entrevista.",
+      "reference_interval": [
+        0.0,
+        7.16
+      ]
+    },
+    {
+      "start": 7.16,
+      "end": 7.8,
+      "pictures": [
+        {
+          "path": "clips/clip-021.mp4",
+          "start": 0,
+          "end": 0.6399999999999997,
+          "interval": 0
+        }
+      ],
+      "voice_role": "narrator",
+      "reason": "Cubrir un hueco de los recursos extraídos con un recurso breve; no ralentizar una boca hablando ni alterar la voz.",
+      "needs_review": true,
+      "text": "Fíjate",
+      "original": "Fíjate"
+    },
+    {
+      "start": 7.8,
+      "end": 15.92,
+      "original": "que en los últimos años siempre lo que se vio de este caso fue verme a mí en un programa contando cómo salí esa noche y pidiendo a los",
+      "text": "que en los últimos años siempre lo que se vio de este caso fue verme a mí en un programa contando cómo salí esa noche y pidiendo a los",
+      "voice_role": "interview",
+      "pictures": [
+        {
+          "path": "clips/clip-016.mp4",
+          "start": 0,
+          "end": 8.120000000000001,
+          "interval": 0
+        }
+      ],
+      "reason": "La voz cambia a un testimonio en primera persona: mostrar la entrevista.",
+      "reference_interval": [
+        7.8,
+        15.92
+      ]
+    },
+    {
+      "start": 15.92,
+      "end": 17.64,
+      "pictures": [
+        {
+          "path": "clips/clip-023.mp4",
+          "start": 0,
+          "end": 1.7200000000000006,
+          "interval": 0
+        }
+      ],
+      "voice_role": "interview",
+      "reason": "Cubrir un hueco de los recursos extraídos con un recurso breve; no ralentizar una boca hablando ni alterar la voz.",
+      "needs_review": true,
+      "text": "jueces que no liben al asesino de mi familia.",
+      "original": "jueces que no liben al asesino de mi familia."
+    },
+    {
+      "start": 17.64,
+      "end": 22.84,
+      "original": "No nos conocen nada, no saben todo lo que fue verdaderamente vivir estos 32 años",
+      "text": "No nos conocen nada, no saben todo lo que fue verdaderamente vivir estos 32 años",
+      "voice_role": "interview",
+      "pictures": [
+        {
+          "path": "clips/clip-018.mp4",
+          "start": 0,
+          "end": 5.199999999999999,
+          "interval": 0
+        }
+      ],
+      "reason": "Continúa el testimonio sobre su familia y los años vividos.",
+      "reference_interval": [
+        17.64,
+        22.84
+      ]
+    },
+    {
+      "start": 22.84,
+      "end": 23.84,
+      "pictures": [
+        {
+          "path": "clips/clip-021.mp4",
+          "start": 0,
+          "end": 1.0,
+          "interval": 0
+        }
+      ],
+      "voice_role": "interview",
+      "reason": "Cubrir un hueco de los recursos extraídos con un recurso breve; no ralentizar una boca hablando ni alterar la voz.",
+      "needs_review": true,
+      "text": "y yo",
+      "original": "y yo"
+    },
+    {
+      "start": 23.84,
+      "end": 28.12,
+      "original": "aflojaba, no había manera de continuar esta lucha.",
+      "text": "aflojaba, no había manera de continuar esta lucha.",
+      "voice_role": "interview",
+      "pictures": [
+        {
+          "path": "clips/clip-020.mp4",
+          "start": 0,
+          "end": 4.280000000000001,
+          "interval": 0
+        }
+      ],
+      "reason": "Mantener su imagen mientras termina la intervención.",
+      "reference_interval": [
+        23.84,
+        28.12
+      ]
+    },
+    {
+      "start": 28.12,
+      "end": 30.2,
+      "original": "Pero no nos adelantemos.",
+      "text": "Pero no nos adelantemos.",
+      "voice_role": "narrator",
+      "pictures": [
+        {
+          "path": "clips/clip-021.mp4",
+          "start": 0,
+          "end": 2.0799999999999983,
+          "interval": 0
+        }
+      ],
+      "reason": "Transición del narrador: «Pero no nos adelantemos».",
+      "reference_interval": [
+        28.12,
+        30.2
+      ]
+    },
+    {
+      "start": 30.2,
+      "end": 39.52,
+      "original": "Durante meses una familia de Buenos Aires vive aterrorizada por un hombre que llama por teléfono, distorsiona su voz y anuncia que todos van a morir quemados.",
+      "text": "Durante meses una familia de Buenos Aires vive aterrorizada por un hombre que llama por teléfono, distorsiona su voz y anuncia que todos van a morir quemados.",
+      "voice_role": "narrator",
+      "pictures": [
+        {
+          "path": "clips/clip-022.mp4",
+          "start": 0,
+          "end": 9.320000000000004,
+          "interval": 0
+        }
+      ],
+      "reason": "El relato describe las llamadas de amenaza: recurso telefónico.",
+      "reference_interval": [
+        30.2,
+        39.52
+      ]
+    },
+    {
+      "start": 39.52,
+      "end": 52.2,
+      "original": "Los chicos conocen su identidad, pero sus apariciones telefónicas tienen algo tan perturbador que empiezan a referirse a él como el monstruo. Sus padres denuncian las amenazas y esperan que alguien consiga detenerlo.",
+      "text": "Los chicos conocen su identidad, pero sus apariciones telefónicas tienen algo tan perturbador que empiezan a referirse a él como el monstruo. Sus padres denuncian las amenazas y esperan que alguien consiga detenerlo.",
+      "voice_role": "narrator",
+      "pictures": [
+        {
+          "path": "clips/clip-023.mp4",
+          "start": 0,
+          "end": 12.68,
+          "interval": 0
+        }
+      ],
+      "reason": "El relato habla de los chicos, el miedo y las llamadas.",
+      "reference_interval": [
+        39.52,
+        52.2
+      ]
+    },
+    {
+      "start": 52.2,
+      "end": 54.72,
+      "original": "Sin embargo el hombre continúa hostigándolos",
+      "text": "Sin embargo el hombre continúa hostigándolos",
+      "voice_role": "narrator",
+      "pictures": [
+        {
+          "path": "clips/clip-024.mp4",
+          "start": 0,
+          "end": 2.519999999999996,
+          "interval": 0
+        }
+      ],
+      "reason": "El relato continúa con el hostigamiento telefónico.",
+      "reference_interval": [
+        52.2,
+        54.72
+      ]
+    },
+    {
+      "start": 54.72,
+      "end": 58.88,
+      "original": "hasta que durante la madrugada del 17 de febrero de 1994.",
+      "text": "hasta que durante la madrugada del 17 de febrero de 1994.",
+      "voice_role": "narrator",
+      "pictures": [
+        {
+          "path": "clips/clip-025.mp4",
+          "start": 0,
+          "end": 4.160000000000004,
+          "interval": 0
+        }
+      ],
+      "reason": "Entrada en el suceso narrado y sus consecuencias; imagen de archivo.",
+      "reference_interval": [
+        54.72,
+        58.88
+      ]
+    },
+    {
+      "start": 58.88,
+      "end": 60,
+      "original": "",
+      "text": "",
+      "voice_role": "narrator",
+      "pictures": [
+        {
+          "path": "clips/clip-026.mp4",
+          "start": 0,
+          "end": 1.1199999999999974,
+          "interval": 0
+        }
+      ],
+      "reason": "Continuar el archivo mientras se sitúa la fecha del suceso.",
+      "reference_interval": [
+        58.88,
+        60
+      ]
+    }
+  ],
+  "limitations": [
+    "First rehearsal guided by the edited reference, not a blind semantic-matching benchmark.",
+    "The narration track already contains interview audio; its voice has not been synthesized or independently identified.",
+    "Three short gaps in extracted footage are covered by brief cutaways. Interview clips play at their original speed to retain lip synchrony; these gap choices remain flagged for review."
+  ]
+}

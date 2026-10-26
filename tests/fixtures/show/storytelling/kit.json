@@ -1,0 +1,57 @@
+{
+  "source": "video.mp4",
+  "narration": "narration.mp3",
+  "duration": 60,
+  "clips": [
+    {
+      "file": "clips/clip-001.mp4",
+      "from": 0.0,
+      "to": 7.16
+    },
+    {
+      "file": "clips/clip-016.mp4",
+      "from": 7.8,
+      "to": 15.92
+    },
+    {
+      "file": "clips/clip-018.mp4",
+      "from": 17.64,
+      "to": 22.84
+    },
+    {
+      "file": "clips/clip-020.mp4",
+      "from": 23.84,
+      "to": 28.12
+    },
+    {
+      "file": "clips/clip-021.mp4",
+      "from": 28.12,
+      "to": 30.2
+    },
+    {
+      "file": "clips/clip-022.mp4",
+      "from": 30.2,
+      "to": 39.52
+    },
+    {
+      "file": "clips/clip-023.mp4",
+      "from": 39.52,
+      "to": 52.2
+    },
+    {
+      "file": "clips/clip-024.mp4",
+      "from": 52.2,
+      "to": 54.72
+    },
+    {
+      "file": "clips/clip-025.mp4",
+      "from": 54.72,
+      "to": 58.88
+    },
+    {
+      "file": "clips/clip-026.mp4",
+      "from": 58.88,
+      "to": 60
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+# Timeline cuts · 0.32 · 2026-10-26
+
+Video cuts appears before voice and effect tracks. The tracks share one horizontal scale and ruler: a tick per second, labels every five seconds, subtle grid lines. The picture stays above the timeline.
+
+In Gamer and Influencer (single-source Show), clicking a shot selects and highlights it. Delete shot or Delete/Backspace removes that shot. Scissors toggles a cutting tool; tapping/clicking a point adds a cut. Ctrl/Command + click cuts directly. Right-click offers Edit framing, Split here and Delete shot. Boundary handles still roll cuts. Small fragments remain selectable even when their handles overlap.
+
+Split preserves source timing and framing interpolation. Delete ripples the edited clock: narrator picture and voice lose the same source interval; following scenes/effects move earlier. Overlapping music and picture overlays keep their surviving pieces and media offsets, rather than playing the deleted middle. Whole inserted clips/talking characters stay anchored to their surviving narration point; their insertion is removed if that point was deleted. No original media file is deleted. Caption timings are regenerated, surviving caption styles are remapped, and corrections never reintroduce deleted words. New previews are explicit, with old browser preview caches cleared after edits.
+
+Undo last change restores the whole transaction (plan, scenes, proposals, caption layout and framing undo stack), with project/revision/content checks so it cannot overwrite a newer effect edit. A storyboard backup and bounded project-local cut snapshots are retained. A pending transaction journal restores documents after an interrupted write. The adapter lives in Montara; no upstream engine source was changed.
+
+Scope: destructive source trimming is currently enabled for Gamer/Influencer only. Podcast/Story use different programme clocks and media maps; the shared ordering and ruler apply, but source deletion is rejected there rather than silently desynchronizing their cameras/narration. Stage/Push trimming is not added by this patch.
+
+Validation: 15 automated checks across cuts, text-led framing, music and project recovery passed. Cut tests exercise two splits, removal of the middle, independent music source offsets, exact undo, stale selection rejection, newer-effect protection, last-shot protection, removal of a whole scene and real video/audio rendering. An additional audio check puts a 1 kHz tone only in the deleted interval and confirms it is absent from the output. Browser rehearsal verifies Control-click, scissors, small-shot selection, Delete shot and Undo, with duration changing and returning.

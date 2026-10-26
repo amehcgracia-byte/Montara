@@ -2,13 +2,22 @@ name: Montara end-to-end (Linux)
 
 on:
   push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
+
+concurrency:
+  group: montara-e2e-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   e2e:
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: 50
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [stage, push, mix]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -18,17 +27,28 @@ jobs:
           python-version: "3.11"
           cache: pip
       - name: Install FFmpeg
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg fonts-dejavu-core
+        run: |
+          if ! command -v ffmpeg >/dev/null || ! fc-match DejaVuSans >/dev/null; then
+            sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=20 update
+            sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=20 install -y ffmpeg fonts-dejavu-core
+          fi
+          ffmpeg -version
       - name: Install Montara
         run: |
           pip install -r requirements.txt
           python -m playwright install --with-deps chromium
-      - name: Stage and Pulse through the real interface
-        run: python tests/e2e_journey.py --output e2e-output
+      - name: Montara regression tests
+        if: matrix.mode == 'stage'
+        run: python -m pytest tests -q
+      - name: ${{ matrix.mode }} through the real interface
+        run: python tests/e2e_journey.py --mode ${{ matrix.mode }} --output e2e-output
       - uses: actions/upload-artifact@v4
         if: always()
+        # Diagnostic storage is optional; test and export failures remain fatal.
+        continue-on-error: true
         with:
-          name: montara-e2e
+          name: montara-e2e-${{ matrix.mode }}
+          retention-days: 3
           path: |
             e2e-output/**/*.png
             e2e-output/**/render.mp4

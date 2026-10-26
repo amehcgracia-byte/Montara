@@ -16,3 +16,9 @@ matchering==2.0.6
 # tests
 pytest>=8.0
 playwright==1.56.0
+
+# macOS subject cutouts (optional on other platforms)
+pyobjc-framework-Quartz>=11; sys_platform == "darwin"
+
+# Internet video and audio excerpts
+yt-dlp>=2026.10.21

@@ -1,51 +1,60 @@
-# Montara
+# Montara 0.38
 
-Drop your footage. Get the edit.
+Web editor for music, reels and creator videos. The shared `main` branch contains
+the working public prototype and the separate asset-selection tool.
 
-Montara is the commercial, web-first sibling of **Zucker Editor**. It reuses the
-Zucker engine untouched and gives it a new interface and brand.
+- **Stage:** multicamera music video and track mixing/mastering.
+- **Push:** reels, including four moments from one URL or uploaded video.
+- **Show:** Gamer, Influencer, Story and Podcast editing styles.
 
-| Mode  | What it makes                                   | Engine mode |
-|-------|-------------------------------------------------|-------------|
-| Stage | Full multicam video, synced and cut on the beat | `youtube`   |
-| Pulse | Reel from all your clips: vertical, horizontal or mixed, with captions | `reel`      |
-| Show  | Talking videos, stories and podcasts (Fast · Normal · Storytelling · Podcast) | `show` |
+Full context, current limitations and Fernando's onboarding are in
+[docs/HANDOFF_FERNANDO_038.md](docs/HANDOFF_FERNANDO_038.md).
+The common base for Fernando, Codex and Claude is `main`. See
+[CONTRIBUTING.md](CONTRIBUTING.md) for the branch and integration workflow.
 
-## How it is built
+## Run locally
 
-```
-montara/
-├── engine/   Zucker Editor, git submodule pinned to one commit. Never edited here.
-├── mixer/    Zucker Mixer, git submodule pinned to one commit. Never edited here.
-├── mixer_adapter/  Single-song mode for the mixer: no song detection, one song = all tracks.
-├── app.py    Starts the engine's API and serves Montara's interface.
-├── web/      Montara interface (HTML/CSS/JS, no build step).
-└── tests/    End-to-end journey: real server, real browser, real renders.
-```
+Clone `main` with submodules, use Python 3.11, and install FFmpeg/ffprobe.
 
-Zucker Editor stays the free local app with its own look. Montara never
-changes it: engine improvements are made in `zucker_videos` and picked up here
-by moving the submodule pointer (`git -C engine checkout <commit>` + commit).
-
-## Run it (Linux or macOS)
-
-```bash
-git clone --recurse-submodules https://github.com/amehcgracia-byte/Montara-.git montara
-cd montara
-python3.11 -m venv .venv && . .venv/bin/activate
-pip install -r requirements.txt
-sudo apt install ffmpeg        # macOS: brew install ffmpeg
-python app.py                  # open http://127.0.0.1:8080
+```sh
+git clone --branch main --recurse-submodules https://github.com/amehcgracia-byte/Montara.git
+cd Montara
+python3.11 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+python app.py --host 127.0.0.1 --port 8080
 ```
 
-Data lives in `~/MontaraData` (change with `--data`), never in `~/ZuckerVideos`.
+Review requirements-mac.txt on macOS. Open http://127.0.0.1:8080.
+Data belongs in ~/MontaraData or the chosen --data directory, never ~/ZuckerVideos.
+The engine and mixer are submodules: retain their pinned revisions.
 
-## Test it for free
+## Separate visual library selector
 
-* **Automatic:** every push runs `.github/workflows/e2e.yml` on GitHub's Ubuntu
-  runners: Stage and Pulse are made through the real interface and the exported
-  MP4s are checked and attached to the run.
-* **By hand in the browser:** *Code → Codespaces → Create codespace on this branch*.
-  It installs everything, starts Montara and opens it in a new tab (port 8080).
-  Real test footage to upload is in `tests/fixtures/real/`.
-* **Locally:** `python tests/e2e_journey.py --output /tmp/montara-e2e`.
+```sh
+.venv/bin/python tools/asset-selector/server.py
+```
+
+Open http://127.0.0.1:8097. Hover previews, Yes/No/Review, per-series folders,
+green/black overlays and full-background video passes. Current selections are seeded
+from tools/asset-selector/examples; later working data is ignored by Git.
+These clips are candidates for review, not commercially cleared assets.
+FFmpeg and ffprobe must be on PATH. YouTube embedding/downloading may be restricted.
+
+## Checks
+
+```sh
+python -m pytest tests -q
+python tools/asset-selector/check_selector.py
+```
+
+Full journey tests require Playwright browsers and real rendering time; the targeted
+checks above do not certify every mode or production readiness.
+
+## Public preview and deployment source
+
+Stable URL: https://montara-tau.vercel.app/ . Ads: /anuncios/; plan simulator: /planes/.
+The editor runs in separate Vercel Sandbox instances, not inside a static page.
+Deployment sources are in deployment/vercel. Run npm ci and npm run build there.
+Credentials are excluded and account-bound templates must be provisioned separately.
+Do not deploy to the owner's account or replace the stable alias without agreement.
