@@ -40,3 +40,22 @@ N > G/(O-P)
 ```
 
 This is not a quality or storage result. It only applies to operations that can be performed on proxies, and excludes the requirement to use original frames for final export.
+
+
+## Primera ejecución real — 27 octubre 2026
+
+Prueba con el algoritmo `local_media.proxies.prepare` de Montara 0.39 reproducido sin modificar en Linux, Python 3.13 y FFmpeg instalado. Vídeo sintético `testsrc2`, 12 segundos, 1280×720, 30 fps, H.264, x264 ultrafast CRF 24. Se ejecutó una sola medición por modalidad.
+
+| Indicador | Medición |
+| --- | ---: |
+| Original | 10.565.743 bytes |
+| Proxy | 704.320 bytes |
+| Proporción proxy/original | 6,67 % |
+| Preparación inicial (caché fría) | 1,4655 s |
+| Preparación con caché caliente | 0,0760 s |
+| Cociente fría/caliente | ≈19,3× |
+| Coincidencia de ID en reapertura | Sí |
+
+**Interpretación correcta:** esta prueba valida la reutilización sin transcodificar y cuantifica el coste evitado de `prepare()`. No mide la velocidad de previsualización completa ni demuestra que un concierto de 800 GB pueda editarse 19 veces más rápido. Falta repetir sobre fuentes largas y variadas, recopilar varias ejecuciones y medir precisión temporal.
+
+**Próxima hipótesis:** comprobar si `ffprobe` antes de mirar el manifiesto de caché es un coste evitable y si la edición web utiliza realmente ese proxy. Cualquier cambio de identidad debe preservar la invalidación al modificarse el original, la información temporal y la seguridad de rutas.
