@@ -4,7 +4,7 @@ Run: python -m local_media.proxies VIDEO --cache FOLDER [--sphere]
 Not yet wired into the public web upload or its final renderer.
 """
 from pathlib import Path
-import argparse,hashlib,json,subprocess
+import argparse,hashlib,json,subprocess,uuid
 
 
 def probe(path):
@@ -36,7 +36,7 @@ def prepare(source,cache,sphere=False):
         except (OSError,ValueError,TypeError,AttributeError):
             pass
     original=probe(source);video=next(s for s in original['streams'] if s['codec_type']=='video')
-    pending=cache/(key+'.pending.mp4')
+    pending=cache/(key+'.'+uuid.uuid4().hex+'.pending.mp4')
     scale='scale=2048:1024' if sphere else "scale=w='min(960,iw)':h=-2"
     try:
         subprocess.run(['ffmpeg','-v','error','-nostdin','-y','-copyts','-start_at_zero','-i',str(source),'-map','0:v:0','-map','0:a:0?','-vf',scale,'-fps_mode','passthrough','-c:v','libx264','-preset','veryfast','-crf','28','-pix_fmt','yuv420p','-c:a','aac','-b:a','96k','-movflags','+faststart',str(pending)],check=True,capture_output=True)
