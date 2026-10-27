@@ -4,7 +4,38 @@ Run: python -m local_media.proxies VIDEO --cache FOLDER [--sphere]
 Not yet wired into the public web upload or its final renderer.
 """
 from pathlib import Path
-import argparse,hashlib,json,subprocess,uuid
+import argparse,hashlib,json,subprocess,uuid,os
+from contextlib import contextmanager
+
+@contextmanager
+def _source_lock(cache, key):
+    """Interprocess lock on Linux/macOS; never use stale PID files."""
+    if os.name != 'posix':
+        raise RuntimeError('Proxy single-flight currently requires POSIX locking.')
+    import fcntl
+    with (cache / (key + '.lock')).open('a+b') as handle:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
+def _cached(source, proxy, private, key, fingerprint, sphere):
+    if not private.is_file() or not proxy.is_file() or not proxy.stat().st_size:
+        return None
+    try:
+        record=json.loads(private.read_text())
+        if (record.get('source_id') == key
+            and record.get('original') == str(source)
+            and record.get('original_stamp') == fingerprint
+            and record.get('proxy') == str(proxy)
+            and record.get('public', {}).get('projection') == ('equirectangular' if sphere else 'flat')
+            and (not record.get('proxy_signature') or record['proxy_signature'] == proxy_signature(proxy))):
+            return record
+    except (OSError, ValueError, TypeError, AttributeError):
+        pass
+    return None
 
 SAMPLE_BYTES = 65536
 
@@ -41,18 +72,17 @@ def prepare(source,cache,sphere=False):
     fingerprint=stamp(source)
     key=hashlib.sha256(json.dumps([str(source),fingerprint,sphere,'proxy019']).encode()).hexdigest()[:24]
     private=cache/(key+'.local.json');proxy=cache/(key+'.mp4')
-    if private.is_file() and proxy.is_file() and proxy.stat().st_size>0:
-        try:
-            record=json.loads(private.read_text())
-            if (record.get('source_id')==key
-                and record.get('original')==str(source)
-                and record.get('original_stamp')==fingerprint
-                and record.get('proxy')==str(proxy)
-                and record.get('public',{}).get('projection')==('equirectangular' if sphere else 'flat')
-                and (not record.get('proxy_signature') or record['proxy_signature']==proxy_signature(proxy))):
-                return record
-        except (OSError,ValueError,TypeError,AttributeError):
-            pass
+    hit = _cached(source, proxy, private, key, fingerprint, sphere)
+    if hit:
+        return hit
+    with _source_lock(cache, key):
+        hit = _cached(source, proxy, private, key, fingerprint, sphere)
+        if hit:
+            return hit
+        return _generate(source, cache, sphere, fingerprint, key, private, proxy)
+
+
+def _generate(source, cache, sphere, fingerprint, key, private, proxy):
     original=probe(source);video=next(s for s in original['streams'] if s['codec_type']=='video')
     pending=cache/(key+'.'+uuid.uuid4().hex+'.pending.mp4')
     scale='scale=2048:1024' if sphere else "scale=w='min(960,iw)':h=-2"
