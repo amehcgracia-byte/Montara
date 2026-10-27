@@ -2,7 +2,7 @@ import {randomBytes} from 'node:crypto';
 import {openPreview} from '../runtime.js';
 export default async function handler(req,res){
   res.setHeader('Cache-Control','no-store');res.setHeader('Referrer-Policy','no-referrer');
-  if((req.headers.host||'').split(':')[0]!=='montara-tau.vercel.app')return res.status(400).json({error:'Abre siempre https://montara-tau.vercel.app/ para iniciar la prueba.'});
+  if(!['montara-tau.vercel.app',process.env.VERCEL_URL].filter(Boolean).includes((req.headers.host||'').split(':')[0]))return res.status(400).json({error:'Abre siempre https://montara-tau.vercel.app/ para iniciar la prueba.'});
   if(req.method!=='GET')return res.status(405).json({error:'Open the preview from the Montara page.'});
   const cookie=(req.headers.cookie||'').split(';').map(v=>v.trim()).find(v=>v.startsWith('montara_demo='))?.split('=')[1];
   const id=/^[a-f0-9]{32}$/.test(cookie||'')?cookie:randomBytes(16).toString('hex');

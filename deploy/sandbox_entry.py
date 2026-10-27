@@ -20,7 +20,7 @@ def preview_access():
         response.set_cookie('montara_preview',secret,secure=True,httponly=True,samesite='Lax',max_age=7*86400)
         return response
     if not hmac.compare_digest(request.cookies.get('montara_preview',''),secret):
-        return Response('Open your preview from https://montara-tau.vercel.app/ to continue.',401)
+        return Response("""<!doctype html><html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Abrir Montara</title><body style="background:#0b0b0d;color:#f5f3ef;font-family:system-ui;max-width:32rem;margin:15vh auto;padding:24px"><h1>Abre tu prueba de Montara</h1><p>Este enlace pertenece a una sesión de otro navegador o ya ha caducado. Cada persona tiene su propio espacio.</p><a href="https://montara-tau.vercel.app/" style="display:inline-block;background:#ff4f2e;color:white;padding:14px 22px;border-radius:24px;text-decoration:none">Abrir Montara</a><p>Comparte la dirección montara-tau.vercel.app para que otra persona pueda probarla.</p></body></html>""",401,mimetype='text/html')
     path=request.path
     if path.startswith('/api/v1/'):
         route=path[len('/api/v1/'):]
