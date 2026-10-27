@@ -149,7 +149,7 @@ function todayName() {
   return `Session ${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-const videos = () => state.files.filter((f) => f.kind === "video");
+const videos = () => state.platform === 'youtube' && $('#stageAudioOnly').checked ? [] : state.files.filter((f) => f.kind === "video");
 const audioTracks = () => state.files.filter((f) => f.kind === "master" || f.kind === "songs");
 // Several audio files on Stage = separate instrument/mic tracks -> the mixer makes the master.
 const audioOnly = () => state.platform === "youtube" && videos().length === 0 && audioTracks().length > 0;
@@ -264,6 +264,7 @@ function addFiles(list) {
 }
 
 function upload(file, entry) {
+  if (file.size > 8 * 1024 * 1024) return uploadInParts(file, entry);
   state.uploads += 1;
   const xhr = new XMLHttpRequest();
   xhr.open("POST", "/api/v1/wizard/upload");
@@ -295,6 +296,19 @@ function upload(file, entry) {
   xhr.send(file);
 }
 
+async function uploadInParts(file, entry) {
+  state.uploads += 1;
+  try {
+    const data = await sendResumableUpload(file, progress => { entry.progress = progress; renderFiles(); }, id => {entry.uploadId = id;});
+    const found = ['videos', 'master', 'songs', 'ignored'].map(kind => [kind, (data[kind] || [])[0]]).find(([, item]) => item);
+    if (!found) throw new Error('Not a usable media file');
+    entry.kind = found[0] === 'videos' ? 'video' : found[0];
+    entry.path = found[1].path; entry.reason = found[1].reason || found[1].note; entry.projection = found[1].projection;
+  } catch (error) {
+    entry.kind = 'error'; entry.error = error.message;
+  } finally { state.uploads -= 1; renderFiles(); }
+}
+
 const KIND_LABEL = { video: "VIDEO", master: "AUDIO", songs: "SONGS", ignored: "SKIPPED", uploading: "UPLOAD", error: "ERROR" };
 const isAudioEntry = (f) => f.kind === "master" || f.kind === "songs" || (f.kind !== "video" && /\.(wav|mp3|m4a|aiff?|flac|ogg)$/i.test(f.name));
 function fileLabel(f) {
@@ -309,9 +323,25 @@ function fileRow(f) {
       <span class="name" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}</span>
       <span class="state">${f.kind === "uploading" ? Math.round(f.progress * 100) + "%" : f.kind === "error" ? escapeHtml(f.error) : f.kind === "ignored" ? escapeHtml(f.reason || "not used") : "Ready"}</span>
       ${f.kind === "uploading" ? `<span class="bar"><i style="width:${Math.round(f.progress * 100)}%"></i></span>` : ""}
+      ${f.kind === 'error' && f.uploadId ? `<button class="link" data-discard-upload="${f.id}" type="button">Discard unfinished upload</button>` : ''}
     </li>`;
 }
+document.addEventListener('click', async event => {
+  const button = event.target.closest('[data-discard-upload]');
+  if (!button) return;
+  const entry = state.files.find(f => f.id === button.dataset.discardUpload);
+  if (!entry?.uploadId) return;
+  button.disabled = true;
+  try {
+    const response = await fetch(`/montara/uploads/${entry.uploadId}`, {method: 'DELETE'});
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error?.message || 'Could not discard this upload.');
+    state.files = state.files.filter(f => f !== entry); renderFiles();
+  } catch (error) { toast(error.message, true); button.disabled = false; }
+});
 function renderFiles() {
+  $('#stageSessionOptions').hidden = state.platform !== 'youtube';
+  $('[data-drop="video"]').closest('.box').hidden = state.platform === 'youtube' && $('#stageAudioOnly').checked;
   $("#audioFiles").innerHTML = state.files.filter(isAudioEntry).map(fileRow).join("");
   $("#audioFiles").classList.toggle("compact", state.files.filter(isAudioEntry).length > 4);
   $("#videoFiles").innerHTML = state.files.filter((f) => !isAudioEntry(f)).map(fileRow).join("");
@@ -389,6 +419,7 @@ function inputs() {
 }
 
 async function registerProject() {
+  if (state.platform === 'youtube' && $('#fullSessionOn').checked) return openFullSession();
   $("#continueFootage").disabled = true;
   try {
     if (audioOnly()) { state.mixMaster = null; state.projectId = null; return await openMixer(); }
@@ -568,7 +599,8 @@ function afterCameras() {
 // ---------- mixer ----------
 const mix = { job: null, plan: null, ctx: null, nodes: {}, buffers: {}, playing: false, startedAt: 0, offset: 0, master: null, timer: null };
 
-async function openMixer() {
+async function openMixer(sessionTracks = null) {
+  if (!sessionTracks) fullSession.active = false;
   show("mix");
   stopMix();
   $("#mixStatus").classList.remove("done");
@@ -577,7 +609,7 @@ async function openMixer() {
   $("#referenceRow").hidden = true;
   $("#useMix").disabled = true;
   $("#strips").innerHTML = "";
-  const job = await api("/montara/mix", { tracks: audioTracks().map((f) => f.path) });
+  const job = await api("/montara/mix", { tracks: sessionTracks || audioTracks().map((f) => f.path) });
   mix.job = job.id;
   $("#referenceName").textContent = "Automatic (no reference)";
   $("#referenceStatus").hidden = true;
@@ -597,6 +629,7 @@ async function openMixer() {
   $("#mixStatusText").textContent = "Auto-mix ready. Faders start where Montara put them.";
   $("#transport").hidden = false;
   $("#referenceRow").hidden = false;
+  if (sessionTracks) $('#mixStatusText').textContent = 'Previewing the first selected song. Your fader adjustments apply to every selected song.';
   $("#useMix").disabled = false;
 }
 
@@ -818,6 +851,7 @@ $("#mixBack").addEventListener("click", () => { stopMix(); show(videos().length 
 
 $("#useMix").addEventListener("click", async () => {
   try {
+    if (fullSession.active) return await renderFullSession();
     stopMix();
     $("#useMix").disabled = true;
     $("#mixStatus").classList.remove("done");

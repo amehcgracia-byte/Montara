@@ -190,7 +190,7 @@ class SingleSongMix:
             result.append(replace(stem, path=target, channels=min(stem.channels, 2)))
         return result
 
-    def render(self, faders_db: dict[str, float], output: Path, mutes: dict[str, bool] | None = None, effects: dict | None = None) -> Path:
+    def render(self, faders_db: dict[str, float], output: Path, mutes: dict[str, bool] | None = None, effects: dict | None = None, *, base_gains: dict[str, float] | None = None) -> Path:
         """Render the song with the person's faders (dB on top of the auto-mix)."""
         app, pipeline = self.app, self.pipeline
         state = self.state or self._register()
@@ -201,6 +201,10 @@ class SingleSongMix:
         overrides = app.load_json(settings_path, {"songs": {}})
         song = overrides.setdefault("songs", {}).setdefault("1", {})
         stems = song.setdefault("stems", {})
+        for name, value in (base_gains or {}).items():
+            # A full session shares the audible baseline of its reviewed mix.
+            # Do not silently rebalance each song underneath the common faders.
+            stems.setdefault(name, {}).update(makeup_gain_db=float(value), manual_makeup_gain_db=True)
         for name, value in (faders_db or {}).items():
             entry = stems.setdefault(name, {})
             entry["fader_db"] = float(value)

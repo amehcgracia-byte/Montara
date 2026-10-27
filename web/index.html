@@ -96,6 +96,7 @@
   <!-- Step 2: footage -->
   <section class="screen" id="footage" hidden>
     <h2><span id="modeLabel">Stage</span> · Add your footage</h2>
+    <div id="stageSessionOptions" class="actions" hidden><label><input id="stageAudioOnly" type="checkbox"> Audio only</label><label><input id="fullSessionOn" type="checkbox"> Full session · find the songs</label><button id="sessionResume" class="btn ghost small" type="button" hidden>Resume session</button></div>
     <p class="hint" id="sampleNote" hidden>Sample material from a real jam is loaded so you can try Montara right away. <button class="link" id="clearSamples">Use my own files instead</button><span id="variantRow"> · <button class="link" id="switchSample"></button></span></p>
     <div class="boxes">
       <div class="box">
@@ -147,6 +148,16 @@
       <button class="btn ghost" data-go="mode">Back</button>
       <button class="btn primary" id="continueFootage" disabled>Continue</button>
     </div>
+  </section>
+
+  <section class="screen" id="sessionReview" hidden>
+    <h2>Your session, song by song.</h2>
+    <p class="hint">Review the suggested boundaries. Choose the songs, then adjust one mix for the session.</p>
+    <p id="sessionStatus" class="hint" role="status" aria-live="polite"></p>
+    <progress id="sessionProgress" max="100" value="0" aria-label="Session progress"></progress>
+    <div id="sessionSongs"></div>
+    <div id="sessionResults"></div>
+    <div class="actions"><button id="sessionBack" class="btn ghost" type="button">Back to footage</button><button id="sessionCancel" class="btn ghost" type="button" hidden>Cancel</button><button id="sessionMix" class="btn primary" type="button" hidden>Mix selected songs</button></div>
   </section>
 
   <!-- Step 3: cameras -->
@@ -332,7 +343,9 @@
 
 <div class="toast" id="toast" hidden></div>
 <script src="mix-levels.js"></script>
+<script src="resumable-upload.js"></script>
 <script src="montara.js"></script>
+<script src="full-session.js"></script>
 <script src="show-media.js"></script>
 <script src="show-editor.js"></script>
 <script src="show-geometry.js"></script>

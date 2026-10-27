@@ -18,7 +18,7 @@ La comparación incluye el estudio original en `engine/tools/qa/`, porque el ser
 
 **Conectada** = se localizaron acceso en interfaz y llamada correspondiente; no equivale a prueba completa de todos los casos. **Parcial** = existe una parte o un acceso reducido. **Pendiente** = no se localizó acceso equivalente en la interfaz de Montara revisada. **Adaptar** = depende del escritorio, sistema operativo o servicio externo y necesita una solución web. **Verificar** = hace falta probar el caso real antes de asegurar equivalencia.
 
-No se propone eliminar ninguna capacidad por tener demasiados controles. El diseño debe mostrar herramientas según el objeto seleccionado: clic derecho y panel contextual para vídeo/efecto, FX para pistas, y opciones avanzadas plegadas. Mantener las pantallas actuales y sus ejemplos con fuentes separadas.
+Este inventario identifica posibilidades, no autoriza trasladarlas todas. La selección acordada con el usuario determina qué se incorpora. El diseño debe mostrar herramientas según el objeto seleccionado: clic derecho y panel contextual para vídeo/efecto, FX para pistas, y opciones avanzadas plegadas. Mantener las pantallas actuales y sus ejemplos con fuentes separadas.
 
 ## Stage y funciones comunes de vídeo
 
@@ -58,11 +58,11 @@ Fuentes: `engine/server/wizard.py`, `engine/server/edit_timeline.py`, `engine/co
 | Master con referencia local | Conectada / verificar | Medir niveles, dinámica y clipping con/sin FX. |
 | Referencia desde enlace | Parcial / adaptar | Importador conectado; bloqueos de fuente externos. |
 | Preview exacto frente a escucha rápida aproximada | Parcial | Comparar Web Audio con render Python, FX y pan. No presentarlos como idénticos sin medición. |
-| Detectar canciones en una jam de varias horas | Pendiente | `SingleSongMix._register()` crea un único segmento y **omite detección por diseño**. |
+| Detectar canciones en una jam de varias horas | Parcial / verificar | Nuevo adaptador de sesión con detector acústico original, caché y revisión de cortes; recorrido de 6:30 probado. Falta medir una jam real de varias horas. Canción única conserva su adaptador. |
 | Revisar, dividir, unir y renombrar canciones detectadas | Pendiente | Reutilizar Select Cuts mediante adaptador, no copiar toda su pantalla. |
 | Reanalizar con revisión de candidato/segunda pasada | Pendiente | Conservar decisiones previas y permitir aprobar un nuevo análisis. |
-| Mezcla común de sesión con ajustes por canción | Pendiente | Necesita modelo de sesión y overrides por canción. |
-| Renderizar varias canciones, cancelar y recuperar resultados | Parcial | Montara tiene trabajos por canción; falta lote de sesión equivalente. |
+| Mezcla común de sesión con ajustes por canción | Parcial | Mezcla común, mute y FX para canciones elegidas implementados; ajustes independientes por canción todavía no expuestos. |
+| Renderizar varias canciones, cancelar y recuperar resultados | Conectada / verificar | Lote MP3, cancelación y recuperación explícita del manifiesto en disco. Probado con dos ventanas; pendiente carga prolongada real. |
 | Historial de versiones de mezcla por canción | Parcial / verificar | No equivale al historial visual de Show. |
 
 Fuentes: `mixer/jam_app.py`, `mixer/jam_mix_pipeline.py`, `mixer/static/app.js`, `mixer/static/tutorial.js`, `mixer_adapter/single_song.py`, `web/montara.js`, `web/mix-levels.js`.
@@ -158,14 +158,54 @@ Fuentes: módulos `engine/core/show_*.py`, `engine/web/show_*.js`, `engine/tools
 | Acceso testers y suscripciones | Preparación parcial; no equivalen a autenticación, facturación y cuotas públicas completas. |
 | Biblioteca y permisos | Promoción explícita de recursos, conservar colecciones/procedencia; no inferir licencia por encontrar un clip online. |
 
-## Orden de trabajo propuesto
+## Alcance acordado con el usuario — 27 de octubre de 2026
 
-1. **Cerrar instalación y observabilidad:** dependencias del importador, resultado exacto de cada prueba y registro de errores útil. No contratar un proveedor de descarga sin medirlo con enlaces nuevos.
-2. **Paridad de edición:** recorrido por cada modo con lista de aceptación; selección, tiempo, split/delete, encuadre, FX, deshacer y exportación. Resolver diferencias entre modos antes de nuevas pantallas.
-3. **Paridad Show avanzada:** trasladar primero pintura, recortes, seguimiento y audio usando el contrato/receta del Studio original y herramientas contextuales. Abrir solo las rutas necesarias con aislamiento.
-4. **Paridad Mixer:** pan/solo/EQ/gate detrás de un panel por pista; incorporar sesión larga, Select Cuts y mezcla por canción a través de un adaptador de sesión separado.
-5. **IA y GPU reales:** elegir proveedor/motor y medir resultados con los kits y material nuevo. No sustituir análisis por una demo fija.
-6. **Distribución:** calendario/publicación social como función nueva después de la paridad básica y con conexiones oficiales.
+- **Sesiones largas de Mixer: incorporar.** Detectar canciones dentro de una jam de varias horas, permitir revisar sus límites y aplicar una mezcla común a las canciones elegidas. Conservar la asociación temporal de vídeos y pistas para poder solicitar después el vídeo de una canción. Usar el detector original mediante un adaptador de sesión; no sustituirlo por el adaptador actual de canción única.
+- **Muchos archivos y vídeos de hasta 30 GB: objetivo de diseño, todavía no capacidad verificada.** La preview pública limita actualmente las subidas a 256 MiB. Este objetivo requiere copias pequeñas para editar, transferencia reanudable de originales cuando el render sea remoto, almacenamiento persistente suficiente y trabajos que procesen por bloques. Medir espacio temporal, memoria y tiempos con material representativo antes de ofrecerlo. No basta con aumentar el límite de una petición.
+- **Mixer: conservar la sencillez actual.** Revisar juntos los controles manuales antes de implementar cambios. Investigar el enlace de dos pistas como pareja estéreo, con asignación izquierda/derecha y controles vinculados; confirmar el comportamiento del original. No añadir por defecto pan, solo, EQ o gate por aparecer en el inventario.
+- **Show avanzado: selección conjunta pendiente.** Revisar las herramientas originales por familias con ejemplos y elegir cuáles aportan valor. No dar por aprobada la incorporación de pintura, seguimiento, face swap ni del resto del Studio completo.
+- **IA: Abacus como destino previsto.** No recuperar los conectores de escritorio de Claude/ChatGPT como requisito de Montara. La aplicación necesitará una integración interna con el servicio de IA elegido; eso no obliga a mostrar conectores al usuario. La cuenta aún no existe y no hay integración ni GPU verificadas. Preparar el prompt de traspaso cuando el usuario se registre, no antes.
+- **Linux: solo dependencias de herramientas elegidas.** Para cada herramienta seleccionada, comprobar si usa Vision/Quartz u otra tecnología de Mac y decidir su alternativa portable. No instalar modelos o componentes de funciones descartadas.
+
+### Planes y consumo de IA — aclaración del usuario
+
+Precios orientativos, todavía sin facturación ni límites comerciales definitivos:
+
+| Plan previsto | Acceso previsto |
+|---|---|
+| Entrada, 15 €/mes | Edición y procesamiento base. Sin acceso general al LLM; las posibles tareas simples de IA, como un cartel, deben definirse expresamente y tener presupuesto acotado. Sin storyboards. |
+| Intermedio, 30 €/mes | IA limitada a herramientas de Montara, con cupo medido y visible antes de ejecutar trabajos adicionales. |
+| Editor profesional, 50–55 €/mes | Todas las herramientas aprobadas y mayor capacidad. La intención comercial es acceso amplio sin un contador restrictivo de peticiones; aún no se ha demostrado viable ofrecer consumo de IA ilimitado por una tarifa fija. |
+
+El LLM estará limitado a tareas de vídeo, audio y recursos de la aplicación; no se ofrecerá como agente general para crear otras aplicaciones ni ejecutar instrucciones arbitrarias. Esta restricción de alcance no garantiza por sí sola un coste bajo: duración, reintentos, modelos de imagen/vídeo y concurrencia siguen afectando al consumo.
+
+Preparar medición interna por cuenta y trabajo: proveedor/modelo, consumo que facture el proveedor, coste, duración, reintentos y resultado. Antes de gastar, aplicar autorización por plan y reserva de presupuesto; conciliar el consumo real al terminar, evitar cobros repetidos por reintentos y devolver reservas no usadas. Mantener un techo de gasto del servicio y límites técnicos de concurrencia. Los extras de pago por uso deben tener precio y aceptación explícitos; no facturar sobrecostes automáticamente por haber elegido el plan profesional.
+
+Almacenamiento: separar espacio temporal de procesamiento de originales y proyectos persistentes en almacenamiento externo. Definir capacidad incluida, conservación, limpieza y coste de transferencia antes de publicar ofertas. No se ha comprado almacenamiento ni decidido un proveedor.
+
+### Condiciones previas al traspaso a Abacus
+
+El registro en Abacus no debe convertirse en el momento de descubrir herramientas incompletas. Antes del traspaso, preparar una versión reproducible y probar en Linux las funciones seleccionadas, con archivos reales, preview, exportación y persistencia. Incluir detección de canciones en sesiones largas y la ruta de archivos grandes dentro del alcance acordado. Adaptar las dependencias de Mac solo para herramientas elegidas.
+
+La importación por enlace debe probarse con vídeos nuevos, sin depender de ejemplos previamente descargados. Actualmente YouTube sigue rechazando las dos pruebas frescas aun con EJS y Deno instalados. Registrar ese bloqueo como pendiente: no prometer ausencia de CAPTCHA ni considerar resuelta la importación por cambiar de alojamiento. La instalación del runtime y la autorización del proveedor son problemas distintos.
+
+Se puede preparar y validar el contrato interno de IA y los controles de consumo antes de la cuenta; esas pruebas no acreditan llamadas reales a Abacus. La autenticación, facturación, recursos y rendimiento específicos de Abacus solo se validarán cuando exista acceso. El prompt de traspaso queda aplazado por petición del usuario.
+
+### Abacus: comprobación documental, sin contratación
+
+La [documentación oficial de SuperComputer](https://abacus.ai/help/chatllm-ai-super-assistant/supercomputer), consultada el 27 de octubre de 2026, describe una máquina Ubuntu persistente, alojamiento de aplicaciones, acceso a RouteLLM por API y GPU opcional. Indica acceso desde Pro, consumo del alojamiento de 1 crédito por 5 minutos y consumo de las llamadas al LLM separado del alojamiento. Esto permite estudiar Abacus como destino; no demuestra qué GPU, almacenamiento, concurrencia o rendimiento tendrá la futura cuenta de Montara. No asumir GPU de render incluida ni inferencia ilimitada. No se ha contratado nada.
+
+El estado detallado de la implementación previa a Abacus está en [`../PRE_ABACUS_2026-10-27.md`](../PRE_ABACUS_2026-10-27.md).
+
+## Orden de trabajo ajustado
+
+1. **Sesiones largas:** estudiar el detector original y definir el flujo de revisión de canciones, mezcla común y selección de vídeo por canción. Mantener operativo el flujo sencillo de una canción.
+2. **Archivos grandes:** diseñar y medir el recorrido de originales, copias pequeñas y almacenamiento para sesiones con muchos archivos; validar el objetivo de 30 GB fuera del límite actual de la preview.
+3. **Revisión conjunta de Mixer y Show:** presentar comportamientos concretos del original y acordar cuáles trasladar. Las tablas anteriores siguen siendo inventario, no una lista de implementación aprobada.
+4. **Adaptación de las funciones elegidas:** conservar la interfaz sencilla y resolver únicamente sus dependencias Linux; comprobar preview, persistencia y exportación.
+5. **Abacus, cuando haya cuenta:** comprobar recursos, costes y acceso real a modelos; entonces preparar el traspaso e integrar y medir el motor de IA. Separar análisis por LLM de render y aceleración GPU.
+
+Los fallos existentes de importación, edición y exportación siguen registrados; esta selección no los da por resueltos ni elimina su seguimiento.
 
 ## Lista de aceptación permanente por capacidad
 

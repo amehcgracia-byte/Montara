@@ -1,0 +1,238 @@
+"""Isolated, disk-backed session detection and per-song rendering.
+
+This module is also the child-process entry point. Vendor globals never live in
+the web server. Only a selected song is decoded for the browser's mixer.
+"""
+from __future__ import annotations
+
+import json
+import math
+import os
+import shutil
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+
+def save(path, value):
+    path = Path(path)
+    temporary = path.with_suffix('.tmp')
+    temporary.write_text(json.dumps(value, allow_nan=False))
+    temporary.replace(path)
+
+
+def read(work):
+    return json.loads((Path(work) / 'session.json').read_text())
+
+
+def validate_songs(songs, duration):
+    if not isinstance(songs, list) or not 1 <= len(songs) <= 500:
+        raise ValueError('Choose between 1 and 500 songs.')
+    result, previous = [], 0.0
+    for index, item in enumerate(songs, 1):
+        if not isinstance(item, dict):
+            raise ValueError('Invalid song.')
+        start, end = item.get('start'), item.get('end')
+        if any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) for v in (start, end)):
+            raise ValueError('Song boundaries must be finite seconds.')
+        if start < previous or end > duration + .001 or end - start < .5:
+            raise ValueError('Songs must be in order, without overlap, and at least half a second long.')
+        if not isinstance(item.get('selected', True), bool):
+            raise ValueError('Invalid song selection.')
+        result.append(dict(id=index, name=str(item.get('name') or f'Song {index:02d}')[:80],
+                           start=float(start), end=float(end), selected=item.get('selected', True)))
+        previous = end
+    if not any(s['selected'] for s in result):
+        raise ValueError('Select at least one song.')
+    return result
+
+
+def silence_candidates(stems, timelines, duration, frame_seconds):
+    """Reviewable fallback for sessions with clear collective instrument rests.
+
+    Uses the vendor's cached RMS grid, never full-length decoded PCM. Speech on
+    a room/mic track must not conceal a rest between songs.
+    """
+    import numpy as np
+    count = int(math.ceil(duration / frame_seconds))
+    active = np.zeros(count, dtype=bool)
+    for stem in stems:
+        if stem.role in {'vocal', 'room'}:
+            continue
+        env = timelines.get(stem.path.name)
+        if env is None or not len(env):
+            continue
+        above_floor = env[env > 10 ** (-60 / 20)]
+        if not len(above_floor):
+            continue
+        threshold = max(10 ** (-55 / 20), float(np.percentile(above_floor, 75)) * .05)
+        active[:min(count, len(env))] |= env[:count] > threshold
+    changes = np.diff(np.r_[True, active, True].astype('int8'))
+    rests = zip(np.where(changes == -1)[0], np.where(changes == 1)[0])
+    cuts = [0.0]
+    for start, end in rests:
+        middle = (start + end) * frame_seconds / 2
+        if (end - start) * frame_seconds >= 8 and middle - cuts[-1] >= 60 and duration - middle >= 60:
+            cuts.append(middle)
+    cuts.append(duration)
+    return [dict(start=a, end=b, name=f'Song {i:02d}') for i, (a, b) in enumerate(zip(cuts, cuts[1:]), 1)]
+
+
+def prepare_tracks(work, song, preview=False):
+    """Extract just this window; honor recorder offsets and pad missing regions."""
+    work = Path(work)
+    data = read(work)
+    song = dict(song)
+    if preview:
+        bytes_per_second = sum(t['samplerate'] * min(t['channels'], 2) * 4 for t in data['tracks'])
+        # decodeAudioData expands compressed sources to PCM in the browser.
+        seconds = min(60, 96 * 1024**2 / max(1, bytes_per_second))
+        song['end'] = min(song['end'], song['start'] + seconds)
+    destination = work / ('preview' if preview else 'songs') / str(song['id']) / 'tracks'
+    destination.mkdir(parents=True, exist_ok=True)
+    duration = song['end'] - song['start']
+    needed = sum(int(duration * t['samplerate'] * min(t['channels'], 2) * 4) for t in data['tracks'])
+    if shutil.disk_usage(work).free < needed * (1 if preview else 4) + 128 * 1024**2:
+        raise ValueError('Not enough working space for this song. Free space or choose a shorter interval.')
+    for track in data['tracks']:
+        if (work / 'cancel').exists():
+            raise InterruptedError('Session cancelled. Your originals are unchanged.')
+        target = destination / track['file']
+        if target.is_file():
+            continue
+        offset = float(track['offset'])
+        source_start = max(0, song['start'] - offset)
+        overlap = min(song['end'], offset + track['duration']) - max(song['start'], offset)
+        delay_ms = round(max(0, offset - song['start']) * 1000)
+        temporary = target.with_suffix('.partial.wav')
+        if overlap <= 0:
+            command = ['ffmpeg', '-v', 'error', '-nostdin', '-y', '-f', 'lavfi', '-i',
+                       f'anullsrc=r={track["samplerate"]}:cl={"mono" if track["channels"] == 1 else "stereo"}']
+            filters = 'anull'
+        else:
+            command = ['ffmpeg', '-v', 'error', '-nostdin', '-y', '-ss', str(source_start),
+                       '-t', str(overlap), '-i', track['path']]
+            filters = f'adelay={delay_ms}:all=1,apad'
+        subprocess.run(command + ['-vn', '-af', filters, '-t', str(duration), '-ac', str(min(track['channels'], 2)),
+                                  '-ar', str(track['samplerate']), '-c:a', 'pcm_f32le', str(temporary)], check=True)
+        temporary.replace(target)
+    return destination
+
+
+def execute(work, action):
+    work = Path(work).resolve()
+    data = read(work)
+    # Set before importing the vendor; one independent state root per process/job.
+    os.environ['ZUCKER_MIXER_STATE_ROOT'] = str(work / 'vendor-state')
+    from mixer_adapter.single_song import SingleSongMix, _load_mixer
+    _, pipeline = _load_mixer(work)
+
+    def progress(update):
+        if (work / 'cancel').exists():
+            raise InterruptedError('Session cancelled. Your originals are unchanged.')
+        data['progress'] = {k: update[k] for k in ('current_stage', 'stage_detail', 'progress') if k in update}
+        save(work / 'session.json', data)
+
+    pipeline.PROGRESS_HOOK = progress
+    if action == 'detect':
+        pipeline.SOURCE_DIR = work / 'tracks'
+        pipeline.configure_detection_cache(work / 'tracks', work / 'cache')
+        pipeline.configure_detection_profile({'min_song_seconds': 60, 'max_song_seconds': 3600,
+                                              'suspicious_short_song_seconds': 30})
+        # Acoustic detection works offline; cloud AI is not a prerequisite.
+        pipeline.WHISPER_ALLOWED = False
+        stems = pipeline.inspect_stems(work / 'tracks')
+        if not stems:
+            raise ValueError('No readable audio tracks.')
+        if len(stems) != len(list((work / 'tracks').iterdir())):
+            raise ValueError('Some audio tracks could not be read. Convert those tracks to WAV or FLAC before continuing.')
+        origin = min(s.offset_seconds for s in stems)
+        from dataclasses import replace
+        stems = [replace(s, offset_seconds=s.offset_seconds - origin) for s in stems]
+        data['duration'] = max(s.offset_seconds + s.duration for s in stems)
+        data['tracks'] = [dict(file=s.path.stem + '.wav', path=str(s.path), samplerate=s.samplerate,
+                               channels=s.channels, offset=s.offset_seconds, duration=s.duration) for s in stems]
+        timelines = pipeline.ensure_detection_cache(stems)
+        segments, _ = pipeline.detect_segments(stems)
+        proposals = [dict(start=max(0, s.start), end=min(data['duration'], s.end), name=f'Song {i:02d}')
+                     for i, s in enumerate(segments, 1) if s.end - s.start >= .5]
+        if pipeline.DETECTION_STRATEGY.get('needs_review') or pipeline.DETECTION_STRATEGY.get('candidate_only'):
+            fallback = silence_candidates(stems, timelines, data['duration'], pipeline.DETECTION_FRAME_SECONDS)
+            if len(fallback) > len(proposals):
+                proposals = fallback
+                pipeline.DETECTION_STRATEGY = dict(id='collective-rest-candidates', needs_review=True,
+                                                  label='Instrument rests — review these suggested song boundaries')
+        # No confident boundaries is reviewable, not an invented successful detection.
+        if not proposals:
+            proposals = [dict(start=0, end=data['duration'], name='Review this session')]
+        proposals.sort(key=lambda s: s['start'])
+        for current, following in zip(proposals, proposals[1:]):
+            current['end'] = min(current['end'], following['start'])
+        proposals = [s for s in proposals if s['end'] - s['start'] >= .5]
+        data['songs'] = validate_songs(proposals, data['duration'])
+        data['detection'] = pipeline.DETECTION_STRATEGY
+        data['status'] = 'review'
+    elif action == 'prepare':
+        song = next(s for s in data['songs'] if s['selected'])
+        folder = prepare_tracks(work, song, preview=True)
+        data['preview_tracks'] = [str(p) for p in sorted(folder.glob('*.wav'))]
+        data['status'] = 'ready'
+    elif action == 'render':
+        data['results'] = []
+        selected = [s for s in data['songs'] if s['selected']]
+        settings = data['settings']
+        for index, song in enumerate(selected):
+            progress(dict(current_stage='mixing songs', stage_detail=f'{index + 1} / {len(selected)} · {song["name"]}',
+                          progress=100 * index / len(selected)))
+            folder = prepare_tracks(work, song)
+            mixer = SingleSongMix(folder, work / 'songs' / str(song['id']) / 'mix', reference=settings.get('reference'))
+            out = mixer.render(settings.get('faders', {}), work / 'exports' / f'song-{song["id"]:03d}.mp3',
+                               settings.get('mutes', {}), settings.get('effects'), base_gains=settings.get('base_gains'))
+            data['results'].append(dict(id=song['id'], name=song['name'], start=song['start'], end=song['end'], path=str(out)))
+            save(work / 'session.json', data)
+            # Keep the first song for the browser; release intermediate PCM for others.
+            if index > 0:
+                shutil.rmtree(work / 'songs' / str(song['id']))
+        data['status'] = 'done'
+    else:
+        raise ValueError('Unknown session action.')
+    data['progress'] = dict(progress=100, current_stage=data['status'])
+    data.pop('error', None)
+    save(work / 'session.json', data)
+
+
+if __name__ == '__main__':
+    work, action = Path(sys.argv[1]), sys.argv[2]
+    import fcntl
+    import signal
+    import threading
+    lock = (work / 'worker.lock').open('a')
+    fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+    def interrupted(*_):
+        raise InterruptedError('Session cancelled. Your originals are unchanged.')
+
+    signal.signal(signal.SIGTERM, interrupted)
+
+    def watch_cancel():
+        while True:
+            time.sleep(.3)
+            if (work / 'cancel').exists():
+                # Also terminate FFmpeg descendants. This worker has its own group.
+                os.killpg(os.getpgrp(), signal.SIGTERM)
+                return
+
+    threading.Thread(target=watch_cancel, daemon=True).start()
+    try:
+        # One compute task per workspace; queued jobs remain cancellable.
+        with (work.parent / 'compute.lock').open('a') as compute:
+            fcntl.flock(compute, fcntl.LOCK_EX)
+            execute(work, action)
+    except Exception as exc:
+        import traceback
+        traceback.print_exc()
+        data = read(work)
+        data.update(status='cancelled' if isinstance(exc, InterruptedError) else 'failed', error=str(exc) or type(exc).__name__)
+        save(work / 'session.json', data)
+        sys.exit(1)

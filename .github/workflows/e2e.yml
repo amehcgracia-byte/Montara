@@ -17,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        mode: [stage, push, mix]
+        mode: [stage, push, mix, session]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -53,7 +53,11 @@ jobs:
         if: matrix.mode == 'stage'
         run: python -m pytest tests -q
       - name: ${{ matrix.mode }} through the real interface
+        if: matrix.mode != 'session'
         run: python tests/e2e_journey.py --mode ${{ matrix.mode }} --output e2e-output
+      - name: Session detection, common mix, exports and resumable upload
+        if: matrix.mode == 'session'
+        run: python tests/e2e_session.py --output e2e-output/session
       - uses: actions/upload-artifact@v4
         if: always()
         # Diagnostic storage is optional; test and export failures remain fatal.
@@ -64,5 +68,8 @@ jobs:
           path: |
             e2e-output/**/*.png
             e2e-output/**/render.mp4
+            e2e-output/**/*.mp3
             e2e-output/summary.json
+            e2e-output/**/summary.json
             e2e-output/server-*.log
+            e2e-output/**/server.log

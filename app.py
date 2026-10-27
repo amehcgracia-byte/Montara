@@ -112,6 +112,10 @@ def create_montara_app(data_root: Path = DEFAULT_DATA, samples: bool = True):
     register_show_samples(app, FIXTURES, samples, data_root)
     from push_pack import register_push_pack
     register_push_pack(app, data_root, FIXTURES)
+    from full_session import register_full_session
+    register_full_session(app, data_root, FIXTURES)
+    from resumable_upload import register_resumable_upload
+    register_resumable_upload(app, data_root, classify_paths)
     app.static_folder = str(WEB)
     app.view_functions["index"] = lambda: send_from_directory(WEB, "index.html")
     app.config["MONTARA"] = True
