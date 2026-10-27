@@ -165,8 +165,8 @@ $('#showCaptionPreset').onchange=saveShowCaptionStyle;$('#showCaptionSize').onch
 $('#showCaptionSize').oninput=()=>{const cue=liveCaption();if(cue){cue.style_override={...cue.style_override,size:Number($('#showCaptionSize').value)};drawShowCaptions();}};
 $('#showDecisionsOpen').onclick=async()=>{try{
   const events=await api('/show/decisions'),list=$('#showDecisionsList');list.replaceChildren();
-  if(showEdit.direction?.method==='local-text-rules'){
-    const notice=document.createElement('p');notice.className='hint';notice.textContent='Gamer framing · local text rules, no LLM. Mild emphasis on selected phrases; hand-aimed shots are kept.';list.append(notice);
+  if(['local-text-rules','llm-reviewed-text'].includes(showEdit.direction?.method)){
+    const notice=document.createElement('p');notice.className='hint';notice.textContent=showEdit.direction.method==='llm-reviewed-text'?'Gamer framing · AI-reviewed phrases. Mild emphasis; hand-aimed shots are kept.':'Gamer framing · local text rules, no LLM. Mild emphasis on selected phrases; hand-aimed shots are kept.';list.append(notice);
     for(const cue of showEdit.direction.emphases){const box=document.createElement('div');box.className='show-decision';const text=document.createElement('p');text.textContent=cue.quote;const reason=document.createElement('small');reason.textContent=`${cue.reason} · ${cue.zoom}× · ${cue.start.toFixed(1)}–${cue.end.toFixed(1)}s`;box.append(text,reason);list.append(box);}
     if(!showEdit.direction.emphases.length){const text=document.createElement('p');text.textContent='No clear text cue: automatic framing stays wide.';list.append(text);}
   }
