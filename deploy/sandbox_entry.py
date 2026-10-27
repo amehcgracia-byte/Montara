@@ -3,6 +3,9 @@ import hmac
 import os
 from pathlib import Path
 from flask import Response, request, redirect
+from deploy.download_runtime import enable_runtime
+
+enable_runtime()
 from app import create_montara_app
 
 secret=os.environ.get('MONTARA_SESSION_TOKEN','')

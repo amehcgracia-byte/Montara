@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {openPreview} from '../deployment/vercel/runtime.js';
 const revision=JSON.parse(readFileSync(new URL('../deployment/vercel/overlay.json',import.meta.url))).revision;
-function setup(previous, {busy=false, hasDrive=false}={}){
+function setup(previous, {busy=false, hasDrive=false, installedRevision=revision}={}){
   const calls=[];
   const worker={
     runCommand:async(cmd,args)=>{
@@ -12,7 +12,7 @@ function setup(previous, {busy=false, hasDrive=false}={}){
       const output=argv?.includes('-w')?'401':argv?.some(a=>a.includes("print('busy'"))?(busy?'busy':'idle'):'';
       return {exitCode:0,stdout:async()=>output};
     },
-    readFileToBuffer:async()=>Buffer.from(revision),
+    readFileToBuffer:async()=>Buffer.from(installedRevision),
     domain:()=> 'https://example.vercel.run',
     stop:async()=>calls.push(['stop']),delete:async()=>calls.push(['delete']),
     update:async()=>calls.push(['update'])
@@ -52,4 +52,25 @@ test('existing snapshot preview preserves its data and does not need a visitor D
   await openPreview('3'.repeat(32),x.services);
   assert.equal(x.calls.filter(c=>c[0]==='drive').length,1);
   assert(x.calls.some(c=>c[0]==='command'&&c[1].some(a=>a.includes('initialize=False'))));
+});
+test('a missing download runtime cannot silently start an incomplete preview',async()=>{
+  const x=setup(undefined,{installedRevision:'previous-build'});
+  const original=x.services.Sandbox.getOrCreate;
+  x.services.Sandbox.getOrCreate=async options=>{
+    const guarded={...options,onCreate:async worker=>{
+      const run=worker.runCommand;
+      worker.runCommand=async (command,...args)=>command?.args?.some(a=>a.includes('def ensure_runtime'))
+        ?{exitCode:1,stdout:async()=>''}:run(command,...args);
+      await options.onCreate(worker);
+    }};
+    return original(guarded);
+  };
+  await assert.rejects(openPreview('4'.repeat(32),x.services),/video import runtime/);
+});
+test('a busy snapshot worker is not reprovisioned during an update',async()=>{
+  const x=setup({name:'montara-demo-'+'5'.repeat(32),status:'running',persistent:true},
+    {busy:true,installedRevision:'previous-build'});
+  await openPreview('5'.repeat(32),x.services);
+  assert(!x.calls.some(c=>c[0]==='command'&&c[1].some(a=>a.includes('def ensure_runtime'))));
+  assert(!x.calls.some(c=>['stop','delete'].includes(c[0])));
 });

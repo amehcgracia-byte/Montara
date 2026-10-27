@@ -1,5 +1,6 @@
 {
   "files": [
+    "deploy/download_runtime.py",
     "app.py",
     "push_pack.py",
     "show_samples.py",

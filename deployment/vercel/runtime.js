@@ -47,6 +47,8 @@ busy=busy or subprocess.run(['pgrep','-x','ffmpeg'],stdout=subprocess.DEVNULL).r
 print('busy' if busy else 'idle')`]});
       if(check.exitCode!==0||(await check.stdout()).trim()!=='idle')return;
     }
+    const downloads=await s.runCommand({cmd:'/vercel/sandbox/venv/bin/python',args:['-c',overlay.files['deploy/download_runtime.py']],env:{DENO_NO_UPDATE_CHECK:'1'}});
+    if(downloads.exitCode!==0)throw new Error('Could not prepare the video import runtime. Retry opening Montara.');
     if(installed?.toString()!==overlay.revision){await s.writeFiles(Object.entries(overlay.files).map(([path,content])=>({path:'/vercel/sandbox/montara/'+path,content:Buffer.from(content)})));
       const checkAssets=await s.runCommand({cmd:'/vercel/sandbox/venv/bin/python',args:['-c','import hashlib,json;from pathlib import Path; print(json.dumps({str(p.relative_to(Path("/vercel/sandbox/montara"))):hashlib.sha256(p.read_bytes()).hexdigest() for p in Path("/vercel/sandbox/montara/tests/fixtures").rglob("*") if p.is_file()}))']});
       const existing=JSON.parse((await checkAssets.stdout()).trim()||'{}');
