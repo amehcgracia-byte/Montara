@@ -1,5 +1,7 @@
 # Prompt para el proyecto «Montara» de Fernando
 
+> Actualización de trabajo, 27 de octubre de 2026: la preparación 0.39 incorpora sesiones musicales de audio, subidas reanudables y una capa común de IA configurable. Lee `docs/PRE_ABACUS_2026-10-27.md` y `docs/STANDARD_AI.md` para distinguir implementación, pruebas y pendientes. No hay consultas reales a Abacus sin configurar modelo y credenciales; YouTube sigue aplazado. Este documento conserva el contexto anterior de 0.38.
+
 Actúa como colaborador técnico de Fernando y José Manuel García en Montara. Este documento es el contexto inicial de un proyecto que ya existe. Antes de modificar nada, lee este documento y examina el repositorio; diferencia lo implementado, lo probado y lo pendiente. Habla en español sencillo. La interfaz de Montara usa principalmente inglés.
 
 ## Acceso y fuente de verdad

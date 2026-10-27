@@ -24,7 +24,7 @@
 - Pruebas específicas de desfases de grabadoras, relleno de zonas sin audio, preview acotada, límites inválidos, rutas ajenas, retransmisión de fragmentos, reservas de disco y límite remoto.
 - Estrés acústico sintético de cuatro horas, dos pistas y 460,8 MB: 23 propuestas, 8,42 segundos en frío y 3,77 segundos reutilizando caché; pico del proceso de unos 73 MiB en este Mac. No son cifras de render, de grabaciones reales ni de Abacus; no extrapolarlas a 30 GB.
 
-Las pruebas Linux y las regresiones de Stage, Push y mezcla deben pasar antes de integrar esta rama. Las capturas y los registros de esta comprobación no son material de producción.
+Verificación final en Linux: [ejecución 40517716811](https://github.com/amehcgracia-byte/Montara/actions/runs/40517716811), código `552022c`. Pasaron los cuatro recorridos completos: Stage, Push, Mix y Session; también 115 pruebas Python y 6 de ciclo de preview. Se inspeccionaron las capturas de revisión y recuperación móvil de Session. La instalación de dependencias y los renders de CI no son tiempos de respuesta del producto. Las capturas y los registros de esta comprobación no son material de producción.
 
 ## Pendientes que no necesitan una cuenta de Abacus
 
