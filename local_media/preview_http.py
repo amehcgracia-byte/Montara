@@ -38,6 +38,10 @@ def register_local_proxy_preview(app, data_root):
         with jobs_lock:
             jobs[job_id] = result
 
+    @app.get("/montara/local-preview/availability")
+    def local_preview_availability():
+        return jsonify(enabled=True)
+
     @app.post("/montara/local-preview/prepare")
     def start_prepare():
         body = request.get_json(silent=True) or {}
