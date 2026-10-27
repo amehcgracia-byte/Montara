@@ -354,6 +354,7 @@ function renderFiles() {
   if (state.platform === "reel" && master) hint = "The reel uses your song master. Camera sound is muted.";
   if (state.platform === "reel" && state.files.some(f=>f.sample) && !master) { hint = "The example song master is missing. Reopen the example."; ready = false; }
   if (state.uploads) hint = "Uploading…";
+  if (state.platform === 'youtube' && $('#fullSessionOn').checked && !state.uploads && audioTracks().length) hint = 'Find and review the songs, then export their mixes. This session step exports audio.';
   if (!audioOnly() && state.branding === "mine" && !state.hasLogo) { hint = "Choose your logo, or pick another option."; ready = false; }
   $("#footageHint").textContent = hint;
   $("#continueFootage").disabled = !ready;
@@ -620,7 +621,7 @@ async function openMixer(sessionTracks = null) {
   mix.fxBuffers = {};
   const ready = await pollMix((j) => j.status !== "analyzing");
   if (ready.status === "failed") throw new Error(ready.error || "The automatic mix failed");
-  mix.plan = { ...ready.plan, tracks: ready.plan.tracks.map(MixLevels.prepare) };
+  mix.plan = { ...ready.plan, tracks: ready.plan.tracks.map(track => MixLevels.prepare(sessionTracks ? {...track, active: true} : track)) };
   renderStrips();
   $("#mixStatusText").textContent = "Loading the tracks for the preview…";
   await loadBuffers();

@@ -39,7 +39,7 @@ SAMPLE_SETS = {
 }
 DEFAULT_DATA = Path.home() / "MontaraData"
 # Shown at the bottom of every page, so it is obvious which build is running.
-MONTARA_VERSION = "0.38 · 2026-10-26 · Transparent overlays"
+MONTARA_VERSION = "0.39 · 2026-10-27 · Session mixes and resumable uploads"
 BRANDING_MODES = {"montara", "mine", "none"}
 
 
