@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Montara · Júpiter 02 · Proyecto local</title>
+<style>
+body{font:16px system-ui,sans-serif;max-width:850px;margin:2rem auto;padding:0 1rem;background:#171923;color:#f3f5fc}
+section{background:#252b39;border-radius:12px;padding:1rem;margin:1rem 0}
+button,select{padding:.65rem .8rem;margin:.25rem;background:#354057;color:white;border:1px solid #66748c;border-radius:7px}
+button{cursor:pointer}button:disabled{opacity:.45;cursor:not-allowed}
+video{width:100%;max-height:360px;background:#000}
+pre{white-space:pre-wrap;overflow-wrap:anywhere}small{color:#bdc7dc}
+</style>
+</head>
+<body>
+<h1>Montara · Júpiter 02</h1>
+<p>Laboratorio local: elige una carpeta, previsualiza archivos y guarda <strong>solo una receta JSON</strong> dentro de <code>Montara/</code>. Ningún original se modifica ni se transmite.</p>
+<section>
+<h2>1. Carpeta de trabajo</h2>
+<button id="pick">Elegir carpeta (lectura)</button>
+<button id="reopen">Recuperar carpeta</button>
+<button id="write" disabled>Autorizar guardar proyecto</button>
+<p id="status" role="status">Selecciona una carpeta en Chrome o Edge.</p>
+<select id="videos" aria-label="Vídeos"><option>Sin carpeta</option></select>
+<p id="count"></p>
+</section>
+<section>
+<h2>2. Previsualización y cortes</h2>
+<video id="player" controls playsinline></video>
+<p id="current"></p>
+<button id="start" disabled>Marcar inicio</button>
+<button id="end" disabled>Guardar corte</button>
+</section>
+<section>
+<h2>3. Proyecto local</h2>
+<button id="save" disabled>Guardar Montara/proyecto-jupiter02.json</button>
+<button id="load" disabled>Recuperar proyecto del disco</button>
+<button id="forget">Olvidar carpeta en este navegador</button>
+<p><small>Guardar solicita permiso de escritura. Solo crea o reemplaza el archivo propio del experimento en la subcarpeta Montara. Nunca borra ni modifica vídeos. Si ya existe otro proyecto con ese nombre, se niega a sobrescribirlo salvo que haya sido creado por este laboratorio.</small></p>
+<pre id="cuts">Sin cortes.</pre>
+</section>
+<script src="jupiter-02.js"></script>
+</body>
+</html>
