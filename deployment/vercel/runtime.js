@@ -31,6 +31,8 @@ async function prepare(id,{Sandbox=SandboxAPI,Drive=DriveAPI}={}){
     const storage=await s.runCommand({cmd:'/vercel/sandbox/venv/bin/python',args:['-c',overlay.files['deploy/preview_storage.py']+`
 prepare_storage(Path('/vercel/sandbox/data'), initialize=${legacy?'False':'True'}, import_root=${importDrive?"Path('/vercel/sandbox/import-data')":'None'})`]});
     if(storage.exitCode!==0)throw new Error('Could not prepare the preview working disk; saved data was kept.');
+    const downloads=await s.runCommand({cmd:'/vercel/sandbox/venv/bin/python',args:['-c',overlay.files['deploy/download_runtime.py']],env:{DENO_NO_UPDATE_CHECK:'1'}});
+    if(downloads.exitCode!==0)throw new Error('Could not prepare the video import runtime. Retry opening Montara.');
     const ping=await s.runCommand('curl',['-s','-o','/dev/null','-w','%{http_code}','http://127.0.0.1:8080/montara/version']);
     const serving=(await ping.stdout()).trim()==='401';
     const installed=await s.readFileToBuffer({path:'/vercel/sandbox/montara/.preview-build'});

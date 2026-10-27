@@ -21,4 +21,4 @@ playwright==1.56.0
 pyobjc-framework-Quartz>=11; sys_platform == "darwin"
 
 # Internet video and audio excerpts
-yt-dlp>=2026.10.21
+yt-dlp[default]>=2026.10.21

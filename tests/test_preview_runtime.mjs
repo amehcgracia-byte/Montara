@@ -53,3 +53,17 @@ test('existing snapshot preview preserves its data and does not need a visitor D
   assert.equal(x.calls.filter(c=>c[0]==='drive').length,1);
   assert(x.calls.some(c=>c[0]==='command'&&c[1].some(a=>a.includes('initialize=False'))));
 });
+test('a missing download runtime cannot silently start an incomplete preview',async()=>{
+  const x=setup();
+  const original=x.services.Sandbox.getOrCreate;
+  x.services.Sandbox.getOrCreate=async options=>{
+    const guarded={...options,onCreate:async worker=>{
+      const run=worker.runCommand;
+      worker.runCommand=async (command,...args)=>command?.args?.some(a=>a.includes('def ensure_runtime'))
+        ?{exitCode:1,stdout:async()=>''}:run(command,...args);
+      await options.onCreate(worker);
+    }};
+    return original(guarded);
+  };
+  await assert.rejects(openPreview('4'.repeat(32),x.services),/video import runtime/);
+});
