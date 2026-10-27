@@ -7,6 +7,9 @@ from __future__ import annotations
 
 import json
 import re
+import uuid
+from concurrent.futures import ThreadPoolExecutor
+from threading import Lock
 from pathlib import Path
 
 from flask import abort, jsonify, request, send_file, Response
@@ -18,7 +21,48 @@ _LOOPBACK = {"127.0.0.1", "::1"}
 
 
 def register_local_proxy_preview(app, data_root):
-    cache = Path(data_root).resolve() / "LocalProxyCache"
+    root = Path(data_root).resolve()
+    cache = root / "LocalProxyCache"
+    executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="montara-proxy")
+    jobs = {}
+    jobs_lock = Lock()
+
+    def run_prepare(job_id, source):
+        from local_media.proxies import prepare
+        try:
+            record = prepare(source, cache)
+            result = {"status": "ready", "source_id": record["source_id"]}
+        except Exception:
+            app.logger.exception("Experimental proxy preparation failed")
+            result = {"status": "failed", "error": "Could not prepare this camera proxy."}
+        with jobs_lock:
+            jobs[job_id] = result
+
+    @app.post("/montara/local-preview/prepare")
+    def start_prepare():
+        body = request.get_json(silent=True) or {}
+        raw = body.get("path")
+        if not isinstance(raw, str) or len(raw) > 4096:
+            return jsonify(error={"message": "Invalid camera path."}), 400
+        source = Path(raw).resolve()
+        if not source.is_relative_to(root) or not source.is_file() or source.suffix.lower() not in {".mp4", ".mov", ".mkv", ".webm", ".mts", ".m2ts"}:
+            return jsonify(error={"message": "Only Montara data videos can be previewed."}), 400
+        job_id = uuid.uuid4().hex
+        with jobs_lock:
+            jobs[job_id] = {"status": "preparing"}
+        executor.submit(run_prepare, job_id, source)
+        return jsonify(id=job_id, status="preparing"), 202
+
+    @app.get("/montara/local-preview/job/<job_id>")
+    def prepare_status(job_id):
+        if not re.fullmatch(r"[a-f0-9]{32}", job_id):
+            abort(404)
+        with jobs_lock:
+            job = jobs.get(job_id)
+        if job is None:
+            abort(404)
+        return jsonify(job)
+
 
     @app.before_request
     def _local_proxy_guard():
