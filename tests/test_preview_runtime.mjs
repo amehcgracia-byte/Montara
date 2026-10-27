@@ -54,7 +54,7 @@ test('existing snapshot preview preserves its data and does not need a visitor D
   assert(x.calls.some(c=>c[0]==='command'&&c[1].some(a=>a.includes('initialize=False'))));
 });
 test('a missing download runtime cannot silently start an incomplete preview',async()=>{
-  const x=setup();
+  const x=setup(undefined,{installedRevision:'previous-build'});
   const original=x.services.Sandbox.getOrCreate;
   x.services.Sandbox.getOrCreate=async options=>{
     const guarded={...options,onCreate:async worker=>{
