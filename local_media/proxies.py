@@ -6,6 +6,23 @@ Not yet wired into the public web upload or its final renderer.
 from pathlib import Path
 import argparse,hashlib,json,subprocess,uuid
 
+SAMPLE_BYTES = 65536
+
+
+def proxy_signature(path):
+    """Bounded sample fingerprint: at most 128 KiB read regardless of proxy size."""
+    path = Path(path)
+    size = path.stat().st_size
+    digest = hashlib.sha256()
+    digest.update(size.to_bytes(8, 'big'))
+    with path.open('rb') as handle:
+        digest.update(handle.read(SAMPLE_BYTES))
+        if size > SAMPLE_BYTES:
+            handle.seek(max(0, size - SAMPLE_BYTES))
+            digest.update(handle.read(SAMPLE_BYTES))
+    return digest.hexdigest()
+
+
 
 def probe(path):
     return json.loads(subprocess.run(['ffprobe','-v','error','-show_streams','-show_format','-of','json',str(path)],check=True,capture_output=True,text=True).stdout)
@@ -31,7 +48,8 @@ def prepare(source,cache,sphere=False):
                 and record.get('original')==str(source)
                 and record.get('original_stamp')==fingerprint
                 and record.get('proxy')==str(proxy)
-                and record.get('public',{}).get('projection')==('equirectangular' if sphere else 'flat')):
+                and record.get('public',{}).get('projection')==('equirectangular' if sphere else 'flat')
+                and (not record.get('proxy_signature') or record['proxy_signature']==proxy_signature(proxy))):
                 return record
         except (OSError,ValueError,TypeError,AttributeError):
             pass
@@ -47,7 +65,7 @@ def prepare(source,cache,sphere=False):
         if abs(duration-pd)>tolerance:raise ValueError('Proxy timing differs from the original; this source needs a dedicated adapter.')
         pending.replace(proxy)
         public={'source_id':key,'duration':duration,'proxy_duration':pd,'projection':'equirectangular' if sphere else 'flat','width':pv['width'],'height':pv['height'],'frame_rate':fps,'proxy_bytes':proxy.stat().st_size}
-        record={'source_id':key,'original':str(source),'original_stamp':fingerprint,'proxy':str(proxy),'public':public}
+        record={'source_id':key,'original':str(source),'original_stamp':fingerprint,'proxy':str(proxy),'public':public,'proxy_signature':proxy_signature(proxy)}
         private.write_text(json.dumps(record,indent=2));(cache/(key+'.public.json')).write_text(json.dumps(public,indent=2))
         return record
     finally:pending.unlink(missing_ok=True)
