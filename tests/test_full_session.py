@@ -73,10 +73,12 @@ def test_review_persists_and_busy_jobs_cannot_be_replaced(tmp_path, monkeypatch)
     job = result.json['id']; work = source.parent / 'Sessions' / job
     assert (work / 'tracks' / source.name).is_symlink()
     assert c.post(f'/montara/session/{job}/prepare', json={'songs': []}).status_code == 409
-    data = read(work); data.update(status='review', duration=20)
+    data = read(work); data.update(status='review', duration=20, songs=[dict(start=0,end=20)],ai_review={'status':'reviewed'})
     save(work / 'session.json', data)
     songs = [{'name': 'First', 'start': 0, 'end': 8}, {'name': 'Second', 'start': 12, 'end': 20}]
     assert c.post(f'/montara/session/{job}/prepare', json={'songs': songs}).status_code == 202
+    assert read(work)['ai_review']['status'] == 'manual_revision'
+    assert read(work)['previous_ai_review']['status'] == 'reviewed'
     # A new app instance recovers the same manifest, rather than an in-memory job dict.
     assert client(tmp_path).get(f'/montara/session/{job}').json['songs'][1]['start'] == 12
     assert c.post(f'/montara/session/{job}/cancel', json={}).status_code == 202

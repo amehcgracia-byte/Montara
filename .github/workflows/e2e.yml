@@ -32,8 +32,16 @@ jobs:
           DEBIAN_FRONTEND: noninteractive
         run: |
           if ! command -v ffmpeg >/dev/null || ! fc-match DejaVuSans >/dev/null; then
-            sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=20 update
-            sudo -E apt-get -o DPkg::Lock::Timeout=30 -o Dpkg::Use-Pty=0 -o Acquire::Retries=2 -o Acquire::http::Timeout=20 install -y ffmpeg fonts-dejavu-core
+            # The runner's Azure mirror intermittently takes minutes per MB.
+            # Use Ubuntu's signed archive without changing the runner's sources.
+            montara_sources="$RUNNER_TEMP/montara-sources.list"
+            printf '%s\n' \
+              'deb [signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] https://archive.ubuntu.com/ubuntu noble main universe' \
+              'deb [signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] https://archive.ubuntu.com/ubuntu noble-updates main universe' \
+              'deb [signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] https://security.ubuntu.com/ubuntu noble-security main universe' > "$montara_sources"
+            apt_options=(-o "Dir::Etc::sourcelist=$montara_sources" -o 'Dir::Etc::sourceparts=-' -o Acquire::Retries=2 -o Acquire::https::Timeout=20 -o DPkg::Lock::Timeout=30 -o Dpkg::Use-Pty=0)
+            sudo -E apt-get "${apt_options[@]}" update
+            sudo -E apt-get "${apt_options[@]}" install --no-install-recommends -y ffmpeg fonts-dejavu-core
           fi
           ffmpeg -version
       - name: Install Montara

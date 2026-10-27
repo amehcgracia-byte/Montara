@@ -114,6 +114,9 @@ def register_full_session(app, data_root, fixtures):
                 body = request.get_json(silent=True) or {}
                 if action == 'prepare':
                     songs = validate_songs(body.get('songs'), data['duration'])
+                    if [(s['start'],s['end']) for s in songs] != [(s['start'],s['end']) for s in data.get('songs', [])]:
+                        data['previous_ai_review'] = data.get('ai_review')
+                        data['ai_review'] = {'status': 'manual_revision'}
                     # Changed boundaries invalidate extracted PCM and mixes.
                     shutil.rmtree(work / 'songs', ignore_errors=True)
                     shutil.rmtree(work / 'preview', ignore_errors=True)

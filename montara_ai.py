@@ -60,11 +60,19 @@ def transport(payload):
             raise RuntimeError('provider_error')
         return json.loads(output)
     except subprocess.TimeoutExpired:
-        process.kill(); process.communicate()
+        try:
+            process.kill()
+        except ProcessLookupError:
+            pass
+        process.communicate()
         raise TimeoutError('provider_timeout') from None
     except BaseException:
         if process.poll() is None:
-            process.kill(); process.communicate()
+            try:
+                process.kill()
+            except ProcessLookupError:
+                pass
+            process.communicate()
         raise
 
 
