@@ -22,8 +22,11 @@ The Editor code's `browser_setting()` reads cookies from a browser on the machin
 ## Validation
 
 - 79 Python regression tests passed locally.
-- 5 JavaScript preview lifecycle tests passed locally, including failure to provision the import runtime.
+- 6 JavaScript preview lifecycle tests passed locally, including failure to provision the import runtime and preserving busy workers.
 - Real Linux download comparisons above failed at YouTube's access check; a successful import/export is not claimed.
-- Full Linux E2E and public deployment status must be recorded separately after they finish.
+- Full Linux Push and mix journeys passed in GitHub run 40492124936 (code commit 713b5ba). Artifact upload hit GitHub storage quota; the upload step is non-blocking.
+- The Stage job in that run stalled at installing FFmpeg, before running Montara. The same Stage journey was instead run in the isolated Vercel Linux worker using Playwright 1.64.1, Chromium and explicit browser OS dependencies. It passed: 100.2 s, 1920×1080, real three-camera fixture, swap exercised, 17 cuts. Camera, frame-selection, result and exported-frame screenshots were saved locally for inspection. The redundant blocked GitHub run was cancelled after this fallback completed; do not describe all three GitHub jobs as passed.
+- The staged production deployment was exercised through the private grant, the actual Flask entry and an HTTP Push request. Flask resolves the provisioned Deno executable and EJS. The fresh HTTP Push import still fails at YouTube's access check, consistent with direct tests.
+- The existing public alias `https://montara-tau.vercel.app/` was assigned to the tested build `montara-2fznt0j51-amehcgracia-2381s-projects.vercel.app` after validation. No new public address is required.
 
 Sources: https://github.com/yt-dlp/yt-dlp/wiki/EJS and https://github.com/yt-dlp/yt-dlp/wiki/Extractors .

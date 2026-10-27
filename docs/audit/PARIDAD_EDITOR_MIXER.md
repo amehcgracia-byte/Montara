@@ -154,7 +154,7 @@ Fuentes: módulos `engine/core/show_*.py`, `engine/web/show_*.js`, `engine/tools
 | Cancelación y reintentos | Existen en fuentes; comprobar qué trabajos expone Montara y que no deja recursos huérfanos. |
 | Almacenamiento | Mantener espacio de trabajo y persistencia; el arreglo anterior preserva proyectos. No usar catálogo prerenderizado como sustituto de procesamiento. |
 | GPU | La preview verificada es CPU, 2 vCPU. No afirmar aceleración GPU instalada. Se necesita perfilado por tarea, compatibilidad de modelos y codificador. |
-| IA | Distinguir heurísticas, planes guardados y llamadas reales a un director. Tener el módulo no implica proveedor conectado. |
+| IA | `app.py:_prepare_environment()` fija `MONTARA_LOCAL_DIRECTOR=1`; `engine/core/gag_director.py:claude_cli()` devuelve None con ese valor. Montara desactiva expresamente esa vía del director Claude de escritorio. Distinguir heurísticas, planes guardados y llamadas reales; hace falta un proveedor web configurado para recuperar esa capacidad. |
 | Acceso testers y suscripciones | Preparación parcial; no equivalen a autenticación, facturación y cuotas públicas completas. |
 | Biblioteca y permisos | Promoción explícita de recursos, conservar colecciones/procedencia; no inferir licencia por encontrar un clip online. |
 
@@ -171,4 +171,4 @@ Fuentes: módulos `engine/core/show_*.py`, `engine/web/show_*.js`, `engine/tools
 
 Registrar: fuente/commit original, modo aplicable, acceso en Montara, llamada al motor, dependencias del servidor, resultado esperado, preview, persistencia y exportación, más un caso real representativo y su medición. Una función pasa a **verificada** solo al completar ese recorrido. Toda nueva versión de Editor/Mixer debe compararse contra este inventario antes de mover el submódulo.
 
-Este documento entrega un inventario y una comparación de código. **No certifica paridad funcional completa ni que las capacidades marcadas pendientes se hayan implementado.** Las 79 pruebas Python y 5 de ciclo de preview validan el arreglo de instalación y regresiones existentes; no sustituyen pruebas específicas para todas estas herramientas.
+Este documento entrega un inventario y una comparación de código. **No certifica paridad funcional completa ni que las capacidades marcadas pendientes se hayan implementado.** Las 79 pruebas Python y 6 de ciclo de preview validan el arreglo de instalación y regresiones existentes; no sustituyen pruebas específicas para todas estas herramientas.
