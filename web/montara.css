@@ -490,3 +490,14 @@ body.is-intro .top,body.is-intro footer,body.is-intro #version{visibility:hidden
 .library-categories{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0}.library-categories button{padding:6px 10px;font-size:12px;border-radius:20px}.library-categories [aria-pressed=true]{border-color:#ff8a3d;color:#ffb286}.show-library-item small{display:block;color:#999;font-size:11px}
 
 .show-keyed-video{display:block;width:100%;height:100%;object-fit:contain}.show-keyed-video[hidden]{display:none}
+
+/* Full sessions share the existing Stage mixer; only the song review is new. */
+.session-song {display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:14px 0; border-bottom:1px solid var(--line, #303034)}
+.session-song input[data-song-field="name"] {flex:1; min-width:140px}
+.session-song input:not([type="checkbox"]) {background:var(--surface);color:var(--fg);border:1px solid var(--line);border-radius:10px;padding:9px;font:inherit}
+.session-song input[type="checkbox"], #stageSessionOptions input {accent-color:var(--accent)}
+.session-song input[type="number"] {width:100px}
+.session-song label {display:flex; align-items:center; gap:6px}
+.session-song audio {max-width:100%; height:36px}
+#sessionProgress {width:100%; accent-color:#FF4F2E; margin:12px 0}
+@media(max-width:600px) {.session-song input[data-song-field="name"] {flex-basis:75%}.session-song audio {width:100%}}

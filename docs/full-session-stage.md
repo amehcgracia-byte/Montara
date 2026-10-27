@@ -1,4 +1,6 @@
-# Stage: sesiones completas — alcance acordado, pendiente de implementación
+# Stage: sesiones completas — alcance y estado
+
+**Actualización 2026-10-27:** detección/revisión de canciones y exportación de audio por lotes implementadas en la rama `codex/pre-abacus-sessions`; ver [estado y pruebas](PRE_ABACUS_2026-10-27.md). La asociación de cámaras por canción y la validación con una sesión real de varias horas siguen pendientes. El alcance siguiente conserva las decisiones originales.
 
 2026-10-25. La sesión completa pertenece al plan superior. La tarifa básica no incluye mezclar una jam entera. El plan superior debe admitir más horas, pistas, cámaras, canciones y análisis, con capacidad de proceso/prioridad mayor. No se ha decidido precio, cupo ni velocidad: se medirán en el servidor con material real la próxima semana. No contratar recursos ni activar cobros para preparar esta función.
 

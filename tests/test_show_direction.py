@@ -36,6 +36,16 @@ def test_no_words_no_periodic_fallback_and_skip_manual_phrase():
     assert not direction(doc,n)['emphases']
 
 
+def test_semantic_choices_still_obey_boundaries_and_manual_edits():
+    doc,n=sample()
+    plan=direction(doc,n,semantic={1:'Important context'})
+    assert plan['method']=='llm-reviewed-text'
+    assert len(plan['emphases'])==1
+    assert 'prueba' in plan['emphases'][0]['quote']
+    assert all(not (r['start']<=34<r['end']) for r in plan['ranges'])
+    assert direction(doc,n,semantic={})['emphases']==[]
+
+
 @pytest.fixture
 def directed(tmp_path,monkeypatch):
     data=tmp_path/'data';monkeypatch.setenv('ZUCKER_DATA_ROOT',str(data));monkeypatch.delenv('MONTARA_SESSION_TOKEN',raising=False)
@@ -77,6 +87,25 @@ def test_other_modes_remain_unchanged(directed):
     c,p,plan=directed;plan['style']='podcast';path=p.artifacts_dir/'show_plan.json';path.write_text(json.dumps(plan));before=path.read_bytes()
     assert c.post('/montara/show/direction',json={}).get_json()['applied'] is False
     assert path.read_bytes()==before
+
+
+def test_shared_ai_choices_reach_framing_without_changing_manual_shots(directed):
+    c,p,before=directed
+    class Reviewed:
+        configured=True
+        model='simulated-contract-model'
+        def review(self,task,evidence):
+            assert task.name=='show.gamer.emphases'
+            assert str(p.folder) not in json.dumps(evidence)
+            return dict(status='reviewed',value={'emphases':[{'id':1,'reason':'Important context'}]},cached=False)
+    c.application.extensions['montara_ai']=Reviewed()
+    response=c.post('/montara/show/direction',json={})
+    assert response.status_code==200,response.get_json()
+    audit=response.get_json()
+    assert audit['method']=='llm-reviewed-text' and audit['ai_review']['status']=='reviewed'
+    assert len(audit['emphases'])==1 and 'prueba' in audit['emphases'][0]['quote']
+    after=json.loads((p.artifacts_dir/'show_plan.json').read_text())
+    assert after['shots'][17]==before['shots'][17]
 
 
 def test_directed_preview_renders_with_audio(directed):

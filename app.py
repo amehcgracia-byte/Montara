@@ -39,7 +39,7 @@ SAMPLE_SETS = {
 }
 DEFAULT_DATA = Path.home() / "MontaraData"
 # Shown at the bottom of every page, so it is obvious which build is running.
-MONTARA_VERSION = "0.38 · 2026-10-26 · Transparent overlays"
+MONTARA_VERSION = "0.39 · 2026-10-27 · Session mixes and resumable uploads"
 BRANDING_MODES = {"montara", "mine", "none"}
 
 
@@ -112,6 +112,12 @@ def create_montara_app(data_root: Path = DEFAULT_DATA, samples: bool = True):
     register_show_samples(app, FIXTURES, samples, data_root)
     from push_pack import register_push_pack
     register_push_pack(app, data_root, FIXTURES)
+    from full_session import register_full_session
+    register_full_session(app, data_root, FIXTURES)
+    from resumable_upload import register_resumable_upload
+    register_resumable_upload(app, data_root, classify_paths)
+    from montara_ai import AIService
+    app.extensions['montara_ai'] = AIService(data_root)
     app.static_folder = str(WEB)
     app.view_functions["index"] = lambda: send_from_directory(WEB, "index.html")
     app.config["MONTARA"] = True

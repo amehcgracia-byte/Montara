@@ -43,6 +43,8 @@ state=json.load(urllib.request.urlopen(r))
 busy=state.get('status') in {'running','mixing','rendering','analyzing'}
 for p in Path('/vercel/sandbox/data').rglob('pack.json'):
  d=json.loads(p.read_text());busy=busy or d.get('status')=='preparing' or d.get('captions_status')=='running' or any(r.get('lyrics_status')=='running' or r.get('alignment_status')=='running' or r.get('render',{}).get('status') in {'running','queued'} for r in d.get('reels',[]))
+for p in Path('/vercel/sandbox/data/Sessions').glob('*/session.json'):
+ d=json.loads(p.read_text());busy=busy or d.get('status') in {'detecting','preparing','rendering'}
 busy=busy or subprocess.run(['pgrep','-x','ffmpeg'],stdout=subprocess.DEVNULL).returncode==0
 print('busy' if busy else 'idle')`]});
       if(check.exitCode!==0||(await check.stdout()).trim()!=='idle')return;
@@ -78,6 +80,8 @@ state=json.load(urllib.request.urlopen(r))
 busy=state.get('status') in {'running','mixing','rendering','analyzing'}
 for p in Path('/vercel/sandbox/data').rglob('pack.json'):
  d=json.loads(p.read_text());busy=busy or d.get('status')=='preparing' or d.get('captions_status')=='running' or any(r.get('lyrics_status')=='running' or r.get('alignment_status')=='running' or r.get('render',{}).get('status') in {'running','queued'} for r in d.get('reels',[]))
+for p in Path('/vercel/sandbox/data/Sessions').glob('*/session.json'):
+ d=json.loads(p.read_text());busy=busy or d.get('status') in {'detecting','preparing','rendering'}
 busy=busy or subprocess.run(['pgrep','-x','ffmpeg'],stdout=subprocess.DEVNULL).returncode==0
 print('busy' if busy else 'idle')`]});
       if(check.exitCode!==0||(await check.stdout()).trim()!=='idle')return {url:retired.domain(8080)+'/_preview/grant?token='+id,name};
