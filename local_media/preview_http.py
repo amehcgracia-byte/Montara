@@ -9,7 +9,7 @@ import json
 import re
 from pathlib import Path
 
-from flask import abort, jsonify, request, send_file
+from flask import abort, jsonify, request, send_file, Response
 
 from local_media.proxies import proxy_signature, stamp
 
@@ -56,3 +56,21 @@ def register_local_proxy_preview(app, data_root):
         response = send_file(proxy, mimetype="video/mp4", conditional=True)
         response.headers["Cache-Control"] = "private, no-store"
         return response
+
+    @app.get("/montara/local-preview/<source_id>/view")
+    def local_proxy_view(source_id):
+        record, _ = resolve(source_id)
+        # Standalone playback integration smoke page; not the production editor.
+        video_path = "/montara/local-preview/" + source_id + "/video"
+        document = (
+            "<!doctype html><html lang='en'><meta charset='utf-8'>"
+            "<meta name='viewport' content='width=device-width, initial-scale=1'>"
+            "<title>Montara local proxy preview</title>"
+            "<body style='margin:2rem;background:#171717;color:white;font-family:sans-serif'>"
+            "<h1>Montara — cached preview</h1>"
+            "<video controls playsinline preload='metadata' style='max-width:100%;max-height:75vh' src='"
+            + video_path + "'></video>"
+            "<p>This is the cached preview. Final exports still use original sources.</p>"
+            "</body></html>"
+        )
+        return Response(document, mimetype="text/html", headers={"Cache-Control": "private, no-store"})
