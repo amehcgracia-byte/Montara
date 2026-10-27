@@ -55,7 +55,9 @@
     "mixer_adapter/single_song.py",
     "web/full-session.js",
     "resumable_upload.py",
-    "web/resumable-upload.js"
+    "web/resumable-upload.js",
+    "montara_ai.py",
+    "ai_tasks.py"
   ],
   "assets": [
     "tests/fixtures/much-to-me/master.mp3",

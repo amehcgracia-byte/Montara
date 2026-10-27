@@ -27,7 +27,7 @@ def launch(work, action):
 
 
 def public(data):
-    result = {k: data[k] for k in ('id', 'status', 'duration', 'songs', 'progress', 'error', 'preview_tracks', 'detection') if k in data}
+    result = {k: data[k] for k in ('id', 'status', 'duration', 'songs', 'progress', 'error', 'preview_tracks', 'detection', 'ai_review') if k in data}
     result['results'] = [{k: v for k, v in r.items() if k != 'path'} for r in data.get('results', [])]
     return result
 
@@ -70,7 +70,7 @@ def register_full_session(app, data_root, fixtures):
             for path in files:
                 # Never duplicate multi-GB source tracks just to register a folder.
                 (work / 'tracks' / path.name).symlink_to(path)
-            data = dict(id=job_id, status='detecting', started_at=time.time(), progress={'current_stage': 'Inspecting session', 'progress': 0})
+            data = dict(id=job_id, ai_data_root=str(Path(data_root).resolve()), status='detecting', started_at=time.time(), progress={'current_stage': 'Inspecting session', 'progress': 0})
             save(work / 'session.json', data)
             launch(work, 'detect')
         except Exception:

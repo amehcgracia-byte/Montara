@@ -116,6 +116,8 @@ def create_montara_app(data_root: Path = DEFAULT_DATA, samples: bool = True):
     register_full_session(app, data_root, FIXTURES)
     from resumable_upload import register_resumable_upload
     register_resumable_upload(app, data_root, classify_paths)
+    from montara_ai import AIService
+    app.extensions['montara_ai'] = AIService(data_root)
     app.static_folder = str(WEB)
     app.view_functions["index"] = lambda: send_from_directory(WEB, "index.html")
     app.config["MONTARA"] = True

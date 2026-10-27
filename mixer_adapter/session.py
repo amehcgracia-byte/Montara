@@ -172,6 +172,40 @@ def execute(work, action):
         proposals = [s for s in proposals if s['end'] - s['start'] >= .5]
         data['songs'] = validate_songs(proposals, data['duration'])
         data['detection'] = pipeline.DETECTION_STRATEGY
+        from montara_ai import AIService
+        from ai_tasks import SESSION_BOUNDARIES
+        service = AIService(data.get('ai_data_root', work))
+        cuts = []
+        for previous, following in zip(data['songs'], data['songs'][1:]):
+            boundary = (previous['end'] + following['start']) / 2
+            bins = []
+            for shift in (-30, -20, -10, 0, 10, 20):
+                a = max(0, int((boundary + shift) / pipeline.DETECTION_FRAME_SECONDS))
+                b = max(a + 1, int((boundary + shift + 10) / pipeline.DETECTION_FRAME_SECONDS))
+                levels = []
+                for stem in stems:
+                    if stem.role in {'vocal', 'room'}:
+                        continue
+                    env = timelines.get(stem.path.name)
+                    if env is not None and len(env[a:b]):
+                        import numpy as np
+                        levels.append(float(np.mean(env[a:b])))
+                bins.append(round(max(levels, default=0), 5))
+            cuts.append(dict(id=previous['id'], before_seconds=previous['end']-previous['start'],
+                             after_seconds=following['end']-following['start'], instrument_rms_10s_bins=bins))
+        evidence = dict(cuts=cuts, duration_seconds=data['duration'], transcript_available=False)
+        if cuts and service.configured:
+            progress(dict(current_stage='Reviewing proposed song boundaries', progress=94))
+        # A bounded review targets the shortest/doubtful neighboring sections;
+        # do not send hundreds of cuts and wait through a chain of model calls.
+        evidence['cuts'] = sorted(cuts, key=lambda cut: min(cut['before_seconds'], cut['after_seconds']))[:12]
+        data['ai_review'] = service.review(SESSION_BOUNDARIES, evidence) if cuts else {'status': 'not_needed'}
+        data['ai_review'].update(total_cuts=len(cuts), submitted_cuts=len(evidence['cuts']))
+        # AI advice annotates proposals; only the person accepts/changes actual cuts.
+        if data['ai_review']['status'] == 'reviewed':
+            for cut in data['ai_review']['value']['cuts']:
+                data['songs'][cut['id']-1]['review_note'] = cut['reason']
+                data['songs'][cut['id']-1]['needs_review'] = cut['decision'] == 'review'
         data['status'] = 'review'
     elif action == 'prepare':
         song = next(s for s in data['songs'] if s['selected'])

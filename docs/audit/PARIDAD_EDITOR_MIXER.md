@@ -169,6 +169,8 @@ Fuentes: módulos `engine/core/show_*.py`, `engine/web/show_*.js`, `engine/tools
 
 ### Planes y consumo de IA — aclaración del usuario
 
+**Aclaración posterior del usuario:** la IA debe ser una capacidad común accesible donde aporte criterio; decidir después qué limitar por precio. La tabla siguiente conserva la propuesta comercial anterior y no constituye un bloqueo de funciones implementado. Preparación común: [STANDARD_AI.md](../STANDARD_AI.md).
+
 Precios orientativos, todavía sin facturación ni límites comerciales definitivos:
 
 | Plan previsto | Acceso previsto |

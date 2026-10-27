@@ -13,9 +13,11 @@
 - El servidor normal admite por configuración archivos de hasta 30 GiB, sujeto al espacio real. La prueba pública mantiene 256 MiB por archivo: los fragmentos no eluden ese límite. **No se ha probado todavía una sesión real con originales de 30 GB.**
 - El actualizador de Vercel comprueba también trabajos de sesión antes de sustituir un espacio ocupado.
 
+- Capa común de IA preparada y conectada a revisión de límites musicales y énfasis de Gamer. Sin cuenta no hay consultas externas; ver [contrato, configuración y pruebas](STANDARD_AI.md).
+
 ## Comprobado en el entorno local
 
-- 101 pruebas Python y 6 pruebas de ciclo de preview, durante el desarrollo.
+- 115 pruebas Python y 6 pruebas de ciclo de preview tras incorporar el contrato común de IA.
 - Recorrido real con dos pistas de 6:30 minutos y dos bloques musicales: dos propuestas con límite en 3:15; corrección manual a dos ventanas de 15 segundos, reproducción del mixer y dos MP3 exportados con duración comprobada.
 - Recuperación tras recargar la página y revisión en anchura de móvil; sin errores de JavaScript en ese recorrido.
 - Interrupción real de la subida en el navegador después de 4 MiB; al recargar y elegir el archivo de nuevo continúa desde ese punto. El SHA-256 completo del archivo recibido coincide con el original.

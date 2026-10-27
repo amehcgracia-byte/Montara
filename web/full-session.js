@@ -64,7 +64,7 @@ async function openFullSession() {
     try { localStorage.setItem('montara-session', job.id); $('#sessionResume').hidden = false; } catch { /* optional */ }
     const data = await waitSession(job);
     drawSessionSongs(data.songs);
-    $('#sessionStatus').textContent = 'Suggested cuts — check each song before continuing.';
+    $('#sessionStatus').textContent = data.ai_review?.status === 'reviewed' ? `AI reviewed ${data.ai_review.submitted_cuts} of ${data.ai_review.total_cuts} cuts · ${data.ai_review.value.summary}` : 'Acoustic suggestions — check each song before continuing.';
   } catch (error) { toast(error.message, true); }
 }
 
@@ -77,6 +77,7 @@ function drawSessionSongs(songs) {
     <label>To <input aria-label="Song end in seconds" data-song-field="end" type="number" step=".1" min="0" max="${fullSession.data.duration}" value="${song.end.toFixed(1)}"></label>
     <button class="btn ghost small" data-song-split="${i}" type="button">Split</button>
     <button class="btn ghost small" data-song-remove="${i}" type="button" ${songs.length === 1 ? 'disabled' : ''}>Remove</button>
+    ${song.review_note ? `<p class="hint">${song.needs_review ? 'Review · ' : ''}${escapeHtml(song.review_note)}</p>` : ''}
   </div>`).join('');
   $('#sessionMix').hidden = false;
 }
