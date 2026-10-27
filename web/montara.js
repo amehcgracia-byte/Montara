@@ -445,7 +445,45 @@ async function registerProject() {
 function cameraTypeOf(f){return f.cameraType || (isSphere(f)?'360':(state.roles[f.path] || guessRole(f))==='fixed_rear'?'fixed':'moving');}
 function renderCameras() {
   $('#cameraList').innerHTML=videos().map((f,index)=>`<div class="cam"><span class="kind video">${String(index+1).padStart(2,'0')}</span><span class="name">${escapeHtml(f.name)}</span><span class="camsel"><label>Camera type<select data-camera-type="${escapeHtml(f.path)}" aria-label="Camera type for ${escapeHtml(f.name)}">${[['360','360'],['fixed','Fixed camera'],['moving','Moving camera']].map(([value,label])=>`<option value="${value}" ${cameraTypeOf(f)===value?'selected':''}>${label}</option>`).join('')}</select></label></span></div>`).join('');
-  $$('[data-camera-type]').forEach(select=>select.onchange=()=>{const f=videos().find(v=>v.path===select.dataset.cameraType);f.cameraType=select.value;if(select.value!=='360')state.roles[f.path]=select.value==='fixed'?'fixed_rear':'handheld';renderCameras();});
+  // Optional local-only experimental proxy preview; never changes editing/export inputs.
+  if (['localhost', '127.0.0.1', '[::1]'].includes(location.hostname)) {
+    $('#cameraList .cam').forEach((card, index) => {
+      const file = videos()[index];
+      if (!file || !file.path) return;
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'btn ghost small';
+      button.textContent = 'Cached preview (experimental)';
+      button.onclick = async () => {
+        button.disabled = true;
+        button.textContent = 'Preparing proxy…';
+        try {
+          const response = await fetch('/montara/local-preview/prepare', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({path: file.path}),
+          });
+          const job = await response.json();
+          if (!response.ok) throw Error(job.error?.message || 'Enable local proxy preview on the server.');
+          let state = job;
+          for (let attempts=0; attempts<120 && state.status==='preparing'; attempts++) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            const check = await fetch('/montara/local-preview/job/'+encodeURIComponent(job.id));
+            if (!check.ok) throw Error('Proxy preparation status is unavailable.');
+            state = await check.json();
+          }
+          if (state.status !== 'ready') throw Error(state.error || 'Proxy is still preparing. Retry shortly.');
+          window.open('/montara/local-preview/'+encodeURIComponent(state.source_id)+'/view', '_blank', 'noopener');
+        } catch (error) {
+          toast(error.message || 'Proxy preview unavailable', true);
+        } finally {
+          button.disabled = false;
+          button.textContent = 'Cached preview (experimental)';
+        }
+      };
+      card.append(button);
+    });
+  }
+  $('[data-camera-type]').forEach(select=>select.onchange=()=>{const f=videos().find(v=>v.path===select.dataset.cameraType);f.cameraType=select.value;if(select.value!=='360')state.roles[f.path]=select.value==='fixed'?'fixed_rear':'handheld';renderCameras();});
   const spheres=videos().filter(isSphere);
   $('#sphereList').innerHTML=spheres.map((f,index)=>`<div class="sphere" data-sphere="${index}"><h3><span class="kind video">360</span> ${escapeHtml(f.name)}</h3><p class="hint">Choose a viewpoint, click where it should look, and give it a name.</p><div class="sphere-body"><ul class="slots"></ul><div class="pano-wrap"><div class="pano"><div class="pano-img"></div><span class="loading">Loading 360 frame…</span></div><p class="hint tiny">Drag to turn · click to place the viewpoint</p><div class="preview"><div class="pv"><img alt="" hidden draggable="false"></div><span class="hint">Drag to aim, scroll to zoom.</span></div></div></div></div>`).join('');
   spheres.forEach((f,index)=>setupSphere(f,$(`[data-sphere="${index}"]`)));
