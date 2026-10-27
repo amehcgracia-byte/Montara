@@ -848,7 +848,7 @@ $("#referenceLinkForm").addEventListener("submit", async (event) => {
   } catch (error) { status.textContent = error.message; }
   finally { if (mix.job === jobId) { button.disabled = false; $("#pickReference").disabled = false; $("#useMix").disabled = false; } }
 });
-$("#mixBack").addEventListener("click", () => { stopMix(); show(videos().length > 1 || videos().some(isSphere) ? "cameras" : "footage"); });
+$("#mixBack").addEventListener("click", () => { stopMix(); show(fullSession.active ? 'sessionReview' : videos().length > 1 || videos().some(isSphere) ? "cameras" : "footage"); });
 
 $("#useMix").addEventListener("click", async () => {
   try {

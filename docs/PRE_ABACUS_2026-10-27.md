@@ -15,11 +15,12 @@
 
 ## Comprobado en el entorno local
 
-- 100 pruebas Python y 6 pruebas de ciclo de preview, durante el desarrollo.
+- 101 pruebas Python y 6 pruebas de ciclo de preview, durante el desarrollo.
 - Recorrido real con dos pistas de 6:30 minutos y dos bloques musicales: dos propuestas con límite en 3:15; corrección manual a dos ventanas de 15 segundos, reproducción del mixer y dos MP3 exportados con duración comprobada.
 - Recuperación tras recargar la página y revisión en anchura de móvil; sin errores de JavaScript en ese recorrido.
 - Interrupción real de la subida en el navegador después de 4 MiB; al recargar y elegir el archivo de nuevo continúa desde ese punto. El SHA-256 completo del archivo recibido coincide con el original.
 - Pruebas específicas de desfases de grabadoras, relleno de zonas sin audio, preview acotada, límites inválidos, rutas ajenas, retransmisión de fragmentos, reservas de disco y límite remoto.
+- Estrés acústico sintético de cuatro horas, dos pistas y 460,8 MB: 23 propuestas, 8,42 segundos en frío y 3,77 segundos reutilizando caché; pico del proceso de unos 73 MiB en este Mac. No son cifras de render, de grabaciones reales ni de Abacus; no extrapolarlas a 30 GB.
 
 Las pruebas Linux y las regresiones de Stage, Push y mezcla deben pasar antes de integrar esta rama. Las capturas y los registros de esta comprobación no son material de producción.
 

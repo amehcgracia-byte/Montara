@@ -112,6 +112,7 @@ $('#sessionMix').onclick = async () => {
 
 async function renderFullSession() {
   stopMix();
+  $('#useMix').disabled = true;
   const mixJob = await api(`/montara/mix/${mix.job}`);
   const payload = {
     reference: mixJob.reference,
@@ -126,7 +127,7 @@ async function renderFullSession() {
     $('#sessionStatus').textContent = 'Your selected songs are ready.';
     drawSessionResults(data);
   } catch (error) { toast(error.message, true); }
-  finally { $('#sessionSongs').hidden = false; }
+  finally { $('#sessionSongs').hidden = false; $('#useMix').disabled = false; }
 }
 
 function drawSessionResults(data) {
