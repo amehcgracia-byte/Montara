@@ -116,6 +116,10 @@ def create_montara_app(data_root: Path = DEFAULT_DATA, samples: bool = True):
     register_full_session(app, data_root, FIXTURES)
     from resumable_upload import register_resumable_upload
     register_resumable_upload(app, data_root, classify_paths)
+    # Experimental local-only proxy playback. Disabled by default.
+    if os.environ.get("MONTARA_EXPERIMENTAL_PROXY_PREVIEW") == "1":
+        from local_media.preview_http import register_local_proxy_preview
+        register_local_proxy_preview(app, data_root)
     from montara_ai import AIService
     app.extensions['montara_ai'] = AIService(data_root)
     app.static_folder = str(WEB)
