@@ -5,6 +5,7 @@ No cloud models or network video imports. Runs unchanged on Linux and macOS.
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import json
 import os
@@ -13,6 +14,7 @@ import socket
 import subprocess
 import sys
 import time
+from io import BytesIO
 from urllib.request import urlopen
 
 import numpy as np
@@ -118,7 +120,7 @@ def run(output):
                 page.screenshot(path=str(output / '05-mobile-resume.png'), full_page=True)
                 assert not errors, errors
                 browser.close()
-            summary = dict(detected_songs=detected, exported_songs=data['results'], browser_errors=errors)
+            summary = dict(platform=sys.platform, detected_songs=detected, exported_songs=data['results'], browser_errors=errors)
             (output / 'summary.json').write_text(json.dumps(summary, indent=2))
             print(json.dumps(summary))
         finally:
@@ -127,4 +129,11 @@ def run(output):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(); parser.add_argument('--output', required=True)
-    run(parser.parse_args().output)
+    parser.add_argument('--stdout-screenshots', action='store_true', help='Small visual evidence when artifact storage is unavailable')
+    args = parser.parse_args(); run(args.output)
+    if args.stdout_screenshots:
+        from PIL import Image
+        for source in sorted(Path(args.output).glob('*.png')):
+            buffer = BytesIO()
+            Image.open(source).convert('RGB').save(buffer, format='WEBP', quality=75)
+            print('MONTARA_SCREENSHOT ' + source.stem + '.webp ' + base64.b64encode(buffer.getvalue()).decode())

@@ -57,7 +57,7 @@ jobs:
         run: python tests/e2e_journey.py --mode ${{ matrix.mode }} --output e2e-output
       - name: Session detection, common mix, exports and resumable upload
         if: matrix.mode == 'session'
-        run: python tests/e2e_session.py --output e2e-output/session
+        run: python tests/e2e_session.py --output e2e-output/session --stdout-screenshots
       - uses: actions/upload-artifact@v4
         if: always()
         # Diagnostic storage is optional; test and export failures remain fatal.
