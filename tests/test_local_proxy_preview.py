@@ -43,6 +43,9 @@ def test_preview_serves_only_registered_proxy(tmp_path):
     assert streamed.status_code == 200
     assert streamed.data == proxy.read_bytes()
     assert streamed.headers["Cache-Control"] == "private, no-store"
+    page = client.get(f"/montara/local-preview/{key}/view")
+    assert page.status_code == 200
+    assert f"/montara/local-preview/{key}/video" in page.get_data(as_text=True)
     assert client.get("/montara/local-preview/../../etc/passwd/video").status_code == 404
 
 
