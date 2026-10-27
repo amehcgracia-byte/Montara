@@ -472,7 +472,13 @@ function renderCameras() {
             state = await check.json();
           }
           if (state.status !== 'ready') throw Error(state.error || 'Proxy is still preparing. Retry shortly.');
-          window.open('/montara/local-preview/'+encodeURIComponent(state.source_id)+'/view', '_blank', 'noopener');
+          const link = document.createElement('a');
+          link.className = 'btn ghost small';
+          link.target = '_blank';
+          link.rel = 'noopener';
+          link.href = '/montara/local-preview/'+encodeURIComponent(state.source_id)+'/view';
+          link.textContent = 'Play cached proxy';
+          button.replaceWith(link);
         } catch (error) {
           toast(error.message || 'Proxy preview unavailable', true);
         } finally {
