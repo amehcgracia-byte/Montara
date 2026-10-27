@@ -19,11 +19,23 @@ def prepare(source,cache,sphere=False):
     source=Path(source).resolve();cache=Path(cache).resolve();cache.mkdir(parents=True,exist_ok=True)
     if source.suffix.lower() in {'.insv','.msv','.360','.insp','.lrv'}:
         raise ValueError('Export a stitched equirectangular MP4 from your camera app first.')
-    original=probe(source);video=next(s for s in original['streams'] if s['codec_type']=='video')
+    # Stat-first cache lookup: avoid an ffprobe process for a verified warm hit.
+    # The fingerprint deliberately remains unchanged for backward compatibility.
     fingerprint=stamp(source)
     key=hashlib.sha256(json.dumps([str(source),fingerprint,sphere,'proxy019']).encode()).hexdigest()[:24]
     private=cache/(key+'.local.json');proxy=cache/(key+'.mp4')
-    if private.exists() and proxy.exists():return json.loads(private.read_text())
+    if private.is_file() and proxy.is_file() and proxy.stat().st_size>0:
+        try:
+            record=json.loads(private.read_text())
+            if (record.get('source_id')==key
+                and record.get('original')==str(source)
+                and record.get('original_stamp')==fingerprint
+                and record.get('proxy')==str(proxy)
+                and record.get('public',{}).get('projection')==('equirectangular' if sphere else 'flat')):
+                return record
+        except (OSError,ValueError,TypeError,AttributeError):
+            pass
+    original=probe(source);video=next(s for s in original['streams'] if s['codec_type']=='video')
     pending=cache/(key+'.pending.mp4')
     scale='scale=2048:1024' if sphere else "scale=w='min(960,iw)':h=-2"
     try:
