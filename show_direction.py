@@ -109,7 +109,7 @@ def register_show_direction(app, data_root):
                 evidence = dict(phrases=[dict(id=i, text=' '.join(w[0] for w in group)[:800])
                                         for i, group in enumerate(proof[:300]) if len(group) >= 4],
                                 maximum=min(12, max(1, int(narrator_probe.get('duration', 0)//25))))
-                review = service.review(GAMER_EMPHASES, evidence)
+                review = service.review(GAMER_EMPHASES, evidence) if evidence['phrases'] else {'status': 'not_needed'}
                 if review['status'] == 'reviewed':
                     semantic = {item['id']: item['reason'] for item in review['value']['emphases']}
         from core.show_proposals import LOCK
