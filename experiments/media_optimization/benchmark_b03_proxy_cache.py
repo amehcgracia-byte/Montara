@@ -10,8 +10,10 @@ import json
 import subprocess
 import tempfile
 import time
+import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from local_media.proxies import prepare
 
 
