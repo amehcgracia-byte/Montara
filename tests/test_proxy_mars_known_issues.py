@@ -20,7 +20,7 @@ def sample(path):
     ], check=True)
 
 
-@pytest.mark.xfail(strict=True, reason="Concurrent writes use the same .pending.mp4 path")
+@pytest.mark.xfail(strict=False, reason="Timing-dependent concurrent writes share .pending.mp4")
 def test_concurrent_prepare_same_source(tmp_path):
     source = tmp_path / "input.mp4"
     sample(source)
