@@ -37,6 +37,18 @@ jobs:
         run: |
           pip install -r requirements.txt
           python -m playwright install --with-deps chromium
+      - uses: actions/setup-node@v4
+        if: matrix.mode == 'stage'
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: deployment/vercel/package-lock.json
+      - name: Preview deployment and storage tests
+        if: matrix.mode == 'stage'
+        run: |
+          npm ci --prefix deployment/vercel --ignore-scripts
+          npm run build --prefix deployment/vercel
+          node --test tests/test_preview_runtime.mjs
       - name: Montara regression tests
         if: matrix.mode == 'stage'
         run: python -m pytest tests -q

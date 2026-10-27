@@ -46,7 +46,9 @@
     "green_library.py",
     "docs/GREEN_LIBRARY_037.md",
     "tests/fixtures/greenscreens/catalog.json",
-    "web/show-chroma.js"
+    "web/show-chroma.js",
+    "deploy/preview_storage.py",
+    "web/preview-share.js"
   ],
   "assets": [
     "tests/fixtures/much-to-me/master.mp3",
