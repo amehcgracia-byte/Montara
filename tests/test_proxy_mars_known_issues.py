@@ -6,6 +6,7 @@ tests when the implementation is repaired. Real FFmpeg is required.
 import concurrent.futures
 import json
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -29,15 +30,16 @@ def test_concurrent_prepare_same_source(tmp_path):
     assert results[0]["source_id"] == results[1]["source_id"]
 
 
-@pytest.mark.xfail(strict=True, reason="Warm-cache check verifies only nonempty proxy existence")
 def test_corrupt_proxy_not_reused(tmp_path):
     source = tmp_path / "input.mp4"
     sample(source)
     record = prepare(source, tmp_path / "cache")
     from pathlib import Path
     Path(record["proxy"]).write_bytes(b"x" * 128)
-    with pytest.raises((ValueError, RuntimeError, subprocess.CalledProcessError)):
-        prepare(source, tmp_path / "cache")
+    repaired = prepare(source, tmp_path / "cache")
+    assert repaired["source_id"] == record["source_id"]
+    assert repaired["proxy_signature"] == record["proxy_signature"]
+    assert Path(repaired["proxy"]).stat().st_size > 128
 
 
 def test_vfr_proxy_duration_smoke(tmp_path):
