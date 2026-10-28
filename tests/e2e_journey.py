@@ -57,6 +57,7 @@ BRANDING = {"stage": "montara", "push": "none", "mix": "montara"}
 
 
 def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
+    started = time.monotonic()
     shots = out / mode
     shots.mkdir(parents=True, exist_ok=True)
     page.goto(url)
@@ -145,23 +146,31 @@ def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
         return {"mode": mode, "passed": False, "error": page.locator("#errorText").inner_text()}
     page.wait_for_timeout(1500)
     page.screenshot(path=str(shots / "07-result.png"))
-    with urlopen(url + "/api/v1/wizard/status", timeout=15) as response:
-        status = json.load(response)
-    path = Path(status["result"]["path"])
+    # HTTP also exercises a real container/private host; never read its disk paths.
+    response = page.request.get(url + "/api/v1/wizard/status")
+    assert response.ok
+    status = response.json()
+    server_name = Path(status["result"]["path"]).name
+    exported = page.request.get(url + "/api/v1/wizard/result", timeout=180_000)
+    assert exported.ok
+    path = shots / 'render.mp4'
+    path.write_bytes(exported.body())
+    journey_seconds = time.monotonic() - started
     probe = json.loads(run(["ffprobe", "-v", "error", "-show_streams", "-show_format", "-of", "json", str(path)]))
     run(["ffmpeg", "-v", "error", "-i", str(path), "-f", "null", "-"])  # decode the whole file
     video = next(s for s in probe["streams"] if s["codec_type"] == "video")
     has_audio = any(s["codec_type"] == "audio" for s in probe["streams"])
     if mode == "push":
-        assert not captioned or "caption" in path.name, f"captions were not burned: {path.name}"
-    (shots / "render.mp4").write_bytes(path.read_bytes())
+        assert not captioned or "caption" in server_name, f"captions were not burned: {server_name}"
     duration = float(probe["format"]["duration"])
     for second in (2.0, duration / 2, max(0.0, duration - 2.0)):  # intro, body, outro: look at them
         run(["ffmpeg", "-v", "error", "-y", "-ss", f"{second:.2f}", "-i", str(path), "-frames:v", "1",
              str(shots / f"frame-{int(second):03d}s.png")])
     result = status["result"]
+    project_response = page.request.get(url + '/api/v1/project')
+    assert project_response.ok
+    project = project_response.json()
     if mode == "mix":
-        project = json.loads((Path(status["project_path"]) / "project.json").read_text())
         mixed = ((project.get("inputs") or {}).get("master") or {}).get("path")
     cameras = [f.name for f in files if f.suffix == ".mp4"]
     used = result.get("camera_usage") or {}
@@ -169,7 +178,9 @@ def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
     # (the engine may rename a camera to a cached proxy, so count cameras, not names)
     all_used = mode == "push" or (len([k for k, n in used.items() if n]) >= len(cameras) and not result.get("excluded_clips"))
     return {"mode": mode, "media": media.name, "branding": BRANDING[mode], "passed": has_audio and duration > 0 and all_used and (mode != "mix" or bool(mixed and "Mixer" in mixed)),
-            "duration": duration, "captioned": captioned, "size": f"{video['width']}x{video['height']}", "frames_swapped": swapped, "mixed_master": mixed,
+            "duration": duration, "captioned": captioned, "size": f"{video['width']}x{video['height']}", "frames_swapped": swapped, "mixed_master": Path(mixed).name if mixed else None,
+            "measured_browser_journey_seconds_including_ui_waits_and_download": round(journey_seconds, 3),
+            "measured_engine_stage_seconds": {name: value['elapsed_seconds'] for name, value in project.get('stages', {}).items() if isinstance(value, dict) and value.get('elapsed_seconds') is not None},
             "cuts": result.get("cut_count"), "camera_usage": used, "excluded": result.get("excluded_clips")}
 
 
@@ -178,7 +189,17 @@ def main() -> int:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--mode", choices=list(MODES))
     parser.add_argument("--synthetic", action="store_true", help="use generated test patterns instead of the real jam excerpt")
+    parser.add_argument('--base-url', help='DESTRUCTIVE TEST: use an isolated existing host; creates/edits its current project. Never use a user/production instance.')
+    parser.add_argument('--stdout-screenshots', action='store_true', help='Small bounded review evidence when CI artifact storage is unavailable.')
     args = parser.parse_args()
+    if args.base_url:
+        from urllib.parse import urlsplit
+        parsed = urlsplit(args.base_url)
+        if parsed.scheme not in {'http', 'https'} or parsed.username or parsed.password or parsed.query or parsed.fragment:
+            parser.error('Use an HTTP(S) base URL without credentials or query parameters.')
+        args.base_url = args.base_url.rstrip('/')
+        if not args.mode:
+            parser.error('--base-url requires one --mode for an isolated test instance.')
     out = args.output.resolve()
     out.mkdir(parents=True, exist_ok=True)
     media = fixtures(out / "fixtures") if args.synthetic or not REAL.exists() else REAL
@@ -186,31 +207,57 @@ def main() -> int:
     from playwright.sync_api import sync_playwright
     for mode in ([args.mode] if args.mode else list(MODES)):
         port = free_port()
-        url = f"http://127.0.0.1:{port}"
+        url = args.base_url or f"http://127.0.0.1:{port}"
         log = (out / f"server-{mode}.log").open("w")
-        server = subprocess.Popen([sys.executable, str(ROOT / "app.py"), "--port", str(port), "--data", str(out / f"data-{mode}")],
+        server = None if args.base_url else subprocess.Popen([sys.executable, str(ROOT / "app.py"), "--port", str(port), "--data", str(out / f"data-{mode}")],
                                   stdout=log, stderr=subprocess.STDOUT, env={**os.environ, "PYTHONUNBUFFERED": "1"})
         try:
+            if args.base_url:
+                # Context-scoped Basic auth; credentials never appear in a URL/report.
+                credentials = {'username': 'montara', 'password': os.environ['MONTARA_PREVIEW_PASSWORD']}
+            else:
+                credentials = None
             for _ in range(120):
                 try:
-                    urlopen(url + "/api/v1/wizard/status", timeout=2)
+                    if args.base_url:
+                        break  # Browser context authenticates the actual readiness request below.
+                    with urlopen(url + "/api/v1/wizard/status", timeout=2):
+                        pass
                     break
                 except Exception:
                     time.sleep(1)
             with sync_playwright() as pw:
                 browser = pw.chromium.launch()
-                page = browser.new_page(viewport={"width": 1440, "height": 960})
+                page = browser.new_page(viewport={"width": 1440, "height": 960}, http_credentials=credentials)
                 try:
+                    if args.base_url:
+                        response = page.request.get(url + '/api/v1/wizard/status', timeout=120_000)
+                        assert response.ok, f'Private host not ready: HTTP {response.status}'
                     reports.append(journey(page, url, mode, media, out))
                 except Exception as exc:  # keep the evidence
                     page.screenshot(path=str(out / f"{mode}-exception.png"))
                     reports.append({"mode": mode, "passed": False, "error": repr(exc)})
                 browser.close()
         finally:
-            server.terminate()
-            server.wait(timeout=30)
+            if server:
+                server.terminate()
+                server.wait(timeout=30)
+            log.close()
     (out / "summary.json").write_text(json.dumps(reports, indent=2))
     print(json.dumps(reports, indent=2))
+    if args.stdout_screenshots:
+        import base64
+        from io import BytesIO
+        from PIL import Image
+        for mode in ([args.mode] if args.mode else list(MODES)):
+            for name in ('03-cameras.png', '05-frames.png', '07-result.png'):
+                source = out / mode / name
+                if source.is_file():
+                    buffer = BytesIO()
+                    picture = Image.open(source).convert('RGB')
+                    picture.thumbnail((1200, 1000))
+                    picture.save(buffer, format='WEBP', quality=75)
+                    print('MONTARA_CHECK_SCREENSHOT ' + mode + '-' + source.stem + '.webp ' + base64.b64encode(buffer.getvalue()).decode())
     return 0 if reports and all(r["passed"] for r in reports) else 1
 
 
