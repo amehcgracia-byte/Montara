@@ -4,7 +4,58 @@ Run: python -m local_media.proxies VIDEO --cache FOLDER [--sphere]
 Not yet wired into the public web upload or its final renderer.
 """
 from pathlib import Path
-import argparse,hashlib,json,subprocess
+import argparse,hashlib,json,subprocess,uuid,os
+from contextlib import contextmanager
+
+@contextmanager
+def _source_lock(cache, key):
+    """Serialize POSIX generators; other platforms retain unique-temp generation."""
+    if os.name != 'posix':
+        # Preserve the existing Windows cold-generation path. UUID outputs avoid
+        # collisions there, but cross-process work deduplication is POSIX-only.
+        yield
+        return
+    import fcntl
+    with (cache / (key + '.lock')).open('a+b') as handle:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
+def _cached(source, proxy, private, key, fingerprint, sphere):
+    if not private.is_file() or not proxy.is_file() or not proxy.stat().st_size:
+        return None
+    try:
+        record=json.loads(private.read_text())
+        if (record.get('source_id') == key
+            and record.get('original') == str(source)
+            and record.get('original_stamp') == fingerprint
+            and record.get('proxy') == str(proxy)
+            and record.get('public', {}).get('projection') == ('equirectangular' if sphere else 'flat')
+            and (not record.get('proxy_signature') or record['proxy_signature'] == proxy_signature(proxy))):
+            return record
+    except (OSError, ValueError, TypeError, AttributeError):
+        pass
+    return None
+
+SAMPLE_BYTES = 65536
+
+
+def proxy_signature(path):
+    """Bounded sample fingerprint: at most 128 KiB read regardless of proxy size."""
+    path = Path(path)
+    size = path.stat().st_size
+    digest = hashlib.sha256()
+    digest.update(size.to_bytes(8, 'big'))
+    with path.open('rb') as handle:
+        digest.update(handle.read(SAMPLE_BYTES))
+        if size > SAMPLE_BYTES:
+            handle.seek(max(0, size - SAMPLE_BYTES))
+            digest.update(handle.read(SAMPLE_BYTES))
+    return digest.hexdigest()
+
 
 
 def probe(path):
@@ -19,12 +70,24 @@ def prepare(source,cache,sphere=False):
     source=Path(source).resolve();cache=Path(cache).resolve();cache.mkdir(parents=True,exist_ok=True)
     if source.suffix.lower() in {'.insv','.msv','.360','.insp','.lrv'}:
         raise ValueError('Export a stitched equirectangular MP4 from your camera app first.')
-    original=probe(source);video=next(s for s in original['streams'] if s['codec_type']=='video')
+    # Stat-first cache lookup: avoid an ffprobe process for a verified warm hit.
+    # The fingerprint deliberately remains unchanged for backward compatibility.
     fingerprint=stamp(source)
     key=hashlib.sha256(json.dumps([str(source),fingerprint,sphere,'proxy019']).encode()).hexdigest()[:24]
     private=cache/(key+'.local.json');proxy=cache/(key+'.mp4')
-    if private.exists() and proxy.exists():return json.loads(private.read_text())
-    pending=cache/(key+'.pending.mp4')
+    hit = _cached(source, proxy, private, key, fingerprint, sphere)
+    if hit:
+        return hit
+    with _source_lock(cache, key):
+        hit = _cached(source, proxy, private, key, fingerprint, sphere)
+        if hit:
+            return hit
+        return _generate(source, cache, sphere, fingerprint, key, private, proxy)
+
+
+def _generate(source, cache, sphere, fingerprint, key, private, proxy):
+    original=probe(source);video=next(s for s in original['streams'] if s['codec_type']=='video')
+    pending=cache/(key+'.'+uuid.uuid4().hex+'.pending.mp4')
     scale='scale=2048:1024' if sphere else "scale=w='min(960,iw)':h=-2"
     try:
         subprocess.run(['ffmpeg','-v','error','-nostdin','-y','-copyts','-start_at_zero','-i',str(source),'-map','0:v:0','-map','0:a:0?','-vf',scale,'-fps_mode','passthrough','-c:v','libx264','-preset','veryfast','-crf','28','-pix_fmt','yuv420p','-c:a','aac','-b:a','96k','-movflags','+faststart',str(pending)],check=True,capture_output=True)
@@ -35,7 +98,7 @@ def prepare(source,cache,sphere=False):
         if abs(duration-pd)>tolerance:raise ValueError('Proxy timing differs from the original; this source needs a dedicated adapter.')
         pending.replace(proxy)
         public={'source_id':key,'duration':duration,'proxy_duration':pd,'projection':'equirectangular' if sphere else 'flat','width':pv['width'],'height':pv['height'],'frame_rate':fps,'proxy_bytes':proxy.stat().st_size}
-        record={'source_id':key,'original':str(source),'original_stamp':fingerprint,'proxy':str(proxy),'public':public}
+        record={'source_id':key,'original':str(source),'original_stamp':fingerprint,'proxy':str(proxy),'public':public,'proxy_signature':proxy_signature(proxy)}
         private.write_text(json.dumps(record,indent=2));(cache/(key+'.public.json')).write_text(json.dumps(public,indent=2))
         return record
     finally:pending.unlink(missing_ok=True)
