@@ -5,6 +5,12 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      scope:
+        description: Run every journey or only the private container acceptance
+        type: choice
+        default: all
+        options: [all, container]
 
 concurrency:
   group: montara-e2e-${{ github.ref }}
@@ -12,6 +18,7 @@ concurrency:
 
 jobs:
   e2e:
+    if: github.event_name != 'workflow_dispatch' || inputs.scope != 'container'
     runs-on: ubuntu-24.04
     timeout-minutes: 50
     strategy:
@@ -124,8 +131,22 @@ jobs:
         run: |
           pip install playwright==1.64.1 pillow
           python -m playwright install --with-deps chromium
+          if ! command -v ffprobe >/dev/null; then
+            montara_sources="$RUNNER_TEMP/montara-client-sources.list"
+            printf '%s\n' \
+              'deb [signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] https://archive.ubuntu.com/ubuntu noble main universe' \
+              'deb [signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] https://archive.ubuntu.com/ubuntu noble-updates main universe' \
+              'deb [signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] https://security.ubuntu.com/ubuntu noble-security main universe' > "$montara_sources"
+            apt_options=(-o "Dir::Etc::sourcelist=$montara_sources" -o 'Dir::Etc::sourceparts=-' -o Acquire::Retries=2 -o Acquire::https::Timeout=20 -o Dpkg::Use-Pty=0)
+            sudo apt-get "${apt_options[@]}" update
+            sudo apt-get "${apt_options[@]}" install --no-install-recommends -y ffmpeg
+          fi
+          ffprobe -version
       - name: Real Stage through the authenticated container
         run: python tests/e2e_journey.py --mode stage --base-url http://127.0.0.1:8090 --output server-check-output --stdout-screenshots
+      - name: Preserve resource peak before restarting the container
+        if: always()
+        run: docker compose -p montara-ci exec -T montara cat /sys/fs/cgroup/memory.peak > server-check-output/container-memory-peak-before-restart-bytes.txt
       - name: Restart and verify persisted project and export
         run: |
           docker compose -p montara-ci restart
@@ -141,9 +162,15 @@ jobs:
           if [ -n "$container" ]; then
             docker cp "$container:/data/server-check.json" server-check-output/server-check.json || true
             docker cp "$container:/data/whisper-warmup.json" server-check-output/whisper-warmup.json || true
-            docker compose -p montara-ci exec -T montara cat /sys/fs/cgroup/memory.peak > server-check-output/container-memory-peak-bytes.txt || true
             docker logs --tail 120 "$container" > server-check-output/server.log 2>&1 || true
           fi
+          python - <<'PY'
+          from pathlib import Path
+          for name in ('server-check.json', 'whisper-warmup.json', 'summary.json', 'container-memory-peak-before-restart-bytes.txt'):
+              path = Path('server-check-output') / name
+              if path.is_file() and path.stat().st_size < 65536:
+                  print('MONTARA_SERVER_REPORT ' + name + ' ' + path.read_text())
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         continue-on-error: true
