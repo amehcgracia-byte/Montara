@@ -1,0 +1,26 @@
+diff --git a/core/stages/export.py b/core/stages/export.py
+--- a/core/stages/export.py
++++ b/core/stages/export.py
+@@
+ def _verification_overlap_enabled(project: Project) -> bool:
+@@
+-        return memory >= 16 * 1024 ** 3 and available >= 2 * 1024 ** 3
++        if memory < 16 * 1024 ** 3 or available < 2 * 1024 ** 3:
++            return False
++        if sys.platform != "darwin":
++            # Linux container quota may be much smaller than host memory.
++            # A finite cgroup with unreadable usage must not enable overlap.
++            limit_file = Path("/sys/fs/cgroup/memory.max")
++            try:
++                raw_limit = limit_file.read_text().strip()
++                if raw_limit != "max":
++                    limit = int(raw_limit)
++                    if limit < 16 * 1024 ** 3:
++                        return False
++                    current = int(Path("/sys/fs/cgroup/memory.current").read_text().strip())
++                    if current < 0 or limit - current < 2 * 1024 ** 3:
++                        return False
++            except (OSError, ValueError):
++                if limit_file.exists():
++                    return False
++        return True
