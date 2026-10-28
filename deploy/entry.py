@@ -13,7 +13,7 @@ app = create_montara_app(Path(os.environ.get("MONTARA_DATA", "/data")))
 @app.before_request
 def private_review_access():
     auth = request.authorization
-    if not auth or not hmac.compare_digest(auth.username or "", "montara") or not hmac.compare_digest((auth.password or "").encode(), password.encode()):
+    if not auth or not hmac.compare_digest((auth.username or "").encode(), b"montara") or not hmac.compare_digest((auth.password or "").encode(), password.encode()):
         return Response("Private Montara review", 401, {"WWW-Authenticate": 'Basic realm="Montara review"', "Cache-Control": "no-store"})
 @app.after_request
 def private_review_headers(response):

@@ -1,12 +1,18 @@
 services:
   montara:
-    build: .
+    build:
+      context: .
+      args:
+        MONTARA_BUILD_SHA: ${MONTARA_BUILD_SHA:-unknown}
+        MONTARA_ENGINE_SHA: ${MONTARA_ENGINE_SHA:-unknown}
+        MONTARA_MIXER_SHA: ${MONTARA_MIXER_SHA:-unknown}
     restart: unless-stopped
     ports:
-      - "127.0.0.1:8090:8080"
+      - "127.0.0.1:${MONTARA_PORT:-8090}:8080"
     environment:
       MONTARA_PREVIEW_PASSWORD: ${MONTARA_PREVIEW_PASSWORD:?Set a private preview password}
       MONTARA_DATA: /data
+      MONTARA_AI_ENABLED: ${MONTARA_AI_ENABLED:-0}
     volumes:
       - montara-data:/data
     mem_limit: 8g

@@ -84,3 +84,77 @@ jobs:
             e2e-output/**/summary.json
             e2e-output/server-*.log
             e2e-output/**/server.log
+
+  private-container:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Private test credentials and build identity
+        shell: bash
+        run: |
+          password=$(openssl rand -hex 24)
+          echo "::add-mask::$password"
+          printf 'MONTARA_PREVIEW_PASSWORD=%s\n' "$password" >> "$GITHUB_ENV"
+          printf 'MONTARA_BUILD_SHA=%s\n' "$GITHUB_SHA" >> "$GITHUB_ENV"
+          printf 'MONTARA_ENGINE_SHA=%s\n' "$(git -C engine rev-parse HEAD)" >> "$GITHUB_ENV"
+          printf 'MONTARA_MIXER_SHA=%s\n' "$(git -C mixer rev-parse HEAD)" >> "$GITHUB_ENV"
+      - name: Build exact private server image
+        run: docker compose -p montara-ci build
+      - name: Check dependencies, data volume, fonts and CPU export
+        run: |
+          mkdir -p server-check-output
+          docker compose -p montara-ci run --rm -T montara python -m deploy.preflight --server --data /data --smoke --output /data/server-check.json
+      - name: Prepare CPU speech model and exercise real decoding
+        run: docker compose -p montara-ci run --rm -T montara python -m deploy.warmup --data /data
+      - name: Start private host
+        run: |
+          docker compose -p montara-ci up -d
+          for attempt in $(seq 1 90); do
+            if docker compose -p montara-ci exec -T montara python -m deploy.healthcheck; then exit 0; fi
+            sleep 2
+          done
+          exit 1
+      - name: Install browser client
+        run: |
+          pip install playwright==1.64.1 pillow
+          python -m playwright install --with-deps chromium
+      - name: Real Stage through the authenticated container
+        run: python tests/e2e_journey.py --mode stage --base-url http://127.0.0.1:8090 --output server-check-output --stdout-screenshots
+      - name: Restart and verify persisted project and export
+        run: |
+          docker compose -p montara-ci restart
+          for attempt in $(seq 1 90); do
+            if docker compose -p montara-ci exec -T montara python -m deploy.healthcheck; then break; fi
+            sleep 2
+          done
+          docker compose -p montara-ci exec -T montara python -m deploy.restart_check
+      - name: Save bounded reports and resource counters
+        if: always()
+        run: |
+          container=$(docker compose -p montara-ci ps -q montara)
+          if [ -n "$container" ]; then
+            docker cp "$container:/data/server-check.json" server-check-output/server-check.json || true
+            docker cp "$container:/data/whisper-warmup.json" server-check-output/whisper-warmup.json || true
+            docker compose -p montara-ci exec -T montara cat /sys/fs/cgroup/memory.peak > server-check-output/container-memory-peak-bytes.txt || true
+            docker logs --tail 120 "$container" > server-check-output/server.log 2>&1 || true
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        continue-on-error: true
+        with:
+          name: montara-private-container
+          retention-days: 3
+          path: |
+            server-check-output/**/*.json
+            server-check-output/**/*.txt
+            server-check-output/**/*.png
+            server-check-output/server.log
+      - name: Remove only the isolated CI container and volume
+        if: always()
+        run: docker compose -p montara-ci down -v

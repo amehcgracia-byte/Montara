@@ -2,6 +2,7 @@
 __pycache__/
 *.pyc
 /e2e-output/
+/server-check-output/
 tests/fixtures/**/ZuckerMixer/
 
 # Local environments, provider credentials and generated deployment artifacts

@@ -47,9 +47,9 @@ def _prepare_environment(data_root: Path) -> None:
     if not (ENGINE / "server" / "api.py").is_file():
         raise SystemExit("The engine is missing. Run: git submodule update --init")
     # Montara never shares data with a local Zucker Editor install.
-    os.environ.setdefault("ZUCKER_DATA_ROOT", str(data_root))
+    os.environ["ZUCKER_DATA_ROOT"] = str(data_root)
     os.environ["MONTARA_LOCAL_DIRECTOR"]="1"
-    os.environ.setdefault("ZUCKER_MIXER_STATE_ROOT", str(data_root / "Mixer" / "state"))
+    os.environ["ZUCKER_MIXER_STATE_ROOT"] = str(data_root / "Mixer" / "state")
     data_root.mkdir(parents=True, exist_ok=True)
     sys.path.insert(0, str(ENGINE))
     # The engine resolves bundled assets relative to its own folder.
@@ -79,6 +79,10 @@ def _apply_branding(mode: str, data_root: Path) -> dict:
 
 
 def create_montara_app(data_root: Path = DEFAULT_DATA, samples: bool = True):
+    data_root = Path(data_root).expanduser().resolve()
+    desktop_data = (Path.home() / 'ZuckerVideos').resolve()
+    if data_root == desktop_data or data_root.is_relative_to(desktop_data):
+        raise ValueError('Choose a separate Montara data folder.')
     _prepare_environment(data_root)
     from flask import jsonify, request, send_from_directory
     from server.api import create_app

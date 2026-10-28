@@ -7,6 +7,7 @@ numba==0.62.1
 librosa>=0.11
 opencv-python-headless>=4.9,<4.12
 faster-whisper>=1.1.0
+av==14.2.0  # Preserve metadata_errors compatibility, as on the tested Mac build.
 openai>=1.0.0
 pillow>=10.0
 # Mixer engine (submodule ./mixer)
