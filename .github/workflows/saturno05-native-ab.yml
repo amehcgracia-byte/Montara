@@ -1,4 +1,5 @@
 name: Saturn 05 isolated native Zucker A/B
+# QA second pass: frame diagnostics and original-file isolation
 on:
   push:
     branches:
