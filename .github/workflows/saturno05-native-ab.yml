@@ -27,7 +27,9 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends ffmpeg fonts-dejavu-core
           pip install -r requirements.txt
-      - name: Native Zucker _render_plan A/B
+      - name: Native Zucker diagnostic with fades disabled (QA runtime only)
+        env:
+          SATURNO_QA_NO_FADES: '1'
         run: |
           python experiments/saturno_05/native_ab.py
       - name: Publish minimal result to logs
