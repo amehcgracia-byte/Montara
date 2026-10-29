@@ -27,7 +27,7 @@ else
 fi
 [ "${MONTARA_OFFLINE:-0}" = 1 ] || git -C "$root" submodule update --init --recursive   # pinned engine/mixer, never moved here
 
-uv venv --python 3.11 "$root/.venv"
+[ -x "$root/.venv/bin/python" ] || uv venv --python 3.11 "$root/.venv"   # re-runs keep the venv
 uv pip install --python "$root/.venv/bin/python" -r "$root/deploy/requirements-linux.lock"
 npm install --prefix "$data/Runtime" --no-audit --no-fund deno@2.5.6
 
