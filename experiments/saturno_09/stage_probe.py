@@ -18,6 +18,8 @@ ROOT = Path(__file__).resolve().parents[2]
 OUT = Path(os.environ.get("SATURNO09_STAGE_OUT", "/tmp/saturno09-stage"))
 OLD = "$('#cameraList .cam').forEach"
 NEW = "$$('#cameraList .cam').forEach"
+OLD2 = "$('[data-camera-type]').forEach"
+NEW2 = "$$('[data-camera-type]').forEach"
 
 
 def server():
@@ -86,6 +88,8 @@ def capture(page, url, out, events):
         data["status_error"] = repr(exc)
     data["json_files"] = {}
     for path in sorted((OUT / "runtime").rglob("*.json")):
+        if "Cache" in path.parts or "cache" in path.parts:
+            continue
         if path.stat().st_size > 1_000_000:
             continue
         # Includes exact edit_plan/project when present, rather than inventing a plan.
@@ -100,7 +104,7 @@ def main():
     OUT.mkdir(parents=True, exist_ok=True)
     report = {"status": "NOT_RUN", "gate_full_stage": False,
               "scope": "Existing real Stage journey, observed original UI then QA-only selector correction",
-              "qa_controls": ["Browser response only: single selector $ -> $$", "libx264 encoder threads:v 1 in server memory"]}
+              "qa_controls": ["Browser response only: two camera-list selectors $ -> $$", "libx264 encoder threads:v 1 in server memory"]}
     proc = None
     try:
         spec = importlib.util.spec_from_file_location("journey", ROOT / "tests/e2e_journey.py")
@@ -128,14 +132,30 @@ def main():
             raise RuntimeError("Server readiness timed out")
         source_js = (ROOT / "web/montara.js").read_text()
         assert source_js.count(OLD) == 1, "UI correction no longer matches exactly one occurrence"
+        assert source_js.count(OLD2) == 1, "Second UI correction no longer matches exactly one occurrence"
+        corrected_js = source_js.replace(OLD, NEW).replace(OLD2, NEW2)
+        report["ui_corrections"] = [{"before": OLD, "after": NEW}, {"before": OLD2, "after": NEW2}]
+        report["original_js_sha256"] = hashlib.sha256(source_js.encode()).hexdigest()
+        report["corrected_js_sha256"] = hashlib.sha256(corrected_js.encode()).hexdigest()
+        # Observational logging of caught exceptions, without changing their handling.
+        corrected_js = corrected_js.replace("function fail(error) {", "function fail(error) { console.error(error.stack);")
+        report["served_js_sha256"] = hashlib.sha256(corrected_js.encode()).hexdigest()
+        arms = (("original", False), ("selector_control", True))
+        if os.environ.get("SATURNO_STAGE_USE_PRIOR_ORIGINAL") == "1":
+            prior = json.loads(Path(__file__).with_name("results_40881393749.json").read_text())
+            assert prior["stage"]["original"]["passed"] is False
+            assert "forEach" in prior["stage"]["original"]["error"]
+            report["original"] = prior["stage"]["original"]
+            report["original_reused_from_run"] = prior["run_id"]
+            arms = (("selector_control", True),)
         from playwright.sync_api import sync_playwright
         with sync_playwright() as pw:
             browser = pw.chromium.launch()
-            for label, corrected in (("original", False), ("selector_control", True)):
+            for label, corrected in arms:
                 context = browser.new_context(viewport={"width": 1440, "height": 960})
                 if corrected:
                     context.route("**/montara.js", lambda route: route.fulfill(
-                        status=200, content_type="application/javascript", body=source_js.replace(OLD, NEW)))
+                        status=200, content_type="application/javascript", body=corrected_js))
                 page = context.new_page()
                 events = []
                 page.on("pageerror", lambda error: events.append({"kind": "pageerror", "message": str(error)}))

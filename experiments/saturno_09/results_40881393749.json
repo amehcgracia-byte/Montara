@@ -1,0 +1,5312 @@
+{
+  "run_id": 40881393749,
+  "job_id": 123473535571,
+  "commit": "55171c00ceafdeb9815c58d1e7b0b6300d501fd9",
+  "reduced": {
+    "status": "PASS_REDUCED_ISOLATED_FLAT_GATE",
+    "scope": "two-second flat-camera reduced-package gate",
+    "full_stage": false,
+    "encoder_override": "QA only: libx264 -threads:v 1",
+    "master_packaging": "First 2.25 s decoded to pcm_f32le WAV; no original master available to B",
+    "package_method": "Historical SAT-05 lossless reencode (3–7 s), not GOP-minimal stream copy",
+    "package_commands": [
+      [
+        "ffmpeg",
+        "-nostdin",
+        "-v",
+        "error",
+        "-y",
+        "-ss",
+        "3",
+        "-i",
+        "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/cam-fixed.mp4",
+        "-t",
+        "4",
+        "-map",
+        "0:v:0",
+        "-an",
+        "-c:v",
+        "libx264",
+        "-qp",
+        "0",
+        "-pix_fmt",
+        "yuv420p",
+        "/tmp/saturno09/package/camera.mkv"
+      ],
+      [
+        "ffmpeg",
+        "-nostdin",
+        "-v",
+        "error",
+        "-y",
+        "-i",
+        "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/master.mp3",
+        "-t",
+        "2.25",
+        "-map",
+        "0:a:0",
+        "-vn",
+        "-c:a",
+        "pcm_f32le",
+        "/tmp/saturno09/package/master.wav"
+      ]
+    ],
+    "package_prepare_sec": 0.3263773309999891,
+    "original_video": {
+      "sha256": "312f4ff0463d1f713c132b9974fdfa443d72ebf9e7432b2d8b839ee6d7919ed3",
+      "bytes": 1416641
+    },
+    "original_audio": {
+      "sha256": "9b2138c11e35ce2d2ef68e866c2cff1c316b065d8c868c94e966fd6dd50fd5e4",
+      "bytes": 1601436
+    },
+    "packaged_video": {
+      "sha256": "a1d55a46426406fc798862571bc5c61db453e01d4483e374ceb96852391c81e2",
+      "bytes": 577828
+    },
+    "packaged_audio": {
+      "sha256": "9068906e53fedb908d0977ac4ef3b78f2702a522b6d5f730752bdc339f55c557",
+      "bytes": 793992
+    },
+    "pre_export": {
+      "video_A": {
+        "sha256": "62d437e0f15f98aa77d7f81df5b86805a59f06149a0f0a0ca97ef25e26359c92",
+        "bytes": 17280000
+      },
+      "video_B": {
+        "sha256": "62d437e0f15f98aa77d7f81df5b86805a59f06149a0f0a0ca97ef25e26359c92",
+        "bytes": 17280000
+      },
+      "audio_A": {
+        "sha256": "31f7a2c0b4c01a0d3db329c957ae9ce8e8125d3dbd0159d7b86548694865d7f3",
+        "bytes": 705600
+      },
+      "audio_B": {
+        "sha256": "31f7a2c0b4c01a0d3db329c957ae9ce8e8125d3dbd0159d7b86548694865d7f3",
+        "bytes": 705600
+      }
+    },
+    "pre_export_exact": true,
+    "specs": {
+      "A_full": {
+        "video": "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/cam-fixed.mp4",
+        "audio": "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/master.mp3",
+        "start": 4,
+        "duration": 2,
+        "folder": "/tmp/saturno09/A_full",
+        "runtime": "/tmp/saturno09/runtime-A_full",
+        "originals": [],
+        "mask": []
+      },
+      "A_repeat": {
+        "video": "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/cam-fixed.mp4",
+        "audio": "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/master.mp3",
+        "start": 4,
+        "duration": 2,
+        "folder": "/tmp/saturno09/A_repeat",
+        "runtime": "/tmp/saturno09/runtime-A_repeat",
+        "originals": [],
+        "mask": []
+      },
+      "B_partial": {
+        "video": "/tmp/saturno09/package/camera.mkv",
+        "audio": "/tmp/saturno09/package/master.wav",
+        "start": 1,
+        "duration": 2,
+        "folder": "/tmp/saturno09/B_partial",
+        "runtime": "/tmp/saturno09/runtime-B_partial",
+        "originals": [
+          "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/cam-fixed.mp4",
+          "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/master.mp3"
+        ],
+        "mask": [
+          "/home/runner/work/Montara/Montara/tests/fixtures",
+          "/tmp/saturno09/A_full",
+          "/tmp/saturno09/A_repeat",
+          "/tmp/saturno09/runtime-A_full",
+          "/tmp/saturno09/runtime-A_repeat"
+        ]
+      }
+    },
+    "results": {
+      "A_full": {
+        "file": "/tmp/saturno09/A_full/render/export.mp4",
+        "elapsed_sec": 4.626127644000007,
+        "bytes": 516447,
+        "sha256": "9df92693b5a5c2efa8b2fbf3fa4a691137951141380e7ce995aa09f143934fe2",
+        "pixels": [
+          "b2b0f75883d46699a63773041d543a5c82e20fb7968ca0ab3c4963fb36d4f354",
+          186624000
+        ],
+        "duration_s": 2,
+        "frame_hashes": [
+          "ed1f277d5b8646b70cdec46c2a45f6face4f769862f15d899d570a6da42c3520",
+          "6a9213c8a934af5f842a81fb85d76407c3eebce05dddf56a2d9cb946669e07be",
+          "a750834c68c0e51704831f85eee095980466bfc0bb11cd354dc36d7432001a6b",
+          "6fc7ac3f113b3635865229b98384d3da364c223f883aa0cb83f0ed9e25f6dc14",
+          "1d63075b70789ca46139910c80fbb19f4c7c966cb87db40692b14003fbe6069b",
+          "3ac2ddd23b616675236519266d5991273cbc50225736cbca57508a855e88ebd9",
+          "0d4c160fda0887f5717388669342071479cc212db90fb2bb133e45ae158d4619",
+          "88bfe5e76107bf2d47c25fea965a60f8d7889666774f4c327e62d1a1dd59866c",
+          "7137ba04a55df2f8925836c98c10f45fa9f94d6b9f43a85d43064f3a251bf93a",
+          "ba7910d7ea978c9c817d1d1fbca1f1a1eb74f19bdf948c1772a5533b247a6d12",
+          "090152bd0f7416f709ce1902a6120736710689b6afa646dfd1ba545a1fd10bc8",
+          "3886f54e593b0683b575fd4337c39cf834eb93c52d8abac4f789a5f1e6f95c76",
+          "35e6e91a749567ce836a9b4997893a05a4e998dfb15991a4bda726d05a3fbe66",
+          "358fd19576f9ba1f8cfb76690c9c852cbb9a9b026a70cbdaf1745a5a88aa2ae5",
+          "5f6d279d4c53b26f2c53061e18a4e6e99aa7c867779e2a25e6d40673d3a0564d",
+          "513ebaa1e1a16aae818e92854492e420031384698b7e83e6c2be507da763c4c1",
+          "33d8e20fe966f522695f4a4a3157355395692a11af583363b8f5ab8bde5d6e42",
+          "fe5dda2f53e1040eaa02032fdae7963effc160f41efa5c7226eca56d46f0534e",
+          "56f4b8179700b52aa2a7580c8abd65d999dbf7d4971978ca44a4ecfea5a5f3b2",
+          "adb4df09f5c0b38664fd23439498f717d1aba3ed598fe824a953a0840197ed95",
+          "ce33bb247b6319b11a0e86ee93350e5c76348d27417ea19ce67bec700a55e557",
+          "3337ed4f7d382813e667ff52754d031086378e46d7522c5a7d0f84d89849f46a",
+          "5eff157985329d917fe758c1b7c27b93587a11e1f99e0f046bf3799ce6402f67",
+          "b191321b9fb097655e1adfddec73de9d36a6adca25be09ce4387727e390a298b",
+          "7f018a8af4cd1b0b4fb8d8f26bba39a023156e8ed20463747199e38497713cb8",
+          "5c4206f6268d3bf16da9314a8266d4bd67badb1bdad51f90115d55cb68a47bf3",
+          "519323aff483ba6fa994b065c7b158203142beaf7ae1c4691b776403b34c8216",
+          "c6e51667ecaa22ee52d463188ab2412f4b4b2b7e4a16e09e3ac930eb1145c8a4",
+          "fba287fdb4810d615e2e85c1ced8b3cf3feda8fbddf7ee26ec0a8526893fb5c8",
+          "3ef6da000cba0629584c3710bb62ff1e9a80358846dbf0b4507613d729a2e7a3",
+          "6f9c0e68c8578a16228a1cb1cca1a4554d31574d5d9e0a27b6bc2caad91520f9",
+          "6251ca778ec013ce349989e3338257efde86870c115b2ee2f07b5274bb46b235",
+          "84e41e6942dd110022cc0126b6bf33f2e6b83cca99c706c7872f28da7bbc2e1d",
+          "53ba342a6bfec5218fba6a6b78be8f6d8d215f22a92ac1f4948dee5f36869247",
+          "0ebff8eef37245277fce76d7e90071a08a29395121cc1987b4fd16d27c846e8e",
+          "68f69cad9483b2a8c299b854b00a9f26df83cbde764b09a04b1417e4355302ca",
+          "709dcc1fd20481da9c758018e8074ed5f9b15189fb0a17c0f4a01fd26cab4c77",
+          "c3ed836cd91f89d450fd277836701631a3a1b7f81f068a9dd9ed489bb0d56870",
+          "916ff32d1129ada87a3e2cd4d93735b90feb17e5b8893c338d5018569c1fb5ec",
+          "6b23ab0a646e33a0334adc76130434108f77db37b430ec88a9c97b08a04a7f78",
+          "810e05a20d83449f674582db31bbb75ad437d0ab50c07ad8d8b5c107b94b7532",
+          "9ebb9a421b5c1d7d8712223b57c7a98ac8870c82236d3bcbbddd24bf59ca6ac8",
+          "17abf8f4949e071c83b33f7a89df5d916d7d941b7bc489e4eb79cb8c41ca36dd",
+          "06584b5ad65ac3bd681a84ee79724d325615b13efb576f608f931b49f3ea7ce2",
+          "b1b180166d4e8a50dab9f451afc811c0417c6e92eb6a46ce3656438fcc893adb",
+          "2aa0aa4aacc7411925f7212417ff4cc9ab7ff7bd315c7b0377e35becda2d65cc",
+          "bc7cf6c53c7528e235aeed4e466c83600223c63e1c0c7095714df2d11e2924c6",
+          "b1618a4ec0e0cc3f6dc1a5908123cd66ccfe6d063af8999f88de51b47008facf",
+          "7ff02d82c8a4076a3ec0239837f703fc242e9984476dbee8a658692906f0bb26",
+          "34cc477dbda9a3e83608c5a3dea52196443b7a6691cbf9dfc209d4f616cb9136",
+          "287cf83a267208b8482d380e51d664b3321095a0757c53b3d9c9963a6ecea9c7",
+          "b438d623cc9b778d96249fc6ebae77457351ec85de1f738fc128744104ae40e0",
+          "c71eb13fab924889a0d52184b9e832c5c04d47230a33dab530101bfaa5d80bbb",
+          "be9bebb2fd410d195a296f4cd7822b53a2cba453b0bb0a933f1661486fd8cef7",
+          "18a155e416d14a73c810e53d5cb8084971077d6bb7c2bbd901d9c53e2b071661",
+          "a0f37cea981d1278499f47e9b844a1bdad4beea18091522015b8655968d9f72e",
+          "69330fdee721328d4d586651a1a80535b26cda8428b94b681e61fb513a5eab4e",
+          "b884bb66681a5edf53442c27d9f7d6c4be4b9de930352ab496dd04981242413f",
+          "fb6bf896b31f7f989746a86e0ff094df5e9eb84a84e4b74ea6c878b0a095761f",
+          "530a3023ee3168c7c4bc67ca08904e38216ba23bc8f39c09f1e92d79f35d34e6"
+        ],
+        "audio": {
+          "sha256": "4b47735b41c6fbf1755032b45f0220e251cfc5ca9b5511ebeff70eb5d4d98749",
+          "bytes": 712704
+        },
+        "timeline": {
+          "packets": [
+            {
+              "stream_index": 0,
+              "pts": 0,
+              "dts": -2000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 0,
+              "pts": 4000,
+              "dts": -1000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": -1024,
+              "dts": -1024,
+              "duration": 1024,
+              "side_data_list": [
+                {
+                  "side_data_type": "Skip Samples",
+                  "skip_samples": 1024,
+                  "discard_padding": 0,
+                  "skip_reason": 0,
+                  "discard_reason": 0
+                }
+              ]
+            },
+            {
+              "stream_index": 0,
+              "pts": 2000,
+              "dts": 0,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 0,
+              "dts": 0,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 1024,
+              "dts": 1024,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 1000,
+              "dts": 1000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 2048,
+              "dts": 2048,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 3000,
+              "dts": 2000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 3072,
+              "dts": 3072,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 4096,
+              "dts": 4096,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 8000,
+              "dts": 3000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 5120,
+              "dts": 5120,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 6000,
+              "dts": 4000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 6144,
+              "dts": 6144,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 7168,
+              "dts": 7168,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 5000,
+              "dts": 5000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 8192,
+              "dts": 8192,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 7000,
+              "dts": 6000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 9216,
+              "dts": 9216,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 10240,
+              "dts": 10240,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 12000,
+              "dts": 7000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 11264,
+              "dts": 11264,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 10000,
+              "dts": 8000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 12288,
+              "dts": 12288,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 9000,
+              "dts": 9000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 13312,
+              "dts": 13312,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 14336,
+              "dts": 14336,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 11000,
+              "dts": 10000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 15360,
+              "dts": 15360,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 16000,
+              "dts": 11000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 16384,
+              "dts": 16384,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 17408,
+              "dts": 17408,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 14000,
+              "dts": 12000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 18432,
+              "dts": 18432,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 13000,
+              "dts": 13000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 19456,
+              "dts": 19456,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 20480,
+              "dts": 20480,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 15000,
+              "dts": 14000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 21504,
+              "dts": 21504,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 20000,
+              "dts": 15000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 22528,
+              "dts": 22528,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 18000,
+              "dts": 16000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 23552,
+              "dts": 23552,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 24576,
+              "dts": 24576,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 17000,
+              "dts": 17000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 25600,
+              "dts": 25600,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 19000,
+              "dts": 18000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 26624,
+              "dts": 26624,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 27648,
+              "dts": 27648,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 24000,
+              "dts": 19000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 28672,
+              "dts": 28672,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 22000,
+              "dts": 20000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 29696,
+              "dts": 29696,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 30720,
+              "dts": 30720,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 21000,
+              "dts": 21000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 31744,
+              "dts": 31744,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 23000,
+              "dts": 22000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 32768,
+              "dts": 32768,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 33792,
+              "dts": 33792,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 28000,
+              "dts": 23000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 34816,
+              "dts": 34816,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 26000,
+              "dts": 24000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 35840,
+              "dts": 35840,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 25000,
+              "dts": 25000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 36864,
+              "dts": 36864,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 37888,
+              "dts": 37888,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 27000,
+              "dts": 26000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 38912,
+              "dts": 38912,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 32000,
+              "dts": 27000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 39936,
+              "dts": 39936,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 40960,
+              "dts": 40960,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 30000,
+              "dts": 28000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 41984,
+              "dts": 41984,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 29000,
+              "dts": 29000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 43008,
+              "dts": 43008,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 44032,
+              "dts": 44032,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 31000,
+              "dts": 30000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 45056,
+              "dts": 45056,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 36000,
+              "dts": 31000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 46080,
+              "dts": 46080,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 34000,
+              "dts": 32000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 47104,
+              "dts": 47104,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 48128,
+              "dts": 48128,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 33000,
+              "dts": 33000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 49152,
+              "dts": 49152,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 35000,
+              "dts": 34000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 50176,
+              "dts": 50176,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 51200,
+              "dts": 51200,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 40000,
+              "dts": 35000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 52224,
+              "dts": 52224,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 38000,
+              "dts": 36000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 53248,
+              "dts": 53248,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 54272,
+              "dts": 54272,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 37000,
+              "dts": 37000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 55296,
+              "dts": 55296,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 39000,
+              "dts": 38000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 56320,
+              "dts": 56320,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 44000,
+              "dts": 39000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 57344,
+              "dts": 57344,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 58368,
+              "dts": 58368,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 42000,
+              "dts": 40000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 59392,
+              "dts": 59392,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 41000,
+              "dts": 41000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 60416,
+              "dts": 60416,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 61440,
+              "dts": 61440,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 43000,
+              "dts": 42000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 62464,
+              "dts": 62464,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 48000,
+              "dts": 43000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 63488,
+              "dts": 63488,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 64512,
+              "dts": 64512,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 46000,
+              "dts": 44000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 65536,
+              "dts": 65536,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 45000,
+              "dts": 45000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 66560,
+              "dts": 66560,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 67584,
+              "dts": 67584,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 47000,
+              "dts": 46000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 68608,
+              "dts": 68608,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 52000,
+              "dts": 47000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 69632,
+              "dts": 69632,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 50000,
+              "dts": 48000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 70656,
+              "dts": 70656,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 71680,
+              "dts": 71680,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 49000,
+              "dts": 49000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 72704,
+              "dts": 72704,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 51000,
+              "dts": 50000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 73728,
+              "dts": 73728,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 74752,
+              "dts": 74752,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 56000,
+              "dts": 51000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 75776,
+              "dts": 75776,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 54000,
+              "dts": 52000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 76800,
+              "dts": 76800,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 77824,
+              "dts": 77824,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 53000,
+              "dts": 53000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 78848,
+              "dts": 78848,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 55000,
+              "dts": 54000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 79872,
+              "dts": 79872,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 59000,
+              "dts": 55000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 80896,
+              "dts": 80896,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 81920,
+              "dts": 81920,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 57000,
+              "dts": 56000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 82944,
+              "dts": 82944,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 58000,
+              "dts": 57000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 83968,
+              "dts": 83968,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 84992,
+              "dts": 84992,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 86016,
+              "dts": 86016,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 87040,
+              "dts": 87040,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 88064,
+              "dts": 88064,
+              "duration": 136
+            }
+          ],
+          "programs": [],
+          "streams": [
+            {
+              "index": 0,
+              "codec_type": "video",
+              "time_base": "1/30000",
+              "start_time": "0.000000",
+              "duration": "2.000000",
+              "nb_frames": "60",
+              "disposition": {
+                "default": 1,
+                "dub": 0,
+                "original": 0,
+                "comment": 0,
+                "lyrics": 0,
+                "karaoke": 0,
+                "forced": 0,
+                "hearing_impaired": 0,
+                "visual_impaired": 0,
+                "clean_effects": 0,
+                "attached_pic": 0,
+                "timed_thumbnails": 0,
+                "non_diegetic": 0,
+                "captions": 0,
+                "descriptions": 0,
+                "metadata": 0,
+                "dependent": 0,
+                "still_image": 0
+              },
+              "tags": {
+                "language": "und",
+                "handler_name": "VideoHandler",
+                "vendor_id": "[0][0][0][0]",
+                "encoder": "Lavc60.31.102 libx264"
+              }
+            },
+            {
+              "index": 1,
+              "codec_type": "audio",
+              "sample_rate": "44100",
+              "channels": 2,
+              "time_base": "1/44100",
+              "start_time": "0.000000",
+              "duration": "2.000000",
+              "nb_frames": "88",
+              "disposition": {
+                "default": 1,
+                "dub": 0,
+                "original": 0,
+                "comment": 0,
+                "lyrics": 0,
+                "karaoke": 0,
+                "forced": 0,
+                "hearing_impaired": 0,
+                "visual_impaired": 0,
+                "clean_effects": 0,
+                "attached_pic": 0,
+                "timed_thumbnails": 0,
+                "non_diegetic": 0,
+                "captions": 0,
+                "descriptions": 0,
+                "metadata": 0,
+                "dependent": 0,
+                "still_image": 0
+              },
+              "tags": {
+                "language": "und",
+                "handler_name": "SoundHandler",
+                "vendor_id": "[0][0][0][0]"
+              }
+            }
+          ]
+        },
+        "isolation": {
+          "requested": false,
+          "masked": [],
+          "original_paths_absent": {}
+        },
+        "cache_root": "/tmp/saturno09/runtime-A_full/Cache",
+        "cache_initial_entries": 0,
+        "traces": [
+          {
+            "command": [
+              "/usr/bin/ffmpeg",
+              "-y",
+              "-hide_banner",
+              "-loglevel",
+              "error",
+              "-nostdin",
+              "-progress",
+              "pipe:1",
+              "-ss",
+              "4.000",
+              "-t",
+              "2.000",
+              "-i",
+              "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/cam-fixed.mp4",
+              "-filter_complex",
+              "[0:v]scale=trunc(iw/2)*2:trunc(ih/2)*2,format=yuv420p,scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p,eq=brightness=0.0000:saturation=1.0000,colorbalance=rs=0.0000:gs=-0.0000:bs=-0.0000:rm=0.0000:gm=-0.0000:bm=-0.0000,fps=fps=30.000:round=near:start_time=0,trim=start_frame=0:end_frame=60,setpts=N/(30.000*TB),fade=t=in:st=0:d=1.500,fade=t=out:st=0.500:d=1.500,tpad=stop_mode=clone:stop_duration=0.033333,format=yuv420p[base];[base]copy[sdr_output];[sdr_output]scale=iw:ih:in_range=auto:out_range=tv:out_color_matrix=bt709,format=yuv420p,setparams=range=limited:colorspace=bt709:color_primaries=bt709:color_trc=bt709[v]",
+              "-map",
+              "[v]",
+              "-pix_fmt",
+              "yuv420p",
+              "-r",
+              "30.000",
+              "-fps_mode",
+              "cfr",
+              "-video_track_timescale",
+              "30000",
+              "-an",
+              "-frames:v",
+              "60",
+              "-movflags",
+              "+faststart",
+              "-color_range",
+              "tv",
+              "-colorspace",
+              "bt709",
+              "-color_primaries",
+              "bt709",
+              "-color_trc",
+              "bt709",
+              "-c:v",
+              "h264_videotoolbox",
+              "-b:v",
+              "2000000",
+              "-maxrate",
+              "2400000",
+              "-bufsize",
+              "4000000",
+              "-profile:v",
+              "high",
+              "/tmp/saturno09/A_full/render/.export-segments/segment-0001.mp4"
+            ],
+            "engine_command": [
+              "/usr/bin/ffmpeg",
+              "-y",
+              "-hide_banner",
+              "-loglevel",
+              "error",
+              "-nostdin",
+              "-progress",
+              "pipe:1",
+              "-ss",
+              "4.000",
+              "-t",
+              "2.000",
+              "-i",
+              "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/cam-fixed.mp4",
+              "-filter_complex",
+              "[0:v]scale=trunc(iw/2)*2:trunc(ih/2)*2,format=yuv420p,scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p,eq=brightness=0.0000:saturation=1.0000,colorbalance=rs=0.0000:gs=-0.0000:bs=-0.0000:rm=0.0000:gm=-0.0000:bm=-0.0000,fps=fps=30.000:round=near:start_time=0,trim=start_frame=0:end_frame=60,setpts=N/(30.000*TB),fade=t=in:st=0:d=1.500,fade=t=out:st=0.500:d=1.500,tpad=stop_mode=clone:stop_duration=0.033333,format=yuv420p[base];[base]copy[sdr_output];[sdr_output]scale=iw:ih:in_range=auto:out_range=tv:out_color_matrix=bt709,format=yuv420p,setparams=range=limited:colorspace=bt709:color_primaries=bt709:color_trc=bt709[v]",
+              "-map",
+              "[v]",
+              "-pix_fmt",
+              "yuv420p",
+              "-r",
+              "30.000",
+              "-fps_mode",
+              "cfr",
+              "-video_track_timescale",
+              "30000",
+              "-an",
+              "-frames:v",
+              "60",
+              "-movflags",
+              "+faststart",
+              "-color_range",
+              "tv",
+              "-colorspace",
+              "bt709",
+              "-color_primaries",
+              "bt709",
+              "-color_trc",
+              "bt709",
+              "-c:v",
+              "h264_videotoolbox",
+              "-b:v",
+              "2000000",
+              "-maxrate",
+              "2400000",
+              "-bufsize",
+              "4000000",
+              "-profile:v",
+              "high",
+              "/tmp/saturno09/A_full/render/.export-segments/segment-0001.mp4"
+            ],
+            "label": "cam-fixed.mp4",
+            "elapsed_sec": 0.0419,
+            "error": "FFmpegError(\"[vost#0:0 @ 0x5632cd42c200] Unknown encoder 'h264_videotoolbox'\\n[vost#0:0 @ 0x5632cd42c200] Error selecting an encoder\\nError opening output file /tmp/saturno09/A_full/render/.export-segments/segment-0001.mp4.\\nError opening output files: Encoder not found\")",
+            "output_exists": false
+          },
+          {
+            "command": [
+              "/usr/bin/ffmpeg",
+              "-y",
+              "-hide_banner",
+              "-loglevel",
+              "error",
+              "-nostdin",
+              "-progress",
+              "pipe:1",
+              "-ss",
+              "4.000",
+              "-t",
+              "2.000",
+              "-i",
+              "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/cam-fixed.mp4",
+              "-filter_complex",
+              "[0:v]scale=trunc(iw/2)*2:trunc(ih/2)*2,format=yuv420p,scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p,eq=brightness=0.0000:saturation=1.0000,colorbalance=rs=0.0000:gs=-0.0000:bs=-0.0000:rm=0.0000:gm=-0.0000:bm=-0.0000,fps=fps=30.000:round=near:start_time=0,trim=start_frame=0:end_frame=60,setpts=N/(30.000*TB),fade=t=in:st=0:d=1.500,fade=t=out:st=0.500:d=1.500,tpad=stop_mode=clone:stop_duration=0.033333,format=yuv420p[base];[base]copy[sdr_output];[sdr_output]scale=iw:ih:in_range=auto:out_range=tv:out_color_matrix=bt709,format=yuv420p,setparams=range=limited:colorspace=bt709:color_primaries=bt709:color_trc=bt709[v]",
+              "-map",
+              "[v]",
+              "-pix_fmt",
+              "yuv420p",
+              "-r",
+              "30.000",
+              "-fps_mode",
+              "cfr",
+              "-video_track_timescale",
+              "30000",
+              "-an",
+              "-frames:v",
+              "60",
+              "-movflags",
+              "+faststart",
+              "-color_range",
+              "tv",
+              "-colorspace",
+              "bt709",
+              "-color_primaries",
+              "bt709",
+              "-color_trc",
+              "bt709",
+              "-c:v",
+              "libx264",
+              "-preset",
+              "veryfast",
+              "-b:v",
+              "2000000",
+              "-maxrate",
+              "2400000",
+              "-bufsize",
+              "4000000",
+              "-threads:v",
+              "1",
+              "/tmp/saturno09/A_full/render/.export-segments/segment-0001.mp4"
+            ],
+            "engine_command": [
+              "/usr/bin/ffmpeg",
+              "-y",
+              "-hide_banner",
+              "-loglevel",
+              "error",
+              "-nostdin",
+              "-progress",
+              "pipe:1",
+              "-ss",
+              "4.000",
+              "-t",
+              "2.000",
+              "-i",
+              "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/cam-fixed.mp4",
+              "-filter_complex",
+              "[0:v]scale=trunc(iw/2)*2:trunc(ih/2)*2,format=yuv420p,scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p,eq=brightness=0.0000:saturation=1.0000,colorbalance=rs=0.0000:gs=-0.0000:bs=-0.0000:rm=0.0000:gm=-0.0000:bm=-0.0000,fps=fps=30.000:round=near:start_time=0,trim=start_frame=0:end_frame=60,setpts=N/(30.000*TB),fade=t=in:st=0:d=1.500,fade=t=out:st=0.500:d=1.500,tpad=stop_mode=clone:stop_duration=0.033333,format=yuv420p[base];[base]copy[sdr_output];[sdr_output]scale=iw:ih:in_range=auto:out_range=tv:out_color_matrix=bt709,format=yuv420p,setparams=range=limited:colorspace=bt709:color_primaries=bt709:color_trc=bt709[v]",
+              "-map",
+              "[v]",
+              "-pix_fmt",
+              "yuv420p",
+              "-r",
+              "30.000",
+              "-fps_mode",
+              "cfr",
+              "-video_track_timescale",
+              "30000",
+              "-an",
+              "-frames:v",
+              "60",
+              "-movflags",
+              "+faststart",
+              "-color_range",
+              "tv",
+              "-colorspace",
+              "bt709",
+              "-color_primaries",
+              "bt709",
+              "-color_trc",
+              "bt709",
+              "-c:v",
+              "libx264",
+              "-preset",
+              "veryfast",
+              "-b:v",
+              "2000000",
+              "-maxrate",
+              "2400000",
+              "-bufsize",
+              "4000000",
+              "/tmp/saturno09/A_full/render/.export-segments/segment-0001.mp4"
+            ],
+            "label": "cam-fixed.mp4",
+            "elapsed_sec": 3.0244,
+            "error": null,
+            "output_exists": true,
+            "output_bytes": 466381,
+            "output_sha256": "8de34d182989bfc450395f1ad216d822458426899404ad3a8a6dc0aa65296564",
+            "frame_hashes": [
+              "ed1f277d5b8646b70cdec46c2a45f6face4f769862f15d899d570a6da42c3520",
+              "6a9213c8a934af5f842a81fb85d76407c3eebce05dddf56a2d9cb946669e07be",
+              "a750834c68c0e51704831f85eee095980466bfc0bb11cd354dc36d7432001a6b",
+              "6fc7ac3f113b3635865229b98384d3da364c223f883aa0cb83f0ed9e25f6dc14",
+              "1d63075b70789ca46139910c80fbb19f4c7c966cb87db40692b14003fbe6069b",
+              "3ac2ddd23b616675236519266d5991273cbc50225736cbca57508a855e88ebd9",
+              "0d4c160fda0887f5717388669342071479cc212db90fb2bb133e45ae158d4619",
+              "88bfe5e76107bf2d47c25fea965a60f8d7889666774f4c327e62d1a1dd59866c",
+              "7137ba04a55df2f8925836c98c10f45fa9f94d6b9f43a85d43064f3a251bf93a",
+              "ba7910d7ea978c9c817d1d1fbca1f1a1eb74f19bdf948c1772a5533b247a6d12",
+              "090152bd0f7416f709ce1902a6120736710689b6afa646dfd1ba545a1fd10bc8",
+              "3886f54e593b0683b575fd4337c39cf834eb93c52d8abac4f789a5f1e6f95c76",
+              "35e6e91a749567ce836a9b4997893a05a4e998dfb15991a4bda726d05a3fbe66",
+              "358fd19576f9ba1f8cfb76690c9c852cbb9a9b026a70cbdaf1745a5a88aa2ae5",
+              "5f6d279d4c53b26f2c53061e18a4e6e99aa7c867779e2a25e6d40673d3a0564d",
+              "513ebaa1e1a16aae818e92854492e420031384698b7e83e6c2be507da763c4c1",
+              "33d8e20fe966f522695f4a4a3157355395692a11af583363b8f5ab8bde5d6e42",
+              "fe5dda2f53e1040eaa02032fdae7963effc160f41efa5c7226eca56d46f0534e",
+              "56f4b8179700b52aa2a7580c8abd65d999dbf7d4971978ca44a4ecfea5a5f3b2",
+              "adb4df09f5c0b38664fd23439498f717d1aba3ed598fe824a953a0840197ed95",
+              "ce33bb247b6319b11a0e86ee93350e5c76348d27417ea19ce67bec700a55e557",
+              "3337ed4f7d382813e667ff52754d031086378e46d7522c5a7d0f84d89849f46a",
+              "5eff157985329d917fe758c1b7c27b93587a11e1f99e0f046bf3799ce6402f67",
+              "b191321b9fb097655e1adfddec73de9d36a6adca25be09ce4387727e390a298b",
+              "7f018a8af4cd1b0b4fb8d8f26bba39a023156e8ed20463747199e38497713cb8",
+              "5c4206f6268d3bf16da9314a8266d4bd67badb1bdad51f90115d55cb68a47bf3",
+              "519323aff483ba6fa994b065c7b158203142beaf7ae1c4691b776403b34c8216",
+              "c6e51667ecaa22ee52d463188ab2412f4b4b2b7e4a16e09e3ac930eb1145c8a4",
+              "fba287fdb4810d615e2e85c1ced8b3cf3feda8fbddf7ee26ec0a8526893fb5c8",
+              "3ef6da000cba0629584c3710bb62ff1e9a80358846dbf0b4507613d729a2e7a3",
+              "6f9c0e68c8578a16228a1cb1cca1a4554d31574d5d9e0a27b6bc2caad91520f9",
+              "6251ca778ec013ce349989e3338257efde86870c115b2ee2f07b5274bb46b235",
+              "84e41e6942dd110022cc0126b6bf33f2e6b83cca99c706c7872f28da7bbc2e1d",
+              "53ba342a6bfec5218fba6a6b78be8f6d8d215f22a92ac1f4948dee5f36869247",
+              "0ebff8eef37245277fce76d7e90071a08a29395121cc1987b4fd16d27c846e8e",
+              "68f69cad9483b2a8c299b854b00a9f26df83cbde764b09a04b1417e4355302ca",
+              "709dcc1fd20481da9c758018e8074ed5f9b15189fb0a17c0f4a01fd26cab4c77",
+              "c3ed836cd91f89d450fd277836701631a3a1b7f81f068a9dd9ed489bb0d56870",
+              "916ff32d1129ada87a3e2cd4d93735b90feb17e5b8893c338d5018569c1fb5ec",
+              "6b23ab0a646e33a0334adc76130434108f77db37b430ec88a9c97b08a04a7f78",
+              "810e05a20d83449f674582db31bbb75ad437d0ab50c07ad8d8b5c107b94b7532",
+              "9ebb9a421b5c1d7d8712223b57c7a98ac8870c82236d3bcbbddd24bf59ca6ac8",
+              "17abf8f4949e071c83b33f7a89df5d916d7d941b7bc489e4eb79cb8c41ca36dd",
+              "06584b5ad65ac3bd681a84ee79724d325615b13efb576f608f931b49f3ea7ce2",
+              "b1b180166d4e8a50dab9f451afc811c0417c6e92eb6a46ce3656438fcc893adb",
+              "2aa0aa4aacc7411925f7212417ff4cc9ab7ff7bd315c7b0377e35becda2d65cc",
+              "bc7cf6c53c7528e235aeed4e466c83600223c63e1c0c7095714df2d11e2924c6",
+              "b1618a4ec0e0cc3f6dc1a5908123cd66ccfe6d063af8999f88de51b47008facf",
+              "7ff02d82c8a4076a3ec0239837f703fc242e9984476dbee8a658692906f0bb26",
+              "34cc477dbda9a3e83608c5a3dea52196443b7a6691cbf9dfc209d4f616cb9136",
+              "287cf83a267208b8482d380e51d664b3321095a0757c53b3d9c9963a6ecea9c7",
+              "b438d623cc9b778d96249fc6ebae77457351ec85de1f738fc128744104ae40e0",
+              "c71eb13fab924889a0d52184b9e832c5c04d47230a33dab530101bfaa5d80bbb",
+              "be9bebb2fd410d195a296f4cd7822b53a2cba453b0bb0a933f1661486fd8cef7",
+              "18a155e416d14a73c810e53d5cb8084971077d6bb7c2bbd901d9c53e2b071661",
+              "a0f37cea981d1278499f47e9b844a1bdad4beea18091522015b8655968d9f72e",
+              "69330fdee721328d4d586651a1a80535b26cda8428b94b681e61fb513a5eab4e",
+              "b884bb66681a5edf53442c27d9f7d6c4be4b9de930352ab496dd04981242413f",
+              "fb6bf896b31f7f989746a86e0ff094df5e9eb84a84e4b74ea6c878b0a095761f",
+              "530a3023ee3168c7c4bc67ca08904e38216ba23bc8f39c09f1e92d79f35d34e6"
+            ]
+          },
+          {
+            "command": [
+              "/usr/bin/ffmpeg",
+              "-y",
+              "-hide_banner",
+              "-loglevel",
+              "error",
+              "-nostdin",
+              "-progress",
+              "pipe:1",
+              "-f",
+              "concat",
+              "-safe",
+              "0",
+              "-i",
+              "/tmp/saturno09/A_full/render/.export-segments/concat.txt",
+              "-ss",
+              "0.000",
+              "-i",
+              "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/master.mp3",
+              "-filter_complex",
+              "[1:a:0]atrim=duration=2.000,asetpts=PTS-STARTPTS,apad,atrim=0:2.000,asetpts=PTS-STARTPTS,afade=t=in:st=0.000:d=1.500,afade=t=out:st=0.500:d=1.500[a]",
+              "-map",
+              "0:v:0",
+              "-map",
+              "[a]",
+              "-c:v",
+              "copy",
+              "-c:a",
+              "aac",
+              "-b:a",
+              "192k",
+              "-t",
+              "2.000",
+              "-movflags",
+              "+faststart",
+              "/tmp/saturno09/A_full/render/.export-segments/.direct-master.partial.mp4"
+            ],
+            "engine_command": [
+              "/usr/bin/ffmpeg",
+              "-y",
+              "-hide_banner",
+              "-loglevel",
+              "error",
+              "-nostdin",
+              "-progress",
+              "pipe:1",
+              "-f",
+              "concat",
+              "-safe",
+              "0",
+              "-i",
+              "/tmp/saturno09/A_full/render/.export-segments/concat.txt",
+              "-ss",
+              "0.000",
+              "-i",
+              "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/master.mp3",
+              "-filter_complex",
+              "[1:a:0]atrim=duration=2.000,asetpts=PTS-STARTPTS,apad,atrim=0:2.000,asetpts=PTS-STARTPTS,afade=t=in:st=0.000:d=1.500,afade=t=out:st=0.500:d=1.500[a]",
+              "-map",
+              "0:v:0",
+              "-map",
+              "[a]",
+              "-c:v",
+              "copy",
+              "-c:a",
+              "aac",
+              "-b:a",
+              "192k",
+              "-t",
+              "2.000",
+              "-movflags",
+              "+faststart",
+              "/tmp/saturno09/A_full/render/.export-segments/.direct-master.partial.mp4"
+            ],
+            "label": "Joining segments",
+            "elapsed_sec": 0.1049,
+            "error": null,
+            "output_exists": true,
+            "output_bytes": 516447,
+            "output_sha256": "9df92693b5a5c2efa8b2fbf3fa4a691137951141380e7ce995aa09f143934fe2",
+            "frame_hashes": [
+              "ed1f277d5b8646b70cdec46c2a45f6face4f769862f15d899d570a6da42c3520",
+              "6a9213c8a934af5f842a81fb85d76407c3eebce05dddf56a2d9cb946669e07be",
+              "a750834c68c0e51704831f85eee095980466bfc0bb11cd354dc36d7432001a6b",
+              "6fc7ac3f113b3635865229b98384d3da364c223f883aa0cb83f0ed9e25f6dc14",
+              "1d63075b70789ca46139910c80fbb19f4c7c966cb87db40692b14003fbe6069b",
+              "3ac2ddd23b616675236519266d5991273cbc50225736cbca57508a855e88ebd9",
+              "0d4c160fda0887f5717388669342071479cc212db90fb2bb133e45ae158d4619",
+              "88bfe5e76107bf2d47c25fea965a60f8d7889666774f4c327e62d1a1dd59866c",
+              "7137ba04a55df2f8925836c98c10f45fa9f94d6b9f43a85d43064f3a251bf93a",
+              "ba7910d7ea978c9c817d1d1fbca1f1a1eb74f19bdf948c1772a5533b247a6d12",
+              "090152bd0f7416f709ce1902a6120736710689b6afa646dfd1ba545a1fd10bc8",
+              "3886f54e593b0683b575fd4337c39cf834eb93c52d8abac4f789a5f1e6f95c76",
+              "35e6e91a749567ce836a9b4997893a05a4e998dfb15991a4bda726d05a3fbe66",
+              "358fd19576f9ba1f8cfb76690c9c852cbb9a9b026a70cbdaf1745a5a88aa2ae5",
+              "5f6d279d4c53b26f2c53061e18a4e6e99aa7c867779e2a25e6d40673d3a0564d",
+              "513ebaa1e1a16aae818e92854492e420031384698b7e83e6c2be507da763c4c1",
+              "33d8e20fe966f522695f4a4a3157355395692a11af583363b8f5ab8bde5d6e42",
+              "fe5dda2f53e1040eaa02032fdae7963effc160f41efa5c7226eca56d46f0534e",
+              "56f4b8179700b52aa2a7580c8abd65d999dbf7d4971978ca44a4ecfea5a5f3b2",
+              "adb4df09f5c0b38664fd23439498f717d1aba3ed598fe824a953a0840197ed95",
+              "ce33bb247b6319b11a0e86ee93350e5c76348d27417ea19ce67bec700a55e557",
+              "3337ed4f7d382813e667ff52754d031086378e46d7522c5a7d0f84d89849f46a",
+              "5eff157985329d917fe758c1b7c27b93587a11e1f99e0f046bf3799ce6402f67",
+              "b191321b9fb097655e1adfddec73de9d36a6adca25be09ce4387727e390a298b",
+              "7f018a8af4cd1b0b4fb8d8f26bba39a023156e8ed20463747199e38497713cb8",
+              "5c4206f6268d3bf16da9314a8266d4bd67badb1bdad51f90115d55cb68a47bf3",
+              "519323aff483ba6fa994b065c7b158203142beaf7ae1c4691b776403b34c8216",
+              "c6e51667ecaa22ee52d463188ab2412f4b4b2b7e4a16e09e3ac930eb1145c8a4",
+              "fba287fdb4810d615e2e85c1ced8b3cf3feda8fbddf7ee26ec0a8526893fb5c8",
+              "3ef6da000cba0629584c3710bb62ff1e9a80358846dbf0b4507613d729a2e7a3",
+              "6f9c0e68c8578a16228a1cb1cca1a4554d31574d5d9e0a27b6bc2caad91520f9",
+              "6251ca778ec013ce349989e3338257efde86870c115b2ee2f07b5274bb46b235",
+              "84e41e6942dd110022cc0126b6bf33f2e6b83cca99c706c7872f28da7bbc2e1d",
+              "53ba342a6bfec5218fba6a6b78be8f6d8d215f22a92ac1f4948dee5f36869247",
+              "0ebff8eef37245277fce76d7e90071a08a29395121cc1987b4fd16d27c846e8e",
+              "68f69cad9483b2a8c299b854b00a9f26df83cbde764b09a04b1417e4355302ca",
+              "709dcc1fd20481da9c758018e8074ed5f9b15189fb0a17c0f4a01fd26cab4c77",
+              "c3ed836cd91f89d450fd277836701631a3a1b7f81f068a9dd9ed489bb0d56870",
+              "916ff32d1129ada87a3e2cd4d93735b90feb17e5b8893c338d5018569c1fb5ec",
+              "6b23ab0a646e33a0334adc76130434108f77db37b430ec88a9c97b08a04a7f78",
+              "810e05a20d83449f674582db31bbb75ad437d0ab50c07ad8d8b5c107b94b7532",
+              "9ebb9a421b5c1d7d8712223b57c7a98ac8870c82236d3bcbbddd24bf59ca6ac8",
+              "17abf8f4949e071c83b33f7a89df5d916d7d941b7bc489e4eb79cb8c41ca36dd",
+              "06584b5ad65ac3bd681a84ee79724d325615b13efb576f608f931b49f3ea7ce2",
+              "b1b180166d4e8a50dab9f451afc811c0417c6e92eb6a46ce3656438fcc893adb",
+              "2aa0aa4aacc7411925f7212417ff4cc9ab7ff7bd315c7b0377e35becda2d65cc",
+              "bc7cf6c53c7528e235aeed4e466c83600223c63e1c0c7095714df2d11e2924c6",
+              "b1618a4ec0e0cc3f6dc1a5908123cd66ccfe6d063af8999f88de51b47008facf",
+              "7ff02d82c8a4076a3ec0239837f703fc242e9984476dbee8a658692906f0bb26",
+              "34cc477dbda9a3e83608c5a3dea52196443b7a6691cbf9dfc209d4f616cb9136",
+              "287cf83a267208b8482d380e51d664b3321095a0757c53b3d9c9963a6ecea9c7",
+              "b438d623cc9b778d96249fc6ebae77457351ec85de1f738fc128744104ae40e0",
+              "c71eb13fab924889a0d52184b9e832c5c04d47230a33dab530101bfaa5d80bbb",
+              "be9bebb2fd410d195a296f4cd7822b53a2cba453b0bb0a933f1661486fd8cef7",
+              "18a155e416d14a73c810e53d5cb8084971077d6bb7c2bbd901d9c53e2b071661",
+              "a0f37cea981d1278499f47e9b844a1bdad4beea18091522015b8655968d9f72e",
+              "69330fdee721328d4d586651a1a80535b26cda8428b94b681e61fb513a5eab4e",
+              "b884bb66681a5edf53442c27d9f7d6c4be4b9de930352ab496dd04981242413f",
+              "fb6bf896b31f7f989746a86e0ff094df5e9eb84a84e4b74ea6c878b0a095761f",
+              "530a3023ee3168c7c4bc67ca08904e38216ba23bc8f39c09f1e92d79f35d34e6"
+            ]
+          }
+        ]
+      },
+      "A_repeat": {
+        "file": "/tmp/saturno09/A_repeat/render/export.mp4",
+        "elapsed_sec": 4.639057301999998,
+        "bytes": 516447,
+        "sha256": "9df92693b5a5c2efa8b2fbf3fa4a691137951141380e7ce995aa09f143934fe2",
+        "pixels": [
+          "b2b0f75883d46699a63773041d543a5c82e20fb7968ca0ab3c4963fb36d4f354",
+          186624000
+        ],
+        "duration_s": 2,
+        "frame_hashes": [
+          "ed1f277d5b8646b70cdec46c2a45f6face4f769862f15d899d570a6da42c3520",
+          "6a9213c8a934af5f842a81fb85d76407c3eebce05dddf56a2d9cb946669e07be",
+          "a750834c68c0e51704831f85eee095980466bfc0bb11cd354dc36d7432001a6b",
+          "6fc7ac3f113b3635865229b98384d3da364c223f883aa0cb83f0ed9e25f6dc14",
+          "1d63075b70789ca46139910c80fbb19f4c7c966cb87db40692b14003fbe6069b",
+          "3ac2ddd23b616675236519266d5991273cbc50225736cbca57508a855e88ebd9",
+          "0d4c160fda0887f5717388669342071479cc212db90fb2bb133e45ae158d4619",
+          "88bfe5e76107bf2d47c25fea965a60f8d7889666774f4c327e62d1a1dd59866c",
+          "7137ba04a55df2f8925836c98c10f45fa9f94d6b9f43a85d43064f3a251bf93a",
+          "ba7910d7ea978c9c817d1d1fbca1f1a1eb74f19bdf948c1772a5533b247a6d12",
+          "090152bd0f7416f709ce1902a6120736710689b6afa646dfd1ba545a1fd10bc8",
+          "3886f54e593b0683b575fd4337c39cf834eb93c52d8abac4f789a5f1e6f95c76",
+          "35e6e91a749567ce836a9b4997893a05a4e998dfb15991a4bda726d05a3fbe66",
+          "358fd19576f9ba1f8cfb76690c9c852cbb9a9b026a70cbdaf1745a5a88aa2ae5",
+          "5f6d279d4c53b26f2c53061e18a4e6e99aa7c867779e2a25e6d40673d3a0564d",
+          "513ebaa1e1a16aae818e92854492e420031384698b7e83e6c2be507da763c4c1",
+          "33d8e20fe966f522695f4a4a3157355395692a11af583363b8f5ab8bde5d6e42",
+          "fe5dda2f53e1040eaa02032fdae7963effc160f41efa5c7226eca56d46f0534e",
+          "56f4b8179700b52aa2a7580c8abd65d999dbf7d4971978ca44a4ecfea5a5f3b2",
+          "adb4df09f5c0b38664fd23439498f717d1aba3ed598fe824a953a0840197ed95",
+          "ce33bb247b6319b11a0e86ee93350e5c76348d27417ea19ce67bec700a55e557",
+          "3337ed4f7d382813e667ff52754d031086378e46d7522c5a7d0f84d89849f46a",
+          "5eff157985329d917fe758c1b7c27b93587a11e1f99e0f046bf3799ce6402f67",
+          "b191321b9fb097655e1adfddec73de9d36a6adca25be09ce4387727e390a298b",
+          "7f018a8af4cd1b0b4fb8d8f26bba39a023156e8ed20463747199e38497713cb8",
+          "5c4206f6268d3bf16da9314a8266d4bd67badb1bdad51f90115d55cb68a47bf3",
+          "519323aff483ba6fa994b065c7b158203142beaf7ae1c4691b776403b34c8216",
+          "c6e51667ecaa22ee52d463188ab2412f4b4b2b7e4a16e09e3ac930eb1145c8a4",
+          "fba287fdb4810d615e2e85c1ced8b3cf3feda8fbddf7ee26ec0a8526893fb5c8",
+          "3ef6da000cba0629584c3710bb62ff1e9a80358846dbf0b4507613d729a2e7a3",
+          "6f9c0e68c8578a16228a1cb1cca1a4554d31574d5d9e0a27b6bc2caad91520f9",
+          "6251ca778ec013ce349989e3338257efde86870c115b2ee2f07b5274bb46b235",
+          "84e41e6942dd110022cc0126b6bf33f2e6b83cca99c706c7872f28da7bbc2e1d",
+          "53ba342a6bfec5218fba6a6b78be8f6d8d215f22a92ac1f4948dee5f36869247",
+          "0ebff8eef37245277fce76d7e90071a08a29395121cc1987b4fd16d27c846e8e",
+          "68f69cad9483b2a8c299b854b00a9f26df83cbde764b09a04b1417e4355302ca",
+          "709dcc1fd20481da9c758018e8074ed5f9b15189fb0a17c0f4a01fd26cab4c77",
+          "c3ed836cd91f89d450fd277836701631a3a1b7f81f068a9dd9ed489bb0d56870",
+          "916ff32d1129ada87a3e2cd4d93735b90feb17e5b8893c338d5018569c1fb5ec",
+          "6b23ab0a646e33a0334adc76130434108f77db37b430ec88a9c97b08a04a7f78",
+          "810e05a20d83449f674582db31bbb75ad437d0ab50c07ad8d8b5c107b94b7532",
+          "9ebb9a421b5c1d7d8712223b57c7a98ac8870c82236d3bcbbddd24bf59ca6ac8",
+          "17abf8f4949e071c83b33f7a89df5d916d7d941b7bc489e4eb79cb8c41ca36dd",
+          "06584b5ad65ac3bd681a84ee79724d325615b13efb576f608f931b49f3ea7ce2",
+          "b1b180166d4e8a50dab9f451afc811c0417c6e92eb6a46ce3656438fcc893adb",
+          "2aa0aa4aacc7411925f7212417ff4cc9ab7ff7bd315c7b0377e35becda2d65cc",
+          "bc7cf6c53c7528e235aeed4e466c83600223c63e1c0c7095714df2d11e2924c6",
+          "b1618a4ec0e0cc3f6dc1a5908123cd66ccfe6d063af8999f88de51b47008facf",
+          "7ff02d82c8a4076a3ec0239837f703fc242e9984476dbee8a658692906f0bb26",
+          "34cc477dbda9a3e83608c5a3dea52196443b7a6691cbf9dfc209d4f616cb9136",
+          "287cf83a267208b8482d380e51d664b3321095a0757c53b3d9c9963a6ecea9c7",
+          "b438d623cc9b778d96249fc6ebae77457351ec85de1f738fc128744104ae40e0",
+          "c71eb13fab924889a0d52184b9e832c5c04d47230a33dab530101bfaa5d80bbb",
+          "be9bebb2fd410d195a296f4cd7822b53a2cba453b0bb0a933f1661486fd8cef7",
+          "18a155e416d14a73c810e53d5cb8084971077d6bb7c2bbd901d9c53e2b071661",
+          "a0f37cea981d1278499f47e9b844a1bdad4beea18091522015b8655968d9f72e",
+          "69330fdee721328d4d586651a1a80535b26cda8428b94b681e61fb513a5eab4e",
+          "b884bb66681a5edf53442c27d9f7d6c4be4b9de930352ab496dd04981242413f",
+          "fb6bf896b31f7f989746a86e0ff094df5e9eb84a84e4b74ea6c878b0a095761f",
+          "530a3023ee3168c7c4bc67ca08904e38216ba23bc8f39c09f1e92d79f35d34e6"
+        ],
+        "audio": {
+          "sha256": "4b47735b41c6fbf1755032b45f0220e251cfc5ca9b5511ebeff70eb5d4d98749",
+          "bytes": 712704
+        },
+        "timeline": {
+          "packets": [
+            {
+              "stream_index": 0,
+              "pts": 0,
+              "dts": -2000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 0,
+              "pts": 4000,
+              "dts": -1000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": -1024,
+              "dts": -1024,
+              "duration": 1024,
+              "side_data_list": [
+                {
+                  "side_data_type": "Skip Samples",
+                  "skip_samples": 1024,
+                  "discard_padding": 0,
+                  "skip_reason": 0,
+                  "discard_reason": 0
+                }
+              ]
+            },
+            {
+              "stream_index": 0,
+              "pts": 2000,
+              "dts": 0,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 0,
+              "dts": 0,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 1024,
+              "dts": 1024,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 1000,
+              "dts": 1000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 2048,
+              "dts": 2048,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 3000,
+              "dts": 2000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 3072,
+              "dts": 3072,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 4096,
+              "dts": 4096,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 8000,
+              "dts": 3000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 5120,
+              "dts": 5120,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 6000,
+              "dts": 4000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 6144,
+              "dts": 6144,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 7168,
+              "dts": 7168,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 5000,
+              "dts": 5000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 8192,
+              "dts": 8192,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 7000,
+              "dts": 6000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 9216,
+              "dts": 9216,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 10240,
+              "dts": 10240,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 12000,
+              "dts": 7000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 11264,
+              "dts": 11264,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 10000,
+              "dts": 8000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 12288,
+              "dts": 12288,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 9000,
+              "dts": 9000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 13312,
+              "dts": 13312,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 14336,
+              "dts": 14336,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 11000,
+              "dts": 10000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 15360,
+              "dts": 15360,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 16000,
+              "dts": 11000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 16384,
+              "dts": 16384,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 17408,
+              "dts": 17408,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 14000,
+              "dts": 12000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 18432,
+              "dts": 18432,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 13000,
+              "dts": 13000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 19456,
+              "dts": 19456,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 20480,
+              "dts": 20480,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 15000,
+              "dts": 14000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 21504,
+              "dts": 21504,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 20000,
+              "dts": 15000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 22528,
+              "dts": 22528,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 18000,
+              "dts": 16000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 23552,
+              "dts": 23552,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 24576,
+              "dts": 24576,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 17000,
+              "dts": 17000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 25600,
+              "dts": 25600,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 19000,
+              "dts": 18000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 26624,
+              "dts": 26624,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 27648,
+              "dts": 27648,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 24000,
+              "dts": 19000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 28672,
+              "dts": 28672,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 22000,
+              "dts": 20000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 29696,
+              "dts": 29696,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 30720,
+              "dts": 30720,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 21000,
+              "dts": 21000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 31744,
+              "dts": 31744,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 23000,
+              "dts": 22000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 32768,
+              "dts": 32768,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 33792,
+              "dts": 33792,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 28000,
+              "dts": 23000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 34816,
+              "dts": 34816,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 26000,
+              "dts": 24000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 35840,
+              "dts": 35840,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 25000,
+              "dts": 25000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 36864,
+              "dts": 36864,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 37888,
+              "dts": 37888,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 27000,
+              "dts": 26000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 38912,
+              "dts": 38912,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 32000,
+              "dts": 27000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 39936,
+              "dts": 39936,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 40960,
+              "dts": 40960,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 30000,
+              "dts": 28000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 41984,
+              "dts": 41984,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 29000,
+              "dts": 29000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 43008,
+              "dts": 43008,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 44032,
+              "dts": 44032,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 31000,
+              "dts": 30000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 45056,
+              "dts": 45056,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 36000,
+              "dts": 31000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 46080,
+              "dts": 46080,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 34000,
+              "dts": 32000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 47104,
+              "dts": 47104,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 48128,
+              "dts": 48128,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 33000,
+              "dts": 33000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 49152,
+              "dts": 49152,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 35000,
+              "dts": 34000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 50176,
+              "dts": 50176,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 51200,
+              "dts": 51200,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 40000,
+              "dts": 35000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 52224,
+              "dts": 52224,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 38000,
+              "dts": 36000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 53248,
+              "dts": 53248,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 54272,
+              "dts": 54272,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 37000,
+              "dts": 37000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 55296,
+              "dts": 55296,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 39000,
+              "dts": 38000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 56320,
+              "dts": 56320,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 44000,
+              "dts": 39000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 57344,
+              "dts": 57344,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 58368,
+              "dts": 58368,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 42000,
+              "dts": 40000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 59392,
+              "dts": 59392,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 41000,
+              "dts": 41000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 60416,
+              "dts": 60416,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 61440,
+              "dts": 61440,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 43000,
+              "dts": 42000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 62464,
+              "dts": 62464,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 48000,
+              "dts": 43000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 63488,
+              "dts": 63488,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 64512,
+              "dts": 64512,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 46000,
+              "dts": 44000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 65536,
+              "dts": 65536,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 45000,
+              "dts": 45000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 66560,
+              "dts": 66560,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 67584,
+              "dts": 67584,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 47000,
+              "dts": 46000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 68608,
+              "dts": 68608,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 52000,
+              "dts": 47000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 69632,
+              "dts": 69632,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 50000,
+              "dts": 48000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 70656,
+              "dts": 70656,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 71680,
+              "dts": 71680,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 49000,
+              "dts": 49000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 72704,
+              "dts": 72704,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 51000,
+              "dts": 50000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 73728,
+              "dts": 73728,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 74752,
+              "dts": 74752,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 56000,
+              "dts": 51000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 75776,
+              "dts": 75776,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 54000,
+              "dts": 52000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 76800,
+              "dts": 76800,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 77824,
+              "dts": 77824,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 53000,
+              "dts": 53000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 78848,
+              "dts": 78848,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 55000,
+              "dts": 54000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 79872,
+              "dts": 79872,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 59000,
+              "dts": 55000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 80896,
+              "dts": 80896,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 81920,
+              "dts": 81920,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 57000,
+              "dts": 56000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 82944,
+              "dts": 82944,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 58000,
+              "dts": 57000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 83968,
+              "dts": 83968,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 84992,
+              "dts": 84992,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 86016,
+              "dts": 86016,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 87040,
+              "dts": 87040,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 88064,
+              "dts": 88064,
+              "duration": 136
+            }
+          ],
+          "programs": [],
+          "streams": [
+            {
+              "index": 0,
+              "codec_type": "video",
+              "time_base": "1/30000",
+              "start_time": "0.000000",
+              "duration": "2.000000",
+              "nb_frames": "60",
+              "disposition": {
+                "default": 1,
+                "dub": 0,
+                "original": 0,
+                "comment": 0,
+                "lyrics": 0,
+                "karaoke": 0,
+                "forced": 0,
+                "hearing_impaired": 0,
+                "visual_impaired": 0,
+                "clean_effects": 0,
+                "attached_pic": 0,
+                "timed_thumbnails": 0,
+                "non_diegetic": 0,
+                "captions": 0,
+                "descriptions": 0,
+                "metadata": 0,
+                "dependent": 0,
+                "still_image": 0
+              },
+              "tags": {
+                "language": "und",
+                "handler_name": "VideoHandler",
+                "vendor_id": "[0][0][0][0]",
+                "encoder": "Lavc60.31.102 libx264"
+              }
+            },
+            {
+              "index": 1,
+              "codec_type": "audio",
+              "sample_rate": "44100",
+              "channels": 2,
+              "time_base": "1/44100",
+              "start_time": "0.000000",
+              "duration": "2.000000",
+              "nb_frames": "88",
+              "disposition": {
+                "default": 1,
+                "dub": 0,
+                "original": 0,
+                "comment": 0,
+                "lyrics": 0,
+                "karaoke": 0,
+                "forced": 0,
+                "hearing_impaired": 0,
+                "visual_impaired": 0,
+                "clean_effects": 0,
+                "attached_pic": 0,
+                "timed_thumbnails": 0,
+                "non_diegetic": 0,
+                "captions": 0,
+                "descriptions": 0,
+                "metadata": 0,
+                "dependent": 0,
+                "still_image": 0
+              },
+              "tags": {
+                "language": "und",
+                "handler_name": "SoundHandler",
+                "vendor_id": "[0][0][0][0]"
+              }
+            }
+          ]
+        },
+        "isolation": {
+          "requested": false,
+          "masked": [],
+          "original_paths_absent": {}
+        },
+        "cache_root": "/tmp/saturno09/runtime-A_repeat/Cache",
+        "cache_initial_entries": 0,
+        "traces": [
+          {
+            "command": [
+              "/usr/bin/ffmpeg",
+              "-y",
+              "-hide_banner",
+              "-loglevel",
+              "error",
+              "-nostdin",
+              "-progress",
+              "pipe:1",
+              "-ss",
+              "4.000",
+              "-t",
+              "2.000",
+              "-i",
+              "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/cam-fixed.mp4",
+              "-filter_complex",
+              "[0:v]scale=trunc(iw/2)*2:trunc(ih/2)*2,format=yuv420p,scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p,eq=brightness=0.0000:saturation=1.0000,colorbalance=rs=0.0000:gs=-0.0000:bs=-0.0000:rm=0.0000:gm=-0.0000:bm=-0.0000,fps=fps=30.000:round=near:start_time=0,trim=start_frame=0:end_frame=60,setpts=N/(30.000*TB),fade=t=in:st=0:d=1.500,fade=t=out:st=0.500:d=1.500,tpad=stop_mode=clone:stop_duration=0.033333,format=yuv420p[base];[base]copy[sdr_output];[sdr_output]scale=iw:ih:in_range=auto:out_range=tv:out_color_matrix=bt709,format=yuv420p,setparams=range=limited:colorspace=bt709:color_primaries=bt709:color_trc=bt709[v]",
+              "-map",
+              "[v]",
+              "-pix_fmt",
+              "yuv420p",
+              "-r",
+              "30.000",
+              "-fps_mode",
+              "cfr",
+              "-video_track_timescale",
+              "30000",
+              "-an",
+              "-frames:v",
+              "60",
+              "-movflags",
+              "+faststart",
+              "-color_range",
+              "tv",
+              "-colorspace",
+              "bt709",
+              "-color_primaries",
+              "bt709",
+              "-color_trc",
+              "bt709",
+              "-c:v",
+              "h264_videotoolbox",
+              "-b:v",
+              "2000000",
+              "-maxrate",
+              "2400000",
+              "-bufsize",
+              "4000000",
+              "-profile:v",
+              "high",
+              "/tmp/saturno09/A_repeat/render/.export-segments/segment-0001.mp4"
+            ],
+            "engine_command": [
+              "/usr/bin/ffmpeg",
+              "-y",
+              "-hide_banner",
+              "-loglevel",
+              "error",
+              "-nostdin",
+              "-progress",
+              "pipe:1",
+              "-ss",
+              "4.000",
+              "-t",
+              "2.000",
+              "-i",
+              "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/cam-fixed.mp4",
+              "-filter_complex",
+              "[0:v]scale=trunc(iw/2)*2:trunc(ih/2)*2,format=yuv420p,scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p,eq=brightness=0.0000:saturation=1.0000,colorbalance=rs=0.0000:gs=-0.0000:bs=-0.0000:rm=0.0000:gm=-0.0000:bm=-0.0000,fps=fps=30.000:round=near:start_time=0,trim=start_frame=0:end_frame=60,setpts=N/(30.000*TB),fade=t=in:st=0:d=1.500,fade=t=out:st=0.500:d=1.500,tpad=stop_mode=clone:stop_duration=0.033333,format=yuv420p[base];[base]copy[sdr_output];[sdr_output]scale=iw:ih:in_range=auto:out_range=tv:out_color_matrix=bt709,format=yuv420p,setparams=range=limited:colorspace=bt709:color_primaries=bt709:color_trc=bt709[v]",
+              "-map",
+              "[v]",
+              "-pix_fmt",
+              "yuv420p",
+              "-r",
+              "30.000",
+              "-fps_mode",
+              "cfr",
+              "-video_track_timescale",
+              "30000",
+              "-an",
+              "-frames:v",
+              "60",
+              "-movflags",
+              "+faststart",
+              "-color_range",
+              "tv",
+              "-colorspace",
+              "bt709",
+              "-color_primaries",
+              "bt709",
+              "-color_trc",
+              "bt709",
+              "-c:v",
+              "h264_videotoolbox",
+              "-b:v",
+              "2000000",
+              "-maxrate",
+              "2400000",
+              "-bufsize",
+              "4000000",
+              "-profile:v",
+              "high",
+              "/tmp/saturno09/A_repeat/render/.export-segments/segment-0001.mp4"
+            ],
+            "label": "cam-fixed.mp4",
+            "elapsed_sec": 0.0419,
+            "error": "FFmpegError(\"[vost#0:0 @ 0x55fabea1b200] Unknown encoder 'h264_videotoolbox'\\n[vost#0:0 @ 0x55fabea1b200] Error selecting an encoder\\nError opening output file /tmp/saturno09/A_repeat/render/.export-segments/segment-0001.mp4.\\nError opening output files: Encoder not found\")",
+            "output_exists": false
+          },
+          {
+            "command": [
+              "/usr/bin/ffmpeg",
+              "-y",
+              "-hide_banner",
+              "-loglevel",
+              "error",
+              "-nostdin",
+              "-progress",
+              "pipe:1",
+              "-ss",
+              "4.000",
+              "-t",
+              "2.000",
+              "-i",
+              "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/cam-fixed.mp4",
+              "-filter_complex",
+              "[0:v]scale=trunc(iw/2)*2:trunc(ih/2)*2,format=yuv420p,scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p,eq=brightness=0.0000:saturation=1.0000,colorbalance=rs=0.0000:gs=-0.0000:bs=-0.0000:rm=0.0000:gm=-0.0000:bm=-0.0000,fps=fps=30.000:round=near:start_time=0,trim=start_frame=0:end_frame=60,setpts=N/(30.000*TB),fade=t=in:st=0:d=1.500,fade=t=out:st=0.500:d=1.500,tpad=stop_mode=clone:stop_duration=0.033333,format=yuv420p[base];[base]copy[sdr_output];[sdr_output]scale=iw:ih:in_range=auto:out_range=tv:out_color_matrix=bt709,format=yuv420p,setparams=range=limited:colorspace=bt709:color_primaries=bt709:color_trc=bt709[v]",
+              "-map",
+              "[v]",
+              "-pix_fmt",
+              "yuv420p",
+              "-r",
+              "30.000",
+              "-fps_mode",
+              "cfr",
+              "-video_track_timescale",
+              "30000",
+              "-an",
+              "-frames:v",
+              "60",
+              "-movflags",
+              "+faststart",
+              "-color_range",
+              "tv",
+              "-colorspace",
+              "bt709",
+              "-color_primaries",
+              "bt709",
+              "-color_trc",
+              "bt709",
+              "-c:v",
+              "libx264",
+              "-preset",
+              "veryfast",
+              "-b:v",
+              "2000000",
+              "-maxrate",
+              "2400000",
+              "-bufsize",
+              "4000000",
+              "-threads:v",
+              "1",
+              "/tmp/saturno09/A_repeat/render/.export-segments/segment-0001.mp4"
+            ],
+            "engine_command": [
+              "/usr/bin/ffmpeg",
+              "-y",
+              "-hide_banner",
+              "-loglevel",
+              "error",
+              "-nostdin",
+              "-progress",
+              "pipe:1",
+              "-ss",
+              "4.000",
+              "-t",
+              "2.000",
+              "-i",
+              "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/cam-fixed.mp4",
+              "-filter_complex",
+              "[0:v]scale=trunc(iw/2)*2:trunc(ih/2)*2,format=yuv420p,scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p,eq=brightness=0.0000:saturation=1.0000,colorbalance=rs=0.0000:gs=-0.0000:bs=-0.0000:rm=0.0000:gm=-0.0000:bm=-0.0000,fps=fps=30.000:round=near:start_time=0,trim=start_frame=0:end_frame=60,setpts=N/(30.000*TB),fade=t=in:st=0:d=1.500,fade=t=out:st=0.500:d=1.500,tpad=stop_mode=clone:stop_duration=0.033333,format=yuv420p[base];[base]copy[sdr_output];[sdr_output]scale=iw:ih:in_range=auto:out_range=tv:out_color_matrix=bt709,format=yuv420p,setparams=range=limited:colorspace=bt709:color_primaries=bt709:color_trc=bt709[v]",
+              "-map",
+              "[v]",
+              "-pix_fmt",
+              "yuv420p",
+              "-r",
+              "30.000",
+              "-fps_mode",
+              "cfr",
+              "-video_track_timescale",
+              "30000",
+              "-an",
+              "-frames:v",
+              "60",
+              "-movflags",
+              "+faststart",
+              "-color_range",
+              "tv",
+              "-colorspace",
+              "bt709",
+              "-color_primaries",
+              "bt709",
+              "-color_trc",
+              "bt709",
+              "-c:v",
+              "libx264",
+              "-preset",
+              "veryfast",
+              "-b:v",
+              "2000000",
+              "-maxrate",
+              "2400000",
+              "-bufsize",
+              "4000000",
+              "/tmp/saturno09/A_repeat/render/.export-segments/segment-0001.mp4"
+            ],
+            "label": "cam-fixed.mp4",
+            "elapsed_sec": 3.049,
+            "error": null,
+            "output_exists": true,
+            "output_bytes": 466381,
+            "output_sha256": "8de34d182989bfc450395f1ad216d822458426899404ad3a8a6dc0aa65296564",
+            "frame_hashes": [
+              "ed1f277d5b8646b70cdec46c2a45f6face4f769862f15d899d570a6da42c3520",
+              "6a9213c8a934af5f842a81fb85d76407c3eebce05dddf56a2d9cb946669e07be",
+              "a750834c68c0e51704831f85eee095980466bfc0bb11cd354dc36d7432001a6b",
+              "6fc7ac3f113b3635865229b98384d3da364c223f883aa0cb83f0ed9e25f6dc14",
+              "1d63075b70789ca46139910c80fbb19f4c7c966cb87db40692b14003fbe6069b",
+              "3ac2ddd23b616675236519266d5991273cbc50225736cbca57508a855e88ebd9",
+              "0d4c160fda0887f5717388669342071479cc212db90fb2bb133e45ae158d4619",
+              "88bfe5e76107bf2d47c25fea965a60f8d7889666774f4c327e62d1a1dd59866c",
+              "7137ba04a55df2f8925836c98c10f45fa9f94d6b9f43a85d43064f3a251bf93a",
+              "ba7910d7ea978c9c817d1d1fbca1f1a1eb74f19bdf948c1772a5533b247a6d12",
+              "090152bd0f7416f709ce1902a6120736710689b6afa646dfd1ba545a1fd10bc8",
+              "3886f54e593b0683b575fd4337c39cf834eb93c52d8abac4f789a5f1e6f95c76",
+              "35e6e91a749567ce836a9b4997893a05a4e998dfb15991a4bda726d05a3fbe66",
+              "358fd19576f9ba1f8cfb76690c9c852cbb9a9b026a70cbdaf1745a5a88aa2ae5",
+              "5f6d279d4c53b26f2c53061e18a4e6e99aa7c867779e2a25e6d40673d3a0564d",
+              "513ebaa1e1a16aae818e92854492e420031384698b7e83e6c2be507da763c4c1",
+              "33d8e20fe966f522695f4a4a3157355395692a11af583363b8f5ab8bde5d6e42",
+              "fe5dda2f53e1040eaa02032fdae7963effc160f41efa5c7226eca56d46f0534e",
+              "56f4b8179700b52aa2a7580c8abd65d999dbf7d4971978ca44a4ecfea5a5f3b2",
+              "adb4df09f5c0b38664fd23439498f717d1aba3ed598fe824a953a0840197ed95",
+              "ce33bb247b6319b11a0e86ee93350e5c76348d27417ea19ce67bec700a55e557",
+              "3337ed4f7d382813e667ff52754d031086378e46d7522c5a7d0f84d89849f46a",
+              "5eff157985329d917fe758c1b7c27b93587a11e1f99e0f046bf3799ce6402f67",
+              "b191321b9fb097655e1adfddec73de9d36a6adca25be09ce4387727e390a298b",
+              "7f018a8af4cd1b0b4fb8d8f26bba39a023156e8ed20463747199e38497713cb8",
+              "5c4206f6268d3bf16da9314a8266d4bd67badb1bdad51f90115d55cb68a47bf3",
+              "519323aff483ba6fa994b065c7b158203142beaf7ae1c4691b776403b34c8216",
+              "c6e51667ecaa22ee52d463188ab2412f4b4b2b7e4a16e09e3ac930eb1145c8a4",
+              "fba287fdb4810d615e2e85c1ced8b3cf3feda8fbddf7ee26ec0a8526893fb5c8",
+              "3ef6da000cba0629584c3710bb62ff1e9a80358846dbf0b4507613d729a2e7a3",
+              "6f9c0e68c8578a16228a1cb1cca1a4554d31574d5d9e0a27b6bc2caad91520f9",
+              "6251ca778ec013ce349989e3338257efde86870c115b2ee2f07b5274bb46b235",
+              "84e41e6942dd110022cc0126b6bf33f2e6b83cca99c706c7872f28da7bbc2e1d",
+              "53ba342a6bfec5218fba6a6b78be8f6d8d215f22a92ac1f4948dee5f36869247",
+              "0ebff8eef37245277fce76d7e90071a08a29395121cc1987b4fd16d27c846e8e",
+              "68f69cad9483b2a8c299b854b00a9f26df83cbde764b09a04b1417e4355302ca",
+              "709dcc1fd20481da9c758018e8074ed5f9b15189fb0a17c0f4a01fd26cab4c77",
+              "c3ed836cd91f89d450fd277836701631a3a1b7f81f068a9dd9ed489bb0d56870",
+              "916ff32d1129ada87a3e2cd4d93735b90feb17e5b8893c338d5018569c1fb5ec",
+              "6b23ab0a646e33a0334adc76130434108f77db37b430ec88a9c97b08a04a7f78",
+              "810e05a20d83449f674582db31bbb75ad437d0ab50c07ad8d8b5c107b94b7532",
+              "9ebb9a421b5c1d7d8712223b57c7a98ac8870c82236d3bcbbddd24bf59ca6ac8",
+              "17abf8f4949e071c83b33f7a89df5d916d7d941b7bc489e4eb79cb8c41ca36dd",
+              "06584b5ad65ac3bd681a84ee79724d325615b13efb576f608f931b49f3ea7ce2",
+              "b1b180166d4e8a50dab9f451afc811c0417c6e92eb6a46ce3656438fcc893adb",
+              "2aa0aa4aacc7411925f7212417ff4cc9ab7ff7bd315c7b0377e35becda2d65cc",
+              "bc7cf6c53c7528e235aeed4e466c83600223c63e1c0c7095714df2d11e2924c6",
+              "b1618a4ec0e0cc3f6dc1a5908123cd66ccfe6d063af8999f88de51b47008facf",
+              "7ff02d82c8a4076a3ec0239837f703fc242e9984476dbee8a658692906f0bb26",
+              "34cc477dbda9a3e83608c5a3dea52196443b7a6691cbf9dfc209d4f616cb9136",
+              "287cf83a267208b8482d380e51d664b3321095a0757c53b3d9c9963a6ecea9c7",
+              "b438d623cc9b778d96249fc6ebae77457351ec85de1f738fc128744104ae40e0",
+              "c71eb13fab924889a0d52184b9e832c5c04d47230a33dab530101bfaa5d80bbb",
+              "be9bebb2fd410d195a296f4cd7822b53a2cba453b0bb0a933f1661486fd8cef7",
+              "18a155e416d14a73c810e53d5cb8084971077d6bb7c2bbd901d9c53e2b071661",
+              "a0f37cea981d1278499f47e9b844a1bdad4beea18091522015b8655968d9f72e",
+              "69330fdee721328d4d586651a1a80535b26cda8428b94b681e61fb513a5eab4e",
+              "b884bb66681a5edf53442c27d9f7d6c4be4b9de930352ab496dd04981242413f",
+              "fb6bf896b31f7f989746a86e0ff094df5e9eb84a84e4b74ea6c878b0a095761f",
+              "530a3023ee3168c7c4bc67ca08904e38216ba23bc8f39c09f1e92d79f35d34e6"
+            ]
+          },
+          {
+            "command": [
+              "/usr/bin/ffmpeg",
+              "-y",
+              "-hide_banner",
+              "-loglevel",
+              "error",
+              "-nostdin",
+              "-progress",
+              "pipe:1",
+              "-f",
+              "concat",
+              "-safe",
+              "0",
+              "-i",
+              "/tmp/saturno09/A_repeat/render/.export-segments/concat.txt",
+              "-ss",
+              "0.000",
+              "-i",
+              "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/master.mp3",
+              "-filter_complex",
+              "[1:a:0]atrim=duration=2.000,asetpts=PTS-STARTPTS,apad,atrim=0:2.000,asetpts=PTS-STARTPTS,afade=t=in:st=0.000:d=1.500,afade=t=out:st=0.500:d=1.500[a]",
+              "-map",
+              "0:v:0",
+              "-map",
+              "[a]",
+              "-c:v",
+              "copy",
+              "-c:a",
+              "aac",
+              "-b:a",
+              "192k",
+              "-t",
+              "2.000",
+              "-movflags",
+              "+faststart",
+              "/tmp/saturno09/A_repeat/render/.export-segments/.direct-master.partial.mp4"
+            ],
+            "engine_command": [
+              "/usr/bin/ffmpeg",
+              "-y",
+              "-hide_banner",
+              "-loglevel",
+              "error",
+              "-nostdin",
+              "-progress",
+              "pipe:1",
+              "-f",
+              "concat",
+              "-safe",
+              "0",
+              "-i",
+              "/tmp/saturno09/A_repeat/render/.export-segments/concat.txt",
+              "-ss",
+              "0.000",
+              "-i",
+              "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/master.mp3",
+              "-filter_complex",
+              "[1:a:0]atrim=duration=2.000,asetpts=PTS-STARTPTS,apad,atrim=0:2.000,asetpts=PTS-STARTPTS,afade=t=in:st=0.000:d=1.500,afade=t=out:st=0.500:d=1.500[a]",
+              "-map",
+              "0:v:0",
+              "-map",
+              "[a]",
+              "-c:v",
+              "copy",
+              "-c:a",
+              "aac",
+              "-b:a",
+              "192k",
+              "-t",
+              "2.000",
+              "-movflags",
+              "+faststart",
+              "/tmp/saturno09/A_repeat/render/.export-segments/.direct-master.partial.mp4"
+            ],
+            "label": "Joining segments",
+            "elapsed_sec": 0.1059,
+            "error": null,
+            "output_exists": true,
+            "output_bytes": 516447,
+            "output_sha256": "9df92693b5a5c2efa8b2fbf3fa4a691137951141380e7ce995aa09f143934fe2",
+            "frame_hashes": [
+              "ed1f277d5b8646b70cdec46c2a45f6face4f769862f15d899d570a6da42c3520",
+              "6a9213c8a934af5f842a81fb85d76407c3eebce05dddf56a2d9cb946669e07be",
+              "a750834c68c0e51704831f85eee095980466bfc0bb11cd354dc36d7432001a6b",
+              "6fc7ac3f113b3635865229b98384d3da364c223f883aa0cb83f0ed9e25f6dc14",
+              "1d63075b70789ca46139910c80fbb19f4c7c966cb87db40692b14003fbe6069b",
+              "3ac2ddd23b616675236519266d5991273cbc50225736cbca57508a855e88ebd9",
+              "0d4c160fda0887f5717388669342071479cc212db90fb2bb133e45ae158d4619",
+              "88bfe5e76107bf2d47c25fea965a60f8d7889666774f4c327e62d1a1dd59866c",
+              "7137ba04a55df2f8925836c98c10f45fa9f94d6b9f43a85d43064f3a251bf93a",
+              "ba7910d7ea978c9c817d1d1fbca1f1a1eb74f19bdf948c1772a5533b247a6d12",
+              "090152bd0f7416f709ce1902a6120736710689b6afa646dfd1ba545a1fd10bc8",
+              "3886f54e593b0683b575fd4337c39cf834eb93c52d8abac4f789a5f1e6f95c76",
+              "35e6e91a749567ce836a9b4997893a05a4e998dfb15991a4bda726d05a3fbe66",
+              "358fd19576f9ba1f8cfb76690c9c852cbb9a9b026a70cbdaf1745a5a88aa2ae5",
+              "5f6d279d4c53b26f2c53061e18a4e6e99aa7c867779e2a25e6d40673d3a0564d",
+              "513ebaa1e1a16aae818e92854492e420031384698b7e83e6c2be507da763c4c1",
+              "33d8e20fe966f522695f4a4a3157355395692a11af583363b8f5ab8bde5d6e42",
+              "fe5dda2f53e1040eaa02032fdae7963effc160f41efa5c7226eca56d46f0534e",
+              "56f4b8179700b52aa2a7580c8abd65d999dbf7d4971978ca44a4ecfea5a5f3b2",
+              "adb4df09f5c0b38664fd23439498f717d1aba3ed598fe824a953a0840197ed95",
+              "ce33bb247b6319b11a0e86ee93350e5c76348d27417ea19ce67bec700a55e557",
+              "3337ed4f7d382813e667ff52754d031086378e46d7522c5a7d0f84d89849f46a",
+              "5eff157985329d917fe758c1b7c27b93587a11e1f99e0f046bf3799ce6402f67",
+              "b191321b9fb097655e1adfddec73de9d36a6adca25be09ce4387727e390a298b",
+              "7f018a8af4cd1b0b4fb8d8f26bba39a023156e8ed20463747199e38497713cb8",
+              "5c4206f6268d3bf16da9314a8266d4bd67badb1bdad51f90115d55cb68a47bf3",
+              "519323aff483ba6fa994b065c7b158203142beaf7ae1c4691b776403b34c8216",
+              "c6e51667ecaa22ee52d463188ab2412f4b4b2b7e4a16e09e3ac930eb1145c8a4",
+              "fba287fdb4810d615e2e85c1ced8b3cf3feda8fbddf7ee26ec0a8526893fb5c8",
+              "3ef6da000cba0629584c3710bb62ff1e9a80358846dbf0b4507613d729a2e7a3",
+              "6f9c0e68c8578a16228a1cb1cca1a4554d31574d5d9e0a27b6bc2caad91520f9",
+              "6251ca778ec013ce349989e3338257efde86870c115b2ee2f07b5274bb46b235",
+              "84e41e6942dd110022cc0126b6bf33f2e6b83cca99c706c7872f28da7bbc2e1d",
+              "53ba342a6bfec5218fba6a6b78be8f6d8d215f22a92ac1f4948dee5f36869247",
+              "0ebff8eef37245277fce76d7e90071a08a29395121cc1987b4fd16d27c846e8e",
+              "68f69cad9483b2a8c299b854b00a9f26df83cbde764b09a04b1417e4355302ca",
+              "709dcc1fd20481da9c758018e8074ed5f9b15189fb0a17c0f4a01fd26cab4c77",
+              "c3ed836cd91f89d450fd277836701631a3a1b7f81f068a9dd9ed489bb0d56870",
+              "916ff32d1129ada87a3e2cd4d93735b90feb17e5b8893c338d5018569c1fb5ec",
+              "6b23ab0a646e33a0334adc76130434108f77db37b430ec88a9c97b08a04a7f78",
+              "810e05a20d83449f674582db31bbb75ad437d0ab50c07ad8d8b5c107b94b7532",
+              "9ebb9a421b5c1d7d8712223b57c7a98ac8870c82236d3bcbbddd24bf59ca6ac8",
+              "17abf8f4949e071c83b33f7a89df5d916d7d941b7bc489e4eb79cb8c41ca36dd",
+              "06584b5ad65ac3bd681a84ee79724d325615b13efb576f608f931b49f3ea7ce2",
+              "b1b180166d4e8a50dab9f451afc811c0417c6e92eb6a46ce3656438fcc893adb",
+              "2aa0aa4aacc7411925f7212417ff4cc9ab7ff7bd315c7b0377e35becda2d65cc",
+              "bc7cf6c53c7528e235aeed4e466c83600223c63e1c0c7095714df2d11e2924c6",
+              "b1618a4ec0e0cc3f6dc1a5908123cd66ccfe6d063af8999f88de51b47008facf",
+              "7ff02d82c8a4076a3ec0239837f703fc242e9984476dbee8a658692906f0bb26",
+              "34cc477dbda9a3e83608c5a3dea52196443b7a6691cbf9dfc209d4f616cb9136",
+              "287cf83a267208b8482d380e51d664b3321095a0757c53b3d9c9963a6ecea9c7",
+              "b438d623cc9b778d96249fc6ebae77457351ec85de1f738fc128744104ae40e0",
+              "c71eb13fab924889a0d52184b9e832c5c04d47230a33dab530101bfaa5d80bbb",
+              "be9bebb2fd410d195a296f4cd7822b53a2cba453b0bb0a933f1661486fd8cef7",
+              "18a155e416d14a73c810e53d5cb8084971077d6bb7c2bbd901d9c53e2b071661",
+              "a0f37cea981d1278499f47e9b844a1bdad4beea18091522015b8655968d9f72e",
+              "69330fdee721328d4d586651a1a80535b26cda8428b94b681e61fb513a5eab4e",
+              "b884bb66681a5edf53442c27d9f7d6c4be4b9de930352ab496dd04981242413f",
+              "fb6bf896b31f7f989746a86e0ff094df5e9eb84a84e4b74ea6c878b0a095761f",
+              "530a3023ee3168c7c4bc67ca08904e38216ba23bc8f39c09f1e92d79f35d34e6"
+            ]
+          }
+        ]
+      },
+      "B_partial": {
+        "file": "/tmp/saturno09/B_partial/render/export.mp4",
+        "elapsed_sec": 4.644647797000005,
+        "bytes": 516447,
+        "sha256": "9df92693b5a5c2efa8b2fbf3fa4a691137951141380e7ce995aa09f143934fe2",
+        "pixels": [
+          "b2b0f75883d46699a63773041d543a5c82e20fb7968ca0ab3c4963fb36d4f354",
+          186624000
+        ],
+        "duration_s": 2,
+        "frame_hashes": [
+          "ed1f277d5b8646b70cdec46c2a45f6face4f769862f15d899d570a6da42c3520",
+          "6a9213c8a934af5f842a81fb85d76407c3eebce05dddf56a2d9cb946669e07be",
+          "a750834c68c0e51704831f85eee095980466bfc0bb11cd354dc36d7432001a6b",
+          "6fc7ac3f113b3635865229b98384d3da364c223f883aa0cb83f0ed9e25f6dc14",
+          "1d63075b70789ca46139910c80fbb19f4c7c966cb87db40692b14003fbe6069b",
+          "3ac2ddd23b616675236519266d5991273cbc50225736cbca57508a855e88ebd9",
+          "0d4c160fda0887f5717388669342071479cc212db90fb2bb133e45ae158d4619",
+          "88bfe5e76107bf2d47c25fea965a60f8d7889666774f4c327e62d1a1dd59866c",
+          "7137ba04a55df2f8925836c98c10f45fa9f94d6b9f43a85d43064f3a251bf93a",
+          "ba7910d7ea978c9c817d1d1fbca1f1a1eb74f19bdf948c1772a5533b247a6d12",
+          "090152bd0f7416f709ce1902a6120736710689b6afa646dfd1ba545a1fd10bc8",
+          "3886f54e593b0683b575fd4337c39cf834eb93c52d8abac4f789a5f1e6f95c76",
+          "35e6e91a749567ce836a9b4997893a05a4e998dfb15991a4bda726d05a3fbe66",
+          "358fd19576f9ba1f8cfb76690c9c852cbb9a9b026a70cbdaf1745a5a88aa2ae5",
+          "5f6d279d4c53b26f2c53061e18a4e6e99aa7c867779e2a25e6d40673d3a0564d",
+          "513ebaa1e1a16aae818e92854492e420031384698b7e83e6c2be507da763c4c1",
+          "33d8e20fe966f522695f4a4a3157355395692a11af583363b8f5ab8bde5d6e42",
+          "fe5dda2f53e1040eaa02032fdae7963effc160f41efa5c7226eca56d46f0534e",
+          "56f4b8179700b52aa2a7580c8abd65d999dbf7d4971978ca44a4ecfea5a5f3b2",
+          "adb4df09f5c0b38664fd23439498f717d1aba3ed598fe824a953a0840197ed95",
+          "ce33bb247b6319b11a0e86ee93350e5c76348d27417ea19ce67bec700a55e557",
+          "3337ed4f7d382813e667ff52754d031086378e46d7522c5a7d0f84d89849f46a",
+          "5eff157985329d917fe758c1b7c27b93587a11e1f99e0f046bf3799ce6402f67",
+          "b191321b9fb097655e1adfddec73de9d36a6adca25be09ce4387727e390a298b",
+          "7f018a8af4cd1b0b4fb8d8f26bba39a023156e8ed20463747199e38497713cb8",
+          "5c4206f6268d3bf16da9314a8266d4bd67badb1bdad51f90115d55cb68a47bf3",
+          "519323aff483ba6fa994b065c7b158203142beaf7ae1c4691b776403b34c8216",
+          "c6e51667ecaa22ee52d463188ab2412f4b4b2b7e4a16e09e3ac930eb1145c8a4",
+          "fba287fdb4810d615e2e85c1ced8b3cf3feda8fbddf7ee26ec0a8526893fb5c8",
+          "3ef6da000cba0629584c3710bb62ff1e9a80358846dbf0b4507613d729a2e7a3",
+          "6f9c0e68c8578a16228a1cb1cca1a4554d31574d5d9e0a27b6bc2caad91520f9",
+          "6251ca778ec013ce349989e3338257efde86870c115b2ee2f07b5274bb46b235",
+          "84e41e6942dd110022cc0126b6bf33f2e6b83cca99c706c7872f28da7bbc2e1d",
+          "53ba342a6bfec5218fba6a6b78be8f6d8d215f22a92ac1f4948dee5f36869247",
+          "0ebff8eef37245277fce76d7e90071a08a29395121cc1987b4fd16d27c846e8e",
+          "68f69cad9483b2a8c299b854b00a9f26df83cbde764b09a04b1417e4355302ca",
+          "709dcc1fd20481da9c758018e8074ed5f9b15189fb0a17c0f4a01fd26cab4c77",
+          "c3ed836cd91f89d450fd277836701631a3a1b7f81f068a9dd9ed489bb0d56870",
+          "916ff32d1129ada87a3e2cd4d93735b90feb17e5b8893c338d5018569c1fb5ec",
+          "6b23ab0a646e33a0334adc76130434108f77db37b430ec88a9c97b08a04a7f78",
+          "810e05a20d83449f674582db31bbb75ad437d0ab50c07ad8d8b5c107b94b7532",
+          "9ebb9a421b5c1d7d8712223b57c7a98ac8870c82236d3bcbbddd24bf59ca6ac8",
+          "17abf8f4949e071c83b33f7a89df5d916d7d941b7bc489e4eb79cb8c41ca36dd",
+          "06584b5ad65ac3bd681a84ee79724d325615b13efb576f608f931b49f3ea7ce2",
+          "b1b180166d4e8a50dab9f451afc811c0417c6e92eb6a46ce3656438fcc893adb",
+          "2aa0aa4aacc7411925f7212417ff4cc9ab7ff7bd315c7b0377e35becda2d65cc",
+          "bc7cf6c53c7528e235aeed4e466c83600223c63e1c0c7095714df2d11e2924c6",
+          "b1618a4ec0e0cc3f6dc1a5908123cd66ccfe6d063af8999f88de51b47008facf",
+          "7ff02d82c8a4076a3ec0239837f703fc242e9984476dbee8a658692906f0bb26",
+          "34cc477dbda9a3e83608c5a3dea52196443b7a6691cbf9dfc209d4f616cb9136",
+          "287cf83a267208b8482d380e51d664b3321095a0757c53b3d9c9963a6ecea9c7",
+          "b438d623cc9b778d96249fc6ebae77457351ec85de1f738fc128744104ae40e0",
+          "c71eb13fab924889a0d52184b9e832c5c04d47230a33dab530101bfaa5d80bbb",
+          "be9bebb2fd410d195a296f4cd7822b53a2cba453b0bb0a933f1661486fd8cef7",
+          "18a155e416d14a73c810e53d5cb8084971077d6bb7c2bbd901d9c53e2b071661",
+          "a0f37cea981d1278499f47e9b844a1bdad4beea18091522015b8655968d9f72e",
+          "69330fdee721328d4d586651a1a80535b26cda8428b94b681e61fb513a5eab4e",
+          "b884bb66681a5edf53442c27d9f7d6c4be4b9de930352ab496dd04981242413f",
+          "fb6bf896b31f7f989746a86e0ff094df5e9eb84a84e4b74ea6c878b0a095761f",
+          "530a3023ee3168c7c4bc67ca08904e38216ba23bc8f39c09f1e92d79f35d34e6"
+        ],
+        "audio": {
+          "sha256": "4b47735b41c6fbf1755032b45f0220e251cfc5ca9b5511ebeff70eb5d4d98749",
+          "bytes": 712704
+        },
+        "timeline": {
+          "packets": [
+            {
+              "stream_index": 0,
+              "pts": 0,
+              "dts": -2000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 0,
+              "pts": 4000,
+              "dts": -1000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": -1024,
+              "dts": -1024,
+              "duration": 1024,
+              "side_data_list": [
+                {
+                  "side_data_type": "Skip Samples",
+                  "skip_samples": 1024,
+                  "discard_padding": 0,
+                  "skip_reason": 0,
+                  "discard_reason": 0
+                }
+              ]
+            },
+            {
+              "stream_index": 0,
+              "pts": 2000,
+              "dts": 0,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 0,
+              "dts": 0,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 1024,
+              "dts": 1024,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 1000,
+              "dts": 1000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 2048,
+              "dts": 2048,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 3000,
+              "dts": 2000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 3072,
+              "dts": 3072,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 4096,
+              "dts": 4096,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 8000,
+              "dts": 3000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 5120,
+              "dts": 5120,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 6000,
+              "dts": 4000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 6144,
+              "dts": 6144,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 7168,
+              "dts": 7168,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 5000,
+              "dts": 5000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 8192,
+              "dts": 8192,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 7000,
+              "dts": 6000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 9216,
+              "dts": 9216,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 10240,
+              "dts": 10240,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 12000,
+              "dts": 7000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 11264,
+              "dts": 11264,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 10000,
+              "dts": 8000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 12288,
+              "dts": 12288,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 9000,
+              "dts": 9000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 13312,
+              "dts": 13312,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 14336,
+              "dts": 14336,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 11000,
+              "dts": 10000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 15360,
+              "dts": 15360,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 16000,
+              "dts": 11000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 16384,
+              "dts": 16384,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 17408,
+              "dts": 17408,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 14000,
+              "dts": 12000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 18432,
+              "dts": 18432,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 13000,
+              "dts": 13000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 19456,
+              "dts": 19456,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 20480,
+              "dts": 20480,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 15000,
+              "dts": 14000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 21504,
+              "dts": 21504,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 20000,
+              "dts": 15000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 22528,
+              "dts": 22528,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 18000,
+              "dts": 16000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 23552,
+              "dts": 23552,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 24576,
+              "dts": 24576,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 17000,
+              "dts": 17000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 25600,
+              "dts": 25600,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 19000,
+              "dts": 18000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 26624,
+              "dts": 26624,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 27648,
+              "dts": 27648,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 24000,
+              "dts": 19000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 28672,
+              "dts": 28672,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 22000,
+              "dts": 20000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 29696,
+              "dts": 29696,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 30720,
+              "dts": 30720,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 21000,
+              "dts": 21000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 31744,
+              "dts": 31744,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 23000,
+              "dts": 22000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 32768,
+              "dts": 32768,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 33792,
+              "dts": 33792,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 28000,
+              "dts": 23000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 34816,
+              "dts": 34816,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 26000,
+              "dts": 24000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 35840,
+              "dts": 35840,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 25000,
+              "dts": 25000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 36864,
+              "dts": 36864,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 37888,
+              "dts": 37888,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 27000,
+              "dts": 26000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 38912,
+              "dts": 38912,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 32000,
+              "dts": 27000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 39936,
+              "dts": 39936,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 40960,
+              "dts": 40960,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 30000,
+              "dts": 28000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 41984,
+              "dts": 41984,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 29000,
+              "dts": 29000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 43008,
+              "dts": 43008,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 44032,
+              "dts": 44032,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 31000,
+              "dts": 30000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 45056,
+              "dts": 45056,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 36000,
+              "dts": 31000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 46080,
+              "dts": 46080,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 34000,
+              "dts": 32000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 47104,
+              "dts": 47104,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 48128,
+              "dts": 48128,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 33000,
+              "dts": 33000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 49152,
+              "dts": 49152,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 35000,
+              "dts": 34000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 50176,
+              "dts": 50176,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 51200,
+              "dts": 51200,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 40000,
+              "dts": 35000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 52224,
+              "dts": 52224,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 38000,
+              "dts": 36000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 53248,
+              "dts": 53248,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 54272,
+              "dts": 54272,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 37000,
+              "dts": 37000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 55296,
+              "dts": 55296,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 39000,
+              "dts": 38000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 56320,
+              "dts": 56320,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 44000,
+              "dts": 39000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 57344,
+              "dts": 57344,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 58368,
+              "dts": 58368,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 42000,
+              "dts": 40000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 59392,
+              "dts": 59392,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 41000,
+              "dts": 41000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 60416,
+              "dts": 60416,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 61440,
+              "dts": 61440,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 43000,
+              "dts": 42000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 62464,
+              "dts": 62464,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 48000,
+              "dts": 43000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 63488,
+              "dts": 63488,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 64512,
+              "dts": 64512,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 46000,
+              "dts": 44000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 65536,
+              "dts": 65536,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 45000,
+              "dts": 45000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 66560,
+              "dts": 66560,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 67584,
+              "dts": 67584,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 47000,
+              "dts": 46000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 68608,
+              "dts": 68608,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 52000,
+              "dts": 47000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 69632,
+              "dts": 69632,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 50000,
+              "dts": 48000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 70656,
+              "dts": 70656,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 71680,
+              "dts": 71680,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 49000,
+              "dts": 49000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 72704,
+              "dts": 72704,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 51000,
+              "dts": 50000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 73728,
+              "dts": 73728,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 74752,
+              "dts": 74752,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 56000,
+              "dts": 51000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 75776,
+              "dts": 75776,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 54000,
+              "dts": 52000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 76800,
+              "dts": 76800,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 77824,
+              "dts": 77824,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 53000,
+              "dts": 53000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 78848,
+              "dts": 78848,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 55000,
+              "dts": 54000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 79872,
+              "dts": 79872,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 59000,
+              "dts": 55000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 80896,
+              "dts": 80896,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 81920,
+              "dts": 81920,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 57000,
+              "dts": 56000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 82944,
+              "dts": 82944,
+              "duration": 1024
+            },
+            {
+              "stream_index": 0,
+              "pts": 58000,
+              "dts": 57000,
+              "duration": 1000
+            },
+            {
+              "stream_index": 1,
+              "pts": 83968,
+              "dts": 83968,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 84992,
+              "dts": 84992,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 86016,
+              "dts": 86016,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 87040,
+              "dts": 87040,
+              "duration": 1024
+            },
+            {
+              "stream_index": 1,
+              "pts": 88064,
+              "dts": 88064,
+              "duration": 136
+            }
+          ],
+          "programs": [],
+          "streams": [
+            {
+              "index": 0,
+              "codec_type": "video",
+              "time_base": "1/30000",
+              "start_time": "0.000000",
+              "duration": "2.000000",
+              "nb_frames": "60",
+              "disposition": {
+                "default": 1,
+                "dub": 0,
+                "original": 0,
+                "comment": 0,
+                "lyrics": 0,
+                "karaoke": 0,
+                "forced": 0,
+                "hearing_impaired": 0,
+                "visual_impaired": 0,
+                "clean_effects": 0,
+                "attached_pic": 0,
+                "timed_thumbnails": 0,
+                "non_diegetic": 0,
+                "captions": 0,
+                "descriptions": 0,
+                "metadata": 0,
+                "dependent": 0,
+                "still_image": 0
+              },
+              "tags": {
+                "language": "und",
+                "handler_name": "VideoHandler",
+                "vendor_id": "[0][0][0][0]",
+                "encoder": "Lavc60.31.102 libx264"
+              }
+            },
+            {
+              "index": 1,
+              "codec_type": "audio",
+              "sample_rate": "44100",
+              "channels": 2,
+              "time_base": "1/44100",
+              "start_time": "0.000000",
+              "duration": "2.000000",
+              "nb_frames": "88",
+              "disposition": {
+                "default": 1,
+                "dub": 0,
+                "original": 0,
+                "comment": 0,
+                "lyrics": 0,
+                "karaoke": 0,
+                "forced": 0,
+                "hearing_impaired": 0,
+                "visual_impaired": 0,
+                "clean_effects": 0,
+                "attached_pic": 0,
+                "timed_thumbnails": 0,
+                "non_diegetic": 0,
+                "captions": 0,
+                "descriptions": 0,
+                "metadata": 0,
+                "dependent": 0,
+                "still_image": 0
+              },
+              "tags": {
+                "language": "und",
+                "handler_name": "SoundHandler",
+                "vendor_id": "[0][0][0][0]"
+              }
+            }
+          ]
+        },
+        "isolation": {
+          "requested": true,
+          "masked": [
+            "/home/runner/work/Montara/Montara/tests/fixtures",
+            "/tmp/saturno09/A_full",
+            "/tmp/saturno09/A_repeat",
+            "/tmp/saturno09/runtime-A_full",
+            "/tmp/saturno09/runtime-A_repeat"
+          ],
+          "original_paths_absent": {
+            "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/cam-fixed.mp4": true,
+            "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/master.mp3": true
+          }
+        },
+        "cache_root": "/tmp/saturno09/runtime-B_partial/Cache",
+        "cache_initial_entries": 0,
+        "traces": [
+          {
+            "command": [
+              "/usr/bin/ffmpeg",
+              "-y",
+              "-hide_banner",
+              "-loglevel",
+              "error",
+              "-nostdin",
+              "-progress",
+              "pipe:1",
+              "-ss",
+              "1.000",
+              "-t",
+              "2.000",
+              "-i",
+              "/tmp/saturno09/package/camera.mkv",
+              "-filter_complex",
+              "[0:v]scale=trunc(iw/2)*2:trunc(ih/2)*2,format=yuv420p,scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p,eq=brightness=0.0000:saturation=1.0000,colorbalance=rs=0.0000:gs=-0.0000:bs=-0.0000:rm=0.0000:gm=-0.0000:bm=-0.0000,fps=fps=30.000:round=near:start_time=0,trim=start_frame=0:end_frame=60,setpts=N/(30.000*TB),fade=t=in:st=0:d=1.500,fade=t=out:st=0.500:d=1.500,tpad=stop_mode=clone:stop_duration=0.033333,format=yuv420p[base];[base]copy[sdr_output];[sdr_output]scale=iw:ih:in_range=auto:out_range=tv:out_color_matrix=bt709,format=yuv420p,setparams=range=limited:colorspace=bt709:color_primaries=bt709:color_trc=bt709[v]",
+              "-map",
+              "[v]",
+              "-pix_fmt",
+              "yuv420p",
+              "-r",
+              "30.000",
+              "-fps_mode",
+              "cfr",
+              "-video_track_timescale",
+              "30000",
+              "-an",
+              "-frames:v",
+              "60",
+              "-movflags",
+              "+faststart",
+              "-color_range",
+              "tv",
+              "-colorspace",
+              "bt709",
+              "-color_primaries",
+              "bt709",
+              "-color_trc",
+              "bt709",
+              "-c:v",
+              "h264_videotoolbox",
+              "-b:v",
+              "2000000",
+              "-maxrate",
+              "2400000",
+              "-bufsize",
+              "4000000",
+              "-profile:v",
+              "high",
+              "/tmp/saturno09/B_partial/render/.export-segments/segment-0001.mp4"
+            ],
+            "engine_command": [
+              "/usr/bin/ffmpeg",
+              "-y",
+              "-hide_banner",
+              "-loglevel",
+              "error",
+              "-nostdin",
+              "-progress",
+              "pipe:1",
+              "-ss",
+              "1.000",
+              "-t",
+              "2.000",
+              "-i",
+              "/tmp/saturno09/package/camera.mkv",
+              "-filter_complex",
+              "[0:v]scale=trunc(iw/2)*2:trunc(ih/2)*2,format=yuv420p,scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p,eq=brightness=0.0000:saturation=1.0000,colorbalance=rs=0.0000:gs=-0.0000:bs=-0.0000:rm=0.0000:gm=-0.0000:bm=-0.0000,fps=fps=30.000:round=near:start_time=0,trim=start_frame=0:end_frame=60,setpts=N/(30.000*TB),fade=t=in:st=0:d=1.500,fade=t=out:st=0.500:d=1.500,tpad=stop_mode=clone:stop_duration=0.033333,format=yuv420p[base];[base]copy[sdr_output];[sdr_output]scale=iw:ih:in_range=auto:out_range=tv:out_color_matrix=bt709,format=yuv420p,setparams=range=limited:colorspace=bt709:color_primaries=bt709:color_trc=bt709[v]",
+              "-map",
+              "[v]",
+              "-pix_fmt",
+              "yuv420p",
+              "-r",
+              "30.000",
+              "-fps_mode",
+              "cfr",
+              "-video_track_timescale",
+              "30000",
+              "-an",
+              "-frames:v",
+              "60",
+              "-movflags",
+              "+faststart",
+              "-color_range",
+              "tv",
+              "-colorspace",
+              "bt709",
+              "-color_primaries",
+              "bt709",
+              "-color_trc",
+              "bt709",
+              "-c:v",
+              "h264_videotoolbox",
+              "-b:v",
+              "2000000",
+              "-maxrate",
+              "2400000",
+              "-bufsize",
+              "4000000",
+              "-profile:v",
+              "high",
+              "/tmp/saturno09/B_partial/render/.export-segments/segment-0001.mp4"
+            ],
+            "label": "camera.mkv",
+            "elapsed_sec": 0.0475,
+            "error": "FFmpegError(\"[vost#0:0 @ 0x560f6262d1c0] Unknown encoder 'h264_videotoolbox'\\n[vost#0:0 @ 0x560f6262d1c0] Error selecting an encoder\\nError opening output file /tmp/saturno09/B_partial/render/.export-segments/segment-0001.mp4.\\nError opening output files: Encoder not found\")",
+            "output_exists": false
+          },
+          {
+            "command": [
+              "/usr/bin/ffmpeg",
+              "-y",
+              "-hide_banner",
+              "-loglevel",
+              "error",
+              "-nostdin",
+              "-progress",
+              "pipe:1",
+              "-ss",
+              "1.000",
+              "-t",
+              "2.000",
+              "-i",
+              "/tmp/saturno09/package/camera.mkv",
+              "-filter_complex",
+              "[0:v]scale=trunc(iw/2)*2:trunc(ih/2)*2,format=yuv420p,scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p,eq=brightness=0.0000:saturation=1.0000,colorbalance=rs=0.0000:gs=-0.0000:bs=-0.0000:rm=0.0000:gm=-0.0000:bm=-0.0000,fps=fps=30.000:round=near:start_time=0,trim=start_frame=0:end_frame=60,setpts=N/(30.000*TB),fade=t=in:st=0:d=1.500,fade=t=out:st=0.500:d=1.500,tpad=stop_mode=clone:stop_duration=0.033333,format=yuv420p[base];[base]copy[sdr_output];[sdr_output]scale=iw:ih:in_range=auto:out_range=tv:out_color_matrix=bt709,format=yuv420p,setparams=range=limited:colorspace=bt709:color_primaries=bt709:color_trc=bt709[v]",
+              "-map",
+              "[v]",
+              "-pix_fmt",
+              "yuv420p",
+              "-r",
+              "30.000",
+              "-fps_mode",
+              "cfr",
+              "-video_track_timescale",
+              "30000",
+              "-an",
+              "-frames:v",
+              "60",
+              "-movflags",
+              "+faststart",
+              "-color_range",
+              "tv",
+              "-colorspace",
+              "bt709",
+              "-color_primaries",
+              "bt709",
+              "-color_trc",
+              "bt709",
+              "-c:v",
+              "libx264",
+              "-preset",
+              "veryfast",
+              "-b:v",
+              "2000000",
+              "-maxrate",
+              "2400000",
+              "-bufsize",
+              "4000000",
+              "-threads:v",
+              "1",
+              "/tmp/saturno09/B_partial/render/.export-segments/segment-0001.mp4"
+            ],
+            "engine_command": [
+              "/usr/bin/ffmpeg",
+              "-y",
+              "-hide_banner",
+              "-loglevel",
+              "error",
+              "-nostdin",
+              "-progress",
+              "pipe:1",
+              "-ss",
+              "1.000",
+              "-t",
+              "2.000",
+              "-i",
+              "/tmp/saturno09/package/camera.mkv",
+              "-filter_complex",
+              "[0:v]scale=trunc(iw/2)*2:trunc(ih/2)*2,format=yuv420p,scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p,eq=brightness=0.0000:saturation=1.0000,colorbalance=rs=0.0000:gs=-0.0000:bs=-0.0000:rm=0.0000:gm=-0.0000:bm=-0.0000,fps=fps=30.000:round=near:start_time=0,trim=start_frame=0:end_frame=60,setpts=N/(30.000*TB),fade=t=in:st=0:d=1.500,fade=t=out:st=0.500:d=1.500,tpad=stop_mode=clone:stop_duration=0.033333,format=yuv420p[base];[base]copy[sdr_output];[sdr_output]scale=iw:ih:in_range=auto:out_range=tv:out_color_matrix=bt709,format=yuv420p,setparams=range=limited:colorspace=bt709:color_primaries=bt709:color_trc=bt709[v]",
+              "-map",
+              "[v]",
+              "-pix_fmt",
+              "yuv420p",
+              "-r",
+              "30.000",
+              "-fps_mode",
+              "cfr",
+              "-video_track_timescale",
+              "30000",
+              "-an",
+              "-frames:v",
+              "60",
+              "-movflags",
+              "+faststart",
+              "-color_range",
+              "tv",
+              "-colorspace",
+              "bt709",
+              "-color_primaries",
+              "bt709",
+              "-color_trc",
+              "bt709",
+              "-c:v",
+              "libx264",
+              "-preset",
+              "veryfast",
+              "-b:v",
+              "2000000",
+              "-maxrate",
+              "2400000",
+              "-bufsize",
+              "4000000",
+              "/tmp/saturno09/B_partial/render/.export-segments/segment-0001.mp4"
+            ],
+            "label": "camera.mkv",
+            "elapsed_sec": 3.0132,
+            "error": null,
+            "output_exists": true,
+            "output_bytes": 466381,
+            "output_sha256": "8de34d182989bfc450395f1ad216d822458426899404ad3a8a6dc0aa65296564",
+            "frame_hashes": [
+              "ed1f277d5b8646b70cdec46c2a45f6face4f769862f15d899d570a6da42c3520",
+              "6a9213c8a934af5f842a81fb85d76407c3eebce05dddf56a2d9cb946669e07be",
+              "a750834c68c0e51704831f85eee095980466bfc0bb11cd354dc36d7432001a6b",
+              "6fc7ac3f113b3635865229b98384d3da364c223f883aa0cb83f0ed9e25f6dc14",
+              "1d63075b70789ca46139910c80fbb19f4c7c966cb87db40692b14003fbe6069b",
+              "3ac2ddd23b616675236519266d5991273cbc50225736cbca57508a855e88ebd9",
+              "0d4c160fda0887f5717388669342071479cc212db90fb2bb133e45ae158d4619",
+              "88bfe5e76107bf2d47c25fea965a60f8d7889666774f4c327e62d1a1dd59866c",
+              "7137ba04a55df2f8925836c98c10f45fa9f94d6b9f43a85d43064f3a251bf93a",
+              "ba7910d7ea978c9c817d1d1fbca1f1a1eb74f19bdf948c1772a5533b247a6d12",
+              "090152bd0f7416f709ce1902a6120736710689b6afa646dfd1ba545a1fd10bc8",
+              "3886f54e593b0683b575fd4337c39cf834eb93c52d8abac4f789a5f1e6f95c76",
+              "35e6e91a749567ce836a9b4997893a05a4e998dfb15991a4bda726d05a3fbe66",
+              "358fd19576f9ba1f8cfb76690c9c852cbb9a9b026a70cbdaf1745a5a88aa2ae5",
+              "5f6d279d4c53b26f2c53061e18a4e6e99aa7c867779e2a25e6d40673d3a0564d",
+              "513ebaa1e1a16aae818e92854492e420031384698b7e83e6c2be507da763c4c1",
+              "33d8e20fe966f522695f4a4a3157355395692a11af583363b8f5ab8bde5d6e42",
+              "fe5dda2f53e1040eaa02032fdae7963effc160f41efa5c7226eca56d46f0534e",
+              "56f4b8179700b52aa2a7580c8abd65d999dbf7d4971978ca44a4ecfea5a5f3b2",
+              "adb4df09f5c0b38664fd23439498f717d1aba3ed598fe824a953a0840197ed95",
+              "ce33bb247b6319b11a0e86ee93350e5c76348d27417ea19ce67bec700a55e557",
+              "3337ed4f7d382813e667ff52754d031086378e46d7522c5a7d0f84d89849f46a",
+              "5eff157985329d917fe758c1b7c27b93587a11e1f99e0f046bf3799ce6402f67",
+              "b191321b9fb097655e1adfddec73de9d36a6adca25be09ce4387727e390a298b",
+              "7f018a8af4cd1b0b4fb8d8f26bba39a023156e8ed20463747199e38497713cb8",
+              "5c4206f6268d3bf16da9314a8266d4bd67badb1bdad51f90115d55cb68a47bf3",
+              "519323aff483ba6fa994b065c7b158203142beaf7ae1c4691b776403b34c8216",
+              "c6e51667ecaa22ee52d463188ab2412f4b4b2b7e4a16e09e3ac930eb1145c8a4",
+              "fba287fdb4810d615e2e85c1ced8b3cf3feda8fbddf7ee26ec0a8526893fb5c8",
+              "3ef6da000cba0629584c3710bb62ff1e9a80358846dbf0b4507613d729a2e7a3",
+              "6f9c0e68c8578a16228a1cb1cca1a4554d31574d5d9e0a27b6bc2caad91520f9",
+              "6251ca778ec013ce349989e3338257efde86870c115b2ee2f07b5274bb46b235",
+              "84e41e6942dd110022cc0126b6bf33f2e6b83cca99c706c7872f28da7bbc2e1d",
+              "53ba342a6bfec5218fba6a6b78be8f6d8d215f22a92ac1f4948dee5f36869247",
+              "0ebff8eef37245277fce76d7e90071a08a29395121cc1987b4fd16d27c846e8e",
+              "68f69cad9483b2a8c299b854b00a9f26df83cbde764b09a04b1417e4355302ca",
+              "709dcc1fd20481da9c758018e8074ed5f9b15189fb0a17c0f4a01fd26cab4c77",
+              "c3ed836cd91f89d450fd277836701631a3a1b7f81f068a9dd9ed489bb0d56870",
+              "916ff32d1129ada87a3e2cd4d93735b90feb17e5b8893c338d5018569c1fb5ec",
+              "6b23ab0a646e33a0334adc76130434108f77db37b430ec88a9c97b08a04a7f78",
+              "810e05a20d83449f674582db31bbb75ad437d0ab50c07ad8d8b5c107b94b7532",
+              "9ebb9a421b5c1d7d8712223b57c7a98ac8870c82236d3bcbbddd24bf59ca6ac8",
+              "17abf8f4949e071c83b33f7a89df5d916d7d941b7bc489e4eb79cb8c41ca36dd",
+              "06584b5ad65ac3bd681a84ee79724d325615b13efb576f608f931b49f3ea7ce2",
+              "b1b180166d4e8a50dab9f451afc811c0417c6e92eb6a46ce3656438fcc893adb",
+              "2aa0aa4aacc7411925f7212417ff4cc9ab7ff7bd315c7b0377e35becda2d65cc",
+              "bc7cf6c53c7528e235aeed4e466c83600223c63e1c0c7095714df2d11e2924c6",
+              "b1618a4ec0e0cc3f6dc1a5908123cd66ccfe6d063af8999f88de51b47008facf",
+              "7ff02d82c8a4076a3ec0239837f703fc242e9984476dbee8a658692906f0bb26",
+              "34cc477dbda9a3e83608c5a3dea52196443b7a6691cbf9dfc209d4f616cb9136",
+              "287cf83a267208b8482d380e51d664b3321095a0757c53b3d9c9963a6ecea9c7",
+              "b438d623cc9b778d96249fc6ebae77457351ec85de1f738fc128744104ae40e0",
+              "c71eb13fab924889a0d52184b9e832c5c04d47230a33dab530101bfaa5d80bbb",
+              "be9bebb2fd410d195a296f4cd7822b53a2cba453b0bb0a933f1661486fd8cef7",
+              "18a155e416d14a73c810e53d5cb8084971077d6bb7c2bbd901d9c53e2b071661",
+              "a0f37cea981d1278499f47e9b844a1bdad4beea18091522015b8655968d9f72e",
+              "69330fdee721328d4d586651a1a80535b26cda8428b94b681e61fb513a5eab4e",
+              "b884bb66681a5edf53442c27d9f7d6c4be4b9de930352ab496dd04981242413f",
+              "fb6bf896b31f7f989746a86e0ff094df5e9eb84a84e4b74ea6c878b0a095761f",
+              "530a3023ee3168c7c4bc67ca08904e38216ba23bc8f39c09f1e92d79f35d34e6"
+            ]
+          },
+          {
+            "command": [
+              "/usr/bin/ffmpeg",
+              "-y",
+              "-hide_banner",
+              "-loglevel",
+              "error",
+              "-nostdin",
+              "-progress",
+              "pipe:1",
+              "-f",
+              "concat",
+              "-safe",
+              "0",
+              "-i",
+              "/tmp/saturno09/B_partial/render/.export-segments/concat.txt",
+              "-ss",
+              "0.000",
+              "-i",
+              "/tmp/saturno09/package/master.wav",
+              "-filter_complex",
+              "[1:a:0]atrim=duration=2.000,asetpts=PTS-STARTPTS,apad,atrim=0:2.000,asetpts=PTS-STARTPTS,afade=t=in:st=0.000:d=1.500,afade=t=out:st=0.500:d=1.500[a]",
+              "-map",
+              "0:v:0",
+              "-map",
+              "[a]",
+              "-c:v",
+              "copy",
+              "-c:a",
+              "aac",
+              "-b:a",
+              "192k",
+              "-t",
+              "2.000",
+              "-movflags",
+              "+faststart",
+              "/tmp/saturno09/B_partial/render/.export-segments/.direct-master.partial.mp4"
+            ],
+            "engine_command": [
+              "/usr/bin/ffmpeg",
+              "-y",
+              "-hide_banner",
+              "-loglevel",
+              "error",
+              "-nostdin",
+              "-progress",
+              "pipe:1",
+              "-f",
+              "concat",
+              "-safe",
+              "0",
+              "-i",
+              "/tmp/saturno09/B_partial/render/.export-segments/concat.txt",
+              "-ss",
+              "0.000",
+              "-i",
+              "/tmp/saturno09/package/master.wav",
+              "-filter_complex",
+              "[1:a:0]atrim=duration=2.000,asetpts=PTS-STARTPTS,apad,atrim=0:2.000,asetpts=PTS-STARTPTS,afade=t=in:st=0.000:d=1.500,afade=t=out:st=0.500:d=1.500[a]",
+              "-map",
+              "0:v:0",
+              "-map",
+              "[a]",
+              "-c:v",
+              "copy",
+              "-c:a",
+              "aac",
+              "-b:a",
+              "192k",
+              "-t",
+              "2.000",
+              "-movflags",
+              "+faststart",
+              "/tmp/saturno09/B_partial/render/.export-segments/.direct-master.partial.mp4"
+            ],
+            "label": "Joining segments",
+            "elapsed_sec": 0.108,
+            "error": null,
+            "output_exists": true,
+            "output_bytes": 516447,
+            "output_sha256": "9df92693b5a5c2efa8b2fbf3fa4a691137951141380e7ce995aa09f143934fe2",
+            "frame_hashes": [
+              "ed1f277d5b8646b70cdec46c2a45f6face4f769862f15d899d570a6da42c3520",
+              "6a9213c8a934af5f842a81fb85d76407c3eebce05dddf56a2d9cb946669e07be",
+              "a750834c68c0e51704831f85eee095980466bfc0bb11cd354dc36d7432001a6b",
+              "6fc7ac3f113b3635865229b98384d3da364c223f883aa0cb83f0ed9e25f6dc14",
+              "1d63075b70789ca46139910c80fbb19f4c7c966cb87db40692b14003fbe6069b",
+              "3ac2ddd23b616675236519266d5991273cbc50225736cbca57508a855e88ebd9",
+              "0d4c160fda0887f5717388669342071479cc212db90fb2bb133e45ae158d4619",
+              "88bfe5e76107bf2d47c25fea965a60f8d7889666774f4c327e62d1a1dd59866c",
+              "7137ba04a55df2f8925836c98c10f45fa9f94d6b9f43a85d43064f3a251bf93a",
+              "ba7910d7ea978c9c817d1d1fbca1f1a1eb74f19bdf948c1772a5533b247a6d12",
+              "090152bd0f7416f709ce1902a6120736710689b6afa646dfd1ba545a1fd10bc8",
+              "3886f54e593b0683b575fd4337c39cf834eb93c52d8abac4f789a5f1e6f95c76",
+              "35e6e91a749567ce836a9b4997893a05a4e998dfb15991a4bda726d05a3fbe66",
+              "358fd19576f9ba1f8cfb76690c9c852cbb9a9b026a70cbdaf1745a5a88aa2ae5",
+              "5f6d279d4c53b26f2c53061e18a4e6e99aa7c867779e2a25e6d40673d3a0564d",
+              "513ebaa1e1a16aae818e92854492e420031384698b7e83e6c2be507da763c4c1",
+              "33d8e20fe966f522695f4a4a3157355395692a11af583363b8f5ab8bde5d6e42",
+              "fe5dda2f53e1040eaa02032fdae7963effc160f41efa5c7226eca56d46f0534e",
+              "56f4b8179700b52aa2a7580c8abd65d999dbf7d4971978ca44a4ecfea5a5f3b2",
+              "adb4df09f5c0b38664fd23439498f717d1aba3ed598fe824a953a0840197ed95",
+              "ce33bb247b6319b11a0e86ee93350e5c76348d27417ea19ce67bec700a55e557",
+              "3337ed4f7d382813e667ff52754d031086378e46d7522c5a7d0f84d89849f46a",
+              "5eff157985329d917fe758c1b7c27b93587a11e1f99e0f046bf3799ce6402f67",
+              "b191321b9fb097655e1adfddec73de9d36a6adca25be09ce4387727e390a298b",
+              "7f018a8af4cd1b0b4fb8d8f26bba39a023156e8ed20463747199e38497713cb8",
+              "5c4206f6268d3bf16da9314a8266d4bd67badb1bdad51f90115d55cb68a47bf3",
+              "519323aff483ba6fa994b065c7b158203142beaf7ae1c4691b776403b34c8216",
+              "c6e51667ecaa22ee52d463188ab2412f4b4b2b7e4a16e09e3ac930eb1145c8a4",
+              "fba287fdb4810d615e2e85c1ced8b3cf3feda8fbddf7ee26ec0a8526893fb5c8",
+              "3ef6da000cba0629584c3710bb62ff1e9a80358846dbf0b4507613d729a2e7a3",
+              "6f9c0e68c8578a16228a1cb1cca1a4554d31574d5d9e0a27b6bc2caad91520f9",
+              "6251ca778ec013ce349989e3338257efde86870c115b2ee2f07b5274bb46b235",
+              "84e41e6942dd110022cc0126b6bf33f2e6b83cca99c706c7872f28da7bbc2e1d",
+              "53ba342a6bfec5218fba6a6b78be8f6d8d215f22a92ac1f4948dee5f36869247",
+              "0ebff8eef37245277fce76d7e90071a08a29395121cc1987b4fd16d27c846e8e",
+              "68f69cad9483b2a8c299b854b00a9f26df83cbde764b09a04b1417e4355302ca",
+              "709dcc1fd20481da9c758018e8074ed5f9b15189fb0a17c0f4a01fd26cab4c77",
+              "c3ed836cd91f89d450fd277836701631a3a1b7f81f068a9dd9ed489bb0d56870",
+              "916ff32d1129ada87a3e2cd4d93735b90feb17e5b8893c338d5018569c1fb5ec",
+              "6b23ab0a646e33a0334adc76130434108f77db37b430ec88a9c97b08a04a7f78",
+              "810e05a20d83449f674582db31bbb75ad437d0ab50c07ad8d8b5c107b94b7532",
+              "9ebb9a421b5c1d7d8712223b57c7a98ac8870c82236d3bcbbddd24bf59ca6ac8",
+              "17abf8f4949e071c83b33f7a89df5d916d7d941b7bc489e4eb79cb8c41ca36dd",
+              "06584b5ad65ac3bd681a84ee79724d325615b13efb576f608f931b49f3ea7ce2",
+              "b1b180166d4e8a50dab9f451afc811c0417c6e92eb6a46ce3656438fcc893adb",
+              "2aa0aa4aacc7411925f7212417ff4cc9ab7ff7bd315c7b0377e35becda2d65cc",
+              "bc7cf6c53c7528e235aeed4e466c83600223c63e1c0c7095714df2d11e2924c6",
+              "b1618a4ec0e0cc3f6dc1a5908123cd66ccfe6d063af8999f88de51b47008facf",
+              "7ff02d82c8a4076a3ec0239837f703fc242e9984476dbee8a658692906f0bb26",
+              "34cc477dbda9a3e83608c5a3dea52196443b7a6691cbf9dfc209d4f616cb9136",
+              "287cf83a267208b8482d380e51d664b3321095a0757c53b3d9c9963a6ecea9c7",
+              "b438d623cc9b778d96249fc6ebae77457351ec85de1f738fc128744104ae40e0",
+              "c71eb13fab924889a0d52184b9e832c5c04d47230a33dab530101bfaa5d80bbb",
+              "be9bebb2fd410d195a296f4cd7822b53a2cba453b0bb0a933f1661486fd8cef7",
+              "18a155e416d14a73c810e53d5cb8084971077d6bb7c2bbd901d9c53e2b071661",
+              "a0f37cea981d1278499f47e9b844a1bdad4beea18091522015b8655968d9f72e",
+              "69330fdee721328d4d586651a1a80535b26cda8428b94b681e61fb513a5eab4e",
+              "b884bb66681a5edf53442c27d9f7d6c4be4b9de930352ab496dd04981242413f",
+              "fb6bf896b31f7f989746a86e0ff094df5e9eb84a84e4b74ea6c878b0a095761f",
+              "530a3023ee3168c7c4bc67ca08904e38216ba23bc8f39c09f1e92d79f35d34e6"
+            ]
+          }
+        ]
+      }
+    },
+    "AA": {
+      "a_frames": 60,
+      "b_frames": 60,
+      "exact": 60,
+      "different_indices": [],
+      "video_exact": true,
+      "audio_pcm_exact": true,
+      "timeline_exact": true,
+      "file_exact": true
+    },
+    "AB": {
+      "a_frames": 60,
+      "b_frames": 60,
+      "exact": 60,
+      "different_indices": [],
+      "video_exact": true,
+      "audio_pcm_exact": true,
+      "timeline_exact": true,
+      "file_exact": true
+    },
+    "package_media_bytes": 1371820,
+    "original_media_bytes": 3018077,
+    "package_fraction": 0.4545344601877288,
+    "video_fraction": 0.40788597816948685,
+    "architecture_approved": false
+  },
+  "stage": {
+    "status": "STAGE_BLOCKED_WITH_EVIDENCE",
+    "gate_full_stage": false,
+    "scope": "Existing real Stage journey, observed original UI then QA-only selector correction",
+    "qa_controls": [
+      "Browser response only: single selector $ -> $$",
+      "libx264 encoder threads:v 1 in server memory"
+    ],
+    "original": {
+      "passed": false,
+      "error": "RuntimeError('OBSERVED_UI_FAILURE: $(...).forEach is not a function')",
+      "elapsed_sec": 4.165748453999996,
+      "evidence": {
+        "events": [],
+        "visible_screens": [
+          "failed"
+        ],
+        "error_text": "$(...).forEach is not a function",
+        "wizard_status": {
+          "id": "project",
+          "logs_path": "/tmp/saturno09-stage/runtime/Projects/E2E stage.zuckervid/cache/logs",
+          "message": "Idle",
+          "progress": 0,
+          "project_path": "/tmp/saturno09-stage/runtime/Projects/E2E stage.zuckervid",
+          "status": "idle"
+        },
+        "json_files": {
+          "runtime/Projects/E2E stage.zuckervid/project.json": {
+            "created_at": "2026-10-29T13:24:47.468228+00:00",
+            "inputs": {
+              "additional_audio": [
+                {
+                  "filename": "master.mp3",
+                  "kind": "master",
+                  "path": "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/master.mp3"
+                }
+              ],
+              "master": {
+                "mtime": 1793280182.3644886,
+                "path": "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/master.mp3",
+                "size": 1601436
+              },
+              "songs": null,
+              "videos": [
+                {
+                  "mtime": 1793280182.3604887,
+                  "path": "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/cam-sony.mp4",
+                  "probe": {
+                    "audio_codec": "aac",
+                    "bit_depth": 8,
+                    "cfr": true,
+                    "duration": 93,
+                    "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+                    "fps": 25,
+                    "hdr": false,
+                    "height": 360,
+                    "projection": null,
+                    "projection_reason": "no spherical metadata and non-2:1 geometry: 640x360 (1.778:1)",
+                    "rotation": 0,
+                    "valid_video": true,
+                    "video_codec": "h264",
+                    "width": 640
+                  },
+                  "size": 2387940
+                },
+                {
+                  "mtime": 1793280182.3554888,
+                  "path": "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/cam-fixed.mp4",
+                  "probe": {
+                    "audio_codec": "aac",
+                    "bit_depth": 8,
+                    "cfr": true,
+                    "duration": 95.04,
+                    "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+                    "fps": 25,
+                    "hdr": false,
+                    "height": 360,
+                    "projection": null,
+                    "projection_reason": "no spherical metadata and non-2:1 geometry: 640x360 (1.778:1)",
+                    "rotation": 0,
+                    "valid_video": true,
+                    "video_codec": "h264",
+                    "width": 640
+                  },
+                  "size": 1416641
+                },
+                {
+                  "mtime": 1793280182.3514886,
+                  "path": "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/cam-360.mp4",
+                  "probe": {
+                    "audio_codec": "aac",
+                    "bit_depth": 8,
+                    "cfr": true,
+                    "duration": 96,
+                    "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+                    "fps": 25,
+                    "hdr": false,
+                    "height": 320,
+                    "projection": "equirect",
+                    "projection_reason": "equirectangular geometry: 640x320 (2.000:1)",
+                    "rotation": 0,
+                    "valid_video": true,
+                    "video_codec": "h264",
+                    "width": 640
+                  },
+                  "projection": "equirect",
+                  "size": 1272853
+                }
+              ],
+              "warnings": []
+            },
+            "modified_at": "2026-10-29T13:24:47.478706+00:00",
+            "name": "E2E stage",
+            "schema_version": 1,
+            "settings": {
+              "cut": {
+                "min_segment_seconds": 4
+              },
+              "edit": {
+                "camera_role_weights": {
+                  "360": 50,
+                  "fixed_rear": 20,
+                  "handheld": 30
+                },
+                "fixed_camera_zoom_coverage_threshold": 2,
+                "fixed_rear_motion": true,
+                "spherical_hold_motion": "subtle",
+                "spherical_mode": "automatic",
+                "spherical_motion": true,
+                "spherical_shot_target_weights": {
+                  "audience": 0.1,
+                  "full_stage": 0.1,
+                  "singer": 0.6
+                },
+                "spherical_sweep": false,
+                "style": "coverage_first",
+                "sweep_speed_deg_per_sec": 20
+              },
+              "export": {
+                "force_rerender_segments": false,
+                "format": "mp4",
+                "resolution": "source",
+                "segment_workers": 2,
+                "transiciones_suaves": false,
+                "transitions": {
+                  "360": {
+                    "duration": 0
+                  },
+                  "backstage": {
+                    "duration": 0
+                  },
+                  "reel": {
+                    "duration": 0,
+                    "every": 3
+                  },
+                  "youtube": {
+                    "duration": 0,
+                    "sections_only": true
+                  }
+                }
+              },
+              "ingest": {
+                "copy_inputs": false,
+                "insv_fov": 190
+              },
+              "inputs": {
+                "copy_into_project": false
+              },
+              "spherical_landmarks": {},
+              "sync": {
+                "confidence_threshold": 6
+              },
+              "wizard": {
+                "platform": "youtube",
+                "reel_logo_mode": "default"
+              }
+            },
+            "stages": {
+              "cut": {
+                "error": null,
+                "fingerprint": null,
+                "finished_at": null,
+                "outputs": {},
+                "started_at": null,
+                "status": "pending"
+              },
+              "edit": {
+                "error": null,
+                "fingerprint": null,
+                "finished_at": null,
+                "outputs": {},
+                "started_at": null,
+                "status": "pending"
+              },
+              "export": {
+                "error": null,
+                "fingerprint": null,
+                "finished_at": null,
+                "outputs": {},
+                "started_at": null,
+                "status": "pending"
+              },
+              "ingest": {
+                "error": null,
+                "fingerprint": null,
+                "finished_at": null,
+                "outputs": {},
+                "started_at": null,
+                "status": "pending"
+              },
+              "sync": {
+                "error": null,
+                "fingerprint": null,
+                "finished_at": null,
+                "outputs": {},
+                "started_at": null,
+                "status": "pending"
+              }
+            }
+          },
+          "runtime/config.json": {
+            "band_name": "",
+            "branding": {
+              "intro_card": false,
+              "logo_path": "/home/runner/work/Montara/Montara/web/brand/montara-logo.png",
+              "mode": "default",
+              "watermark_path": "/home/runner/work/Montara/Montara/web/brand/montara-watermark.png"
+            },
+            "ffmpeg_path": "/usr/bin/ffmpeg",
+            "ffprobe_path": "/usr/bin/ffprobe",
+            "handle": "",
+            "inbox_path": "/tmp/saturno09-stage/runtime/Inbox",
+            "last_project_path": "/tmp/saturno09-stage/runtime/Projects/E2E stage.zuckervid",
+            "montara_branding_mode": "montara",
+            "project_roots": [
+              "/tmp/saturno09-stage/runtime/Projects"
+            ],
+            "source_folders": [
+              "/tmp/saturno09-stage/runtime/Inbox"
+            ]
+          }
+        }
+      }
+    },
+    "selector_control": {
+      "passed": false,
+      "error": "RuntimeError('OBSERVED_UI_FAILURE: $(...).forEach is not a function')",
+      "elapsed_sec": 3.6561609090000076,
+      "evidence": {
+        "events": [],
+        "visible_screens": [
+          "failed"
+        ],
+        "error_text": "$(...).forEach is not a function",
+        "wizard_status": {
+          "id": "project",
+          "logs_path": "/tmp/saturno09-stage/runtime/Projects/E2E stage-2.zuckervid/cache/logs",
+          "message": "Idle",
+          "progress": 0,
+          "project_path": "/tmp/saturno09-stage/runtime/Projects/E2E stage-2.zuckervid",
+          "status": "idle"
+        },
+        "json_files": {
+          "runtime/Projects/E2E stage-2.zuckervid/project.json": {
+            "created_at": "2026-10-29T13:24:51.233309+00:00",
+            "inputs": {
+              "additional_audio": [
+                {
+                  "filename": "master.mp3",
+                  "kind": "master",
+                  "path": "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/master.mp3"
+                }
+              ],
+              "master": {
+                "mtime": 1793280182.3644886,
+                "path": "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/master.mp3",
+                "size": 1601436
+              },
+              "songs": null,
+              "videos": [
+                {
+                  "mtime": 1793280182.3604887,
+                  "path": "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/cam-sony.mp4",
+                  "probe": {
+                    "audio_codec": "aac",
+                    "bit_depth": 8,
+                    "cfr": true,
+                    "duration": 93,
+                    "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+                    "fps": 25,
+                    "hdr": false,
+                    "height": 360,
+                    "projection": null,
+                    "projection_reason": "no spherical metadata and non-2:1 geometry: 640x360 (1.778:1)",
+                    "rotation": 0,
+                    "valid_video": true,
+                    "video_codec": "h264",
+                    "width": 640
+                  },
+                  "size": 2387940
+                },
+                {
+                  "mtime": 1793280182.3554888,
+                  "path": "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/cam-fixed.mp4",
+                  "probe": {
+                    "audio_codec": "aac",
+                    "bit_depth": 8,
+                    "cfr": true,
+                    "duration": 95.04,
+                    "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+                    "fps": 25,
+                    "hdr": false,
+                    "height": 360,
+                    "projection": null,
+                    "projection_reason": "no spherical metadata and non-2:1 geometry: 640x360 (1.778:1)",
+                    "rotation": 0,
+                    "valid_video": true,
+                    "video_codec": "h264",
+                    "width": 640
+                  },
+                  "size": 1416641
+                },
+                {
+                  "mtime": 1793280182.3514886,
+                  "path": "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/cam-360.mp4",
+                  "probe": {
+                    "audio_codec": "aac",
+                    "bit_depth": 8,
+                    "cfr": true,
+                    "duration": 96,
+                    "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+                    "fps": 25,
+                    "hdr": false,
+                    "height": 320,
+                    "projection": "equirect",
+                    "projection_reason": "equirectangular geometry: 640x320 (2.000:1)",
+                    "rotation": 0,
+                    "valid_video": true,
+                    "video_codec": "h264",
+                    "width": 640
+                  },
+                  "projection": "equirect",
+                  "size": 1272853
+                }
+              ],
+              "warnings": []
+            },
+            "modified_at": "2026-10-29T13:24:51.246431+00:00",
+            "name": "E2E stage",
+            "schema_version": 1,
+            "settings": {
+              "cut": {
+                "min_segment_seconds": 4
+              },
+              "edit": {
+                "camera_role_weights": {
+                  "360": 50,
+                  "fixed_rear": 20,
+                  "handheld": 30
+                },
+                "fixed_camera_zoom_coverage_threshold": 2,
+                "fixed_rear_motion": true,
+                "spherical_hold_motion": "subtle",
+                "spherical_mode": "automatic",
+                "spherical_motion": true,
+                "spherical_shot_target_weights": {
+                  "audience": 0.1,
+                  "full_stage": 0.1,
+                  "singer": 0.6
+                },
+                "spherical_sweep": false,
+                "style": "coverage_first",
+                "sweep_speed_deg_per_sec": 20
+              },
+              "export": {
+                "force_rerender_segments": false,
+                "format": "mp4",
+                "resolution": "source",
+                "segment_workers": 2,
+                "transiciones_suaves": false,
+                "transitions": {
+                  "360": {
+                    "duration": 0
+                  },
+                  "backstage": {
+                    "duration": 0
+                  },
+                  "reel": {
+                    "duration": 0,
+                    "every": 3
+                  },
+                  "youtube": {
+                    "duration": 0,
+                    "sections_only": true
+                  }
+                }
+              },
+              "ingest": {
+                "copy_inputs": false,
+                "insv_fov": 190
+              },
+              "inputs": {
+                "copy_into_project": false
+              },
+              "spherical_landmarks": {},
+              "sync": {
+                "confidence_threshold": 6
+              },
+              "wizard": {
+                "platform": "youtube",
+                "reel_logo_mode": "default"
+              }
+            },
+            "stages": {
+              "cut": {
+                "error": null,
+                "fingerprint": null,
+                "finished_at": null,
+                "outputs": {},
+                "started_at": null,
+                "status": "pending"
+              },
+              "edit": {
+                "error": null,
+                "fingerprint": null,
+                "finished_at": null,
+                "outputs": {},
+                "started_at": null,
+                "status": "pending"
+              },
+              "export": {
+                "error": null,
+                "fingerprint": null,
+                "finished_at": null,
+                "outputs": {},
+                "started_at": null,
+                "status": "pending"
+              },
+              "ingest": {
+                "error": null,
+                "fingerprint": null,
+                "finished_at": null,
+                "outputs": {},
+                "started_at": null,
+                "status": "pending"
+              },
+              "sync": {
+                "error": null,
+                "fingerprint": null,
+                "finished_at": null,
+                "outputs": {},
+                "started_at": null,
+                "status": "pending"
+              }
+            }
+          },
+          "runtime/Projects/E2E stage.zuckervid/project.json": {
+            "created_at": "2026-10-29T13:24:47.468228+00:00",
+            "inputs": {
+              "additional_audio": [
+                {
+                  "filename": "master.mp3",
+                  "kind": "master",
+                  "path": "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/master.mp3"
+                }
+              ],
+              "master": {
+                "mtime": 1793280182.3644886,
+                "path": "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/master.mp3",
+                "size": 1601436
+              },
+              "songs": null,
+              "videos": [
+                {
+                  "mtime": 1793280182.3604887,
+                  "path": "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/cam-sony.mp4",
+                  "probe": {
+                    "audio_codec": "aac",
+                    "bit_depth": 8,
+                    "cfr": true,
+                    "duration": 93,
+                    "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+                    "fps": 25,
+                    "hdr": false,
+                    "height": 360,
+                    "projection": null,
+                    "projection_reason": "no spherical metadata and non-2:1 geometry: 640x360 (1.778:1)",
+                    "rotation": 0,
+                    "valid_video": true,
+                    "video_codec": "h264",
+                    "width": 640
+                  },
+                  "size": 2387940
+                },
+                {
+                  "mtime": 1793280182.3554888,
+                  "path": "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/cam-fixed.mp4",
+                  "probe": {
+                    "audio_codec": "aac",
+                    "bit_depth": 8,
+                    "cfr": true,
+                    "duration": 95.04,
+                    "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+                    "fps": 25,
+                    "hdr": false,
+                    "height": 360,
+                    "projection": null,
+                    "projection_reason": "no spherical metadata and non-2:1 geometry: 640x360 (1.778:1)",
+                    "rotation": 0,
+                    "valid_video": true,
+                    "video_codec": "h264",
+                    "width": 640
+                  },
+                  "size": 1416641
+                },
+                {
+                  "mtime": 1793280182.3514886,
+                  "path": "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/cam-360.mp4",
+                  "probe": {
+                    "audio_codec": "aac",
+                    "bit_depth": 8,
+                    "cfr": true,
+                    "duration": 96,
+                    "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+                    "fps": 25,
+                    "hdr": false,
+                    "height": 320,
+                    "projection": "equirect",
+                    "projection_reason": "equirectangular geometry: 640x320 (2.000:1)",
+                    "rotation": 0,
+                    "valid_video": true,
+                    "video_codec": "h264",
+                    "width": 640
+                  },
+                  "projection": "equirect",
+                  "size": 1272853
+                }
+              ],
+              "warnings": []
+            },
+            "modified_at": "2026-10-29T13:24:47.478706+00:00",
+            "name": "E2E stage",
+            "schema_version": 1,
+            "settings": {
+              "cut": {
+                "min_segment_seconds": 4
+              },
+              "edit": {
+                "camera_role_weights": {
+                  "360": 50,
+                  "fixed_rear": 20,
+                  "handheld": 30
+                },
+                "fixed_camera_zoom_coverage_threshold": 2,
+                "fixed_rear_motion": true,
+                "spherical_hold_motion": "subtle",
+                "spherical_mode": "automatic",
+                "spherical_motion": true,
+                "spherical_shot_target_weights": {
+                  "audience": 0.1,
+                  "full_stage": 0.1,
+                  "singer": 0.6
+                },
+                "spherical_sweep": false,
+                "style": "coverage_first",
+                "sweep_speed_deg_per_sec": 20
+              },
+              "export": {
+                "force_rerender_segments": false,
+                "format": "mp4",
+                "resolution": "source",
+                "segment_workers": 2,
+                "transiciones_suaves": false,
+                "transitions": {
+                  "360": {
+                    "duration": 0
+                  },
+                  "backstage": {
+                    "duration": 0
+                  },
+                  "reel": {
+                    "duration": 0,
+                    "every": 3
+                  },
+                  "youtube": {
+                    "duration": 0,
+                    "sections_only": true
+                  }
+                }
+              },
+              "ingest": {
+                "copy_inputs": false,
+                "insv_fov": 190
+              },
+              "inputs": {
+                "copy_into_project": false
+              },
+              "spherical_landmarks": {},
+              "sync": {
+                "confidence_threshold": 6
+              },
+              "wizard": {
+                "platform": "youtube",
+                "reel_logo_mode": "default"
+              }
+            },
+            "stages": {
+              "cut": {
+                "error": null,
+                "fingerprint": null,
+                "finished_at": null,
+                "outputs": {},
+                "started_at": null,
+                "status": "pending"
+              },
+              "edit": {
+                "error": null,
+                "fingerprint": null,
+                "finished_at": null,
+                "outputs": {},
+                "started_at": null,
+                "status": "pending"
+              },
+              "export": {
+                "error": null,
+                "fingerprint": null,
+                "finished_at": null,
+                "outputs": {},
+                "started_at": null,
+                "status": "pending"
+              },
+              "ingest": {
+                "error": null,
+                "fingerprint": null,
+                "finished_at": null,
+                "outputs": {},
+                "started_at": null,
+                "status": "pending"
+              },
+              "sync": {
+                "error": null,
+                "fingerprint": null,
+                "finished_at": null,
+                "outputs": {},
+                "started_at": null,
+                "status": "pending"
+              }
+            }
+          },
+          "runtime/config.json": {
+            "band_name": "",
+            "branding": {
+              "intro_card": false,
+              "logo_path": "/home/runner/work/Montara/Montara/web/brand/montara-logo.png",
+              "mode": "default",
+              "watermark_path": "/home/runner/work/Montara/Montara/web/brand/montara-watermark.png"
+            },
+            "ffmpeg_path": "/usr/bin/ffmpeg",
+            "ffprobe_path": "/usr/bin/ffprobe",
+            "handle": "",
+            "inbox_path": "/tmp/saturno09-stage/runtime/Inbox",
+            "last_project_path": "/tmp/saturno09-stage/runtime/Projects/E2E stage-2.zuckervid",
+            "montara_branding_mode": "montara",
+            "project_roots": [
+              "/tmp/saturno09-stage/runtime/Projects"
+            ],
+            "source_folders": [
+              "/tmp/saturno09-stage/runtime/Inbox"
+            ]
+          }
+        }
+      }
+    },
+    "server_log_tail": "2026-10-29 13:24:42,864 INFO montara Montara on http://127.0.0.1:35055 (data: /tmp/saturno09-stage/runtime)\n * Serving Flask app 'server.api'\n * Debug mode: off\n2026-10-29 13:24:42,867 INFO werkzeug \u001b[31m\u001b[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.\u001b[0m\n * Running on http://127.0.0.1:35055\n2026-10-29 13:24:42,867 INFO werkzeug \u001b[33mPress CTRL+C to quit\u001b[0m\n2026-10-29 13:24:42,905 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:42] \"GET /api/v1/wizard/status HTTP/1.1\" 200 -\n2026-10-29 13:24:43,386 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:43] \"GET / HTTP/1.1\" 200 -\n2026-10-29 13:24:43,399 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:43] \"GET /montara.css HTTP/1.1\" 200 -\n2026-10-29 13:24:43,404 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:43] \"GET /push-pack.css HTTP/1.1\" 200 -\n2026-10-29 13:24:43,406 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:43] \"GET /resumable-upload.js HTTP/1.1\" 200 -\n2026-10-29 13:24:43,407 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:43] \"GET /mix-levels.js HTTP/1.1\" 200 -\n2026-10-29 13:24:43,427 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:43] \"GET /montara.js HTTP/1.1\" 200 -\n2026-10-29 13:24:43,431 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:43] \"GET /show-geometry.js HTTP/1.1\" 200 -\n2026-10-29 13:24:43,431 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:43] \"GET /show-chroma.js HTTP/1.1\" 200 -\n2026-10-29 13:24:43,429 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:43] \"GET /full-session.js HTTP/1.1\" 200 -\n2026-10-29 13:24:43,430 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:43] \"GET /show-media.js HTTP/1.1\" 200 -\n2026-10-29 13:24:43,430 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:43] \"GET /show-editor.js HTTP/1.1\" 200 -\n2026-10-29 13:24:43,441 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:43] \"GET /flat-camera.js HTTP/1.1\" 200 -\n2026-10-29 13:24:43,444 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:43] \"GET /spherical-preview.js HTTP/1.1\" 200 -\n2026-10-29 13:24:43,445 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:43] \"GET /show-music.js HTTP/1.1\" 200 -\n2026-10-29 13:24:43,446 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:43] \"GET /show-live.js HTTP/1.1\" 200 -\n2026-10-29 13:24:43,447 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:43] \"GET /show-modes.js HTTP/1.1\" 200 -\n2026-10-29 13:24:43,448 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:43] \"GET /cut-editor.js HTTP/1.1\" 200 -\n2026-10-29 13:24:43,450 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:43] \"GET /compact-editor.js HTTP/1.1\" 200 -\n2026-10-29 13:24:43,456 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:43] \"GET /push-pack.js HTTP/1.1\" 200 -\n2026-10-29 13:24:43,461 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:43] \"GET /preview-share.js HTTP/1.1\" 200 -\n2026-10-29 13:24:43,461 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:43] \"GET /mark.svg HTTP/1.1\" 200 -\n2026-10-29 13:24:43,512 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:43] \"GET /montara/branding HTTP/1.1\" 200 -\n2026-10-29 13:24:43,515 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:43] \"GET /montara/push/packs/latest HTTP/1.1\" 200 -\n2026-10-29 13:24:43,517 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:43] \"GET /montara/version HTTP/1.1\" 200 -\n2026-10-29 13:24:46,915 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:46] \"GET /montara/samples?platform=youtube&variant= HTTP/1.1\" 200 -\n2026-10-29 13:24:47,007 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:47] \"GET /montara/samples?platform=youtube&variant=master HTTP/1.1\" 200 -\n2026-10-29 13:24:47,447 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:47] \"POST /montara/branding HTTP/1.1\" 200 -\n2026-10-29 13:24:47,462 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:47] \"POST /api/v1/wizard/projects/new HTTP/1.1\" 200 -\n2026-10-29 13:24:47,480 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:47] \"POST /api/v1/wizard/draft HTTP/1.1\" 200 -\n2026-10-29 13:24:47,546 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:47] \"GET /api/v1/wizard/status HTTP/1.1\" 200 -\n2026-10-29 13:24:47,652 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:47] \"GET / HTTP/1.1\" 200 -\n2026-10-29 13:24:47,667 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:47] \"GET /montara.css HTTP/1.1\" 200 -\n2026-10-29 13:24:47,670 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:47] \"GET /push-pack.css HTTP/1.1\" 200 -\n2026-10-29 13:24:47,671 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:47] \"GET /resumable-upload.js HTTP/1.1\" 200 -\n2026-10-29 13:24:47,672 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:47] \"GET /mix-levels.js HTTP/1.1\" 200 -\n2026-10-29 13:24:47,679 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:47] \"GET /full-session.js HTTP/1.1\" 200 -\n2026-10-29 13:24:47,681 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:47] \"GET /show-editor.js HTTP/1.1\" 200 -\n2026-10-29 13:24:47,684 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:47] \"GET /show-chroma.js HTTP/1.1\" 200 -\n2026-10-29 13:24:47,686 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:47] \"GET /show-media.js HTTP/1.1\" 200 -\n2026-10-29 13:24:47,686 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:47] \"GET /show-geometry.js HTTP/1.1\" 200 -\n2026-10-29 13:24:47,688 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:47] \"GET /show-live.js HTTP/1.1\" 200 -\n2026-10-29 13:24:47,696 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:47] \"GET /show-modes.js HTTP/1.1\" 200 -\n2026-10-29 13:24:47,698 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:47] \"GET /show-music.js HTTP/1.1\" 200 -\n2026-10-29 13:24:47,699 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:47] \"GET /flat-camera.js HTTP/1.1\" 200 -\n2026-10-29 13:24:47,700 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:47] \"GET /spherical-preview.js HTTP/1.1\" 200 -\n2026-10-29 13:24:47,701 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:47] \"GET /cut-editor.js HTTP/1.1\" 200 -\n2026-10-29 13:24:47,702 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:47] \"GET /compact-editor.js HTTP/1.1\" 200 -\n2026-10-29 13:24:47,708 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:47] \"GET /push-pack.js HTTP/1.1\" 200 -\n2026-10-29 13:24:47,708 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:47] \"GET /preview-share.js HTTP/1.1\" 200 -\n2026-10-29 13:24:47,709 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:47] \"GET /mark.svg HTTP/1.1\" 200 -\n2026-10-29 13:24:47,737 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:47] \"GET /montara/branding HTTP/1.1\" 200 -\n2026-10-29 13:24:47,738 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:47] \"GET /montara/version HTTP/1.1\" 200 -\n2026-10-29 13:24:47,740 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:47] \"GET /montara/push/packs/latest HTTP/1.1\" 200 -\n2026-10-29 13:24:50,688 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:50] \"GET /montara/samples?platform=youtube&variant= HTTP/1.1\" 200 -\n2026-10-29 13:24:50,748 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:50] \"GET /montara/samples?platform=youtube&variant=master HTTP/1.1\" 200 -\n2026-10-29 13:24:51,198 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:51] \"POST /montara/branding HTTP/1.1\" 200 -\n2026-10-29 13:24:51,212 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:51] \"POST /api/v1/wizard/projects/new HTTP/1.1\" 200 -\n2026-10-29 13:24:51,247 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:51] \"POST /api/v1/wizard/draft HTTP/1.1\" 200 -\n2026-10-29 13:24:51,309 INFO werkzeug 127.0.0.1 - - [29/Oct/2026 13:24:51] \"GET /api/v1/wizard/status HTTP/1.1\" 200 -\n",
+    "ffmpeg_commands": [],
+    "export_files": []
+  }
+}

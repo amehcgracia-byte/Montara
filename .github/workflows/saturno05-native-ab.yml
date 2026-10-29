@@ -1,5 +1,5 @@
-name: Saturn 09 reduced isolated package and Stage diagnosis
-# One consolidated execution. Code/docs-only commits do not trigger this job.
+name: Saturn 10 Stage journey with observed selector controls
+# Stage only: reduced video/audio gate already passed in run 40881393749.
 on:
   push:
     branches:
@@ -7,10 +7,8 @@ on:
     paths:
       - .github/workflows/saturno05-native-ab.yml
   workflow_dispatch:
-
 permissions:
   contents: read
-
 jobs:
   native-ab:
     runs-on: ubuntu-24.04
@@ -22,26 +20,23 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install runtime for the consolidated controls
+      - name: Install Stage runtime
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends ffmpeg fonts-dejavu-core
           pip install -r requirements.txt
           python -m playwright install --with-deps chromium
-          ffmpeg -version
-      - name: Reduced video and audio package with original paths and A caches masked
-        run: python experiments/saturno_09/reduced_gate.py
-      - name: Diagnose real Stage journey and predeclared browser-only selector control
-        if: always()
+      - name: Existing real Stage journey with two browser-only selector corrections
+        env:
+          SATURNO_STAGE_USE_PRIOR_ORIGINAL: '1'
         run: python experiments/saturno_09/stage_probe.py
-      - name: Preserve structured evidence in logs
+      - name: Preserve scientific gate and evidence in logs
         if: always()
         run: |
           python - <<'PY'
           from pathlib import Path
-          for folder in ("/tmp/saturno09", "/tmp/saturno09-stage"):
-              p = Path(folder) / "REPORT.json"
-              if p.is_file():
-                  print(f"EVIDENCE_FILE={p}", flush=True)
-                  print(p.read_text(), flush=True)
+          p = Path("/tmp/saturno09-stage/REPORT.json")
+          if p.is_file():
+              print("EVIDENCE_FILE=" + str(p), flush=True)
+              print(p.read_text(), flush=True)
           PY
