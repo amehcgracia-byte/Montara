@@ -1,0 +1,33 @@
+name: Saturn 24 full selective isolated Stage AAB
+on:
+  push:
+    branches: [fernando/continuacion-montara]
+    paths: [.github/workflows/saturno24-full-selective.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  selective:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg fonts-dejavu-core
+          python -m pip install -r requirements.txt
+      - name: Full isolated selective AAB
+        timeout-minutes: 54
+        run: python experiments/saturno_24/full_selective_isolated.py
+      - name: Preserved summary
+        if: always()
+        run: |
+          if test -f /tmp/saturno-full24/REPORT.json; then
+            python -c 'import json; d=json.load(open("/tmp/saturno-full24/REPORT.json")); print("SATURNO24_PRESERVED="+json.dumps({k:v for k,v in d.items() if k!="source_rows"}))'
+          fi
