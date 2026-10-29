@@ -1,0 +1,35 @@
+name: Saturn 05 isolated native Zucker A/B
+on:
+  push:
+    branches:
+      - fernando/continuacion-montara
+    paths:
+      - .github/workflows/saturno05-native-ab.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-ab:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: FFmpeg and Python
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg fonts-dejavu-core
+          pip install -r requirements.txt
+      - name: Native Zucker _render_plan A/B
+        run: |
+          python experiments/saturno_05/native_ab.py
+      - name: Publish minimal result to logs
+        if: always()
+        run: |
+          test -f /tmp/saturno-native-ab/AB_VERDICT.json && cat /tmp/saturno-native-ab/AB_VERDICT.json || true
