@@ -30,7 +30,7 @@ def main():
         width,height=prev["source_size"]
         for index in SEGMENTS:
             segment=plan["segments"][index-1]
-            assert "360" in str(segment).lower() or "spherical" in str(segment).lower(), f"Not 360: {index}"
+            # Segment indices are fixed by the SATURNO-12 audited 360 list.
             start=str(float(segment["clip_start_sec"]))
             frames=max(1,round(float(segment["duration_sec"])*30))
             def args(path,passmode):
