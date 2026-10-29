@@ -1,5 +1,5 @@
 name: Saturn 05 isolated native Zucker A/B
-# QA third pass: 1s pre and post context plus original-file isolation
+# QA fourth pass: isolate mismatch before vs after Zucker render
 on:
   push:
     branches:
