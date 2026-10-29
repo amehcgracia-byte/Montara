@@ -1,0 +1,40 @@
+name: Saturn 22 exact GOP deletion bounds
+on:
+  push:
+    branches:
+      - fernando/continuacion-montara
+    paths:
+      - .github/workflows/saturno22-gop-bounds.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  gop-optimization:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install FFmpeg
+        timeout-minutes: 5
+        run: |
+          sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 update -qq
+          sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 install -y --no-install-recommends ffmpeg
+      - name: Measure deletion-minimal GOP set with exact output constraints
+        timeout-minutes: 9
+        run: python experiments/saturno_22/gop_deletion_audit.py
+      - name: Print compact evidence
+        if: always()
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('/tmp/saturno22-gop/REPORT.json')
+          if p.exists():
+              r=json.loads(p.read_text())
+              print('SATURNO22_PRESERVED='+json.dumps({k:v for k,v in r.items() if k not in ('variants','final_selection')},separators=(',',':')))
+          PY
