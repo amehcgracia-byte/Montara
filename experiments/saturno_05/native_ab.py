@@ -2,7 +2,7 @@
 A deliberately narrow native renderer integration gate, NOT a complete Stage E2E.
 """
 from __future__ import annotations
-import hashlib,json,os,subprocess,time,sys,tempfile,shutil
+import hashlib,json,os,subprocess,time,sys,tempfile,shutil,threading
 from pathlib import Path
 
 REPO=Path(__file__).resolve().parents[2]
@@ -50,6 +50,49 @@ def sequence_diagnostics(a,b):
 def probe(path):
     return json.loads(command("ffprobe","-v","error","-show_streams","-show_format","-of","json",path))
 
+def install_trace():
+    original=export_module._run_ffmpeg_progress
+    traces=[]
+    lock=threading.Lock()
+    def traced(command,duration,label,progress):
+        start=time.perf_counter()
+        error=None
+        try:
+            return original(command,duration,label,progress)
+        except Exception as exc:
+            error=repr(exc)
+            raise
+        finally:
+            destination=Path(str(command[-1])) if command else Path("/nonexistent")
+            # Only inspect generated media, never mutate originals or engine.
+            entry={"command":[str(x) for x in command],"label":str(label),
+                   "elapsed_sec":round(time.perf_counter()-start,4),
+                   "error":error,"output_exists":destination.is_file()}
+            if destination.is_file() and destination.suffix.lower() in {".mp4",".mov",".mkv"}:
+                entry["output_bytes"]=destination.stat().st_size
+                entry["output_sha256"]=hashlib.sha256(destination.read_bytes()).hexdigest()
+                try:
+                    entry["frame_hashes"]=decoded_frame_digests(destination)
+                except Exception as exc:
+                    entry["frame_probe_error"]=repr(exc)
+            with lock:
+                traces.append(entry)
+    export_module._run_ffmpeg_progress=traced
+    return traces
+
+def trace_compare(traces,a_label,b_label):
+    def find(label):
+        return [t for t in traces if label in t.get("output_path_tag","")]
+    # Compare commands by output kind rather than assuming a given stage name.
+    matching={}
+    for x in (a_label,b_label):
+        matching[x]=[t for t in traces if x in " ".join(t["command"])]
+    return {"by_export":{x:[{"command":t["command"],"elapsed_sec":t["elapsed_sec"],
+                            "output_sha256":t.get("output_sha256"),
+                            "frames":len(t.get("frame_hashes",[])),
+                            "error":t["error"]} for t in items]
+                  for x,items in matching.items()}}
+
 def measure_render(root,source,master,clip_start,label):
     folder=root/label;folder.mkdir()
     project=create_project(label,str(folder/"QA.zuckervid"))
@@ -74,6 +117,17 @@ def measure_render(root,source,master,clip_start,label):
         "sha256":hashlib.sha256(output.read_bytes()).hexdigest(),"pixels":video_pixels(output),
         "duration_s":float(probe(output)["format"]["duration"])}
 
+def _trace_pair_comparison(traces,label_a,label_b):
+    a=[t for t in traces if label_a in " ".join(t["command"]) and t.get("frame_hashes")]
+    b=[t for t in traces if label_b in " ".join(t["command"]) and t.get("frame_hashes")]
+    out=[]
+    for idx,(x,y) in enumerate(zip(a,b)):
+        l=x["frame_hashes"];r=y["frame_hashes"]
+        out.append({"step_index":idx,"frames_a":len(l),"frames_b":len(r),
+                    "exact":sum(v==w for v,w in zip(l,r)),
+                    "different":[i for i,(v,w) in enumerate(zip(l,r)) if v!=w]})
+    return {"a_steps":len(a),"b_steps":len(b),"comparisons":out}
+
 def eval_fraction(s):
     a,b=s.split("/")
     return int(a)/int(b) if int(b) else 30
@@ -83,6 +137,7 @@ def main():
     diagnostic_no_fade=os.environ.get("SATURNO_QA_NO_FADES")=="1"
     if diagnostic_no_fade:
         export_module.CONTENT_FADE_DURATION=0.0
+    traces=install_trace()
     source=REPO/"tests/fixtures/much-to-me/cam-fixed.mp4"
     master=REPO/"tests/fixtures/much-to-me/master.mp3"
     out=Path(os.environ.get("SATURNO_AB_OUT","/tmp/saturno-native-ab"))
@@ -116,7 +171,13 @@ def main():
         finally:
             hidden.rename(source)
         same_pixels=(a["pixels"]==b["pixels"])
-        report.update(A_repeat=a_repeat, A_repeat_comparison=a_repeat_comparison,
+        report.update(trace_summary=trace_compare(traces,"A_full","A_repeat_same_source"),
+            trace_records=[{k:v for k,v in t.items() if k!="frame_hashes"}
+                           for t in traces],
+            traced_frame_comparisons={
+               "A_full_vs_A_repeat": _trace_pair_comparison(traces,"A_full","A_repeat_same_source"),
+               "A_full_vs_B": _trace_pair_comparison(traces,"A_full","B_partial")},
+            A_repeat=a_repeat, A_repeat_comparison=a_repeat_comparison,
             pre_export_decoded_window=raw_check,
             pre_export_pixels_equal=raw_check["source_window"]==raw_check["fragment_window"],
             byte_identical_source_copy=(hashlib.sha256(source.read_bytes()).hexdigest()==hashlib.sha256(fragment.read_bytes()).hexdigest()),
