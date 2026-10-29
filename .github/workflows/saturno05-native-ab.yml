@@ -1,5 +1,4 @@
-name: Saturn 12 full fixed Stage plan A-A and isolated A-B
-# Real fixed plan already captured. Does not repeat the UI, ingest, sync or creative edit.
+name: Saturn 14 exact 360 decoder diagnostic
 on:
   push:
     branches:
@@ -10,9 +9,9 @@ on:
 permissions:
   contents: read
 jobs:
-  native-ab:
+  decoder-window:
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
@@ -20,20 +19,17 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install complete native renderer runtime
+      - name: Install FFmpeg only
+        timeout-minutes: 5
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends ffmpeg fonts-dejavu-core
-          pip install -r requirements.txt
-      - name: Full forced A-A then isolated B, including native 360 encoder control
-        run: python experiments/saturno_10/full_gate.py
-      - name: Preserve scientific gate and worker errors
-        if: always()
+          sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 update -qq
+          sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 install -y --no-install-recommends ffmpeg
+      - name: Decode one 278-frame window with exact and previous commands
+        timeout-minutes: 3
+        run: python experiments/saturno_14/decoder_window.py
+      - name: Print preserved evidence if diagnostic was interrupted
+        if: failure()
         run: |
-          python - <<'PY'
-          from pathlib import Path
-          p = Path("/tmp/saturno-full12/REPORT.json")
-          if p.is_file():
-              print("EVIDENCE_FILE=" + str(p), flush=True)
-              print(p.read_text(), flush=True)
-          PY
+          if test -f /tmp/saturno14-decoder/REPORT.json; then
+            cat /tmp/saturno14-decoder/REPORT.json
+          fi
