@@ -1,5 +1,5 @@
-name: Saturn 10 Stage journey with observed selector controls
-# Stage only: reduced video/audio gate already passed in run 40881393749.
+name: Saturn 11 real Stage packet and colour preflight
+# No rerun of the successful Stage or isolated flat render.
 on:
   push:
     branches:
@@ -12,7 +12,7 @@ permissions:
 jobs:
   native-ab:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
@@ -20,22 +20,19 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install Stage runtime
+      - name: Install decoder and native analysis runtime
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends ffmpeg fonts-dejavu-core
           pip install -r requirements.txt
-          python -m playwright install --with-deps chromium
-      - name: Existing real Stage journey with two browser-only selector corrections
-        env:
-          SATURNO_STAGE_USE_PRIOR_ORIGINAL: '1'
-        run: python experiments/saturno_09/stage_probe.py
-      - name: Preserve scientific gate and evidence in logs
+      - name: Packet, decoded-window and native-colour preflight of exact Stage plan
+        run: python experiments/saturno_10/packet_preflight.py
+      - name: Preserve structured preflight in logs
         if: always()
         run: |
           python - <<'PY'
           from pathlib import Path
-          p = Path("/tmp/saturno09-stage/REPORT.json")
+          p = Path("/tmp/saturno-packet-preflight/REPORT.json")
           if p.is_file():
               print("EVIDENCE_FILE=" + str(p), flush=True)
               print(p.read_text(), flush=True)
