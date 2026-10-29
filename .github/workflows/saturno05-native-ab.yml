@@ -1,4 +1,4 @@
-name: Saturn 17 native 360 reprojection AAB
+name: Saturn 18 isolated full AAB with QA decoder passthrough
 on:
   push:
     branches:
@@ -9,9 +9,9 @@ on:
 permissions:
   contents: read
 jobs:
-  decoder-window:
+  full-plan:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 65
     steps:
       - uses: actions/checkout@v4
         with:
@@ -19,18 +19,31 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install FFmpeg and native reprojection dependencies
-        timeout-minutes: 5
+      - name: Install FFmpeg and Python runtime
+        timeout-minutes: 12
         run: |
           sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 update -qq
-          sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 install -y --no-install-recommends ffmpeg
-          python -m pip install numpy opencv-python-headless
-      - name: Test actual Zucker reprojection of segment 0003 A/A/B
-        timeout-minutes: 8
-        run: python experiments/saturno_17/reprojection_gate.py
-      - name: Print preserved evidence if diagnostic was interrupted
-        if: failure()
+          sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 install -y --no-install-recommends ffmpeg fonts-dejavu-core
+          python -m pip install -r requirements.txt
+      - name: Full isolated Stage-plan A/A/B with QA-only decoder control
+        timeout-minutes: 52
+        run: python experiments/saturno_18/full_gate_passthrough.py
+      - name: Print compact preserved result if available
+        if: always()
         run: |
-          if test -f /tmp/saturno17-reprojection/REPORT.json; then
-            cat /tmp/saturno17-reprojection/REPORT.json
-          fi
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          path=Path('/tmp/saturno-full18/REPORT.json')
+          if not path.exists():
+              print("SATURNO18_REPORT_NOT_WRITTEN")
+          else:
+              r=json.loads(path.read_text())
+              print("SATURNO18_PRESERVED="+json.dumps({
+                  'status':r.get('status'),
+                  'AA':{k:r.get('AA',{}).get(k) for k in ('same_index_exact','video_exact','audio_exact','timeline_exact','file_exact')},
+                  'AB':{k:r.get('AB',{}).get(k) for k in ('same_index_exact','video_exact','audio_exact','timeline_exact','file_exact')},
+                  'summaries':r.get('summaries'),
+                  'error':r.get('error')
+              },separators=(',',':')))
+          PY
