@@ -22,6 +22,28 @@ def video_pixels(path):
     if p.returncode:raise RuntimeError(p.stderr.decode(errors="replace")[-700:])
     return hashlib.sha256(p.stdout).hexdigest(),len(p.stdout)
 
+def decoded_frame_digests(path):
+    probe_result=probe(path)
+    v=next(s for s in probe_result["streams"] if s["codec_type"]=="video")
+    width,height=int(v["width"]),int(v["height"])
+    frame_size=width*height*3//2
+    p=subprocess.run(["ffmpeg","-nostdin","-v","error","-i",str(path),"-map","0:v:0",
+       "-pix_fmt","yuv420p","-f","rawvideo","-"],capture_output=True,timeout=300,check=True)
+    if len(p.stdout)%frame_size:raise ValueError("unaligned raw frame bytes")
+    return [hashlib.sha256(p.stdout[i:i+frame_size]).hexdigest()
+        for i in range(0,len(p.stdout),frame_size)]
+
+def sequence_diagnostics(a,b):
+    left=decoded_frame_digests(a);right=decoded_frame_digests(b)
+    exact=sum(x==y for x,y in zip(left,right))
+    best={"shift":0,"matched":exact}
+    for shift in range(-4,5):
+        matched=sum(left[i]==right[i+shift] for i in range(max(0,-shift),min(len(left),len(right)-shift)))
+        if matched>best["matched"]:best={"shift":shift,"matched":matched}
+    return {"A_frames":len(left),"B_frames":len(right),
+            "same_index_exact_frames":exact,"best_small_shift":best,
+            "A_first_8":left[:8],"B_first_8":right[:8]}
+
 def probe(path):
     return json.loads(command("ffprobe","-v","error","-show_streams","-show_format","-of","json",path))
 
@@ -68,9 +90,17 @@ def main():
         command("ffmpeg","-nostdin","-v","error","-y","-ss","4","-i",source,
             "-t","2","-map","0:v:0","-an","-c:v","libx264","-qp","0",
             "-pix_fmt","yuv420p",fragment)
-        b=measure_render(out,fragment,master,0,"B_partial")
+        hidden=source.with_name(source.name+".saturno-hide")
+        if hidden.exists():raise ValueError("QA original hidden path already exists")
+        source.rename(hidden)
+        try:
+            b=measure_render(out,fragment,master,0,"B_partial")
+            b["original_absent_during_B"]=not source.exists()
+        finally:
+            hidden.rename(source)
         same_pixels=(a["pixels"]==b["pixels"])
-        report.update(status="PASS_NATIVE_AB_PIXELS" if same_pixels else "FAIL_NATIVE_AB_PIXELS",
+        report.update(frame_comparison=sequence_diagnostics(a["file"],b["file"]),
+            status="PASS_NATIVE_AB_PIXELS" if same_pixels else "FAIL_NATIVE_AB_PIXELS",
             A=a,B=b,package_video_bytes=fragment.stat().st_size,full_video_bytes=source.stat().st_size,
             package_fraction=round(fragment.stat().st_size/source.stat().st_size,5),
             audio_limitation="The original master MP3 is shared by A and B; complete source isolation not proved",
