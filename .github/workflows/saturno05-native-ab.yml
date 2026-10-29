@@ -1,5 +1,5 @@
 name: Saturn 05 isolated native Zucker A/B
-# QA fourth pass: isolate mismatch before vs after Zucker render
+# QA fifth pass: preserve timeline origin using prefix streamcopy
 on:
   push:
     branches:
