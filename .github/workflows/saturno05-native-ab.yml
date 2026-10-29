@@ -1,5 +1,5 @@
 name: Saturn 05 isolated native Zucker A/B
-# QA fifth pass: preserve timeline origin using prefix streamcopy
+# QA sixth pass: byte-for-byte negative control with original inaccessible
 on:
   push:
     branches:
