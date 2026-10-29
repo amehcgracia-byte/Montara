@@ -1,0 +1,1015 @@
+{
+  "run_id": 40886014059,
+  "job_id": 123489800215,
+  "commit": "05567cc0e6c8a232115ad48178f4852ff9d2393d",
+  "report": {
+    "status": "PASS_INPUT_PREFLIGHT",
+    "scope": "GOP and decoded-input/colour preflight, NOT final rendered A/B",
+    "stage_reference_run": 40882186838,
+    "sources": [
+      {
+        "source": "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/cam-sony.mp4",
+        "target": "/tmp/saturno-packet-preflight/package/cam-sony.mp4",
+        "source_bytes": 2387940,
+        "target_bytes": 1595299,
+        "source_sha256": "858933d35473862b347dd4c76826c896d2f5fd3c46313295d5fb57ff074e7b80",
+        "target_sha256": "33dbf10228ac1fbe2b99ee092c009e41cafd24a8f7e2de7b76182df7b056067b",
+        "groups_total": 10,
+        "groups_selected": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9
+        ],
+        "group_packet_ranges": [
+          [
+            0,
+            250
+          ],
+          [
+            250,
+            499
+          ],
+          [
+            499,
+            749
+          ],
+          [
+            749,
+            999
+          ],
+          [
+            999,
+            1249
+          ],
+          [
+            1249,
+            1416
+          ],
+          [
+            1416,
+            1644
+          ],
+          [
+            1644,
+            1868
+          ],
+          [
+            1868,
+            2099
+          ],
+          [
+            2099,
+            2325
+          ]
+        ],
+        "source_packets": 2325,
+        "retained_packets": 2325,
+        "original_video_packet_bytes": 1567163,
+        "retained_video_packet_bytes": 1567163,
+        "packet_payload_and_pts_dts_exact": true,
+        "duration_exact": true,
+        "duration_A": "93.000000",
+        "duration_B": "93.000000",
+        "needed_windows": [
+          [
+            28.480317793650794,
+            31.880317793650793
+          ],
+          [
+            36.34698379365079,
+            39.24698379365079
+          ],
+          [
+            28.25,
+            29.516666999999998
+          ],
+          [
+            50.58031779365079,
+            52.24698379365079
+          ],
+          [
+            61.01365079365079,
+            62.280317793650795
+          ],
+          [
+            63.51365079365079,
+            64.7803177936508
+          ],
+          [
+            77.3803177936508,
+            81.7469837936508
+          ],
+          [
+            9.3,
+            11.3
+          ],
+          [
+            27.9,
+            29.9
+          ],
+          [
+            46.5,
+            48.5
+          ],
+          [
+            65.1,
+            67.1
+          ],
+          [
+            83.7,
+            85.7
+          ]
+        ],
+        "colour_commands_A": [
+          [
+            "/usr/bin/ffmpeg",
+            "-hide_banner",
+            "-nostdin",
+            "-ss",
+            "9.300",
+            "-t",
+            "2.000",
+            "-i",
+            "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/cam-sony.mp4",
+            "-vf",
+            "fps=2,scale=320:-2,signalstats,metadata=print",
+            "-an",
+            "-f",
+            "null",
+            "-"
+          ],
+          [
+            "/usr/bin/ffmpeg",
+            "-hide_banner",
+            "-nostdin",
+            "-ss",
+            "27.900",
+            "-t",
+            "2.000",
+            "-i",
+            "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/cam-sony.mp4",
+            "-vf",
+            "fps=2,scale=320:-2,signalstats,metadata=print",
+            "-an",
+            "-f",
+            "null",
+            "-"
+          ],
+          [
+            "/usr/bin/ffmpeg",
+            "-hide_banner",
+            "-nostdin",
+            "-ss",
+            "46.500",
+            "-t",
+            "2.000",
+            "-i",
+            "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/cam-sony.mp4",
+            "-vf",
+            "fps=2,scale=320:-2,signalstats,metadata=print",
+            "-an",
+            "-f",
+            "null",
+            "-"
+          ],
+          [
+            "/usr/bin/ffmpeg",
+            "-hide_banner",
+            "-nostdin",
+            "-ss",
+            "65.100",
+            "-t",
+            "2.000",
+            "-i",
+            "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/cam-sony.mp4",
+            "-vf",
+            "fps=2,scale=320:-2,signalstats,metadata=print",
+            "-an",
+            "-f",
+            "null",
+            "-"
+          ],
+          [
+            "/usr/bin/ffmpeg",
+            "-hide_banner",
+            "-nostdin",
+            "-ss",
+            "83.700",
+            "-t",
+            "2.000",
+            "-i",
+            "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/cam-sony.mp4",
+            "-vf",
+            "fps=2,scale=320:-2,signalstats,metadata=print",
+            "-an",
+            "-f",
+            "null",
+            "-"
+          ]
+        ],
+        "selected_window_comparisons": [
+          {
+            "start": 28.48,
+            "duration": 3.4,
+            "native_360_decoder": false,
+            "A": {
+              "sha256": "a6cdc218929938247f64446f6bf123f284148cbeb8775632821b11f931860511",
+              "bytes": 29376000
+            },
+            "B": {
+              "sha256": "a6cdc218929938247f64446f6bf123f284148cbeb8775632821b11f931860511",
+              "bytes": 29376000
+            },
+            "exact": true
+          },
+          {
+            "start": 36.347,
+            "duration": 2.9,
+            "native_360_decoder": false,
+            "A": {
+              "sha256": "4171cf0fda3ee293c702503a4967d7ab2f682212ec415aacd7f8e5fa16dc7c3e",
+              "bytes": 25228800
+            },
+            "B": {
+              "sha256": "4171cf0fda3ee293c702503a4967d7ab2f682212ec415aacd7f8e5fa16dc7c3e",
+              "bytes": 25228800
+            },
+            "exact": true
+          },
+          {
+            "start": 28.25,
+            "duration": 1.267,
+            "native_360_decoder": false,
+            "A": {
+              "sha256": "f058751f7ce606e1f576697aa9234ceef7522c90a2536424f05a85bfe4b1fc68",
+              "bytes": 10713600
+            },
+            "B": {
+              "sha256": "f058751f7ce606e1f576697aa9234ceef7522c90a2536424f05a85bfe4b1fc68",
+              "bytes": 10713600
+            },
+            "exact": true
+          },
+          {
+            "start": 50.58,
+            "duration": 1.667,
+            "native_360_decoder": false,
+            "A": {
+              "sha256": "8acaafd0b0ae3a86613c27142ca40d3dbbebe0a670c537129bd5b290c872aae1",
+              "bytes": 14169600
+            },
+            "B": {
+              "sha256": "8acaafd0b0ae3a86613c27142ca40d3dbbebe0a670c537129bd5b290c872aae1",
+              "bytes": 14169600
+            },
+            "exact": true
+          },
+          {
+            "start": 61.014,
+            "duration": 1.267,
+            "native_360_decoder": false,
+            "A": {
+              "sha256": "b39eb2773122e0a13c811e7d53f77564c266bdf12276be0a0e88282759d87a42",
+              "bytes": 10713600
+            },
+            "B": {
+              "sha256": "b39eb2773122e0a13c811e7d53f77564c266bdf12276be0a0e88282759d87a42",
+              "bytes": 10713600
+            },
+            "exact": true
+          },
+          {
+            "start": 63.514,
+            "duration": 1.267,
+            "native_360_decoder": false,
+            "A": {
+              "sha256": "e226213127714e0bfcfbab0a9446066e2d73ca5f9465a74d08089e304fb51f3b",
+              "bytes": 11059200
+            },
+            "B": {
+              "sha256": "e226213127714e0bfcfbab0a9446066e2d73ca5f9465a74d08089e304fb51f3b",
+              "bytes": 11059200
+            },
+            "exact": true
+          },
+          {
+            "start": 77.38,
+            "duration": 4.367,
+            "native_360_decoder": false,
+            "A": {
+              "sha256": "26a646e4ffc02a2019b23c126aa349f1b2f384ab48db3520f4524aab12e5dc6f",
+              "bytes": 37670400
+            },
+            "B": {
+              "sha256": "26a646e4ffc02a2019b23c126aa349f1b2f384ab48db3520f4524aab12e5dc6f",
+              "bytes": 37670400
+            },
+            "exact": true
+          }
+        ],
+        "command": [
+          "ffmpeg",
+          "-nostdin",
+          "-v",
+          "error",
+          "-y",
+          "-copyts",
+          "-i",
+          "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/cam-sony.mp4",
+          "-map",
+          "0:v:0",
+          "-an",
+          "-c:v",
+          "copy",
+          "-bsf:v",
+          "noise=amount=0:drop=not(between(n\\,0\\,249)+between(n\\,250\\,498)+between(n\\,499\\,748)+between(n\\,749\\,998)+between(n\\,999\\,1248)+between(n\\,1249\\,1415)+between(n\\,1416\\,1643)+between(n\\,1644\\,1867)+between(n\\,1868\\,2098)+between(n\\,2099\\,2324))",
+          "-avoid_negative_ts",
+          "disabled",
+          "-video_track_timescale",
+          "12800",
+          "-movflags",
+          "+faststart",
+          "/tmp/saturno-packet-preflight/package/cam-sony.mp4"
+        ]
+      },
+      {
+        "source": "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/cam-fixed.mp4",
+        "target": "/tmp/saturno-packet-preflight/package/cam-fixed.mp4",
+        "source_bytes": 1416641,
+        "target_bytes": 599803,
+        "source_sha256": "312f4ff0463d1f713c132b9974fdfa443d72ebf9e7432b2d8b839ee6d7919ed3",
+        "target_sha256": "81e074db43ff49d8c4e461963f9af9771445fb8b419aa07b427ad33dd05cb35d",
+        "groups_total": 10,
+        "groups_selected": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9
+        ],
+        "group_packet_ranges": [
+          [
+            0,
+            250
+          ],
+          [
+            250,
+            500
+          ],
+          [
+            500,
+            750
+          ],
+          [
+            750,
+            1000
+          ],
+          [
+            1000,
+            1250
+          ],
+          [
+            1250,
+            1500
+          ],
+          [
+            1500,
+            1750
+          ],
+          [
+            1750,
+            2000
+          ],
+          [
+            2000,
+            2250
+          ],
+          [
+            2250,
+            2376
+          ]
+        ],
+        "source_packets": 2376,
+        "retained_packets": 2376,
+        "original_video_packet_bytes": 570443,
+        "retained_video_packet_bytes": 570443,
+        "packet_payload_and_pts_dts_exact": true,
+        "duration_exact": true,
+        "duration_A": "95.040000",
+        "duration_B": "95.040000",
+        "needed_windows": [
+          [
+            13.597142523809524,
+            19.863809523809522
+          ],
+          [
+            32.530476523809526,
+            33.797142523809526
+          ],
+          [
+            49.23047652380952,
+            51.23047652380952
+          ],
+          [
+            62.930476523809524,
+            64.16380952380952
+          ],
+          [
+            75.09714252380952,
+            78.03047652380953
+          ],
+          [
+            9.504,
+            11.504
+          ],
+          [
+            28.512,
+            30.512
+          ],
+          [
+            47.52,
+            49.52
+          ],
+          [
+            66.528,
+            68.528
+          ],
+          [
+            85.536,
+            87.536
+          ]
+        ],
+        "colour_commands_A": [
+          [
+            "/usr/bin/ffmpeg",
+            "-hide_banner",
+            "-nostdin",
+            "-ss",
+            "9.504",
+            "-t",
+            "2.000",
+            "-i",
+            "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/cam-fixed.mp4",
+            "-vf",
+            "fps=2,scale=320:-2,signalstats,metadata=print",
+            "-an",
+            "-f",
+            "null",
+            "-"
+          ],
+          [
+            "/usr/bin/ffmpeg",
+            "-hide_banner",
+            "-nostdin",
+            "-ss",
+            "28.512",
+            "-t",
+            "2.000",
+            "-i",
+            "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/cam-fixed.mp4",
+            "-vf",
+            "fps=2,scale=320:-2,signalstats,metadata=print",
+            "-an",
+            "-f",
+            "null",
+            "-"
+          ],
+          [
+            "/usr/bin/ffmpeg",
+            "-hide_banner",
+            "-nostdin",
+            "-ss",
+            "47.520",
+            "-t",
+            "2.000",
+            "-i",
+            "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/cam-fixed.mp4",
+            "-vf",
+            "fps=2,scale=320:-2,signalstats,metadata=print",
+            "-an",
+            "-f",
+            "null",
+            "-"
+          ],
+          [
+            "/usr/bin/ffmpeg",
+            "-hide_banner",
+            "-nostdin",
+            "-ss",
+            "66.528",
+            "-t",
+            "2.000",
+            "-i",
+            "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/cam-fixed.mp4",
+            "-vf",
+            "fps=2,scale=320:-2,signalstats,metadata=print",
+            "-an",
+            "-f",
+            "null",
+            "-"
+          ],
+          [
+            "/usr/bin/ffmpeg",
+            "-hide_banner",
+            "-nostdin",
+            "-ss",
+            "85.536",
+            "-t",
+            "2.000",
+            "-i",
+            "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/cam-fixed.mp4",
+            "-vf",
+            "fps=2,scale=320:-2,signalstats,metadata=print",
+            "-an",
+            "-f",
+            "null",
+            "-"
+          ]
+        ],
+        "selected_window_comparisons": [
+          {
+            "start": 13.597,
+            "duration": 6.267,
+            "native_360_decoder": false,
+            "A": {
+              "sha256": "5f8ff34f9463d2cd86ba4bb5b7d9937520a5221acc633fe4806d9a9d8e72e294",
+              "bytes": 54259200
+            },
+            "B": {
+              "sha256": "5f8ff34f9463d2cd86ba4bb5b7d9937520a5221acc633fe4806d9a9d8e72e294",
+              "bytes": 54259200
+            },
+            "exact": true
+          },
+          {
+            "start": 32.53,
+            "duration": 1.267,
+            "native_360_decoder": false,
+            "A": {
+              "sha256": "8fea972bc8406ff2e2e1451851e416b128f13e453994654c8565bbd8dbd59fb8",
+              "bytes": 10713600
+            },
+            "B": {
+              "sha256": "8fea972bc8406ff2e2e1451851e416b128f13e453994654c8565bbd8dbd59fb8",
+              "bytes": 10713600
+            },
+            "exact": true
+          },
+          {
+            "start": 49.23,
+            "duration": 2,
+            "native_360_decoder": false,
+            "A": {
+              "sha256": "e303548033e2db0b65b147576b4c347e8edccd41cdce78f89b112b81eef9c2c0",
+              "bytes": 17280000
+            },
+            "B": {
+              "sha256": "e303548033e2db0b65b147576b4c347e8edccd41cdce78f89b112b81eef9c2c0",
+              "bytes": 17280000
+            },
+            "exact": true
+          },
+          {
+            "start": 62.93,
+            "duration": 1.233,
+            "native_360_decoder": false,
+            "A": {
+              "sha256": "af3e6cfd6da77cc04bfc4848dd393ca480a37cb1cffef46db5958993bf902487",
+              "bytes": 10368000
+            },
+            "B": {
+              "sha256": "af3e6cfd6da77cc04bfc4848dd393ca480a37cb1cffef46db5958993bf902487",
+              "bytes": 10368000
+            },
+            "exact": true
+          },
+          {
+            "start": 75.097,
+            "duration": 2.933,
+            "native_360_decoder": false,
+            "A": {
+              "sha256": "b054379492a79900ddbb7b90f0eb249833064242828df499bc543736bd527278",
+              "bytes": 25228800
+            },
+            "B": {
+              "sha256": "b054379492a79900ddbb7b90f0eb249833064242828df499bc543736bd527278",
+              "bytes": 25228800
+            },
+            "exact": true
+          }
+        ],
+        "command": [
+          "ffmpeg",
+          "-nostdin",
+          "-v",
+          "error",
+          "-y",
+          "-copyts",
+          "-i",
+          "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/cam-fixed.mp4",
+          "-map",
+          "0:v:0",
+          "-an",
+          "-c:v",
+          "copy",
+          "-bsf:v",
+          "noise=amount=0:drop=not(between(n\\,0\\,249)+between(n\\,250\\,499)+between(n\\,500\\,749)+between(n\\,750\\,999)+between(n\\,1000\\,1249)+between(n\\,1250\\,1499)+between(n\\,1500\\,1749)+between(n\\,1750\\,1999)+between(n\\,2000\\,2249)+between(n\\,2250\\,2375))",
+          "-avoid_negative_ts",
+          "disabled",
+          "-video_track_timescale",
+          "12800",
+          "-movflags",
+          "+faststart",
+          "/tmp/saturno-packet-preflight/package/cam-fixed.mp4"
+        ]
+      },
+      {
+        "source": "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/cam-360.mp4",
+        "target": "/tmp/saturno-packet-preflight/package/cam-360.mp4",
+        "source_bytes": 1272853,
+        "target_bytes": 454633,
+        "source_sha256": "439571bf23a4fe7c80bece2001fe956de2eac0d271eec2146761170651eae944",
+        "target_sha256": "fe8c9ffab9515a978e295cdee31a730672226c0edef4d096df4df1a89fa5b63a",
+        "groups_total": 10,
+        "groups_selected": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9
+        ],
+        "group_packet_ranges": [
+          [
+            0,
+            250
+          ],
+          [
+            250,
+            500
+          ],
+          [
+            500,
+            750
+          ],
+          [
+            750,
+            1000
+          ],
+          [
+            1000,
+            1250
+          ],
+          [
+            1250,
+            1500
+          ],
+          [
+            1500,
+            1750
+          ],
+          [
+            1750,
+            2000
+          ],
+          [
+            2000,
+            2250
+          ],
+          [
+            2250,
+            2400
+          ]
+        ],
+        "source_packets": 2400,
+        "retained_packets": 2400,
+        "original_video_packet_bytes": 431510,
+        "retained_video_packet_bytes": 431510,
+        "packet_payload_and_pts_dts_exact": true,
+        "duration_exact": true,
+        "duration_A": "96.000000",
+        "duration_B": "96.000000",
+        "needed_windows": [
+          [
+            7.267845804988662,
+            15.501178804988662
+          ],
+          [
+            21.76784580498866,
+            31.034512804988662
+          ],
+          [
+            35.701178804988665,
+            38.90117880498866
+          ],
+          [
+            41.80117880498866,
+            49.86784580498866
+          ],
+          [
+            54.80117880498866,
+            63.56784580498866
+          ],
+          [
+            67.33451280498866,
+            77.00117880498865
+          ],
+          [
+            84.30117880498867,
+            87.30117880498867
+          ],
+          [
+            11.385,
+            13.385
+          ],
+          [
+            26.401,
+            28.401
+          ],
+          [
+            45.835,
+            47.835
+          ],
+          [
+            59.185,
+            61.185
+          ],
+          [
+            85.801,
+            87.801
+          ]
+        ],
+        "colour_commands_A": [
+          [
+            "/usr/bin/ffmpeg",
+            "-hide_banner",
+            "-nostdin",
+            "-ss",
+            "11.385",
+            "-t",
+            "2.000",
+            "-i",
+            "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/cam-360.mp4",
+            "-vf",
+            "fps=2,v360@sphere=input=equirect:output=flat:yaw=-114.000:pitch=-20.000:roll=0.000:h_fov=102.000:v_fov=69.570:w=1920:h=1080:interp=lanczos,scale=320:-2,signalstats,metadata=print",
+            "-an",
+            "-f",
+            "null",
+            "-"
+          ],
+          [
+            "/usr/bin/ffmpeg",
+            "-hide_banner",
+            "-nostdin",
+            "-ss",
+            "26.401",
+            "-t",
+            "2.000",
+            "-i",
+            "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/cam-360.mp4",
+            "-vf",
+            "fps=2,v360@sphere=input=equirect:output=flat:yaw=164.000:pitch=-17.000:roll=0.000:h_fov=90.000:v_fov=58.716:w=1920:h=1080:interp=lanczos,scale=320:-2,signalstats,metadata=print",
+            "-an",
+            "-f",
+            "null",
+            "-"
+          ],
+          [
+            "/usr/bin/ffmpeg",
+            "-hide_banner",
+            "-nostdin",
+            "-ss",
+            "45.835",
+            "-t",
+            "2.000",
+            "-i",
+            "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/cam-360.mp4",
+            "-vf",
+            "fps=2,v360@sphere=input=equirect:output=flat:yaw=129.000:pitch=-28.000:roll=0.000:h_fov=90.000:v_fov=58.716:w=1920:h=1080:interp=lanczos,scale=320:-2,signalstats,metadata=print",
+            "-an",
+            "-f",
+            "null",
+            "-"
+          ],
+          [
+            "/usr/bin/ffmpeg",
+            "-hide_banner",
+            "-nostdin",
+            "-ss",
+            "59.185",
+            "-t",
+            "2.000",
+            "-i",
+            "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/cam-360.mp4",
+            "-vf",
+            "fps=2,v360@sphere=input=equirect:output=sg:yaw=143.000:pitch=-22.000:roll=0.000:h_fov=140.000:v_fov=85.991:w=1920:h=1080:interp=lanczos,scale=320:-2,signalstats,metadata=print",
+            "-an",
+            "-f",
+            "null",
+            "-"
+          ],
+          [
+            "/usr/bin/ffmpeg",
+            "-hide_banner",
+            "-nostdin",
+            "-ss",
+            "85.801",
+            "-t",
+            "2.000",
+            "-i",
+            "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/cam-360.mp4",
+            "-vf",
+            "fps=2,v360@sphere=input=equirect:output=flat:yaw=-110.000:pitch=-17.000:roll=0.000:h_fov=110.000:v_fov=77.552:w=1920:h=1080:interp=lanczos,scale=320:-2,signalstats,metadata=print",
+            "-an",
+            "-f",
+            "null",
+            "-"
+          ]
+        ],
+        "selected_window_comparisons": [
+          {
+            "start": 7.267845804988662,
+            "duration": 8.233333,
+            "native_360_decoder": true,
+            "A": {
+              "sha256": "3699a0d8cbf6b7cc3689409efb7b9f4cc9f61578a5180432ecb1565865dd0495",
+              "bytes": 151756800
+            },
+            "B": {
+              "sha256": "3699a0d8cbf6b7cc3689409efb7b9f4cc9f61578a5180432ecb1565865dd0495",
+              "bytes": 151756800
+            },
+            "exact": true
+          },
+          {
+            "start": 21.76784580498866,
+            "duration": 9.266667000000002,
+            "native_360_decoder": true,
+            "A": {
+              "sha256": "256eb4f074baeb9f04b4f6fd9194edc98137c48db2e362edcd46dc953e084d89",
+              "bytes": 170803200
+            },
+            "B": {
+              "sha256": "256eb4f074baeb9f04b4f6fd9194edc98137c48db2e362edcd46dc953e084d89",
+              "bytes": 170803200
+            },
+            "exact": true
+          },
+          {
+            "start": 35.701178804988665,
+            "duration": 3.1999999999999993,
+            "native_360_decoder": true,
+            "A": {
+              "sha256": "fe9fbccc360105af991e2a8a8891900afb83f18e47972837ffff0742fd32496c",
+              "bytes": 58982400
+            },
+            "B": {
+              "sha256": "fe9fbccc360105af991e2a8a8891900afb83f18e47972837ffff0742fd32496c",
+              "bytes": 58982400
+            },
+            "exact": true
+          },
+          {
+            "start": 41.80117880498866,
+            "duration": 8.066667000000002,
+            "native_360_decoder": true,
+            "A": {
+              "sha256": "ea08e04d18bae16bc62fd19a57b928e0cffcd8cd97e2cf3f89b6bac2091f65fd",
+              "bytes": 148684800
+            },
+            "B": {
+              "sha256": "ea08e04d18bae16bc62fd19a57b928e0cffcd8cd97e2cf3f89b6bac2091f65fd",
+              "bytes": 148684800
+            },
+            "exact": true
+          },
+          {
+            "start": 54.80117880498866,
+            "duration": 8.766666999999998,
+            "native_360_decoder": true,
+            "A": {
+              "sha256": "273602d657726a22c42ce8ffeca1ec451e31e696c3d06aa3601bb027f9d835c2",
+              "bytes": 161587200
+            },
+            "B": {
+              "sha256": "273602d657726a22c42ce8ffeca1ec451e31e696c3d06aa3601bb027f9d835c2",
+              "bytes": 161587200
+            },
+            "exact": true
+          },
+          {
+            "start": 67.33451280498866,
+            "duration": 9.666666,
+            "native_360_decoder": true,
+            "A": {
+              "sha256": "160b1689d75c16674c6fb9fa39df8d8ee2e81346926fce3b26abb9d561b6d568",
+              "bytes": 178176000
+            },
+            "B": {
+              "sha256": "160b1689d75c16674c6fb9fa39df8d8ee2e81346926fce3b26abb9d561b6d568",
+              "bytes": 178176000
+            },
+            "exact": true
+          },
+          {
+            "start": 84.30117880498867,
+            "duration": 3,
+            "native_360_decoder": true,
+            "A": {
+              "sha256": "2c20888d46fd1838f3fc945f00c22d02e41cff9b1c0196c0ad6bcf76b469a1a1",
+              "bytes": 55296000
+            },
+            "B": {
+              "sha256": "2c20888d46fd1838f3fc945f00c22d02e41cff9b1c0196c0ad6bcf76b469a1a1",
+              "bytes": 55296000
+            },
+            "exact": true
+          }
+        ],
+        "command": [
+          "ffmpeg",
+          "-nostdin",
+          "-v",
+          "error",
+          "-y",
+          "-copyts",
+          "-i",
+          "/home/runner/work/Montara/Montara/tests/fixtures/much-to-me/cam-360.mp4",
+          "-map",
+          "0:v:0",
+          "-an",
+          "-c:v",
+          "copy",
+          "-bsf:v",
+          "noise=amount=0:drop=not(between(n\\,0\\,249)+between(n\\,250\\,499)+between(n\\,500\\,749)+between(n\\,750\\,999)+between(n\\,1000\\,1249)+between(n\\,1250\\,1499)+between(n\\,1500\\,1749)+between(n\\,1750\\,1999)+between(n\\,2000\\,2249)+between(n\\,2250\\,2399))",
+          "-avoid_negative_ts",
+          "disabled",
+          "-video_track_timescale",
+          "12800",
+          "-movflags",
+          "+faststart",
+          "/tmp/saturno-packet-preflight/package/cam-360.mp4"
+        ]
+      }
+    ],
+    "native_final_ab_approved": false,
+    "method": "FFmpeg stream-copy; noise BSF amount=0; retain whole GOPs plus first/last; original timestamps",
+    "prepare_and_window_checks_sec": 10.835481907000002,
+    "colour_A": {
+      "cam-360.mp4": {
+        "brightness_adjust": -0.0060392705882353044,
+        "saturation_adjust": 0.9933869341176471,
+        "red_balance": -0.0018980468749999703,
+        "blue_balance": -0.0003329687499999734
+      },
+      "cam-fixed.mp4": {
+        "brightness_adjust": 0.0075292,
+        "saturation_adjust": 1.005767365882353,
+        "red_balance": 0.004076875000000069,
+        "blue_balance": -0.0017717968750000424
+      },
+      "cam-sony.mp4": {}
+    },
+    "colour_B": {
+      "cam-360.mp4": {
+        "brightness_adjust": -0.0060392705882353044,
+        "saturation_adjust": 0.9933869341176471,
+        "red_balance": -0.0018980468749999703,
+        "blue_balance": -0.0003329687499999734
+      },
+      "cam-fixed.mp4": {
+        "brightness_adjust": 0.0075292,
+        "saturation_adjust": 1.005767365882353,
+        "red_balance": 0.004076875000000069,
+        "blue_balance": -0.0017717968750000424
+      },
+      "cam-sony.mp4": {}
+    },
+    "colour_exact": true,
+    "original_video_bytes": 5077434,
+    "packaged_video_bytes": 2649735,
+    "master_bytes_required_in_full": 1601436,
+    "media_fraction_including_master": 0.6365105174977205,
+    "measured_plan_project_metadata_bytes": 472057,
+    "media_plus_plan_project_bytes": 4723228,
+    "metadata_transport_manifest_and_assets_still_not_counted": true,
+    "gop_video_payload_fraction": 1,
+    "isolation_limitation": "This preflight recomputes B colour from mapped sources, but does not sandbox B. Final export A/B requires source/cache masking."
+  }
+}

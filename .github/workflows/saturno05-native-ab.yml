@@ -1,5 +1,5 @@
-name: Saturn 11 real Stage packet and colour preflight
-# No rerun of the successful Stage or isolated flat render.
+name: Saturn 12 full fixed Stage plan A-A and isolated A-B
+# Real fixed plan already captured. Does not repeat the UI, ingest, sync or creative edit.
 on:
   push:
     branches:
@@ -12,7 +12,7 @@ permissions:
 jobs:
   native-ab:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
         with:
@@ -20,19 +20,19 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install decoder and native analysis runtime
+      - name: Install complete native renderer runtime
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends ffmpeg fonts-dejavu-core
           pip install -r requirements.txt
-      - name: Packet, decoded-window and native-colour preflight of exact Stage plan
-        run: python experiments/saturno_10/packet_preflight.py
-      - name: Preserve structured preflight in logs
+      - name: Full forced A-A then isolated B, including native 360 encoder control
+        run: python experiments/saturno_10/full_gate.py
+      - name: Preserve scientific gate and worker errors
         if: always()
         run: |
           python - <<'PY'
           from pathlib import Path
-          p = Path("/tmp/saturno-packet-preflight/REPORT.json")
+          p = Path("/tmp/saturno-full12/REPORT.json")
           if p.is_file():
               print("EVIDENCE_FILE=" + str(p), flush=True)
               print(p.read_text(), flush=True)
