@@ -190,7 +190,9 @@ def main():
             call(["ffmpeg","-v","error","-nostdin","-y","-i",original,
                  "-map","0:v:0","-an","-c:v","copy",video_only],timeout=180)
             concat=source_dir/(original.stem+".txt")
-            concat.write_text("".join("file '"+str(video_only)+"'\\n" for _ in range(3)))
+            concat.write_text("".join("file '"+str(video_only)+"'\n" for _ in range(3)))
+            manifest_lines=concat.read_text().splitlines()
+            assert manifest_lines==["file '"+str(video_only)+"'"]*3, "Concat manifest malformed"
             expanded=source_dir/original.name
             call(["ffmpeg","-v","error","-nostdin","-y","-f","concat","-safe","0",
                  "-i",concat,"-map","0:v:0","-an","-c:v","copy",
