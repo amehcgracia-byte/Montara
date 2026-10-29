@@ -134,7 +134,7 @@ def worker(spec_path):
         (Path(spec["folder"]) / "error.json").write_text(json.dumps({"error": repr(exc), "commands": commands}))
         raise
     elapsed = time.perf_counter() - started
-    assert decoder_control is not None and len(decoder_control["interventions"]) == 7, "Expected seven QA decoder interventions"
+    assert decoder_control is not None and len(decoder_control["interventions"]) >= 7, "Expected at least seven QA decoder interventions including possible failed encoder attempts"
     result = final_evidence(destination)
     expected = round((sum(float(s["duration_sec"]) for s in plan["segments"])
                       + export.INTRO_DURATION + export.OUTRO_DURATION) * export.TARGET_EXPORT_FPS)
