@@ -87,14 +87,14 @@ def main():
         a=measure_render(out,source,master,4,"A_full")
         package=out/"B_package";package.mkdir(exist_ok=True)
         fragment=package/"cam-fixed-fragment.mkv"
-        command("ffmpeg","-nostdin","-v","error","-y","-ss","4","-i",source,
-            "-t","2","-map","0:v:0","-an","-c:v","libx264","-qp","0",
+        command("ffmpeg","-nostdin","-v","error","-y","-ss","3","-i",source,
+            "-t","4","-map","0:v:0","-an","-c:v","libx264","-qp","0",
             "-pix_fmt","yuv420p",fragment)
         hidden=source.with_name(source.name+".saturno-hide")
         if hidden.exists():raise ValueError("QA original hidden path already exists")
         source.rename(hidden)
         try:
-            b=measure_render(out,fragment,master,0,"B_partial")
+            b=measure_render(out,fragment,master,1,"B_partial")
             b["original_absent_during_B"]=not source.exists()
         finally:
             hidden.rename(source)
@@ -105,7 +105,7 @@ def main():
             package_fraction=round(fragment.stat().st_size/source.stat().st_size,5),
             audio_limitation="The original master MP3 is shared by A and B; complete source isolation not proved",
             temporal_limitation="Only 2 seconds of one flat camera; not the Stage edit plan or moving 360",
-            package_method="H264 lossless reencode of fragment, not copy-only or minimal GOP dependency package")
+            package_method="H264 lossless fragment reencode with 1-second pre/post context; not stream copy or proven minimum package")
     except Exception as e:
         report.update(status="BLOCKED_OR_FAILED",error=repr(e))
     (out/"AB_VERDICT.json").write_text(json.dumps(report,indent=2,default=list))
