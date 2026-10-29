@@ -1,0 +1,72 @@
+name: Saturn 05 real Zucker baseline (QA only)
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - fernando/continuacion-montara
+    paths:
+      - .github/workflows/saturno05-baseline.yml
+
+permissions:
+  contents: read
+
+jobs:
+  stage-baseline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install application
+        run: |
+          python -m pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+          ffmpeg -version
+      - name: Run actual Stage E2E with independent wall-clock
+        shell: bash
+        run: |
+          mkdir -p e2e-output
+          start=$(date +%s)
+          set +e
+          python tests/e2e_journey.py --mode stage --output e2e-output 2>&1 | tee e2e-output/saturno05-run.log
+          code=${PIPESTATUS[0]}
+          set -e
+          end=$(date +%s)
+          printf '{"elapsed_wall_s":%d,"return_code":%d,"clock":"date-second-resolution","scope":"full-E2E-including-startup-not-export-only"}\n' "$((end-start))" "$code" >e2e-output/wall.json
+          test "$code" -eq 0
+      - name: Validate evidence (fail closed)
+        if: always()
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json,hashlib,pathlib
+          out=pathlib.Path("e2e-output")
+          summary=out/"summary.json"
+          records=json.loads(summary.read_text()) if summary.exists() else []
+          exports=list(out.rglob("render.mp4"))
+          ok=bool(records and all(x.get("passed") is True for x in records) and exports)
+          payload={"status":"MEASURED_E2E" if ok else "BLOCKED_OR_FAILED","results":records,
+                   "exports":[{"path":str(p),"bytes":p.stat().st_size,"sha256":hashlib.sha256(p.read_bytes()).hexdigest()} for p in exports],
+                   "limitation":"Only full-input A tested. Fragment-only Zucker B/C not tested."}
+          (out/"saturno05-verdict.json").write_text(json.dumps(payload,indent=2))
+          print(json.dumps(payload,indent=2))
+          if not ok: raise SystemExit(2)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        continue-on-error: true
+        with:
+          name: saturno05-stage-baseline
+          retention-days: 7
+          path: |
+            e2e-output/summary.json
+            e2e-output/saturno05-*.json
+            e2e-output/saturno05-*.log
+            e2e-output/wall.json
+            e2e-output/stage/render.mp4
+            e2e-output/server-*.log
