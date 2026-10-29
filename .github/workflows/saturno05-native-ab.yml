@@ -1,4 +1,4 @@
-name: Saturn 16 six-window fps_mode decoder gate
+name: Saturn 17 native 360 reprojection AAB
 on:
   push:
     branches:
@@ -11,7 +11,7 @@ permissions:
 jobs:
   decoder-window:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
@@ -19,17 +19,18 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install FFmpeg only
+      - name: Install FFmpeg and native reprojection dependencies
         timeout-minutes: 5
         run: |
           sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 update -qq
           sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 install -y --no-install-recommends ffmpeg
-      - name: Test passthrough in six audited 360 windows
-        timeout-minutes: 3
-        run: python experiments/saturno_16/six_windows.py
+          python -m pip install numpy opencv-python-headless
+      - name: Test actual Zucker reprojection of segment 0003 A/A/B
+        timeout-minutes: 8
+        run: python experiments/saturno_17/reprojection_gate.py
       - name: Print preserved evidence if diagnostic was interrupted
         if: failure()
         run: |
-          if test -f /tmp/saturno16-decoder/REPORT.json; then
-            cat /tmp/saturno16-decoder/REPORT.json
+          if test -f /tmp/saturno17-reprojection/REPORT.json; then
+            cat /tmp/saturno17-reprojection/REPORT.json
           fi
