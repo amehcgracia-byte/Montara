@@ -1,4 +1,4 @@
-name: Saturn 15 fps_mode 360 decoder control
+name: Saturn 16 six-window fps_mode decoder gate
 on:
   push:
     branches:
@@ -24,12 +24,12 @@ jobs:
         run: |
           sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 update -qq
           sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 install -y --no-install-recommends ffmpeg
-      - name: Test single-variable fps_mode passthrough on 360 window
+      - name: Test passthrough in six audited 360 windows
         timeout-minutes: 3
-        run: python experiments/saturno_15/decoder_fps_mode.py
+        run: python experiments/saturno_16/six_windows.py
       - name: Print preserved evidence if diagnostic was interrupted
         if: failure()
         run: |
-          if test -f /tmp/saturno15-decoder/REPORT.json; then
-            cat /tmp/saturno15-decoder/REPORT.json
+          if test -f /tmp/saturno16-decoder/REPORT.json; then
+            cat /tmp/saturno16-decoder/REPORT.json
           fi
