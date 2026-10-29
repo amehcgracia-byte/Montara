@@ -30,6 +30,7 @@ jobs:
       - name: Native Zucker diagnostic with fades disabled (QA runtime only)
         env:
           SATURNO_QA_NO_FADES: '0'
+          SATURNO_QA_FILTER_THREADS_ONE: '1'
         run: |
           python experiments/saturno_05/native_ab.py
       - name: Publish minimal result to logs
