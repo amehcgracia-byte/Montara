@@ -1,4 +1,5 @@
 name: Saturn 18 isolated full AAB with QA decoder passthrough
+# QA runner includes encoder-fallback decoder attempts in intervention count.
 on:
   push:
     branches:
