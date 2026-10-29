@@ -1,0 +1,43 @@
+name: Saturn 23 native Zucker eight optimized GOP AAB
+on:
+  push:
+    branches:
+      - fernando/continuacion-montara
+    paths:
+      - .github/workflows/saturno23-eight-gop.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-sparse:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install FFmpeg and only native Python dependencies
+        timeout-minutes: 7
+        run: |
+          sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 update -qq
+          sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 install -y --no-install-recommends ffmpeg
+          python -m pip install 'numpy>=1.26,<2' 'opencv-python-headless>=4.9,<4.12'
+      - name: Native 360 isolated segment test against eight optimized GOP package
+        timeout-minutes: 10
+        run: python experiments/saturno_23/native_eight_gop.py
+      - name: Show compact preserved report
+        if: always()
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('/tmp/saturno23-native-eight/REPORT.json')
+          if p.exists():
+              d=json.loads(p.read_text())
+              print('SATURNO23_PRESERVED='+json.dumps({k:v for k,v in d.items() if k!='renders'},separators=(',',':')))
+          else:
+              print('SATURNO23_NO_REPORT')
+          PY
