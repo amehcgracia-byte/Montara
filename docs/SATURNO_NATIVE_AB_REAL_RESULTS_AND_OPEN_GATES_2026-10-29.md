@@ -37,3 +37,14 @@ El paquete de 4s con codificación H264 lossless demuestra igualdad **pre-render
 
 ## Gobernanza
 Todas las variantes se han ejecutado en GitHub Actions QA sobre rama `fernando/continuacion-montara`; sin cambios en `main`, ni en los submódulos ni gasto de RunPod. Cierre de **ronda de experimentos**, no aprobación final de SATURNO. La elección de rumbo queda sin resolver hasta que el usuario decida qué requisitos adicionales probar.
+
+## Control de falsos positivos por caché — resultado decisivo
+**2026-10-29, GitHub Actions https://github.com/amehcgracia-byte/Montara/actions/runs/40861549637:** dos proyectos QA consecutivos renderizaron el **mismo archivo, misma ruta y misma ventana 4–6s**, con `force_rerender_segments=True` establecido antes de llamar a `_render_plan`. Ambos produjeron 60 fotogramas; **solo 49/60 píxeles-fotograma coinciden**, y difieren los fotogramas de índice **49 a 59**. Con una copia byte idéntica ubicada en otra ruta B frente a A, **53/60** coincidieron, con diferencias en índices **53–59**. Las ventanas decodificadas antes del render eran idénticas, y B se ejecutó con el archivo de cámara original oculto.
+
+Antes de forzar rerender, A/A arrojó 60/60, pero **podía usar la caché global**; ese 60/60 NO es prueba de determinismo. Una vez evitada la caché, **no puede usarse igualdad exacta 60/60 como gate diferencial SATURNO sin demostrar antes repetibilidad del exportador y controlar PTS/cadencia y posibles efectos de FFmpeg**.
+
+**No está identificada causalmente la fuente precisa de variación**: el log solo demuestra que dos ejecuciones con el mismo origen y plan básico, usando proyectos QA diferentes, producen variación en el tramo final. Pueden intervenir contexto de proyecto, fuentes, ffmpeg/muxer, filtro de cadencia, composición o cachés adicionales. No afirmar que sea un defecto general del motor o que afecte cualquier exportación.
+
+**Estado revisado del hito C:** demostrado que el renderizador puede exportar B sin leer la ruta de original; **equivalencia exacta no certificable** hasta disponer de baseline A/A estable, o una métrica perceptual acordada contra la variación A/A y probada con sincronía y audio. Este gate requiere diagnóstico de mantenedor José Manuel; no se ha intervenido en el motor.
+
+Código QA: `experiments/saturno_05/native_ab.py`. Workflow QA: `.github/workflows/saturno05-native-ab.yml`. La evidencia está en el **log del job GitHub Actions**; los artefactos GitHub no se pudieron conservar cuando la cuenta alcanzó la cuota de almacenamiento.
