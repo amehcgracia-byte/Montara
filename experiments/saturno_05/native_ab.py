@@ -2,7 +2,7 @@
 A deliberately narrow native renderer integration gate, NOT a complete Stage E2E.
 """
 from __future__ import annotations
-import hashlib,json,os,subprocess,time,sys,tempfile
+import hashlib,json,os,subprocess,time,sys,tempfile,shutil
 from pathlib import Path
 
 REPO=Path(__file__).resolve().parents[2]
@@ -88,9 +88,8 @@ def main():
             if not p.is_file():raise FileNotFoundError(str(p))
         a=measure_render(out,source,master,4,"A_full")
         package=out/"B_package";package.mkdir(exist_ok=True)
-        fragment=package/"cam-fixed-fragment.mkv"
-        command("ffmpeg","-nostdin","-v","error","-y","-i",source,
-            "-t","9","-map","0:v:0","-an","-c:v","copy",fragment)
+        fragment=package/"cam-fixed-full-byte-copy.mp4"
+        shutil.copy2(source,fragment)
         # Compare the selected decoded windows BEFORE the Zucker export.
         def window_sha(video,start):
             result=subprocess.run(["ffmpeg","-nostdin","-v","error","-ss",str(start),
@@ -110,13 +109,14 @@ def main():
         same_pixels=(a["pixels"]==b["pixels"])
         report.update(pre_export_decoded_window=raw_check,
             pre_export_pixels_equal=raw_check["source_window"]==raw_check["fragment_window"],
+            byte_identical_source_copy=(hashlib.sha256(source.read_bytes()).hexdigest()==hashlib.sha256(fragment.read_bytes()).hexdigest()),
             frame_comparison=sequence_diagnostics(a["file"],b["file"]),
             status="PASS_NATIVE_AB_PIXELS" if same_pixels else "FAIL_NATIVE_AB_PIXELS",
             A=a,B=b,package_video_bytes=fragment.stat().st_size,full_video_bytes=source.stat().st_size,
             package_fraction=round(fragment.stat().st_size/source.stat().st_size,5),
             audio_limitation="The original master MP3 is shared by A and B; complete source isolation not proved",
             temporal_limitation="Only 2 seconds of one flat camera; not the Stage edit plan or moving 360",
-            package_method="original H264 packets stream-copied from t=0 to 9s, source timeline start 0; prefix package, not minimal arbitrary interval closure")
+            package_method="Negative control: byte-identical full source file at new path, not a reduced package")
     except Exception as e:
         report.update(status="BLOCKED_OR_FAILED",error=repr(e))
     (out/"AB_VERDICT.json").write_text(json.dumps(report,indent=2,default=list))
