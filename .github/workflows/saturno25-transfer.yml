@@ -1,0 +1,43 @@
+name: Saturn 25 preparation and transfer economics
+on:
+  push:
+    branches: [fernando/continuacion-montara]
+    paths: [.github/workflows/saturno25-transfer.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  transfer-economics:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install reproducible runtime
+        timeout-minutes: 9
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg
+          python -m pip install 'numpy>=1.26,<2' 'opencv-python-headless>=4.9,<4.12'
+      - name: Validate script syntax
+        run: python -m py_compile experiments/saturno_25/transfer_economics.py
+      - name: Package and compare controlled transfers
+        timeout-minutes: 7
+        run: python experiments/saturno_25/transfer_economics.py
+      - name: Preserve compact phase evidence in logs
+        if: always()
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          p=Path('/tmp/saturno25/REPORT.json')
+          if p.exists():
+              r=json.loads(p.read_text())
+              print("SATURNO25_PRESERVED="+json.dumps(r,separators=(',',':')))
+          else:
+              print("SATURNO25_NO_REPORT")
+          PY
