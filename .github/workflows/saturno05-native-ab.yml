@@ -1,5 +1,5 @@
 name: Saturn 05 isolated native Zucker A/B
-# QA seventh pass: same-source repeat against byte-identical copy
+# QA eighth pass: force rerender all source-identity comparisons
 on:
   push:
     branches:
