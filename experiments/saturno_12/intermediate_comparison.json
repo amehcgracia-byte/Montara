@@ -1,0 +1,154 @@
+[
+  {
+    "output": "segment-0001.mp4",
+    "kind": "native_360",
+    "A_sha256": "6bb9846bf6c08d92ff937fc2d7f8703285cdf8f4d2b192e19c291bdcb0df5f26",
+    "B_sha256": "6bb9846bf6c08d92ff937fc2d7f8703285cdf8f4d2b192e19c291bdcb0df5f26",
+    "same": true,
+    "encoder_arguments_except_output_equal": true
+  },
+  {
+    "output": "segment-0002.mp4",
+    "kind": "ordinary",
+    "A_sha256": "4dfeba793b9321fdb11ced6abdac61d5b045f7aeb8208ddf8034cac9d3b76af9",
+    "B_sha256": "4dfeba793b9321fdb11ced6abdac61d5b045f7aeb8208ddf8034cac9d3b76af9",
+    "same": true,
+    "encoder_arguments_except_output_equal": null
+  },
+  {
+    "output": "segment-0003.mp4",
+    "kind": "native_360",
+    "A_sha256": "80cb0088ff6564a0b01ca2d47ed4bd0175f56732654ec35a2b22e402f6926d2c",
+    "B_sha256": "0d307f01118ea32342995e68d7ca7b8bd2fc421f8aba21a00441abd150c45317",
+    "same": false,
+    "encoder_arguments_except_output_equal": true
+  },
+  {
+    "output": "segment-0004.mp4",
+    "kind": "ordinary",
+    "A_sha256": "ca86404593c6b15fa3d5b895609196264a80b32192477bb8079e77dc83b4c349",
+    "B_sha256": "ca86404593c6b15fa3d5b895609196264a80b32192477bb8079e77dc83b4c349",
+    "same": true,
+    "encoder_arguments_except_output_equal": null
+  },
+  {
+    "output": "segment-0005.mp4",
+    "kind": "ordinary",
+    "A_sha256": "0851807dfb75c6e24219a482f1dfc6c2a369f00b4b25b08d9d55f05cb9c28596",
+    "B_sha256": "0851807dfb75c6e24219a482f1dfc6c2a369f00b4b25b08d9d55f05cb9c28596",
+    "same": true,
+    "encoder_arguments_except_output_equal": null
+  },
+  {
+    "output": "segment-0006.mp4",
+    "kind": "native_360",
+    "A_sha256": "6d4b3c93cbf5de37565c54fe97288c7008534cb0e987cdaff0c728b925b37a78",
+    "B_sha256": "dac4b54f9acee45ad187b4d9076b89997cf228cd041c68662bcb97be7a5e8dea",
+    "same": false,
+    "encoder_arguments_except_output_equal": true
+  },
+  {
+    "output": "segment-0007.mp4",
+    "kind": "ordinary",
+    "A_sha256": "0e8f29fc4f02852b45a7798812639a0fef890859fb0d0b661c23ca8b4e5a67b2",
+    "B_sha256": "0e8f29fc4f02852b45a7798812639a0fef890859fb0d0b661c23ca8b4e5a67b2",
+    "same": true,
+    "encoder_arguments_except_output_equal": null
+  },
+  {
+    "output": "segment-0008.mp4",
+    "kind": "native_360",
+    "A_sha256": "41c4722f22df545b6140eef2b7e8a9a07c4be348d0228f1bb832e224082ff7e9",
+    "B_sha256": "6da2e150bfa4dbd4bde43b5462410352accc159eb5681a4c2d20cbb9b4e92d0c",
+    "same": false,
+    "encoder_arguments_except_output_equal": true
+  },
+  {
+    "output": "segment-0009.mp4",
+    "kind": "ordinary",
+    "A_sha256": "9a98db793386ed51bb39ed10874e0b76f7b2277f12ab1f26c9970091a3bd7a5f",
+    "B_sha256": "9a98db793386ed51bb39ed10874e0b76f7b2277f12ab1f26c9970091a3bd7a5f",
+    "same": true,
+    "encoder_arguments_except_output_equal": null
+  },
+  {
+    "output": "segment-0010.mp4",
+    "kind": "ordinary",
+    "A_sha256": "9b1e2f76f9b492e7a3d055fb7b0388f109b5bce74a7d70a2914d03a65b25ea79",
+    "B_sha256": "9b1e2f76f9b492e7a3d055fb7b0388f109b5bce74a7d70a2914d03a65b25ea79",
+    "same": true,
+    "encoder_arguments_except_output_equal": null
+  },
+  {
+    "output": "segment-0011.mp4",
+    "kind": "ordinary",
+    "A_sha256": "692aec297d1450fa6e0d91d16e3b882e2d880b693849a3d9dca135fc42a3663f",
+    "B_sha256": "692aec297d1450fa6e0d91d16e3b882e2d880b693849a3d9dca135fc42a3663f",
+    "same": true,
+    "encoder_arguments_except_output_equal": null
+  },
+  {
+    "output": "segment-0012.mp4",
+    "kind": "native_360",
+    "A_sha256": "0f302406a89743dc800b72085fb59e5d8b2042de645959fc5d1dfbab23178ada",
+    "B_sha256": "5eb1b7836446874f122db41896528e1aafc6af34bf36c3118458fdb00d89196d",
+    "same": false,
+    "encoder_arguments_except_output_equal": true
+  },
+  {
+    "output": "segment-0013.mp4",
+    "kind": "ordinary",
+    "A_sha256": "fea3dce706391af711c887662f12352b5f69428dafebeb734f3667765ae56947",
+    "B_sha256": "fea3dce706391af711c887662f12352b5f69428dafebeb734f3667765ae56947",
+    "same": true,
+    "encoder_arguments_except_output_equal": null
+  },
+  {
+    "output": "segment-0014.mp4",
+    "kind": "ordinary",
+    "A_sha256": "2348bd52f0990a66dfb4da3fa17c21f0a4c400ffd03e1c04fdf3d1551f75aa61",
+    "B_sha256": "2348bd52f0990a66dfb4da3fa17c21f0a4c400ffd03e1c04fdf3d1551f75aa61",
+    "same": true,
+    "encoder_arguments_except_output_equal": null
+  },
+  {
+    "output": "segment-0015.mp4",
+    "kind": "ordinary",
+    "A_sha256": "760c0d1ccc8e1d6af13f834ff951086d8e8ed44fe7fff5c14b94a554ca042b81",
+    "B_sha256": "760c0d1ccc8e1d6af13f834ff951086d8e8ed44fe7fff5c14b94a554ca042b81",
+    "same": true,
+    "encoder_arguments_except_output_equal": null
+  },
+  {
+    "output": "segment-0016.mp4",
+    "kind": "native_360",
+    "A_sha256": "71a9faf38009abf1d221b306648387e9db4c8c2786a63ad6576e4b1adda5c436",
+    "B_sha256": "cdf99aa89b4b6d42a040600b0f298d25b11f51926ebe4ba124a8f454fa859f06",
+    "same": false,
+    "encoder_arguments_except_output_equal": true
+  },
+  {
+    "output": "segment-0017.mp4",
+    "kind": "ordinary",
+    "A_sha256": "bf70e5f203d26a4333c01f989a1fe9e98ee2c03f0f7b5b4ea461cf9f0a21f167",
+    "B_sha256": "bf70e5f203d26a4333c01f989a1fe9e98ee2c03f0f7b5b4ea461cf9f0a21f167",
+    "same": true,
+    "encoder_arguments_except_output_equal": null
+  },
+  {
+    "output": "segment-0018.mp4",
+    "kind": "ordinary",
+    "A_sha256": "c77794fd7d7c7c8a4601235e42ab74af02ba55c2c685b657edf7f39ea80bb3c5",
+    "B_sha256": "c77794fd7d7c7c8a4601235e42ab74af02ba55c2c685b657edf7f39ea80bb3c5",
+    "same": true,
+    "encoder_arguments_except_output_equal": null
+  },
+  {
+    "output": "segment-0019.mp4",
+    "kind": "native_360",
+    "A_sha256": "cb93f3a87bb077824d0bdcfd6f5351f3ee9739b2a611f939c9e73b5af941ad58",
+    "B_sha256": "043c18c3ed9474675e494325e940dc64123069e02fdc836d41150332d86f0c56",
+    "same": false,
+    "encoder_arguments_except_output_equal": true
+  }
+]
