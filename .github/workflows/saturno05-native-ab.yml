@@ -1,4 +1,4 @@
-name: Saturn 14 exact 360 decoder diagnostic
+name: Saturn 15 fps_mode 360 decoder control
 on:
   push:
     branches:
@@ -24,12 +24,12 @@ jobs:
         run: |
           sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 update -qq
           sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 install -y --no-install-recommends ffmpeg
-      - name: Decode one 278-frame window with exact and previous commands
+      - name: Test single-variable fps_mode passthrough on 360 window
         timeout-minutes: 3
-        run: python experiments/saturno_14/decoder_window.py
+        run: python experiments/saturno_15/decoder_fps_mode.py
       - name: Print preserved evidence if diagnostic was interrupted
         if: failure()
         run: |
-          if test -f /tmp/saturno14-decoder/REPORT.json; then
-            cat /tmp/saturno14-decoder/REPORT.json
+          if test -f /tmp/saturno15-decoder/REPORT.json; then
+            cat /tmp/saturno15-decoder/REPORT.json
           fi
