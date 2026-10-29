@@ -48,3 +48,13 @@ Antes de forzar rerender, A/A arrojó 60/60, pero **podía usar la caché global
 **Estado revisado del hito C:** demostrado que el renderizador puede exportar B sin leer la ruta de original; **equivalencia exacta no certificable** hasta disponer de baseline A/A estable, o una métrica perceptual acordada contra la variación A/A y probada con sincronía y audio. Este gate requiere diagnóstico de mantenedor José Manuel; no se ha intervenido en el motor.
 
 Código QA: `experiments/saturno_05/native_ab.py`. Workflow QA: `.github/workflows/saturno05-native-ab.yml`. La evidencia está en el **log del job GitHub Actions**; los artefactos GitHub no se pudieron conservar cuando la cuenta alcanzó la cuota de almacenamiento.
+
+## SATURNO-06 — Control de fundidos, 29 octubre 2026
+
+Nueva ejecución QA: https://github.com/amehcgracia-byte/Montara/actions/runs/40862910889 (conclusión CI FAIL del criterio de igualdad). El harness añade la variable temporal de diagnóstico `SATURNO_QA_NO_FADES=1`, que asigna `core.stages.export.CONTENT_FADE_DURATION = 0.0` **en memoria del proceso QA únicamente**. No se alteran fuentes del motor, submódulos ni `main`. Cada proyecto fuerza `force_rerender_segments=True` para evitar reutilización del segmento cacheado.
+
+**Resultado:** A/A mismo original y misma ruta: **51 de 60 frames exactos**; diferencias continuas índices 51–59. A/B con copia **byte idéntica** de la fuente a otra ruta, con original oculto durante B: **51 de 60** fotogramas idénticos. Los fallos persisten incluso con los fundidos desactivados. **Por tanto, los fundidos no son explicación suficiente** para la divergencia observada. El experimento no permite atribuir causalidad a FFmpeg, cadencia, codificación, cachés adicionales o contexto del proyecto.
+
+**Consecuencia:** antes de etiquetar a Saturno como no viable, la siguiente evaluación debe obtener los comandos reales FFmpeg de cada ejecución, PTS por fotograma y comparación de salidas intermedias antes del ensamblado; separar cualquier variabilidad del exportador de la causada por el cambio de fuente. Se requiere colaborar con el mantenedor antes de proponer parches al motor. El criterio 60/60 pixel exactos debe permanecer BLOQUEADO hasta conseguir un control A/A reproducible.
+
+**Estado:** diagnóstico completado, no equivalencia A/B completa. Los experimentos siguen siendo de un único clip plano de 2 s y máster compartido; el Stage real multicámara + 360 no está demostrado.
