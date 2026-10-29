@@ -1,3 +1,5 @@
+> **Actualización SATURNO-08:** el run 40878313397 estabilizó el control A/A y A/B con copia completa a 60/60 mediante un único hilo de codificación libx264 en QA. No aprueba paquetes reducidos ni los cuatro hitos. Ver [resultados actuales](SATURNO_08_ENCODER_VBV_RESULTS_2026-10-29.md). Los apartados siguientes conservan los resultados históricos.
+
 # SATURNO — Informe de ejecución real A/B y puerta pendiente (29-10-2026)
 
 ## Alcance y veredicto
