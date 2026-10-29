@@ -87,6 +87,8 @@ def main():
         for p in [source,master]:
             if not p.is_file():raise FileNotFoundError(str(p))
         a=measure_render(out,source,master,4,"A_full")
+        a_repeat=measure_render(out,source,master,4,"A_repeat_same_source")
+        a_repeat_comparison=sequence_diagnostics(a["file"],a_repeat["file"])
         package=out/"B_package";package.mkdir(exist_ok=True)
         fragment=package/"cam-fixed-full-byte-copy.mp4"
         shutil.copy2(source,fragment)
@@ -107,7 +109,8 @@ def main():
         finally:
             hidden.rename(source)
         same_pixels=(a["pixels"]==b["pixels"])
-        report.update(pre_export_decoded_window=raw_check,
+        report.update(A_repeat=a_repeat, A_repeat_comparison=a_repeat_comparison,
+            pre_export_decoded_window=raw_check,
             pre_export_pixels_equal=raw_check["source_window"]==raw_check["fragment_window"],
             byte_identical_source_copy=(hashlib.sha256(source.read_bytes()).hexdigest()==hashlib.sha256(fragment.read_bytes()).hexdigest()),
             frame_comparison=sequence_diagnostics(a["file"],b["file"]),
