@@ -19,7 +19,7 @@ import zlib
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[2]
-HERE = Path(__file__).resolve().parent
+HERE = ROOT / "experiments/saturno_10"
 OUT = Path(os.environ.get("SATURNO_FULL_OUT", "/tmp/saturno-full18"))
 
 
@@ -177,6 +177,7 @@ def main():
               "remote_transfer_or_production_cost_measured": False}
     results = {}
     try:
+        sys.path.insert(0, str(HERE))
         from packet_preflight import rewrite
         preflight = json.loads((HERE / "packet_results_40886014059.json").read_text())["report"]
         assert preflight["status"] == "PASS_INPUT_PREFLIGHT"
