@@ -1,5 +1,5 @@
 name: Saturn 05 isolated native Zucker A/B
-# QA sixth pass: byte-for-byte negative control with original inaccessible
+# QA seventh pass: same-source repeat against byte-identical copy
 on:
   push:
     branches:
