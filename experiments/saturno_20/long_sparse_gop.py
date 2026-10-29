@@ -4,8 +4,10 @@ Generate original 90s synthetic 360-like H.264 clip with 2s closed GOP;
 keep windows only at 20-26s and 50-56s plus first/last GOP; compare exact
 decoder BGR frames using the same passthrough control verified in SAT-16.
 """
-import hashlib,json,subprocess,tempfile
+import hashlib,json,subprocess,tempfile,sys
 from pathlib import Path
+ROOT=Path(__file__).resolve().parents[2]
+sys.path.insert(0,str(ROOT))
 from experiments.saturno_10.packet_preflight import probe,choose_gops,copy_sparse
 
 OUT=Path(tempfile.gettempdir())/"saturno20-selective"
