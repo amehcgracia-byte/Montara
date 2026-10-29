@@ -1,5 +1,5 @@
-name: Saturn 07 traced native Zucker A/B
-# QA eighth pass: force rerender all source-identity comparisons
+name: Saturn 08 first-stage encoder diagnosis
+# One consolidated push-triggered diagnostic. Do not edit merely to rerun.
 on:
   push:
     branches:
@@ -27,13 +27,34 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends ffmpeg fonts-dejavu-core
           pip install -r requirements.txt
-      - name: Native Zucker diagnostic with fades disabled (QA runtime only)
+      - name: Replay recorded command with three repetitions per control
+        run: python experiments/saturno_08/command_replay.py
+      - name: Check encoder control before native follow-up
+        id: control
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          report = json.loads(Path("/tmp/saturno08-replay/REPORT.json").read_text())
+          stable = report.get("native_encoder_one_candidate") is True
+          with open(os.environ["GITHUB_OUTPUT"], "a") as handle:
+              handle.write(f"stable={str(stable).lower()}\n")
+          PY
+      - name: Native Zucker A-A and byte-copy B with QA encoder control
+        if: steps.control.outputs.stable == 'true'
         env:
           SATURNO_QA_NO_FADES: '0'
-          SATURNO_QA_FILTER_THREADS_ONE: '1'
-        run: |
-          python experiments/saturno_05/native_ab.py
-      - name: Publish minimal result to logs
+          SATURNO_QA_FILTER_THREADS_ONE: '0'
+          SATURNO_QA_ENCODER_THREADS_ONE: '1'
+        run: python experiments/saturno_05/native_ab.py
+      - name: Preserve reports in logs without artifact storage
         if: always()
         run: |
-          test -f /tmp/saturno-native-ab/AB_VERDICT.json && cat /tmp/saturno-native-ab/AB_VERDICT.json || true
+          python - <<'PY'
+          from pathlib import Path
+          for path in ("/tmp/saturno08-replay/REPORT.json", "/tmp/saturno-native-ab/AB_VERDICT.json"):
+              p = Path(path)
+              if p.is_file():
+                  print(f"EVIDENCE_FILE={path}", flush=True)
+                  print(p.read_text(), flush=True)
+          PY

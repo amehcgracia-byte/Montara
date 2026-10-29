@@ -59,6 +59,8 @@ def install_trace():
         error=None
         try:
             controlled=list(command)
+            if os.environ.get("SATURNO_QA_ENCODER_THREADS_ONE")=="1" and "libx264" in controlled:
+                controlled[-1:-1]=["-threads:v","1"]
             if os.environ.get("SATURNO_QA_FILTER_THREADS_ONE")=="1" and "-filter_complex" in controlled:
                 at=controlled.index("-filter_complex")
                 controlled[at:at]=["-filter_complex_threads","1"]
@@ -69,7 +71,8 @@ def install_trace():
         finally:
             destination=Path(str(command[-1])) if command else Path("/nonexistent")
             # Only inspect generated media, never mutate originals or engine.
-            entry={"command":[str(x) for x in command],"label":str(label),
+            entry={"command":[str(x) for x in controlled],
+                   "engine_command":[str(x) for x in command],"label":str(label),
                    "elapsed_sec":round(time.perf_counter()-start,4),
                    "error":error,"output_exists":destination.is_file()}
             if destination.is_file() and destination.suffix.lower() in {".mp4",".mov",".mkv"}:
@@ -149,7 +152,8 @@ def main():
     report={"scope":"unmodified Zucker _render_plan, 2-second single-camera reel_horizontal",
         "full_stage_e2e":False,"status":"NOT_RUN",
         "diagnostic_fades_disabled":diagnostic_no_fade,
-        "diagnostic_filter_threads_one":os.environ.get("SATURNO_QA_FILTER_THREADS_ONE")=="1"}
+        "diagnostic_filter_threads_one":os.environ.get("SATURNO_QA_FILTER_THREADS_ONE")=="1",
+        "diagnostic_encoder_threads_one":os.environ.get("SATURNO_QA_ENCODER_THREADS_ONE")=="1"}
     try:
         for p in [source,master]:
             if not p.is_file():raise FileNotFoundError(str(p))
@@ -175,7 +179,8 @@ def main():
             b["original_absent_during_B"]=not source.exists()
         finally:
             hidden.rename(source)
-        same_pixels=(a["pixels"]==b["pixels"])
+        same_pixels=(a["pixels"]==b["pixels"] and a["pixels"]==a_repeat["pixels"]
+                     and a_repeat_comparison["A_frames"]==a_repeat_comparison["B_frames"]==60)
         report.update(trace_summary=trace_compare(traces,"A_full","A_repeat_same_source"),
             trace_records=[{k:v for k,v in t.items() if k!="frame_hashes"}
                            for t in traces],
