@@ -28,7 +28,7 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           s=Path("experiments/saturno_24/full_selective_isolated.py").read_text()
-          assert '"\\n" for _ in range(3)' in s, "concat manifest must use newline escape"
+          assert "manifest_lines=concat.read_text().splitlines()" in s, "concat manifest validation missing"
           print("SATURNO24_CONCAT_PREFLIGHT_OK")
           PY
       - name: Full isolated selective AAB
