@@ -31,6 +31,26 @@ jobs:
         run: |
           python -m pip install -r requirements.txt
           python -m playwright install --with-deps chromium
+      - name: Temporary QA-only wizard diagnostic
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path("tests/e2e_journey.py")
+          s=p.read_text()
+          before='page.wait_for_selector("#cameras:not([hidden]), #making:not([hidden])", timeout=120_000)'
+          after='''try:
+        page.wait_for_selector("#cameras:not([hidden]), #making:not([hidden])", timeout=300_000)
+    except Exception:
+        diag = page.evaluate("""() => ({
+          location: location.pathname,
+          visible: [...document.querySelectorAll('section[id]')].filter(x => !x.hidden).map(x=>x.id),
+          text: document.body.innerText.slice(-3500)
+        })""")
+        print("SATURNO_WIZARD_DIAGNOSTIC", json.dumps(diag), flush=True)
+        raise'''
+          assert before in s
+          p.write_text(s.replace(before,after))
+          PY
       - name: Run actual Stage E2E with independent wall-clock
         shell: bash
         run: |
