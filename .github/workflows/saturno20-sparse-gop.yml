@@ -1,0 +1,35 @@
+name: Saturn 20 long source selective GOP preflight
+on:
+  push:
+    branches:
+      - fernando/continuacion-montara
+    paths:
+      - .github/workflows/saturno20-sparse-gop.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  sparse-gop:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install FFmpeg
+        timeout-minutes: 5
+        run: |
+          sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 update -qq
+          sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 install -y --no-install-recommends ffmpeg
+      - name: Real sparse GOP bytes and decoded windows gate
+        timeout-minutes: 8
+        run: python experiments/saturno_20/long_sparse_gop.py
+      - name: Preserve compact result even on test failure
+        if: always()
+        run: |
+          if test -f /tmp/saturno20-selective/REPORT.json; then
+            python -c 'import json; p=json.load(open("/tmp/saturno20-selective/REPORT.json")); print("SATURNO20_PRESERVED="+json.dumps({k:v for k,v in p.items() if k not in ("ffmpeg_command","selected_indices")},separators=(",",":")))'
+          fi
