@@ -89,9 +89,8 @@ def main():
         a=measure_render(out,source,master,4,"A_full")
         package=out/"B_package";package.mkdir(exist_ok=True)
         fragment=package/"cam-fixed-fragment.mkv"
-        command("ffmpeg","-nostdin","-v","error","-y","-ss","3","-i",source,
-            "-t","4","-map","0:v:0","-an","-c:v","libx264","-qp","0",
-            "-pix_fmt","yuv420p",fragment)
+        command("ffmpeg","-nostdin","-v","error","-y","-i",source,
+            "-t","9","-map","0:v:0","-an","-c:v","copy",fragment)
         # Compare the selected decoded windows BEFORE the Zucker export.
         def window_sha(video,start):
             result=subprocess.run(["ffmpeg","-nostdin","-v","error","-ss",str(start),
@@ -99,12 +98,12 @@ def main():
                 "-f","rawvideo","-"],capture_output=True,timeout=120,check=True)
             return hashlib.sha256(result.stdout).hexdigest(),len(result.stdout)
         raw_check={"source_window":window_sha(source,4),
-                   "fragment_window":window_sha(fragment,1)}
+                   "fragment_window":window_sha(fragment,4)}
         hidden=source.with_name(source.name+".saturno-hide")
         if hidden.exists():raise ValueError("QA original hidden path already exists")
         source.rename(hidden)
         try:
-            b=measure_render(out,fragment,master,1,"B_partial")
+            b=measure_render(out,fragment,master,4,"B_partial")
             b["original_absent_during_B"]=not source.exists()
         finally:
             hidden.rename(source)
@@ -117,7 +116,7 @@ def main():
             package_fraction=round(fragment.stat().st_size/source.stat().st_size,5),
             audio_limitation="The original master MP3 is shared by A and B; complete source isolation not proved",
             temporal_limitation="Only 2 seconds of one flat camera; not the Stage edit plan or moving 360",
-            package_method="H264 lossless fragment reencode with 1-second pre/post context; not stream copy or proven minimum package")
+            package_method="original H264 packets stream-copied from t=0 to 9s, source timeline start 0; prefix package, not minimal arbitrary interval closure")
     except Exception as e:
         report.update(status="BLOCKED_OR_FAILED",error=repr(e))
     (out/"AB_VERDICT.json").write_text(json.dumps(report,indent=2,default=list))
