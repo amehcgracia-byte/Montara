@@ -7,6 +7,7 @@
 # SSH key / token of that user). Never share credentials between the two accounts.
 # Without GitHub on the VM: copy a checkout (with submodules) to ~/montara first and run with
 # MONTARA_OFFLINE=1. MONTARA_GENERATE_PASSWORD=1 creates the private password and shows it once.
+# MONTARA_LOGIN_USER sets the browser login name (default 'montara').
 set -euo pipefail
 branch=${1:?branch}; port=${2:?port}
 root="$HOME/montara"; data="$HOME/montara-data"; conf="$HOME/.config/montara"
@@ -35,7 +36,7 @@ npm install --prefix "$data/Runtime" --no-audit --no-fund deno@2.5.6
 if [ ! -f "$conf/env" ]; then
   if [ "${MONTARA_GENERATE_PASSWORD:-0}" = 1 ]; then
     pw=$(openssl rand -base64 18 | tr -d '/+=' | cut -c1-20)
-    echo "Private Montara login for $(whoami): user 'montara', password: $pw  (shown once; stored in $conf/env)"
+    echo "Private Montara login for $(whoami): user '${MONTARA_LOGIN_USER:-montara}', password: $pw  (shown once; stored in $conf/env)"
   else
     read -r -s -p "Private Montara password for $(whoami) (16+ chars): " pw; echo
   fi
@@ -43,6 +44,7 @@ if [ ! -f "$conf/env" ]; then
   umask 077
   printf 'MONTARA_PREVIEW_PASSWORD=%s\nMONTARA_DATA=%s\nPATH=%s\nXDG_CACHE_HOME=%s\nTMPDIR=%s\n' \
     "$pw" "$data" "$data/Runtime/node_modules/.bin:$root/.venv/bin:/usr/bin:/bin" "$HOME/.cache" "$data/tmp" > "$conf/env"
+  printf 'MONTARA_PREVIEW_USER="%s"\n' "${MONTARA_LOGIN_USER:-montara}" >> "$conf/env"
   mkdir -p "$data/tmp"
 fi
 
