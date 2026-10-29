@@ -46,6 +46,7 @@ def main():
         assert 13 in selected and 28 in selected
         selected=[i for i in selected if i not in (13,28)]
         assert len(selected)==8
+        indices=[i for g in selected for i in range(*groups[g])]
         copy_sparse(str(source),str(sparse),data,groups,selected)
         info=probe(str(sparse),packets=True)
         expected=[data["packets"][i] for i in indices]
