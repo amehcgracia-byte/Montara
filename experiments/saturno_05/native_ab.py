@@ -58,7 +58,11 @@ def install_trace():
         start=time.perf_counter()
         error=None
         try:
-            return original(command,duration,label,progress)
+            controlled=list(command)
+            if os.environ.get("SATURNO_QA_FILTER_THREADS_ONE")=="1" and "-filter_complex" in controlled:
+                at=controlled.index("-filter_complex")
+                controlled[at:at]=["-filter_complex_threads","1"]
+            return original(controlled,duration,label,progress)
         except Exception as exc:
             error=repr(exc)
             raise
@@ -144,7 +148,8 @@ def main():
     out.mkdir(parents=True,exist_ok=True)
     report={"scope":"unmodified Zucker _render_plan, 2-second single-camera reel_horizontal",
         "full_stage_e2e":False,"status":"NOT_RUN",
-        "diagnostic_fades_disabled":diagnostic_no_fade}
+        "diagnostic_fades_disabled":diagnostic_no_fade,
+        "diagnostic_filter_threads_one":os.environ.get("SATURNO_QA_FILTER_THREADS_ONE")=="1"}
     try:
         for p in [source,master]:
             if not p.is_file():raise FileNotFoundError(str(p))
