@@ -53,6 +53,7 @@ def measure_render(root,source,master,clip_start,label):
     folder=root/label;folder.mkdir()
     project=create_project(label,str(folder/"QA.zuckervid"))
     project.data.setdefault("settings",{}).setdefault("export",{})["verify_motion"]=False
+    project.data["settings"]["export"]["force_rerender_segments"]=True
     project.data.setdefault("settings",{}).setdefault("wizard",{})["platform"]="reel_horizontal"
     record=file_record(str(source.resolve()))
     meta=probe(source)
