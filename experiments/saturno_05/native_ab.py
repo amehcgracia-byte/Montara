@@ -9,6 +9,7 @@ REPO=Path(__file__).resolve().parents[2]
 sys.path.insert(0,str(REPO/"engine"))
 from core.project import create_project,file_record
 from core.stages.export import _render_plan
+import core.stages.export as export_module
 
 def command(*args,timeout=600):
     p=subprocess.run(list(map(str,args)),capture_output=True,text=True,timeout=timeout)
@@ -78,12 +79,17 @@ def eval_fraction(s):
     return int(a)/int(b) if int(b) else 30
 
 def main():
+    # Experimental diagnostic only: runtime override, no engine file modified.
+    diagnostic_no_fade=os.environ.get("SATURNO_QA_NO_FADES")=="1"
+    if diagnostic_no_fade:
+        export_module.CONTENT_FADE_DURATION=0.0
     source=REPO/"tests/fixtures/much-to-me/cam-fixed.mp4"
     master=REPO/"tests/fixtures/much-to-me/master.mp3"
     out=Path(os.environ.get("SATURNO_AB_OUT","/tmp/saturno-native-ab"))
     out.mkdir(parents=True,exist_ok=True)
     report={"scope":"unmodified Zucker _render_plan, 2-second single-camera reel_horizontal",
-        "full_stage_e2e":False,"status":"NOT_RUN"}
+        "full_stage_e2e":False,"status":"NOT_RUN",
+        "diagnostic_fades_disabled":diagnostic_no_fade}
     try:
         for p in [source,master]:
             if not p.is_file():raise FileNotFoundError(str(p))
