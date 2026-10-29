@@ -58,6 +58,7 @@ Restart=on-failure
 WantedBy=default.target
 UNIT
 
+cd "$root"   # deploy.* modules are imported from the checkout
 set -a; . "$conf/env"; set +a
 "$root/.venv/bin/python" -m deploy.preflight --server --data "$data" --smoke --output "$data/server-check.json"
 "$root/.venv/bin/python" -m deploy.warmup --data "$data"
