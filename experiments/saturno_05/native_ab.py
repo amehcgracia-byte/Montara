@@ -40,7 +40,9 @@ def sequence_diagnostics(a,b):
     for shift in range(-4,5):
         matched=sum(left[i]==right[i+shift] for i in range(max(0,-shift),min(len(left),len(right)-shift)))
         if matched>best["matched"]:best={"shift":shift,"matched":matched}
-    return {"A_frames":len(left),"B_frames":len(right),
+    differing=[i for i,(a,b) in enumerate(zip(left,right)) if a!=b]
+    return {"differing_indices":differing,
+            "A_frames":len(left),"B_frames":len(right),
             "same_index_exact_frames":exact,"best_small_shift":best,
             "A_first_8":left[:8],"B_first_8":right[:8]}
 
@@ -90,6 +92,14 @@ def main():
         command("ffmpeg","-nostdin","-v","error","-y","-ss","3","-i",source,
             "-t","4","-map","0:v:0","-an","-c:v","libx264","-qp","0",
             "-pix_fmt","yuv420p",fragment)
+        # Compare the selected decoded windows BEFORE the Zucker export.
+        def window_sha(video,start):
+            result=subprocess.run(["ffmpeg","-nostdin","-v","error","-ss",str(start),
+                "-i",str(video),"-t","2","-map","0:v:0","-pix_fmt","yuv420p",
+                "-f","rawvideo","-"],capture_output=True,timeout=120,check=True)
+            return hashlib.sha256(result.stdout).hexdigest(),len(result.stdout)
+        raw_check={"source_window":window_sha(source,4),
+                   "fragment_window":window_sha(fragment,1)}
         hidden=source.with_name(source.name+".saturno-hide")
         if hidden.exists():raise ValueError("QA original hidden path already exists")
         source.rename(hidden)
@@ -99,7 +109,9 @@ def main():
         finally:
             hidden.rename(source)
         same_pixels=(a["pixels"]==b["pixels"])
-        report.update(frame_comparison=sequence_diagnostics(a["file"],b["file"]),
+        report.update(pre_export_decoded_window=raw_check,
+            pre_export_pixels_equal=raw_check["source_window"]==raw_check["fragment_window"],
+            frame_comparison=sequence_diagnostics(a["file"],b["file"]),
             status="PASS_NATIVE_AB_PIXELS" if same_pixels else "FAIL_NATIVE_AB_PIXELS",
             A=a,B=b,package_video_bytes=fragment.stat().st_size,full_video_bytes=source.stat().st_size,
             package_fraction=round(fragment.stat().st_size/source.stat().st_size,5),
