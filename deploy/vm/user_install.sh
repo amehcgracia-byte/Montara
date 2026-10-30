@@ -65,6 +65,6 @@ set -a; . "$conf/env"; set +a
 "$root/.venv/bin/python" -m deploy.preflight --server --data "$data" --smoke --output "$data/server-check.json"
 "$root/.venv/bin/python" -m deploy.warmup --data "$data"
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
-systemctl --user daemon-reload && systemctl --user enable --now montara.service
+systemctl --user daemon-reload && systemctl --user enable montara.service && systemctl --user restart montara.service   # re-runs load the new code
 echo "Montara for $(whoami) on 127.0.0.1:$port. From your computer:"
 echo "  gcloud compute ssh $(whoami)@<vm> --zone <zone> -- -L $port:127.0.0.1:$port   then open http://127.0.0.1:$port"
