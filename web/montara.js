@@ -1159,9 +1159,27 @@ function renderStatus(s) {
     setProgress(exporting && s.status !== "done" ? Math.min(99, p) : p, exporting ? "Finishing your video…" : p < 40 ? "Listening and finding the cuts…" : "Shaping your edit…", exporting && p >= 99 ? "Joining, checking playback and saving the final file. This can take a little longer." : exporting ? "Keeping the choices from your preview." : "Preparing the framing and the rhythm you chose.");
     return;
   }
-  const task = (s.tasks || [])[0] || {};
+  renderShotBars(s);
+  const rendering = (s.tasks || []).some((t) => /^segment-/.test(t.id || ""));
+  const task = rendering ? { label: "Rendering your video" } : (s.tasks || [])[0] || {};
   const finalizing = s.status !== "done" && Number(s.progress || 0) >= 99;
   setProgress(finalizing ? 99 : Number(s.progress || 0), finalizing ? "Finishing your video…" : task.label || s.message || "Working…", finalizing ? "Joining, checking playback and saving the final file. This can take a little longer." : s.detail || "");
+}
+
+// One small bar per shot while the engine renders (tasks "segment-N", label "Shot N/T").
+function renderShotBars(s) {
+  const box = $("#renderBars");
+  const shots = (s.tasks || []).filter((t) => /^segment-\d+$/.test(t.id || ""));
+  const total = Math.max(0, ...shots.map((t) => Number((/\/(\d+)/.exec(t.label || "") || [])[1] || 0)));
+  if (!total || s.status === "done") { box.hidden = true; box.innerHTML = ""; return; }
+  if (box.children.length !== total) box.innerHTML = Array.from({ length: total }, () => "<i></i>").join("");
+  box.classList.toggle("many", total > 60);
+  for (const t of shots) {
+    const index = Number(t.id.split("-")[1]) - 1;
+    const bar = box.children[index];
+    if (bar) bar.style.setProperty("--p", Math.max(0, Math.min(1, Number(t.percent || 0) / 100)).toFixed(3));
+  }
+  box.hidden = false;
 }
 
 function setProgress(percent, message, detail) {
