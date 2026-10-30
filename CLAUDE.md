@@ -20,3 +20,5 @@
 - Read docs/HANDOFF_FERNANDO_038.md for current context. Older docs with Pulse/Story as top-level modes are historical.
 - Keep tools/asset-selector separate from Montara; its candidates and decisions are not automatic production-library approvals.
 - Report exactly which checks ran; do not claim full E2E or production readiness from targeted tests.
+- Two labs share this repo: read docs/COLLABORATION.md, then docs/lab/STATUS-JM.md and docs/lab/STATUS-FER.md.
+  Fernando's experiments are indexed in docs/lab/INVENTORY-FER.md; open long reports only when deciding about that piece.

@@ -1,0 +1,31 @@
+name: Lab digest
+
+# Posts new commits of main and Fernando's branch to one issue per branch
+# (docs/COLLABORATION.md). Runs from main only, so no other branch needs this file.
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 */3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: lab-digest
+  cancel-in-progress: false
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+      - run: python3 .github/scripts/lab_digest.py
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LAB_BRANCHES: main,fernando/continuacion-montara
