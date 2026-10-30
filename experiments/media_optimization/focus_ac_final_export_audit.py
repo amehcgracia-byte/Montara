@@ -20,7 +20,10 @@ def main():
     seg=manifest.get("performance",{}).get("segments") or []
     videos=[s for s in media.get("streams",[]) if s.get("codec_type")=="video"]
     audios=[s for s in media.get("streams",[]) if s.get("codec_type")=="audio"]
-    expected=sum(float(s["duration_sec"]) for s in plan["segments"])
+    content_duration=sum(float(s["duration_sec"]) for s in plan["segments"])
+    from core.stages.export import INTRO_DURATION, OUTRO_DURATION
+    # The tested YouTube export includes these two branded bookends.
+    expected=content_duration+INTRO_DURATION+OUTRO_DURATION
     actual=float(media.get("format",{}).get("duration",0))
     provenance=len(seg)==len(plan["segments"])==6 and all(s.get("rendered_from")=="original" and s.get("cached") is False for s in seg)
     duration_ok=abs(actual-expected)<=1.0
@@ -28,7 +31,9 @@ def main():
     audio_ok=len(audios)>=1
     checks={"six_uncached_original_segments":provenance,"duration_within_one_second":duration_ok,"1920x1080_video":video_ok,"audio_track_present":audio_ok}
     out={"status":"PASS_METADATA_AND_PROVENANCE" if all(checks.values()) else "REVIEW_REQUIRED",
-         "checks":checks,"expected_segment_duration_sec":round(expected,3),
+         "checks":checks,"expected_segment_duration_sec":round(content_duration,3),
+         "intro_duration_sec":INTRO_DURATION,"outro_duration_sec":OUTRO_DURATION,
+         "expected_total_duration_sec":round(expected,3),
          "output_duration_sec":actual,"streams":media.get("streams",[]),
          "export_name":exported[0].name,"bytes":exported[0].stat().st_size,
          "limitations":["No actual audio listening, no waveform analysis, no decoded-frame parity.",
