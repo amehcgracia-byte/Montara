@@ -12,7 +12,7 @@ from local_media.proxies import proxy_signature, stamp
 def setup(tmp_path):
     root = tmp_path / "workspace"
     cache = root / "LocalProxyCache"
-    cache.mkdir(parents=True)
+    cache.mkdir(parents=True, exist_ok=True)
     source = tmp_path / "camera.mp4"
     source.write_bytes(b"original-source")
     source_id = "a" * 24
