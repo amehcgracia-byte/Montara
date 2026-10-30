@@ -20,6 +20,7 @@ Ambos equipos pueden investigar, proponer y revisar cualquier cosa. Una observac
 - **Código y resultados:** ramas y PR de GitHub. Entire y las transcripciones de agentes no los sustituyen.
 - **Estado:** `docs/lab/STATUS-JM.md` y `docs/lab/STATUS-FER.md`. Cada uno tiene 40 líneas como máximo y lo sobrescribe su propio laboratorio en cada hito.
 - **Inventario:** `docs/lab/INVENTORY-FER.md`. Indexa los experimentos de Fernando por familias. Se audita una vez y después se mantiene de forma incremental.
+- **Tiempos:** `docs/lab/RUNS.md` (tabla) y `docs/lab/runs.jsonl` (registros) guardan cada trabajo medido con fecha, versiones, máquina y segundos por fase. Solo se comparan filas con el mismo motor y la misma máquina.
 - **Avisos:** el workflow `Lab digest` publica cada rango de commits nuevo de `main` y de `fernando/continuacion-montara` en un issue fijo por rama. Es determinista: no depende de que ningún agente se acuerde.
 
 ## Presupuesto de lectura para agentes
