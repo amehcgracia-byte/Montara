@@ -524,7 +524,7 @@ function setupSphere(file, root) {
   const anchor = views.full_stage || Object.values(views).find((v) => v.enabled);
   let offset = anchor ? wrap(0.5 - (anchor.yaw + 180) / 360) : 0;
   const frame = new Image();
-  frame.onload = () => { pano.querySelector(".loading").hidden = true; panoImg.style.backgroundImage = `url("${frame.src}")`; place(); };
+  frame.onload = () => { pano.querySelector(".loading").hidden = true; panoImg.style.backgroundImage = `url("${frame.src}")`; place(); preview(); };
   frame.onerror = () => { pano.querySelector(".loading").textContent = "Could not load the 360 frame."; };
   frame.src = `/api/v1/wizard/spherical-source-frame?source=${encodeURIComponent(file.path)}`;
 
@@ -582,20 +582,27 @@ function setupSphere(file, root) {
     }
   }
 
-  let previewTimer = null;
-  function preview(immediate = true) {
+  // The view is drawn in the browser from the panorama already on screen (WebGL), so
+  // aiming and zooming are instant. The engine's exact view (wide presets are not
+  // rectilinear) replaces it once the person stops moving, if it is still current.
+  let previewTimer = null, previewToken = 0;
+  function preview() {
     const view = views[active];
     const img = root.querySelector(".preview img");
     if (!view) { img.hidden = true; return; }
-    const load = () => {
+    const token = ++previewToken;
+    let local = "";
+    try { local = webSphericalStill(frame, { yaw: view.yaw, pitch: view.pitch, fov: view.fov }); } catch (error) { console.warn(error); }
+    if (local) { img.src = local; img.hidden = false; }
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(() => {
       const zoom = zoomOf(view);
       const params = new URLSearchParams({ source: file.path, shot: active, yaw: view.yaw, pitch: view.pitch, fov: view.fov,
         projection_preset: view.projection_preset || zoom[3], time_sec: 20 });
-      img.src = `/api/v1/wizard/spherical-preview?${params}`;
-      img.hidden = false;
-    };
-    clearTimeout(previewTimer);
-    if (immediate) load(); else previewTimer = setTimeout(load, 180);
+      const exact = new Image();
+      exact.onload = () => { if (token === previewToken) { img.src = exact.src; img.hidden = false; } };
+      exact.src = `/api/v1/wizard/spherical-preview?${params}`;
+    }, local ? 1500 : 0);
   }
 
   // Panorama: drag turns it, a click (no drag) places the selected point of view.
@@ -638,7 +645,7 @@ function setupSphere(file, root) {
     const degPerPx = Math.min(view.fov, 110) / width;
     view.yaw = Math.round(((((aim.yaw - (e.clientX - aim.x) * degPerPx) + 180) % 360 + 360) % 360 - 180) * 10) / 10;
     view.pitch = Math.round(Math.max(-89, Math.min(89, aim.pitch + (e.clientY - aim.y) * degPerPx)) * 10) / 10;
-    drawMarkers(); preview(false);
+    drawMarkers(); preview();
   });
   pv.addEventListener("pointerup", () => { if (aim) { aim = null; preview(); } });
   pv.addEventListener("wheel", (e) => {
@@ -648,7 +655,7 @@ function setupSphere(file, root) {
     const index = ZOOMS.indexOf(zoomOf(view));
     const next = ZOOMS[Math.max(0, Math.min(ZOOMS.length - 1, index + (e.deltaY > 0 ? 1 : -1)))];
     setZoom(active, next);
-    renderSlots(); preview(false);
+    renderSlots(); preview();
   }, { passive: false });
 
   renderSlots();
@@ -989,15 +996,27 @@ async function status() {
   return api(`/wizard/status${query}`);
 }
 
+// Long footage (a whole jam, 4K phone video) can prepare for hours. Wait while the
+// engine reports progress; give up only if nothing changes for 45 minutes.
+const STALL_LIMIT_MS = 45 * 60 * 1000;
 async function waitFor(predicate) {
-  for (let i = 0; i < 1200; i += 1) {
-    const s = await status();
+  let signature = "", changedAt = Date.now();
+  for (;;) {
+    let s;
+    try { s = await status(); }
+    catch (error) {  // a dropped connection must not end a job the server is still doing
+      if (Date.now() - changedAt > STALL_LIMIT_MS) throw error;
+      await new Promise((r) => setTimeout(r, 5000));
+      continue;
+    }
     renderStatus(s);
     if (s.status === "failed") throw new Error(s.error || s.message || "Preparation failed");
     if (predicate(s)) return s;
-    await new Promise((r) => setTimeout(r, 1000));
+    const now = JSON.stringify([s.status, s.stage, s.progress, s.message, s.detail, (s.tasks || []).map((t) => [t.label, t.progress])]);
+    if (now !== signature) { signature = now; changedAt = Date.now(); }
+    if (Date.now() - changedAt > STALL_LIMIT_MS) throw new Error("The preparation stopped making progress.");
+    await new Promise((r) => setTimeout(r, 2000));
   }
-  throw new Error("The preparation is taking too long.");
 }
 
 function startPolling() {
