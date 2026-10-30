@@ -5,7 +5,7 @@
 #   montara-runs     timing record of every finished job on the VM (~/montara-runs.jsonl)
 #   montara-start    switch the VM on if needed, wait for Montara, open the tunnel
 #   montara-stop     switch the VM off now
-#   montara-autostop once: the VM switches itself off after 30 min without use
+#   montara-autostop once: the VM switches itself off after 1 h without web use and 2 h without SSH typing
 # Install: curl -fsSL https://raw.githubusercontent.com/amehcgracia-byte/Montara/main/deploy/vm/mac-tools.sh | bash
 set -euo pipefail
 BIN="$HOME/.montara-tools/bin"
@@ -59,14 +59,14 @@ SCRIPT
 
 cat > "$BIN/montara-stop" <<SCRIPT
 #!/bin/bash
-# Switches the lab VM off now (it also switches itself off after 30 min without use).
+# Switches the lab VM off now (it also switches itself off when nobody uses it).
 gcloud compute instances stop $VM --zone $ZONE --project $PROJECT --quiet && echo "Lab machine off. Start it again with: montara-start"
 SCRIPT
 
 cat > "$BIN/montara-autostop" <<SCRIPT
 #!/bin/bash
-# Once: makes the lab VM switch itself off after N minutes without use (default 30).
-gcloud compute ssh $VM --zone $ZONE --project $PROJECT --command "sudo bash /home/jm/montara/deploy/vm/install_idle_shutdown.sh \${1:-30}"
+# Once: the lab VM switches itself off after WEB minutes without Montara use (60) and SSH minutes without typing (120).
+gcloud compute ssh $VM --zone $ZONE --project $PROJECT --command "sudo bash /home/jm/montara/deploy/vm/install_idle_shutdown.sh \${1:-60} \${2:-120}"
 SCRIPT
 
 chmod +x "$BIN/montara-update" "$BIN/montara-tunnel" "$BIN/montara-runs" "$BIN/montara-start" "$BIN/montara-stop" "$BIN/montara-autostop"
