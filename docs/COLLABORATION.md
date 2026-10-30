@@ -44,7 +44,8 @@ Una funcionalidad del producto solo está «terminada» cuando `tests/e2e_journe
 
 ## Git
 
-- Ningún laboratorio modifica la rama del otro ni `main` sin su responsable. Chema decide qué entra en `main`.
+- **Chema decide e integra en `main`** sin esperar autorización del otro laboratorio. Basta con informar: el issue «Lab digest · main» lista los commits, y el laboratorio de Fernando señala riesgos si los ve.
+- Nadie modifica la rama `fernando/*` sin coordinarlo con Fernando.
 - La integración se hace pieza a pieza, como en la PR #8: rama corta desde `main` y una PR por pieza. La rama experimental nunca se fusiona entera.
 - Cada PR indica los commits de `engine/` y `mixer/` y las pruebas exactas que se ejecutaron.
 - Un cambio de submódulo demuestra `git merge-base --is-ancestor <viejo> <nuevo>` o declara qué se pierde. Los cambios del motor pasan por `zucker_videos` (ver `CLAUDE.md`).
