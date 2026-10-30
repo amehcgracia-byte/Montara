@@ -181,6 +181,7 @@ $$(".mode[data-platform]").forEach((card) => card.addEventListener("click", () =
   renderFiles();
   show("footage");
   loadSamples().catch((error) => console.warn("Samples unavailable", error));
+  offerRestore().catch((error) => console.warn("Footage memory", error));
 }));
 
 function resetFlow() {
@@ -247,21 +248,68 @@ $("#clearSamples").addEventListener("click", () => {
 $$("[data-drop]").forEach((drop) => {
   ["dragenter", "dragover"].forEach((name) => drop.addEventListener(name, (e) => { e.preventDefault(); drop.classList.add("over"); }));
   ["dragleave", "drop"].forEach((name) => drop.addEventListener(name, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
-  drop.addEventListener("drop", (e) => addFiles([...e.dataTransfer.files]));
+  drop.addEventListener("drop", (e) => {
+    const files = [...e.dataTransfer.files];
+    footageMemory.handlesFromDrop(e.dataTransfer).then((handles) => addFiles(files, handles), () => addFiles(files));
+  });
   drop.querySelector("input").addEventListener("change", (e) => { addFiles([...e.target.files]); e.target.value = ""; });
+  // Chrome/Edge: the system picker returns handles, so an interrupted upload can resume later.
+  if (footageMemory.pickerAvailable) drop.querySelector(".drop-prompt")?.addEventListener("click", async (e) => {
+    e.preventDefault();
+    try { const {files, handles} = await footageMemory.pick(drop.dataset.drop); addFiles(files, handles); }
+    catch (error) { if (error.name !== "AbortError") toast(error.message, true); }
+  });
 });
 $("#reelDuration").addEventListener("input", (e) => { $("#reelDurationOut").textContent = `${e.target.value} s`; });
 
-function addFiles(list) {
+function addFiles(list, handles = []) {
   if (rejectRaw360(list)) return;
   if (state.files.some((f) => f.sample)) { state.files = state.files.filter((f) => !f.sample); $("#sampleNote").hidden = true; }
+  $("#restoreNote").hidden = true;
+  const unused = [...handles];
   for (const file of list) {
-    const entry = { id: crypto.randomUUID(), name: file.name, kind: "uploading", progress: 0 };
+    const handle = unused.splice(unused.findIndex((h) => h.name === file.name) >>> 0, 1)[0];
+    const entry = { id: crypto.randomUUID(), name: file.name, kind: "uploading", progress: 0,
+      memory: { platform: state.platform, size: file.size, lastModified: file.lastModified, handle: handle?.name === file.name ? handle : undefined } };
     state.files.push(entry);
+    remember(entry);
     upload(file, entry);
   }
   renderFiles();
 }
+
+// ---------- footage memory: survive a reload ----------
+function remember(entry) {
+  if (!entry.memory) return;
+  const { id, name, kind, path, reason, projection, duration, uploadId } = entry;
+  footageMemory.save({ id, name, kind: kind === "error" ? "uploading" : kind, path, reason, projection, duration, uploadId, ...entry.memory });
+}
+async function offerRestore() {
+  const records = (await footageMemory.list(state.platform)).filter((r) => !state.files.some((f) => f.id === r.id));
+  state.restorable = records;
+  const done = records.filter((r) => r.path).length;
+  $("#restoreText").textContent = `${records.length} file${records.length === 1 ? "" : "s"} from your last visit` + (done < records.length ? ` (${records.length - done} still to upload).` : ".");
+  $("#restoreNote").hidden = !records.length || state.files.some((f) => !f.sample);
+}
+$("#restoreForget").addEventListener("click", async () => { await footageMemory.clear(state.platform); state.restorable = []; $("#restoreNote").hidden = true; });
+$("#restoreFiles").addEventListener("click", async () => {
+  const records = state.restorable || [];
+  $("#restoreNote").hidden = true;
+  state.files = state.files.filter((f) => !f.sample);
+  $("#sampleNote").hidden = true;
+  for (const record of records) {
+    const entry = { id: record.id, name: record.name, kind: record.kind, path: record.path, reason: record.reason, projection: record.projection,
+      duration: record.duration, uploadId: record.uploadId, progress: 0,
+      memory: { platform: record.platform, size: record.size, lastModified: record.lastModified, handle: record.handle } };
+    state.files.push(entry);
+    if (record.path) continue;
+    let file = null;
+    try { file = await footageMemory.reopen(record); } catch (error) { console.warn(error); }
+    if (file) { entry.kind = "uploading"; upload(file, entry); }  // resumable uploads continue where they stopped
+    else { entry.kind = "error"; entry.error = "Add this file again to continue its upload"; }
+  }
+  renderFiles();
+});
 
 function upload(file, entry) {
   if (file.size > 8 * 1024 * 1024) return uploadInParts(file, entry);
@@ -287,6 +335,7 @@ function upload(file, entry) {
         entry.reason = found[1].reason || found[1].note;
         entry.projection = found[1].projection;
         entry.duration = Number(found[1].duration) || 0;
+        remember(entry);
       } else {
         entry.kind = "error";
         entry.error = "Not a usable media file";
@@ -302,12 +351,13 @@ function upload(file, entry) {
 async function uploadInParts(file, entry) {
   state.uploads += 1;
   try {
-    const data = await sendResumableUpload(file, progress => { entry.progress = progress; renderFiles(); }, id => {entry.uploadId = id;}, () => entry.removed);
+    const data = await sendResumableUpload(file, progress => { entry.progress = progress; renderFiles(); }, id => {entry.uploadId = id; remember(entry);}, () => entry.removed);
     const found = ['videos', 'master', 'songs', 'ignored'].map(kind => [kind, (data[kind] || [])[0]]).find(([, item]) => item);
     if (!found) throw new Error('Not a usable media file');
     entry.kind = found[0] === 'videos' ? 'video' : found[0];
     entry.path = found[1].path; entry.reason = found[1].reason || found[1].note; entry.projection = found[1].projection;
     entry.duration = Number(found[1].duration) || 0;
+    remember(entry);
   } catch (error) {
     if (entry.removed) {
       if (entry.uploadId) fetch(`/montara/uploads/${entry.uploadId}`, {method: 'DELETE'}).catch(() => {});
@@ -342,6 +392,7 @@ document.addEventListener('click', event => {
   const entry = state.files.find(f => f.id === button.dataset.removeFile);
   if (!entry) return;
   entry.removed = true;
+  footageMemory.forget(entry.id);
   if (entry.xhr && entry.kind === 'uploading') entry.xhr.abort();
   if (entry.uploadId && entry.kind !== 'video' && entry.kind !== 'master' && entry.kind !== 'songs') {
     fetch(`/montara/uploads/${entry.uploadId}`, {method: 'DELETE'}).catch(() => {});
@@ -1738,6 +1789,7 @@ $("#showExport").addEventListener("click", async () => {
 // ---------- result ----------
 function showResult(s) {
   const result = s.result || {};
+  footageMemory.clear(state.platform);  // the video is made; next visit starts clean
   const url = result.url || `/api/v1/wizard/result?t=${Date.now()}`;
   $("#resultVideo").hidden = Boolean(result.audio);
   $("#resultAudio").hidden = !result.audio;
