@@ -182,6 +182,7 @@ $$(".mode[data-platform]").forEach((card) => card.addEventListener("click", () =
   show("footage");
   loadSamples().catch((error) => console.warn("Samples unavailable", error));
   offerRestore().catch((error) => console.warn("Footage memory", error));
+  montaraCompanion.detect().then((info) => { $("#companionNote").hidden = !info; });
 }));
 
 function resetFlow() {
@@ -281,8 +282,8 @@ function addFiles(list, handles = []) {
 // ---------- footage memory: survive a reload ----------
 function remember(entry) {
   if (!entry.memory) return;
-  const { id, name, kind, path, reason, projection, duration, uploadId } = entry;
-  footageMemory.save({ id, name, kind: kind === "error" ? "uploading" : kind, path, reason, projection, duration, uploadId, ...entry.memory });
+  const { id, name, kind, path, reason, projection, duration, uploadId, small, original } = entry;
+  footageMemory.save({ id, name, kind: kind === "error" ? "uploading" : kind, path, reason, projection, duration, uploadId, small, original, ...entry.memory });
 }
 async function offerRestore() {
   const records = (await footageMemory.list(state.platform)).filter((r) => !state.files.some((f) => f.id === r.id));
@@ -299,7 +300,7 @@ $("#restoreFiles").addEventListener("click", async () => {
   $("#sampleNote").hidden = true;
   for (const record of records) {
     const entry = { id: record.id, name: record.name, kind: record.kind, path: record.path, reason: record.reason, projection: record.projection,
-      duration: record.duration, uploadId: record.uploadId, progress: 0,
+      duration: record.duration, uploadId: record.uploadId, small: record.small, original: record.original, progress: 0,
       memory: { platform: record.platform, size: record.size, lastModified: record.lastModified, handle: record.handle } };
     state.files.push(entry);
     if (record.path) continue;
@@ -311,7 +312,27 @@ $("#restoreFiles").addEventListener("click", async () => {
   renderFiles();
 });
 
+// With the companion running, a video becomes a small version on the person's
+// computer and only that is uploaded; the original stays where it is.
+async function uploadSmall(file, entry) {
+  entry.viaCompanion = true;
+  state.uploads += 1;
+  let small = null;
+  try {
+    small = await montaraCompanion.smallVersion(file, (phase, progress) => { entry.phase = phase; entry.progress = progress; renderFiles(); }, () => entry.removed);
+  } catch (error) { console.warn(error); }
+  if (!entry.removed) {
+    entry.phase = small ? "Uploading small version" : "";
+    entry.progress = 0;
+    if (small) { entry.small = true; entry.original = small.original; remember(entry); }
+    upload(small ? small.file : file, entry);
+  }
+  state.uploads -= 1;
+  renderFiles();
+}
+
 function upload(file, entry) {
+  if (montaraCompanion.info && !entry.viaCompanion && montaraCompanion.isVideo(file)) return uploadSmall(file, entry);
   if (file.size > 8 * 1024 * 1024) return uploadInParts(file, entry);
   state.uploads += 1;
   const xhr = new XMLHttpRequest();
@@ -379,9 +400,9 @@ function fileRow(f) {
     <li>
       <span class="kind ${f.kind}">${fileLabel(f)}</span>
       <span class="name" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}</span>
-      <span class="state">${f.kind === "uploading" ? Math.round(f.progress * 100) + "%" : f.kind === "error" ? escapeHtml(f.error) : f.kind === "ignored" ? escapeHtml(f.reason || "not used") : "Ready"}</span>
-      ${f.kind === "uploading" ? `<span class="bar"><i style="width:${Math.round(f.progress * 100)}%"></i></span>` : ""}
+      <span class="state">${f.kind === "uploading" ? (f.phase ? escapeHtml(f.phase) + " " : "") + Math.round(f.progress * 100) + "%" : f.small && f.kind === "video" ? "Ready · small version" : f.kind === "error" ? escapeHtml(f.error) : f.kind === "ignored" ? escapeHtml(f.reason || "not used") : "Ready"}</span>
       <button class="remove" data-remove-file="${f.id}" type="button" aria-label="Remove ${escapeHtml(f.name)}" title="Remove">×</button>
+      ${f.kind === "uploading" ? `<span class="bar"><i style="width:${Math.round(f.progress * 100)}%"></i></span>` : ""}
     </li>`;
 }
 // Every file row can be removed, also while it uploads: the upload stops and
