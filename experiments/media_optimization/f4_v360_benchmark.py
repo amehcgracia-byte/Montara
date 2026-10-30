@@ -11,11 +11,35 @@ Los resultados son comparaciones de salidas codificadas, NO calidad de verdad-te
 import argparse
 import csv
 import json
+import statistics
 import shutil
 import subprocess
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+
+
+def git_revision():
+    try:
+        return command_output(["git", "rev-parse", "HEAD"])
+    except (OSError, subprocess.CalledProcessError):
+        return "unavailable"
+
+
+def frame_count(path):
+    data = json.loads(command_output([
+        "ffprobe", "-v", "error", "-select_streams", "v:0", "-count_frames",
+        "-show_entries", "stream=width,height,nb_read_frames", "-of", "json", str(path)
+    ]))
+    streams = data.get("streams", [])
+    if len(streams) != 1 or "nb_read_frames" not in streams[0]:
+        raise RuntimeError(f"No se pudo contar el vídeo: {path}")
+    return int(streams[0]["nb_read_frames"]), int(streams[0]["width"]), int(streams[0]["height"])
+
+
+def still(source, destination, seconds):
+    run(["ffmpeg", "-hide_banner", "-nostdin", "-loglevel", "error", "-y",
+         "-ss", str(seconds), "-i", str(source), "-frames:v", "1", str(destination)])
 
 
 def command_output(args):
@@ -100,6 +124,7 @@ def main():
     metadata = {
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
         "source": str(source),
+        "git_revision": git_revision(),
         "source_size_bytes": source.stat().st_size,
         "source_probe": probe(source),
         "ffmpeg": command_output(["ffmpeg", "-version"]).splitlines()[0],
@@ -134,9 +159,19 @@ def main():
             elapsed[mode] = encode(source, destination, mode, args.seconds,
                                    args.width, args.height, args.threads)
             outputs[mode] = destination
+        count_l, w_l, h_l = frame_count(outputs["lanczos"])
+        count_b, w_b, h_b = frame_count(outputs["linear"])
+        if count_l != count_b or count_l < 1:
+            raise RuntimeError(f"Fotogramas distintos: lanczos={count_l}, linear={count_b}")
+        if (w_l, h_l) != (args.width, args.height) or (w_b, h_b) != (args.width, args.height):
+            raise RuntimeError("Las dimensiones de salida no coinciden con las solicitadas")
         similarity = ssim(outputs["lanczos"], outputs["linear"])
+        if repetition == 1:
+            for mode in ("lanczos", "linear"):
+                still(outputs[mode], output_dir / f"f4_preview_{mode}.png", args.seconds / 2)
         row = {
             "repeat": repetition, "order": "->".join(order),
+            "frame_count": count_l,
             "lanczos_s": round(elapsed["lanczos"], 4),
             "linear_s": round(elapsed["linear"], 4),
             "saving_pct": round(100 * (1 - elapsed["linear"] / elapsed["lanczos"]), 3),
@@ -151,6 +186,19 @@ def main():
         writer = csv.DictWriter(f, fieldnames=list(rows[0]))
         writer.writeheader()
         writer.writerows(rows)
+    summary = {
+        "repeats": len(rows),
+        "median_lanczos_s": statistics.median(r["lanczos_s"] for r in rows),
+        "median_linear_s": statistics.median(r["linear_s"] for r in rows),
+        "median_saving_pct": statistics.median(r["saving_pct"] for r in rows),
+        "min_saving_pct": min(r["saving_pct"] for r in rows),
+        "max_saving_pct": max(r["saving_pct"] for r in rows),
+        "median_ssim_all": statistics.median(r["ssim_all"] for r in rows),
+        "frame_count": rows[0]["frame_count"],
+        "note": "No es prueba con 360 real ni calidad absoluta; inspeccionar las imágenes PNG."
+    }
+    (output_dir / "summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+    print(f"Resumen: {summary}")
     print(f"Guardado: {output_dir / 'results.csv'}")
     print(f"Guardado: {output_dir / 'manifest.json'}")
 
