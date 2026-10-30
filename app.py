@@ -14,10 +14,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import logging
 import os
 import sys
 import threading
+import time
 import uuid
 from pathlib import Path
 
@@ -126,6 +128,25 @@ def create_montara_app(data_root: Path = DEFAULT_DATA, samples: bool = True):
     app.view_functions["index"] = lambda: send_from_directory(WEB, "index.html")
     app.config["MONTARA"] = True
     app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
+
+    # Someone is really using Montara: the VM idle watchdog (deploy/vm/idle_shutdown.sh)
+    # powers the machine off when this file is old and no engine work is running.
+    # Background polls of status do not count, so an open but unused page lets it sleep.
+    activity_file = data_root / ".last-activity"
+    polls = re.compile(r"^/(api/v1/wizard/(status|review)|montara/(mix|session)/[a-f0-9]+|montara/version|montara/uploads)$")
+    last_touch = [0.0]
+
+    @app.before_request
+    def montara_mark_activity():
+        now = time.time()
+        if now - last_touch[0] < 30 or (request.method == "GET" and polls.match(request.path)):
+            return None
+        last_touch[0] = now
+        try:
+            activity_file.write_text(str(int(now)))
+        except OSError:
+            pass
+        return None
 
     @app.before_request
     def montara_raw_camera_guard():
