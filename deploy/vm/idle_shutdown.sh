@@ -4,7 +4,9 @@
 #   - the machine has been up for at least GRACE minutes,
 #   - no Montara of any lab user saw real activity for IDLE minutes (~/montara-data/.last-activity),
 #   - no engine work is running (ffmpeg, ffprobe, the mixer worker),
-#   - no benchmark holds the lab lock (montara-bench).
+#   - no benchmark holds the lab lock (montara-bench),
+#   - nobody typed in an interactive SSH terminal for IDLE minutes (a forgotten open
+#     terminal does not count; long unattended jobs must run under montara-bench).
 # Start it again from the Mac with: montara-start
 set -u
 IDLE_MIN="${MONTARA_IDLE_MINUTES:-30}"
@@ -19,6 +21,10 @@ if [ -e /var/lock/montara/bench.lock ] && ! flock -n /var/lock/montara/bench.loc
   echo "benchmark running: keep"; exit 0
 fi
 latest=0
+for tty in $(who | awk '{print $2}' | sort -u); do
+  t=$(stat -c %X "/dev/$tty" 2>/dev/null || echo 0)   # last keystroke on that terminal
+  [ "$t" -gt "$latest" ] 2>/dev/null && latest=$t
+done
 for f in ${MONTARA_IDLE_HOMES:-/home/*}/montara-data/.last-activity; do
   [ -f "$f" ] || continue
   t=$(cat "$f" 2>/dev/null || echo 0)
