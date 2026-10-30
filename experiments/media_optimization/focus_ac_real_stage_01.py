@@ -7,7 +7,6 @@ Does NOT run Zucker edit planning or final render. Source files are never writte
 Uses isolated output directory; output must not exist.
 """
 import argparse
-import hashlib
 import json
 import os
 import shutil
@@ -31,12 +30,6 @@ def probe(path):
       "-show_entries","stream=codec_name,width,height,avg_frame_rate,side_data_list:format=duration",
       "-of","json",str(path)],capture_output=True,text=True,timeout=45,check=True)
     return json.loads(result.stdout)
-
-def digest(path):
-    h=hashlib.sha256()
-    with path.open("rb") as f:
-        for chunk in iter(lambda:f.read(2*1024*1024),b""):h.update(chunk)
-    return h.hexdigest()
 
 def safety():
     util=sample_cpu(2)
@@ -77,14 +70,14 @@ def main():
         "render_from_originals":False,
         "limitations":["Lab fixture only; no Zucker cut/edit stage invoked.",
           "No final export / frame / audio parity verified.",
-          "Hashing reads entire original files; can consume disk I/O under shared VM.",
+          "Only metadata/size/mtime integrity check, not full-byte hash of originals.",
           "For iPhone, FFmpeg autorotation changes proxy display orientation; ensure comparison by display matrix."]}
     try:
         # Do not compete with a suddenly active Chema FFmpeg between sources.
         for idx,(name,src,w,h) in enumerate(files):
             safety()
             before=probe(src)
-            sha_before=digest(src)
+            stat_before=(src.stat().st_size,src.stat().st_mtime_ns)
             dst=out/f"{idx+1}-{name}-proxy.mp4"
             # The 360 input is kept equirectangular; flat originals are scaled
             # after autorotation. No forced FPS conversion.
@@ -98,8 +91,8 @@ def main():
             subprocess.run(cmd,check=True,timeout=180)
             elapsed=round(_t.monotonic()-start,3)
             after=probe(dst)
-            sha_after=digest(src)
-            if sha_after!=sha_before:raise RuntimeError(f"Original modified {src.name}")
+            stat_after=(src.stat().st_size,src.stat().st_mtime_ns)
+            if stat_after!=stat_before:raise RuntimeError(f"Original metadata changed {src.name}")
             d=float(after["format"]["duration"])
             if not abs(d-args.seconds)<.5:raise RuntimeError(f"Proxy duration unexpected {name}: {d}")
             rec={"camera_id":name,"path":str(src),
@@ -116,7 +109,7 @@ def main():
             if resolved["source_path"]!=str(src) or resolved["proxy_path"]!=str(dst):
                 raise RuntimeError(f"Engine handoff mismatch: {name}")
             report["sources"].append({"camera":name,"original":src.name,
-               "original_sha256":sha_before,"original_size":src.stat().st_size,
+               "original_size":stat_before[0],"original_mtime_ns":stat_before[1],
                "original_codec":before["streams"][0]["codec_name"],
                "proxy":dst.name,"proxy_size":dst.stat().st_size,
                "proxy_resolution":f"{w}x{h}","proxy_duration":d,
