@@ -3,7 +3,7 @@
 Actualizado: 2026-10-30 · lo mantiene el equipo de Chema · 40 líneas como máximo, se sobrescribe.
 
 ## Referencias
-- `main`: `e46b685` · `engine`: `c89e779` · `mixer`: `c7a46a6`
+- `main`: `1a11d6a` (PR #10, #11, #12, #15, #16, #17 y #6 integradas) · `engine`: `c89e779` · `mixer`: `c7a46a6`
 - Rama de Fer revisada hasta: `1a5f3bd` (2026-10-30)
 - VM de pruebas: Ubuntu 24.04, 4 vCPU / 16 GB; `jm` en `127.0.0.1:8101`, `fer` en `127.0.0.1:8102`
 
@@ -27,4 +27,7 @@ Actualizado: 2026-10-30 · lo mantiene el equipo de Chema · 40 líneas como má
 - Auditoría de `INVENTORY-FER.md`: hecha la familia F1; quedan F2–F8.
 
 ## Decisiones tomadas
+- `main` lo decide Chema; el laboratorio de Fernando informa de riesgos, sin bloquear (30-10-2026).
+- F4 (reproyección 360 bilineal con material real): la investiga el laboratorio de Fernando.
+- Aviso: el historial de `main` referencia un commit del motor que ya no existe (`bf5d0066`). Para actualizar, usar `git fetch --no-recurse-submodules`; el pin actual (`c89e779`) está intacto.
 - Montara, zucker_videos y ZuckerMixer son repositorios **públicos** (comprobado por API el 30-10-2026; corrige lo que dijo antes la PR #10).
