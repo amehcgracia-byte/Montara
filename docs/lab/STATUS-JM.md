@@ -1,34 +1,36 @@
 # STATUS — laboratorio de Chema (main · claude/* · codex/*)
 
-Actualizado: 2026-10-30 · lo mantiene el equipo de Chema · 40 líneas como máximo, se sobrescribe.
+Actualizado: 2026-10-30 tarde · lo mantiene el equipo de Chema · 40 líneas como máximo, se sobrescribe.
 
 ## Referencias
-- `main`: `b509097` · `engine`: `c89e779` · `mixer`: `c7a46a6`
-- Rama de Fer revisada hasta: `f77ba0e` (inventario F1–F8 en primera pasada)
-- VM de pruebas: Ubuntu 24.04, 4 vCPU / 16 GB; `jm` en `127.0.0.1:8101`, `fer` en `127.0.0.1:8102`
+- `engine`: `c89e779` · `mixer`: `c7a46a6` · rama de Fer revisada hasta `f77ba0e`
+- VM: Ubuntu 24.04, **e2-standard-8 (8 vCPU / 32 GB)** desde el 30-10; `jm` en `127.0.0.1:8101`, `fer` en `127.0.0.1:8102`
+- Apagado automático (PR #29–#31): se apaga si pasan **60 min sin uso de la web**, **120 min sin teclear en SSH** y no hay ffmpeg, mezclador ni `montara-bench` en marcha. Trabajos de más de 2 h sin teclear: siempre bajo `montara-bench`.
+- Originales grandes para pruebas en `/home/fer/lab-clips/originales`: 360 HEVC 3840×1920 (912 s), 4K H.264 3840×2160 (987 s), Sony 1080p (90 s), canción MP3 (634 s).
 
-## Integrado hoy en `main` (pruebas completas de GitHub Actions en verde: Stage, Push, Mix, Session, contenedor)
+## Integrado en `main` desde el último STATUS
 | Pieza | PR |
 |---|---|
-| Laboratorio de dos usuarios en VM; usuario de acceso configurable; la actualización reinicia el servicio | #10, #16 |
-| Footage: quitar archivos con ×, también durante la subida; aviso de audio largo; audio y vídeo suben en paralelo | #11 |
-| Validación de pistas del mezclador (laboratorio de Fer, F1.6) | #15 |
-| Protocolo, STATUS, inventario y aviso automático por issues (#13 y #14) | #12, #17, #18 |
-| Benchmarks históricos (Codex) | #6 |
+| Recordar el material entre recargas (IndexedDB + handles) | #20 |
+| Zoom 360 instantáneo en el navegador; espera sin límite de 20 min | #21 |
+| Companion **macOS** sin interfaz: versión pequeña 720p en el Mac y solo eso se sube; carpeta de proyecto; el vídeo final se guarda en esa carpeta | #22, #23, #24 |
+| Rango de canción (Start/End) → `trim_start_sec`/`trim_end_sec` | #24 |
+| Vista previa estereográfica (sin ojo de pez), hover inmediato, barras de render por plano | #26 |
+| Historial de tiempos `docs/lab/RUNS.md` + `deploy/vm/run_history.py` | #27, #28 |
+| Herramientas del Mac (`montara-start/stop/update/runs/autostop`) | #25, #29 |
+| Reproductor del resultado: controles debajo del vídeo | #32 |
 
-## Siguiente
-1. **Medir la base:** tiempos del flujo actual desde que se arrastran los archivos hasta el vídeo final.
-2. **Fase 0, continuar mientras se sube:** configurar cámaras, nombre y logo durante la subida; el proyecto arranca solo cuando termina.
-3. **Fases 1–2:** versión pequeña desde el navegador primero; después subir solo los GOP usados (F1.4, F1.5, F2). El motor necesita poder cambiar un proxy por su original (F8 FOCUS_A_C): PR en `zucker_videos`.
-4. **«Jam entero → una canción»:** detectar canciones, sincronizar los vídeos, proponer la canción, mezclar esa primero y el resto después.
+## Cómo funciona hoy a nivel usuario (feedback de Chema, 30-10)
+- El motor actual le convence. Primer render con 8 vCPU: exportación 1388 s para 628 s de vídeo (2,2 s por segundo; con 4 vCPU eran 6,3), con 3 cámaras y los originales subidos enteros.
+- **El render final se hace en el servidor.** Con companion conectado, el MP4 se copia solo a la carpeta del proyecto en el Mac; si no, botón Download.
+- Mayor coste conocido: reproyección 360 en CPU (6,3× más lenta que tiempo real en 4 vCPU; ver RUNS.md).
+
+## Para el laboratorio de Fer (lo que necesitamos de vosotros)
+1. **Companion para Windows** (vuestra área): hoy `companion/companion.py` es Python + FFmpeg y casi portable, pero el instalador es `.command` (macOS) y el diálogo de carpeta usa `osascript`; en Windows cae a `MONTARA_COMPANION_PROJECTS` o al HOME. Falta: instalador de doble clic, diálogo nativo de carpeta, búsqueda de originales sin Spotlight y codificador por hardware (NVENC/QSV/AMF) con caída a libx264. Sin tocar la API (`/health`, `/locate`, `/proxies`, `/projects`).
+2. **Render local con los originales (relink, FOCUS_A_C)**: que el vídeo final se monte en el ordenador del usuario con los originales, no en el servidor.
+3. **F4 bilineal con material real**: medir con los originales de arriba antes de proponer el cambio en `zucker_videos`.
+Cada resultado: fila en `docs/lab/RUNS.md` + `runs.jsonl` y una línea en STATUS-FER.
 
 ## Pendiente
-- Actualizar la VM de `jm` a `main` con `git fetch --no-recurse-submodules` (hay un commit histórico del motor, `bf5d0066`, que ya no existe en `zucker_videos`).
-- Cambiar las contraseñas web de la VM, que pasaron por chat. Cerrar sesión de `gh` en el Cloud Shell de amehc.
-- Revisar las capturas del E2E de Actions; desde la sesión de Claude no se pueden descargar los artefactos.
-
-## Decisiones tomadas
-- `main` lo decide Chema; el laboratorio de Fernando informa de riesgos, sin bloquear (30-10-2026).
-- F4 (reproyección 360 bilineal con material real): la investiga el laboratorio de Fernando.
-- Montara, zucker_videos y ZuckerMixer son repositorios **públicos** (comprobado por API el 30-10-2026).
-- Vercel no aloja el servidor de render. Las pruebas públicas temporales se hacen con un túnel de Cloudflare hacia la VM.
+- `run_history.py` no guarda qué cámara usa cada plano: sin eso no se puede separar cuánto gana cada factor.
+- Cambiar las contraseñas web de la VM, que pasaron por chat.
