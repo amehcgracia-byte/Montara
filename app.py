@@ -261,10 +261,15 @@ def create_montara_app(data_root: Path = DEFAULT_DATA, samples: bool = True):
     @app.post("/montara/mix")
     def montara_mix_start():
         """Start the auto-mix for a list of registered audio tracks (paths)."""
-        tracks = [str(p) for p in ((request.get_json(silent=True) or {}).get("tracks") or []) if isinstance(p, str)]
-        files = [Path(p) for p in tracks if Path(p).is_file()]
-        if len(files) < 1:
-            return jsonify({"error": {"message": "Add at least one audio track"}}), 400
+        from mixer_adapter.source_access import resolve_mix_sources
+        try:
+            files = resolve_mix_sources(
+                (request.get_json(silent=True) or {}).get("tracks"),
+                data_root, FIXTURES,
+                remote=bool(os.environ.get("MONTARA_SESSION_TOKEN")),
+            )
+        except ValueError as exc:
+            return jsonify({"error": {"message": str(exc)}}), 400
         job_id = uuid.uuid4().hex[:12]
         work = data_root / "Mixer" / job_id
         tracks_dir = work / "tracks"
