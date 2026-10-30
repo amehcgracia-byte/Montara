@@ -167,6 +167,13 @@
   <section class="screen" id="cameras" hidden>
     <h2>Your cameras</h2>
     <p class="lead small">Choose each camera’s type: 360, fixed or moving. For 360 cameras, name the places or people each viewpoint shows.</p>
+    <section id="songRange" class="song-range" hidden>
+      <h3>Song</h3>
+      <p class="hint">Play the song and mark where the video starts and ends. Montara edits only that part.</p>
+      <div class="range-player"><select id="rangeTrack" aria-label="Track to listen to" hidden></select><audio id="rangeAudio" controls preload="metadata"></audio></div>
+      <div class="range-bar" id="rangeBar" aria-hidden="true"><i id="rangeFill"></i><b id="rangeHead"></b></div>
+      <div class="actions range-actions"><button class="btn ghost small" id="rangeStart" type="button">Start here</button><output id="rangeStartOut">0:00</output><button class="btn ghost small" id="rangeEnd" type="button">End here</button><output id="rangeEndOut">end</output><button class="link" id="rangeReset" type="button">Whole song</button></div>
+    </section>
     <div id="cameraList" class="cameras"></div>
     <div id="sphereList"></div>
     <div class="actions">

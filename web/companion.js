@@ -29,6 +29,19 @@ const montaraCompanion = (() => {
       return info;
     },
     isVideo(file) { return /^video\//.test(file.type) || /\.(mp4|mov|m4v|mts|mkv|avi|webm)$/i.test(file.name); },
+    /* Asks on the computer where to keep the project; resolves to {id, folder} or null. */
+    async projectFolder(name, sources) {
+      if (!info) return null;
+      try {
+        const response = await call('/projects', json({name, sources}));
+        return response.ok ? await response.json() : null;
+      } catch { return null; }
+    },
+    async saveInProject(projectId, name, blob) {
+      const response = await call(`/projects/${projectId}/save?name=${encodeURIComponent(name)}`, {method: 'POST', headers: {'Content-Type': 'application/octet-stream'}, body: blob});
+      if (!response.ok) throw new Error('The companion could not save the video.');
+      return (await response.json()).saved;
+    },
     /* Resolves to {file, original} with the small version, or null to upload the original. */
     async smallVersion(file, onProgress, cancelled = () => false) {
       if (!info || !this.isVideo(file)) return null;
