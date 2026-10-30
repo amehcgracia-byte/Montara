@@ -282,6 +282,22 @@ function addFiles(list, handles = []) {
   renderFiles();
 }
 
+// ---------- idle page: after 30 min without use, pause it ----------
+// The lab server switches itself off when nobody uses it (deploy/vm/idle_shutdown.sh);
+// background polls do not keep it awake, and an idle page says so instead of failing.
+const IDLE_PAGE_MS = 30 * 60 * 1000;
+let lastInput = Date.now();
+["pointerdown", "keydown", "wheel", "touchstart"].forEach((name) => addEventListener(name, () => { lastInput = Date.now(); }, { passive: true }));
+setInterval(() => {
+  if (Date.now() - lastInput < IDLE_PAGE_MS || state.polling || state.uploads || document.querySelector("#idlePause")) return;
+  clearTimeout(companionWatch);
+  const dialog = document.createElement("dialog");
+  dialog.id = "idlePause"; dialog.className = "cut-dialog";
+  dialog.innerHTML = '<h3>Montara paused</h3><p>Nobody used this page for 30 minutes. Your files and projects are kept; the server may switch itself off to save resources.</p><button class="btn primary" type="button">Continue</button>';
+  dialog.querySelector("button").onclick = () => location.reload();
+  document.body.append(dialog); dialog.showModal();
+}, 60 * 1000);
+
 // ---------- song range: choose the part of the song the video covers ----------
 const range = { start: 0, end: null, duration: 0 };
 let rangeSourcesList = [];
