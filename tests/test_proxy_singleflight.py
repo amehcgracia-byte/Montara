@@ -44,3 +44,15 @@ def test_warm_hit_does_not_acquire_lock(tmp_path):
     src, cache, _, _, expected = seed(tmp_path)
     with patch.object(proxies, "_source_lock", side_effect=AssertionError("Unexpected lock")):
         assert proxies.prepare(src, cache) == expected
+
+
+def test_non_posix_cold_generation_remains_available(tmp_path):
+    from types import SimpleNamespace
+    source = tmp_path / "camera.mp4"
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i",
+                    "testsrc2=size=320x180:rate=15:duration=1",
+                    "-c:v", "libx264", "-preset", "ultrafast", str(source)], check=True)
+    # Simulate only the platform selection, not a Windows runtime certification.
+    with patch.object(proxies, "os", SimpleNamespace(name="nt")):
+        result = proxies.prepare(source, tmp_path / "cache")
+    assert result["public"]["duration"] == pytest.approx(1, abs=.1)

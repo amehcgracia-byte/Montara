@@ -9,9 +9,12 @@ from contextlib import contextmanager
 
 @contextmanager
 def _source_lock(cache, key):
-    """Interprocess lock on Linux/macOS; never use stale PID files."""
+    """Serialize POSIX generators; other platforms retain unique-temp generation."""
     if os.name != 'posix':
-        raise RuntimeError('Proxy single-flight currently requires POSIX locking.')
+        # Preserve the existing Windows cold-generation path. UUID outputs avoid
+        # collisions there, but cross-process work deduplication is POSIX-only.
+        yield
+        return
     import fcntl
     with (cache / (key + '.lock')).open('a+b') as handle:
         fcntl.flock(handle.fileno(), fcntl.LOCK_EX)

@@ -1,5 +1,7 @@
 # Preparación de Montara antes de Abacus
 
+**Seguimiento actualizado, 28 de octubre:** ver [lista operativa de cierre y pendientes](ANTES_DEL_SERVIDOR.md). Incluye la preparación reproducible del contenedor y CorridorKey expresamente aplazado; este documento conserva la aceptación de 0.39 del día 27.
+
 ## Implementado en esta rama
 
 - Stage conserva su flujo de canción única y añade **Audio only** y **Full session**.

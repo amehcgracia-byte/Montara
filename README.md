@@ -1,4 +1,4 @@
-# Montara 0.38
+# Montara 0.39
 
 Web editor for music, reels and creator videos. The shared `main` branch contains
 the working public prototype and the separate asset-selection tool.
@@ -58,3 +58,10 @@ The editor runs in separate Vercel Sandbox instances, not inside a static page.
 Deployment sources are in deployment/vercel. Run npm ci and npm run build there.
 Credentials are excluded and account-bound templates must be provisioned separately.
 Do not deploy to the owner's account or replace the stable alias without agreement.
+
+## Before the processing server
+
+See [the current preparation checklist](docs/ANTES_DEL_SERVIDOR.md) and
+[the private Linux installation guide](deploy/README.md). The list distinguishes
+verified installation, unfinished local development and checks that require the
+actual provider account/hardware. CorridorKey remains a future GPU candidate.
