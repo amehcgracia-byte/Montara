@@ -21,7 +21,7 @@ class WebSphere {
     this.texture=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,this.texture);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);
     this.pose=gl.getUniformLocation(program,'pose');
   }
-  draw(image,pose={}){const gl=this.gl;gl.useProgram(this.program);gl.bindTexture(gl.TEXTURE_2D,this.texture);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,gl.RGB,gl.UNSIGNED_BYTE,image);gl.uniform3f(this.pose,pose.yaw || 0,pose.pitch || 0,Math.max(20,Math.min(170,pose.fov || 110)));gl.viewport(0,0,640,360);gl.drawArrays(gl.TRIANGLES,0,6);return this.canvas;}
+  draw(image,pose={}){const gl=this.gl;gl.useProgram(this.program);gl.bindTexture(gl.TEXTURE_2D,this.texture);const key=image instanceof HTMLImageElement?image.currentSrc||image.src:'';if(!key||this.image!==image||this.key!==key){gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,gl.RGB,gl.UNSIGNED_BYTE,image);this.image=image;this.key=key;}gl.uniform3f(this.pose,pose.yaw || 0,pose.pitch || 0,Math.max(20,Math.min(170,pose.fov || 110)));gl.viewport(0,0,640,360);gl.drawArrays(gl.TRIANGLES,0,6);return this.canvas;}
 }
 let webSphereRenderer;
 function sphereRenderer(){return webSphereRenderer ||= new WebSphere();}
