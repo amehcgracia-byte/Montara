@@ -57,7 +57,7 @@ def main():
             raise SystemExit(f"Segment {index} does not reference matching project original/proxy")
         used.add(str(original))
         duration=float(seg.get("duration_sec") or 0)
-        start=float(seg.get("clip_start_sec") or -1)
+        start=float(seg.get("clip_start_sec") if seg.get("clip_start_sec") is not None else -1)
         if duration<=0 or start<0:raise SystemExit(f"Invalid timeline segment {index}")
         segment_checks.append({"segment":index,"original_proxy_mapping":True,
                                "timeline_present":True,"camera_id_present":bool(seg.get("camera_id")),
