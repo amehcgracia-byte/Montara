@@ -64,13 +64,15 @@ em{font-style:normal;color:var(--accent)}
 .drop strong{font-size:20px;font-weight:600}
 .drop span{color:var(--muted);font-size:14px}
 .files{list-style:none;display:flex;flex-direction:column;gap:8px;margin:18px 0}
-.files li{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:14px;padding:12px 16px;border-radius:14px;background:var(--surface);border:1px solid var(--line)}
+.files li{display:grid;grid-template-columns:auto 1fr auto auto;align-items:center;gap:14px;padding:12px 16px;border-radius:14px;background:var(--surface);border:1px solid var(--line)}
 .files .kind{font-size:11px;font-weight:700;letter-spacing:1.5px;padding:4px 8px;border-radius:6px;background:var(--panel);color:var(--muted)}
 .files .kind.video{color:var(--fg)}
 .files .kind.master{background:var(--accent-soft);color:var(--accent)}
 .files .kind.ignored{opacity:.5}
 .files .name{font-size:15px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .files .state{font-size:13px;color:var(--muted)}
+.files .remove{width:28px;height:28px;border-radius:50%;border:0;background:transparent;color:var(--muted);font-size:18px;line-height:1;cursor:pointer}
+.files .remove:hover,.files .remove:focus-visible{background:var(--panel);color:var(--accent)}
 .files .bar{grid-column:1/-1;height:4px;border-radius:2px;background:var(--panel);overflow:hidden}
 .files .bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}
 .form{display:flex;flex-wrap:wrap;gap:24px;margin:8px 0 12px}

@@ -1,10 +1,17 @@
 /* Files are sliced on disk; never read a multi-GB original into one ArrayBuffer. */
-let activePartUploads = 0;
-const waitingPartUploads = [];
-async function sendResumableUpload(file, progress, registered = () => {}) {
-  if (activePartUploads >= 2) await new Promise(resolve => waitingPartUploads.push(resolve));
-  else activePartUploads += 1;
+// Audio and video have separate lanes so tracks upload alongside long videos
+// instead of queueing behind them. Two parts at a time per lane.
+const PART_LANE_LIMIT = 2;
+const partLanes = { audio: { active: 0, waiting: [] }, video: { active: 0, waiting: [] } };
+const AUDIO_NAME = /\.(wav|mp3|m4a|aiff?|flac|ogg)$/i;
+const partLane = file => partLanes[AUDIO_NAME.test(file.name) ? 'audio' : 'video'];
+async function sendResumableUpload(file, progress, registered = () => {}, cancelled = () => false) {
+  const lane = partLane(file);
+  if (lane.active >= PART_LANE_LIMIT) await new Promise(resolve => lane.waiting.push(resolve));
+  else lane.active += 1;
+  const stopIfCancelled = () => { if (cancelled()) throw new Error('Upload removed.'); };
   try {
+    stopIfCancelled();
     const limits = await api('/montara/uploads');
     if (file.size > limits.max_file_bytes) throw new Error(`This test environment accepts up to ${Math.round(limits.max_file_bytes / 1048576)} MiB per file.`);
     const edges = await new Blob([file.slice(0, 65536), file.slice(Math.max(0, file.size - 65536))]).arrayBuffer();
@@ -14,6 +21,7 @@ async function sendResumableUpload(file, progress, registered = () => {}) {
     let offset = job.received;
     progress(offset / file.size);
     while (!job.complete && offset < file.size) {
+      stopIfCancelled();
       const end = Math.min(file.size, offset + job.chunk_size);
       let lastError;
       for (let attempt = 0; attempt < 3; attempt++) {
@@ -30,9 +38,10 @@ async function sendResumableUpload(file, progress, registered = () => {}) {
       if (lastError) throw lastError;
       progress(offset / file.size);
     }
+    stopIfCancelled();
     return await api(`/montara/uploads/${job.id}/finish`, {});
   } finally {
-    const next = waitingPartUploads.shift();
-    if (next) next(); else activePartUploads -= 1;
+    const next = lane.waiting.shift();
+    if (next) next(); else lane.active -= 1;
   }
 }

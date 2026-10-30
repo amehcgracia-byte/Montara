@@ -267,6 +267,7 @@ function upload(file, entry) {
   if (file.size > 8 * 1024 * 1024) return uploadInParts(file, entry);
   state.uploads += 1;
   const xhr = new XMLHttpRequest();
+  entry.xhr = xhr;
   xhr.open("POST", "/api/v1/wizard/upload");
   xhr.setRequestHeader("Content-Type", "application/octet-stream");
   xhr.setRequestHeader("X-Zucker-Filename", encodeURIComponent(file.name));
@@ -285,6 +286,7 @@ function upload(file, entry) {
         entry.path = found[1].path;
         entry.reason = found[1].reason || found[1].note;
         entry.projection = found[1].projection;
+        entry.duration = Number(found[1].duration) || 0;
       } else {
         entry.kind = "error";
         entry.error = "Not a usable media file";
@@ -293,18 +295,24 @@ function upload(file, entry) {
     renderFiles();
   };
   xhr.onerror = () => { state.uploads -= 1; entry.kind = "error"; entry.error = "Connection interrupted"; renderFiles(); };
+  xhr.onabort = () => { state.uploads -= 1; renderFiles(); };
   xhr.send(file);
 }
 
 async function uploadInParts(file, entry) {
   state.uploads += 1;
   try {
-    const data = await sendResumableUpload(file, progress => { entry.progress = progress; renderFiles(); }, id => {entry.uploadId = id;});
+    const data = await sendResumableUpload(file, progress => { entry.progress = progress; renderFiles(); }, id => {entry.uploadId = id;}, () => entry.removed);
     const found = ['videos', 'master', 'songs', 'ignored'].map(kind => [kind, (data[kind] || [])[0]]).find(([, item]) => item);
     if (!found) throw new Error('Not a usable media file');
     entry.kind = found[0] === 'videos' ? 'video' : found[0];
     entry.path = found[1].path; entry.reason = found[1].reason || found[1].note; entry.projection = found[1].projection;
+    entry.duration = Number(found[1].duration) || 0;
   } catch (error) {
+    if (entry.removed) {
+      if (entry.uploadId) fetch(`/montara/uploads/${entry.uploadId}`, {method: 'DELETE'}).catch(() => {});
+      return;
+    }
     entry.kind = 'error'; entry.error = error.message;
   } finally { state.uploads -= 1; renderFiles(); }
 }
@@ -323,21 +331,24 @@ function fileRow(f) {
       <span class="name" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}</span>
       <span class="state">${f.kind === "uploading" ? Math.round(f.progress * 100) + "%" : f.kind === "error" ? escapeHtml(f.error) : f.kind === "ignored" ? escapeHtml(f.reason || "not used") : "Ready"}</span>
       ${f.kind === "uploading" ? `<span class="bar"><i style="width:${Math.round(f.progress * 100)}%"></i></span>` : ""}
-      ${f.kind === 'error' && f.uploadId ? `<button class="link" data-discard-upload="${f.id}" type="button">Discard unfinished upload</button>` : ''}
+      <button class="remove" data-remove-file="${f.id}" type="button" aria-label="Remove ${escapeHtml(f.name)}" title="Remove">×</button>
     </li>`;
 }
-document.addEventListener('click', async event => {
-  const button = event.target.closest('[data-discard-upload]');
+// Every file row can be removed, also while it uploads: the upload stops and
+// an unfinished server copy is discarded. Finished files simply leave this project.
+document.addEventListener('click', event => {
+  const button = event.target.closest('[data-remove-file]');
   if (!button) return;
-  const entry = state.files.find(f => f.id === button.dataset.discardUpload);
-  if (!entry?.uploadId) return;
-  button.disabled = true;
-  try {
-    const response = await fetch(`/montara/uploads/${entry.uploadId}`, {method: 'DELETE'});
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error?.message || 'Could not discard this upload.');
-    state.files = state.files.filter(f => f !== entry); renderFiles();
-  } catch (error) { toast(error.message, true); button.disabled = false; }
+  const entry = state.files.find(f => f.id === button.dataset.removeFile);
+  if (!entry) return;
+  entry.removed = true;
+  if (entry.xhr && entry.kind === 'uploading') entry.xhr.abort();
+  if (entry.uploadId && entry.kind !== 'video' && entry.kind !== 'master' && entry.kind !== 'songs') {
+    fetch(`/montara/uploads/${entry.uploadId}`, {method: 'DELETE'}).catch(() => {});
+  }
+  state.files = state.files.filter(f => f !== entry);
+  if (!state.files.some(f => f.sample)) $('#sampleNote').hidden = true;
+  renderFiles();
 });
 function renderFiles() {
   $('#stageSessionOptions').hidden = state.platform !== 'youtube';
@@ -355,6 +366,8 @@ function renderFiles() {
   if (state.platform === "reel" && state.files.some(f=>f.sample) && !master) { hint = "The example song master is missing. Reopen the example."; ready = false; }
   if (state.uploads) hint = "Uploading…";
   if (state.platform === 'youtube' && $('#fullSessionOn').checked && !state.uploads && audioTracks().length) hint = 'Find and review the songs, then export their mixes. This session step exports audio.';
+  const longest = Math.max(0, ...state.files.filter(isAudioEntry).map(f => f.duration || 0));
+  if (state.platform === 'youtube' && !$('#fullSessionOn').checked && !state.uploads && longest > 20 * 60) hint = `Your audio is ${Math.round(longest / 60)} min long. If it is a whole session and you want one song, tick Full session to find the songs first, or trim the tracks to that song.`;
   if (!audioOnly() && state.branding === "mine" && !state.hasLogo) { hint = "Choose your logo, or pick another option."; ready = false; }
   $("#footageHint").textContent = hint;
   $("#continueFootage").disabled = !ready;
