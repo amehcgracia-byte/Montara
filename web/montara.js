@@ -447,7 +447,7 @@ function renderCameras() {
   $('#cameraList').innerHTML=videos().map((f,index)=>`<div class="cam"><span class="kind video">${String(index+1).padStart(2,'0')}</span><span class="name">${escapeHtml(f.name)}</span><span class="camsel"><label>Camera type<select data-camera-type="${escapeHtml(f.path)}" aria-label="Camera type for ${escapeHtml(f.name)}">${[['360','360'],['fixed','Fixed camera'],['moving','Moving camera']].map(([value,label])=>`<option value="${value}" ${cameraTypeOf(f)===value?'selected':''}>${label}</option>`).join('')}</select></label></span></div>`).join('');
   // Optional local-only experimental proxy preview; never changes editing/export inputs.
   if (['localhost', '127.0.0.1', '[::1]'].includes(location.hostname)) {
-    $('#cameraList .cam').forEach((card, index) => {
+    $$('#cameraList .cam').forEach((card, index) => {
       const file = videos()[index];
       if (!file || !file.path) return;
       const button = document.createElement('button');
@@ -489,7 +489,7 @@ function renderCameras() {
       card.append(button);
     });
   }
-  $('[data-camera-type]').forEach(select=>select.onchange=()=>{const f=videos().find(v=>v.path===select.dataset.cameraType);f.cameraType=select.value;if(select.value!=='360')state.roles[f.path]=select.value==='fixed'?'fixed_rear':'handheld';renderCameras();});
+  $$('[data-camera-type]').forEach(select=>select.onchange=()=>{const f=videos().find(v=>v.path===select.dataset.cameraType);f.cameraType=select.value;if(select.value!=='360')state.roles[f.path]=select.value==='fixed'?'fixed_rear':'handheld';renderCameras();});
   const spheres=videos().filter(isSphere);
   $('#sphereList').innerHTML=spheres.map((f,index)=>`<div class="sphere" data-sphere="${index}"><h3><span class="kind video">360</span> ${escapeHtml(f.name)}</h3><p class="hint">Choose a viewpoint, click where it should look, and give it a name.</p><div class="sphere-body"><ul class="slots"></ul><div class="pano-wrap"><div class="pano"><div class="pano-img"></div><span class="loading">Loading 360 frame…</span></div><p class="hint tiny">Drag to turn · click to place the viewpoint</p><div class="preview"><div class="pv"><img alt="" hidden draggable="false"></div><span class="hint">Drag to aim, scroll to zoom.</span></div></div></div></div>`).join('');
   spheres.forEach((f,index)=>setupSphere(f,$(`[data-sphere="${index}"]`)));
