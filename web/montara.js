@@ -187,6 +187,9 @@ $$(".mode[data-platform]").forEach((card) => card.addEventListener("click", () =
 
 function resetFlow() {
   stopPolling();
+  state.localProject = null;
+  state.savedLocally = false;
+  range.start = 0; range.end = null;
   state.platform = null;
   state.files = [];
   state.projectId = null;
@@ -270,7 +273,7 @@ function addFiles(list, handles = []) {
   const unused = [...handles];
   for (const file of list) {
     const handle = unused.splice(unused.findIndex((h) => h.name === file.name) >>> 0, 1)[0];
-    const entry = { id: crypto.randomUUID(), name: file.name, kind: "uploading", progress: 0,
+    const entry = { id: crypto.randomUUID(), name: file.name, kind: "uploading", progress: 0, localFile: file,
       memory: { platform: state.platform, size: file.size, lastModified: file.lastModified, handle: handle?.name === file.name ? handle : undefined } };
     state.files.push(entry);
     remember(entry);
@@ -278,6 +281,59 @@ function addFiles(list, handles = []) {
   }
   renderFiles();
 }
+
+// ---------- song range: choose the part of the song the video covers ----------
+const range = { start: 0, end: null, duration: 0 };
+let rangeSourcesList = [];
+const clock = (t) => { t = Math.max(0, Math.floor(t || 0)); const h = Math.floor(t / 3600), m = Math.floor(t / 60) % 60, s = String(t % 60).padStart(2, "0"); return h ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`; };
+function audioUrl(f) {
+  if (f.localFile) return (f.objectUrl ||= URL.createObjectURL(f.localFile));
+  return f.path ? `/montara/audio?path=${encodeURIComponent(f.path)}` : "";
+}
+function openSongRange() {
+  rangeSourcesList = state.platform === "youtube" ? audioTracks().filter((f) => audioUrl(f)) : [];
+  $("#songRange").hidden = !rangeSourcesList.length;
+  if (!rangeSourcesList.length) return;
+  const select = $("#rangeTrack");
+  const preferred = rangeSourcesList.findIndex((f) => /\b(ov|room|mix|master|ambi|stereo|lr)\b/i.test(f.name.replace(/[_.-]/g, " ")));
+  select.innerHTML = rangeSourcesList.map((f, i) => `<option value="${i}">${escapeHtml(f.name)}</option>`).join("");
+  select.value = String(preferred >= 0 ? preferred : 0);
+  select.hidden = rangeSourcesList.length < 2;
+  const url = audioUrl(rangeSourcesList[Number(select.value)]);
+  if ($("#rangeAudio").dataset.url !== url) { $("#rangeAudio").src = url; $("#rangeAudio").dataset.url = url; }
+  drawRange();
+}
+function drawRange() {
+  const audio = $("#rangeAudio"), d = range.duration || audio.duration || 0;
+  const end = range.end ?? d;
+  $("#rangeFill").style.left = d ? `${(range.start / d) * 100}%` : "0";
+  $("#rangeFill").style.width = d ? `${Math.max(0, (end - range.start) / d) * 100}%` : "100%";
+  $("#rangeHead").style.left = d ? `${(audio.currentTime / d) * 100}%` : "0";
+  $("#rangeStartOut").textContent = clock(range.start);
+  $("#rangeEndOut").textContent = range.end === null ? (d ? clock(d) : "end") : clock(range.end);
+}
+$("#rangeTrack").addEventListener("change", () => {
+  const audio = $("#rangeAudio"), t = audio.currentTime, url = audioUrl(rangeSourcesList[Number($("#rangeTrack").value)]);
+  audio.src = url; audio.dataset.url = url;
+  audio.addEventListener("loadedmetadata", () => { audio.currentTime = t; }, { once: true });
+});
+$("#rangeAudio").addEventListener("loadedmetadata", () => { range.duration = $("#rangeAudio").duration || 0; drawRange(); });
+$("#rangeAudio").addEventListener("timeupdate", drawRange);
+$("#rangeStart").addEventListener("click", () => {
+  range.start = $("#rangeAudio").currentTime || 0;
+  if (range.end !== null && range.end <= range.start + 1) range.end = null;
+  drawRange();
+});
+$("#rangeEnd").addEventListener("click", () => {
+  const t = $("#rangeAudio").currentTime || 0;
+  if (t <= range.start + 1) return toast("Mark the end after the start.", true);
+  range.end = t; drawRange();
+});
+$("#rangeReset").addEventListener("click", () => { range.start = 0; range.end = null; drawRange(); });
+$("#rangeBar").addEventListener("click", (e) => {
+  const audio = $("#rangeAudio"), d = range.duration || audio.duration || 0, box = $("#rangeBar").getBoundingClientRect();
+  if (d) audio.currentTime = Math.max(0, Math.min(d, ((e.clientX - box.left) / box.width) * d));
+});
 
 // ---------- companion: offer it on a Mac, notice when it starts ----------
 const isDesktopMac = /Macintosh|Mac OS X/.test(navigator.userAgent) && !/iPhone|iPad/.test(navigator.userAgent) && navigator.maxTouchPoints < 2;
@@ -525,6 +581,11 @@ async function registerProject() {
     await api("/montara/branding", { mode: state.branding });
     const name = $("#videoName").value.trim() || todayName();
     const data = inputs();
+    if (montaraCompanion.info && !state.localProject) {
+      toast("Choose on your Mac where Montara keeps this project (a window opened).");
+      state.localProject = await montaraCompanion.projectFolder(name, state.files.filter((f) => f.original).map((f) => f.original));
+      if (state.localProject) toast(`Project folder: ${state.localProject.folder}`);
+    }
     await api("/wizard/projects/new", {});
     const draft = await api("/wizard/draft", { name, project_id: null, platform: state.platform, audio_paths: data.master ? [data.master] : [], ...data });
     state.mixMaster = null;
@@ -536,6 +597,7 @@ async function registerProject() {
   const needsCameras = videos().length > 0;
   if (!needsCameras) return afterCameras();
   renderCameras();
+  openSongRange();
   show("cameras");
 }
 
@@ -1018,6 +1080,8 @@ async function make() {
   await api("/wizard/start", {
     project_id: state.projectId, name, platform, ...data,
     reel_duration_sec: platform === "reel" ? Number($("#reelDuration").value) : undefined,
+    trim_start_sec: platform === "youtube" && range.start > 0 ? range.start : undefined,
+    trim_end_sec: platform === "youtube" && range.end !== null ? range.end : undefined,
     reel_aspect: platform === "reel" ? engineReelFormat() : undefined,
     reel_mix_vertical_ratio: platform === "reel" ? (reelFormat() === "mix" ? $("#mixShare").value : "auto") : undefined,
   });
@@ -1843,6 +1907,13 @@ $("#showExport").addEventListener("click", async () => {
 function showResult(s) {
   const result = s.result || {};
   footageMemory.clear(state.platform);  // the video is made; next visit starts clean
+  if (state.localProject && !state.savedLocally) {
+    state.savedLocally = true;
+    const resultUrl = result.url || `/api/v1/wizard/result?t=${Date.now()}`;
+    const fileName = `${(result.filename || $("#videoName").value.trim() || todayName()).replace(/\.[a-z0-9]+$/i, "").replace(/[\/\\]/g, "-")}${result.audio ? ".mp3" : ".mp4"}`;
+    fetch(resultUrl).then((r) => r.blob()).then((blob) => montaraCompanion.saveInProject(state.localProject.id, fileName, blob))
+      .then((saved) => toast(`Saved on your computer: ${saved}`)).catch((error) => toast(error.message, true));
+  }
   const url = result.url || `/api/v1/wizard/result?t=${Date.now()}`;
   $("#resultVideo").hidden = Boolean(result.audio);
   $("#resultAudio").hidden = !result.audio;

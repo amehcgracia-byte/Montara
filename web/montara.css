@@ -503,3 +503,14 @@ body.is-intro .top,body.is-intro footer,body.is-intro #version{visibility:hidden
 .session-song audio {max-width:100%; height:36px}
 #sessionProgress {width:100%; accent-color:#FF4F2E; margin:12px 0}
 @media(max-width:600px) {.session-song input[data-song-field="name"] {flex-basis:75%}.session-song audio {width:100%}}
+
+/* Song range on the Cameras screen */
+.song-range{margin:8px 0 28px;padding:18px 20px;border:1px solid var(--line);border-radius:14px;background:var(--surface)}
+.song-range h3{margin:0 0 4px}
+.range-player{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:10px 0}
+.range-player audio{flex:1;min-width:240px}
+.range-bar{position:relative;height:10px;border-radius:5px;background:var(--panel);overflow:hidden;cursor:pointer}
+.range-bar i{position:absolute;top:0;bottom:0;background:var(--accent);opacity:.55}
+.range-bar b{position:absolute;top:0;bottom:0;width:2px;background:var(--fg)}
+.range-actions{align-items:center;gap:10px;margin-top:12px}
+.range-actions output{font-variant-numeric:tabular-nums;color:var(--muted);min-width:52px}

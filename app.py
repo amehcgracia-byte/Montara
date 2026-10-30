@@ -172,6 +172,19 @@ def create_montara_app(data_root: Path = DEFAULT_DATA, samples: bool = True):
     def montara_version():
         return jsonify({"version": MONTARA_VERSION})
 
+    @app.get("/montara/audio")
+    def montara_audio():
+        """Stream an uploaded or bundled audio file so the page can choose the song range."""
+        from flask import abort, send_file
+        try:
+            path = Path(request.args.get("path", "")).resolve()
+        except (OSError, ValueError):
+            abort(404)
+        allowed = path.is_relative_to(data_root) or path.is_relative_to(FIXTURES.resolve())
+        if not allowed or not path.is_file() or path.suffix.lower() not in {".wav", ".mp3", ".m4a", ".aif", ".aiff", ".flac", ".ogg"}:
+            abort(404)
+        return send_file(path, conditional=True)
+
     @app.get("/montara/companion/download")
     def montara_companion_download():
         """Zip for macOS: double-click 'Install Montara Companion.command' (executable bit kept)."""

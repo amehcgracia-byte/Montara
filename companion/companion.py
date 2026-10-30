@@ -34,6 +34,7 @@ ORIGINS = re.compile("^(" + os.environ.get("MONTARA_COMPANION_ORIGINS", DEFAULT_
 SEARCH_BUDGET_SEC = 25
 
 sources: dict[str, Path] = {}
+projects: dict[str, Path] = {}
 jobs: dict[str, dict] = {}
 lock = threading.Lock()
 
@@ -217,6 +218,34 @@ def make_proxy(source_id: str) -> None:
         job.pop("process", None)
 
 
+# ---------- project folder on this computer ----------
+def choose_folder(prompt: str) -> Path | None:
+    """Native folder dialog on a Mac; elsewhere MONTARA_COMPANION_PROJECTS or the home folder."""
+    if sys.platform == "darwin":
+        script = f'POSIX path of (choose folder with prompt "{prompt}")'
+        result = subprocess.run(["osascript", "-e", "activate", "-e", script], capture_output=True, text=True, timeout=900)
+        chosen = result.stdout.strip()
+        return Path(chosen) if result.returncode == 0 and chosen else None
+    return Path(os.environ.get("MONTARA_COMPANION_PROJECTS", str(Path.home()))).expanduser()
+
+
+def safe_name(text: str, fallback: str) -> str:
+    cleaned = re.sub(r"[^\w .,()+-]", "-", str(text or "")).strip(" .")[:80]
+    return cleaned or fallback
+
+
+def load_projects() -> None:
+    try:
+        for key, value in json.loads((HOME / "projects.json").read_text()).items():
+            projects[key] = Path(value)
+    except (OSError, ValueError):
+        pass
+
+
+def save_projects() -> None:
+    (HOME / "projects.json").write_text(json.dumps({k: str(v) for k, v in projects.items()}, indent=2))
+
+
 # ---------- HTTP ----------
 class Handler(BaseHTTPRequestHandler):
     server_version = f"MontaraCompanion/{VERSION}"
@@ -283,6 +312,9 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if not self.origin_ok():
             return self.reply(403, {"error": "origin not allowed"})
+        save = re.fullmatch(r"/projects/([a-f0-9]{16})/save\?name=([^&/]+)", self.path)
+        if save:
+            return self.save_file(save.group(1), save.group(2))
         try:
             body = self.body()
         except ValueError:
@@ -311,7 +343,46 @@ class Handler(BaseHTTPRequestHandler):
                     jobs[source_id] = {"status": "working", "progress": 0.0}
                     threading.Thread(target=make_proxy, args=(source_id,), daemon=True).start()
             return self.reply(202, {"id": source_id})
+        if self.path == "/projects":
+            folder = choose_folder("Where should Montara keep this project?")
+            if not folder or not folder.is_dir():
+                return self.reply(409, {"error": "no folder chosen"})
+            name = safe_name(body.get("name"), "Montara project")
+            root = folder if folder.name == "Montara" else folder / "Montara"
+            target = root / name
+            target.mkdir(parents=True, exist_ok=True)
+            project_id = hashlib.sha256(f"{target}|{time.time()}".encode()).hexdigest()[:16]
+            manifest = {"app": "montara", "name": body.get("name"), "created": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                        "sources": [s for s in body.get("sources") or [] if isinstance(s, dict)][:200]}
+            (target / "montara-project.json").write_text(json.dumps(manifest, indent=2, ensure_ascii=False))
+            projects[project_id] = target
+            save_projects()
+            log(f"project folder: {target}")
+            return self.reply(200, {"id": project_id, "folder": str(target)})
         return self.reply(404, {"error": "unknown"})
+
+    def save_file(self, project_id: str, raw_name: str):
+        from urllib.parse import unquote
+        folder = projects.get(project_id)
+        length = int(self.headers.get("Content-Length") or 0)
+        if not folder or not folder.is_dir() or length <= 0:
+            return self.reply(404, {"error": "unknown project"})
+        name = safe_name(unquote(raw_name), "montara-video.mp4")
+        target, pending = folder / name, folder / (name + ".part")
+        with pending.open("wb") as handle:
+            remaining = length
+            while remaining:
+                chunk = self.rfile.read(min(remaining, 1024 * 1024))
+                if not chunk:
+                    break
+                handle.write(chunk)
+                remaining -= len(chunk)
+        if remaining:
+            pending.unlink(missing_ok=True)
+            return self.reply(400, {"error": "incomplete upload"})
+        pending.replace(target)
+        log(f"saved {target}")
+        return self.reply(200, {"saved": str(target)})
 
 
 def main() -> int:
@@ -319,6 +390,7 @@ def main() -> int:
         print("Montara companion needs FFmpeg. On a Mac: brew install ffmpeg")
         return 1
     CACHE.mkdir(parents=True, exist_ok=True)
+    load_projects()
     try:
         server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     except OSError:
