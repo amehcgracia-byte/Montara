@@ -8,7 +8,7 @@ def check():
     password = os.environ.get('MONTARA_PREVIEW_PASSWORD', '')
     if len(password) < 16:
         return False
-    encoded = base64.b64encode(('montara:' + password).encode()).decode()
+    encoded = base64.b64encode((os.environ.get('MONTARA_PREVIEW_USER', 'montara') + ':' + password).encode()).decode()
     request = Request('http://127.0.0.1:8080/api/v1/wizard/status',
                       headers={'Authorization': 'Basic ' + encoded})
     try:

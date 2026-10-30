@@ -6,7 +6,7 @@ from urllib.request import Request, urlopen
 
 
 def get(path):
-    encoded = base64.b64encode(('montara:' + os.environ['MONTARA_PREVIEW_PASSWORD']).encode()).decode()
+    encoded = base64.b64encode((os.environ.get('MONTARA_PREVIEW_USER', 'montara') + ':' + os.environ['MONTARA_PREVIEW_PASSWORD']).encode()).decode()
     return urlopen(Request('http://127.0.0.1:8080' + path,
                           headers={'Authorization': 'Basic ' + encoded}), timeout=30)
 
