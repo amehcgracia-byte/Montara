@@ -89,7 +89,7 @@ output{color:var(--fg);font-weight:600;min-width:42px}
 
 /* making */
 .making{display:flex;flex-direction:column;align-items:center;text-align:center;padding:40px 0;gap:12px}
-.ring{position:relative;width:180px;height:180px;margin-bottom:20px}
+.ring{position:relative;width:min(240px,62vw);height:min(240px,62vw);margin-bottom:20px}
 .ring svg{width:100%;height:100%;transform:rotate(-90deg)}
 .ring circle{fill:none;stroke-width:8}
 .ring .track{stroke:var(--panel)}
@@ -514,3 +514,10 @@ body.is-intro .top,body.is-intro footer,body.is-intro #version{visibility:hidden
 .range-bar b{position:absolute;top:0;bottom:0;width:2px;background:var(--fg)}
 .range-actions{align-items:center;gap:10px;margin-top:12px}
 .range-actions output{font-variant-numeric:tabular-nums;color:var(--muted);min-width:52px}
+
+/* Per-shot render bars under the ring: small, orange at 0 % to green at 100 % */
+.render-bars{display:flex;flex-wrap:wrap;justify-content:center;align-items:flex-end;gap:3px;max-width:560px;margin:14px auto 0;min-height:22px}
+.render-bars i{display:block;width:6px;height:22px;border-radius:3px;background:var(--panel);position:relative;overflow:hidden}
+.render-bars i::after{content:"";position:absolute;left:0;right:0;bottom:0;height:calc(var(--p,0) * 100%);
+  background:color-mix(in srgb,#2EBD6B calc(var(--p,0) * 100%),#FF4F2E);transition:height .4s ease}
+.render-bars.many i{width:3px;height:16px}

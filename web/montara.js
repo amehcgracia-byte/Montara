@@ -688,7 +688,9 @@ function setupSphere(file, root) {
     if (!view) { img.hidden = true; return; }
     const token = ++previewToken;
     let local = "";
-    try { local = webSphericalStill(frame, { yaw: view.yaw, pitch: view.pitch, fov: view.fov }); } catch (error) { console.warn(error); }
+    // Wide and Ultra wide are stereographic in the engine (fisheye look), not stretched rectilinear.
+    const stereographic = ["megaview", "ultrawide", "tiny_planet", "crystal_ball"].includes(view.projection_preset || zoomOf(view)[3]);
+    try { local = webSphericalStill(frame, { yaw: view.yaw, pitch: view.pitch, fov: view.fov, projection: stereographic ? "sg" : "flat" }); } catch (error) { console.warn(error); }
     if (local) { img.src = local; img.hidden = false; }
     clearTimeout(previewTimer);
     previewTimer = setTimeout(() => {
@@ -1157,9 +1159,27 @@ function renderStatus(s) {
     setProgress(exporting && s.status !== "done" ? Math.min(99, p) : p, exporting ? "Finishing your video…" : p < 40 ? "Listening and finding the cuts…" : "Shaping your edit…", exporting && p >= 99 ? "Joining, checking playback and saving the final file. This can take a little longer." : exporting ? "Keeping the choices from your preview." : "Preparing the framing and the rhythm you chose.");
     return;
   }
-  const task = (s.tasks || [])[0] || {};
+  renderShotBars(s);
+  const rendering = (s.tasks || []).some((t) => /^segment-/.test(t.id || ""));
+  const task = rendering ? { label: "Rendering your video" } : (s.tasks || [])[0] || {};
   const finalizing = s.status !== "done" && Number(s.progress || 0) >= 99;
   setProgress(finalizing ? 99 : Number(s.progress || 0), finalizing ? "Finishing your video…" : task.label || s.message || "Working…", finalizing ? "Joining, checking playback and saving the final file. This can take a little longer." : s.detail || "");
+}
+
+// One small bar per shot while the engine renders (tasks "segment-N", label "Shot N/T").
+function renderShotBars(s) {
+  const box = $("#renderBars");
+  const shots = (s.tasks || []).filter((t) => /^segment-\d+$/.test(t.id || ""));
+  const total = Math.max(0, ...shots.map((t) => Number((/\/(\d+)/.exec(t.label || "") || [])[1] || 0)));
+  if (!total || s.status === "done") { box.hidden = true; box.innerHTML = ""; return; }
+  if (box.children.length !== total) box.innerHTML = Array.from({ length: total }, () => "<i></i>").join("");
+  box.classList.toggle("many", total > 60);
+  for (const t of shots) {
+    const index = Number(t.id.split("-")[1]) - 1;
+    const bar = box.children[index];
+    if (bar) bar.style.setProperty("--p", Math.max(0, Math.min(1, Number(t.percent || 0) / 100)).toFixed(3));
+  }
+  box.hidden = false;
 }
 
 function setProgress(percent, message, detail) {
@@ -1202,13 +1222,34 @@ function viewpointName(item) {
 }
 const swapping = new Set();
 let frameHover = null;
+// Shot previews stay loaded once played, and are made in the background one by one
+// after the shots appear, so hovering shows the movement at once.
 function stopFrameHover() {
   if (!frameHover) return;
   clearTimeout(frameHover.timer);
   const { video, thumb } = frameHover;
-  video.pause(); video.removeAttribute("src"); video.load(); video.hidden = true;
+  video.pause(); video.hidden = true;
+  if (video.readyState >= 2) { try { video.currentTime = 0; } catch { /* not seekable yet */ } }
   thumb.querySelector(".hover-status").hidden = true;
   frameHover = null;
+}
+function resetFrameVideo(thumb) {
+  const video = thumb.querySelector("video");
+  video.pause(); video.removeAttribute("src"); video.load(); video.hidden = true;
+  delete thumb.dataset.warm;
+}
+let previewWarmer = 0;
+async function warmFramePreviews() {
+  const run = ++previewWarmer;
+  for (const thumb of $$("#frameGrid .thumb")) {
+    if (run !== previewWarmer || $("#frames").hidden) return;
+    if (thumb.dataset.warm || thumb.closest(".frame").classList.contains("busy") || !thumb.dataset.preview) continue;
+    try {
+      const response = await fetch(thumb.dataset.preview, { headers: { Range: "bytes=0-1" } });
+      if (response.ok) thumb.dataset.warm = "1";
+      else if (response.status === 409) return;  // the engine is busy again; try on the next refresh
+    } catch { return; }
+  }
 }
 function startFrameHover(thumb) {
   if (frameHover?.thumb === thumb) return;
@@ -1216,6 +1257,11 @@ function startFrameHover(thumb) {
   if (thumb.closest(".frame").classList.contains("busy")) return;
   const video = thumb.querySelector("video"), label = thumb.querySelector(".hover-status");
   const entry = { thumb, video, timer: null }; frameHover = entry;
+  if (video.getAttribute("src") === thumb.dataset.preview && video.readyState >= 2) {
+    video.hidden = false; label.hidden = true;
+    video.play().catch(() => {});
+    return;
+  }
   entry.timer = setTimeout(() => {
     if (frameHover !== entry || $("#frames").hidden) return;
     label.textContent = "Preparing preview…"; label.hidden = false;
@@ -1228,7 +1274,7 @@ function startFrameHover(thumb) {
     video.preload = "auto";
     video.src = thumb.dataset.preview;
     video.load();
-  }, 250);
+  }, thumb.dataset.warm ? 0 : 120);
 }
 async function openFrames() {
   show("frames");
@@ -1271,8 +1317,10 @@ async function refreshFrames(first) {
     const fig = grid.querySelector(`[data-index="${item.index}"]`);
     const img = fig.querySelector("img");
     const thumb = fig.querySelector(".thumb");
-    if (thumb.dataset.preview !== item.preview && frameHover?.thumb === thumb) stopFrameHover();
-    thumb.dataset.preview = item.preview || `/api/v1/wizard/review/preview/${item.index}`;
+    // The thumbnail changes when a shot is swapped: use it to version the preview URL.
+    const preview = item.preview || `/api/v1/wizard/review/preview/${item.index}?v=${encodeURIComponent(item.thumbnail || "")}`;
+    if (thumb.dataset.preview && thumb.dataset.preview !== preview) { if (frameHover?.thumb === thumb) stopFrameHover(); resetFrameVideo(thumb); }
+    thumb.dataset.preview = preview;
     const landmark = viewpointName(item);
     const type=item.camera_type || (item.pose && Object.keys(item.pose).length?"360":"moving");
     const label = `${{fixed:"Fixed",moving:"Moving","360":"360"}[type]}${type==="360" && landmark?" · "+landmark:""}`;
@@ -1290,7 +1338,7 @@ async function refreshFrames(first) {
     fig.querySelector(".dur").textContent = `${Number(item.duration_sec).toFixed(1)} s`;
     fig.querySelector(".swap").disabled = item.candidate_count !== undefined && item.candidate_count < 2;
   }
-  if (!pending) { clearInterval(state.framesPoll); state.framesPoll = null; }
+  if (!pending) { clearInterval(state.framesPoll); state.framesPoll = null; warmFramePreviews(); }
 }
 
 async function swap(index) {
