@@ -4,7 +4,7 @@
 Lo audita el equipo de Chema; el equipo de Fernando corrige y amplía.
 
 ## Avance de la auditoría
-- Rama revisada hasta: `1a5f3bd` · `main` de referencia: `e46b685`
+- Rama revisada hasta: `f77ba0e` (incluye la fusión de `main` `e46b685`, sin cambios de producto nuevos) · `main` de referencia: `d2dd61d`
 - Familias: **F1 hecha** · F2–F8 pendientes (archivos asignados abajo; no volver a leer los de F1)
 
 Cada utilidad ocupa 10 líneas como máximo: problema · archivos · evidencia · mejora medida · ¿existe en `main`? · veredicto · riesgos · qué leer (3 archivos como máximo) · **Decisión JM** (solo la rellena José Manuel).
@@ -28,7 +28,7 @@ Cada utilidad ocupa 10 líneas como máximo: problema · archivos · evidencia �
 - **Evidencia:** tests unitarios. No probado en un Stage real (lo dice el propio documento).
 - **¿En main?:** no.
 - **Veredicto:** **no integrar tal cual.** Solo sirve si el servidor está en el mismo ordenador que los archivos: en la VM el proxy llega después de subir el original, así que no acorta la subida.
-- **Riesgo, comprobado leyendo el código y no ejecutado:** en `renderCameras()` la rama cambia `$$('[data-camera-type]')` por `$('[data-camera-type]')`. `$` devuelve un solo elemento, sin `forEach`, así que la función lanza `TypeError` en todos los hosts: no se conectan los tipos de cámara ni se dibujan los puntos de vista 360. En localhost, `$('#cameraList .cam').forEach` también falla.
+- **Corregido en `3bbee90`:** `renderCameras()` usaba `$` en lugar de `$$`, que lanzaba `TypeError` y dejaba sin conectar los tipos de cámara y los puntos de vista 360.
 - **Decisión JM:**
 
 ### F1.3 Puente subidas → proxies
@@ -60,8 +60,8 @@ Cada utilidad ocupa 10 líneas como máximo: problema · archivos · evidencia �
 ### F1.6 Validación de fuentes del mezclador
 - **Problema:** que el servidor solo mezcle subidas propias y completas.
 - **Archivos:** `mixer_adapter/source_access.py`, `tests/test_mixer_source_access.py`.
-- **¿En main?:** no.
-- **Veredicto:** **candidato pequeño de seguridad.** El propio módulo dice que no implementa propiedad por usuario.
+- **¿En main?:** en PR #15 (`a56f095`, `e15d78f`, `5c54457`).
+- **Veredicto:** **integrar.** El propio módulo dice que no implementa propiedad por usuario.
 - **Decisión JM:**
 
 ---
