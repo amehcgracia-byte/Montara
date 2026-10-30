@@ -27,7 +27,7 @@ function packInput(){
 }
 const packNativeFiles=renderFiles;renderFiles=function(){packNativeFiles();packInput();};
 const packNativeShow=show;show=function(id){if(id!=='pushPack'){$('#packVideo').pause();clearTimeout(packUI.timer);}packNativeShow(id);packInput();};
-const packNativeAdd=addFiles;addFiles=function(files){if(packEnabled()){if(rejectRaw360(files))return;if(files.length!==1 || !files[0].type.startsWith('video/'))return toast('Choose one music video for this pack.',true);$('#pushPackURL').value='';state.files=[];$('#sampleNote').hidden=true;packUI.doc=null;}packNativeAdd(files);};
+const packNativeAdd=addFiles;addFiles=function(files,handles){if(packEnabled()){if(rejectRaw360(files))return;if(files.length!==1 || !files[0].type.startsWith('video/'))return toast('Choose one music video for this pack.',true);$('#pushPackURL').value='';state.files=[];$('#sampleNote').hidden=true;packUI.doc=null;}packNativeAdd(files,handles);};
 $('#pushPackOn').onchange=()=>{if(packEnabled() && state.files.every(f=>f.sample)){const first=videos()[0];state.files=first?[first]:[];}renderFiles();if(!packEnabled() && !state.files.length)loadSamples().catch(console.warn);};
 $('#pushPackURL').oninput=()=>{packUI.doc=null;renderFiles();};
 const packNativeRegister=registerProject;
