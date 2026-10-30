@@ -21,7 +21,7 @@ Actualizado: 2026-10-30 tarde · lo mantiene el equipo de Chema · 40 líneas co
 | Reproductor del resultado: controles debajo del vídeo | #32 |
 
 ## Cómo funciona hoy a nivel usuario (feedback de Chema, 30-10)
-- El motor actual le convence: último proyecto con 8 vCPU «bastante rápido».
+- El motor actual le convence. Primer render con 8 vCPU: exportación 1388 s para 628 s de vídeo (2,2 s por segundo; con 4 vCPU eran 6,3), con 3 cámaras y los originales subidos enteros.
 - **El render final se hace en el servidor.** Con companion conectado, el MP4 se copia solo a la carpeta del proyecto en el Mac; si no, botón Download.
 - Mayor coste conocido: reproyección 360 en CPU (6,3× más lenta que tiempo real en 4 vCPU; ver RUNS.md).
 
@@ -32,5 +32,5 @@ Actualizado: 2026-10-30 tarde · lo mantiene el equipo de Chema · 40 líneas co
 Cada resultado: fila en `docs/lab/RUNS.md` + `runs.jsonl` y una línea en STATUS-FER.
 
 ## Pendiente
-- Fila en RUNS.md del primer render con 8 vCPU (falta `montara-runs` de Chema).
+- `run_history.py` no guarda qué cámara usa cada plano: sin eso no se puede separar cuánto gana cada factor.
 - Cambiar las contraseñas web de la VM, que pasaron por chat.
