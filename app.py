@@ -171,6 +171,23 @@ def create_montara_app(data_root: Path = DEFAULT_DATA, samples: bool = True):
     @app.get("/montara/version")
     def montara_version():
         return jsonify({"version": MONTARA_VERSION})
+
+    @app.get("/montara/companion/download")
+    def montara_companion_download():
+        """Zip for macOS: double-click 'Install Montara Companion.command' (executable bit kept)."""
+        import io
+        import zipfile
+        from flask import send_file
+        folder = ROOT / "companion"
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+            for name, mode in (("Install Montara Companion.command", 0o755), ("companion.py", 0o644), ("README.md", 0o644)):
+                info = zipfile.ZipInfo(f"Montara Companion/{name}")
+                info.external_attr = (0o100000 | mode) << 16
+                info.compress_type = zipfile.ZIP_DEFLATED
+                archive.writestr(info, (folder / name).read_bytes())
+        buffer.seek(0)
+        return send_file(buffer, mimetype="application/zip", as_attachment=True, download_name="Montara Companion.zip")
     _apply_branding(str(load_global_config().get("montara_branding_mode") or "montara"), data_root)
 
     @app.get("/montara/samples")

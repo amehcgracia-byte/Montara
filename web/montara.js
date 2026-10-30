@@ -182,7 +182,7 @@ $$(".mode[data-platform]").forEach((card) => card.addEventListener("click", () =
   show("footage");
   loadSamples().catch((error) => console.warn("Samples unavailable", error));
   offerRestore().catch((error) => console.warn("Footage memory", error));
-  montaraCompanion.detect().then((info) => { $("#companionNote").hidden = !info; });
+  watchCompanion();
 }));
 
 function resetFlow() {
@@ -277,6 +277,19 @@ function addFiles(list, handles = []) {
     upload(file, entry);
   }
   renderFiles();
+}
+
+// ---------- companion: offer it on a Mac, notice when it starts ----------
+const isDesktopMac = /Macintosh|Mac OS X/.test(navigator.userAgent) && !/iPhone|iPad/.test(navigator.userAgent) && navigator.maxTouchPoints < 2;
+let companionWatch = null;
+async function watchCompanion() {
+  clearTimeout(companionWatch);
+  const info = await montaraCompanion.detect();
+  $("#companionNote").hidden = !info;
+  $("#companionOffer").hidden = Boolean(info) || !isDesktopMac || state.platform === "show";
+  if (!info && !$("#footage").hidden) companionWatch = setTimeout(watchCompanion, 4000);  // starts while the person installs it
+  else if (info && renderFiles.companionSeen === false) toast("Companion connected: videos stay on your computer.");
+  renderFiles.companionSeen = Boolean(info);
 }
 
 // ---------- footage memory: survive a reload ----------
