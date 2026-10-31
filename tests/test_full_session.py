@@ -143,3 +143,24 @@ def test_preview_session_exports_from_received_original_ranges_only(tmp_path):
     np.testing.assert_allclose(audio, original[4 * rate:8 * rate], atol=1e-6)   # song 6–10 s = file 4–8 s (offset 2)
     audio, _ = sf.read(prepare_tracks(work, song, preview=True) / 'keys.wav', dtype='float32')
     np.testing.assert_allclose(audio, 0, atol=1e-6)                     # the browser preview stays on the preview
+
+
+def test_waveform_and_listen_cover_offsets(tmp_path):
+    from mixer_adapter.session import listen_range, session_waveform
+    rate = 8000
+    loud = tmp_path / 'drums.wav'; sf.write(loud, np.r_[np.zeros(rate * 2), np.ones(rate * 2) * .5], rate, subtype='FLOAT')
+    late = tmp_path / 'sax.wav'; sf.write(late, np.ones(rate * 2) * .2, rate, subtype='FLOAT')
+    work = tmp_path / 'job'; work.mkdir()
+    save(work / 'session.json', {'duration': 6.0, 'tracks': [
+        dict(file='drums.wav', path=str(loud), samplerate=rate, channels=1, offset=0, duration=4),
+        dict(file='sax.wav', path=str(late), samplerate=rate, channels=1, offset=4, duration=2)]})
+    wave = session_waveform(work)
+    assert wave['step'] == .25 and len(wave['peaks']) == 24
+    assert max(wave['peaks'][:7]) == 0 and min(wave['peaks'][9:16]) > 200 and 0 < min(wave['peaks'][17:]) < 200  # silence, drums, quieter sax
+    clip = listen_range(work, 3.0, 5.5)
+    assert clip.is_file() and listen_range(work, 3.0, 5.5) == clip
+    duration = float(subprocess.run(['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', str(clip)],
+                                    capture_output=True, text=True).stdout)
+    assert abs(duration - 2.5) < .1
+    with pytest.raises(ValueError):
+        listen_range(work, 1, 1.2)

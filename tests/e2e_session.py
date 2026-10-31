@@ -95,17 +95,33 @@ def run(output):
                 assert abs(detected[0]['end'] - 195) < 3
                 page.screenshot(path=str(output / '02-detected.png'), full_page=True)
                 rows = page.locator('[data-session-song]')
-                for index, start in enumerate([5, 215]):
-                    rows.nth(index).locator('[data-song-field="start"]').fill(str(start))
-                    rows.nth(index).locator('[data-song-field="end"]').fill(str(start + 15))
-                page.locator('#sessionMix').click()
+                page.wait_for_function('sessionWave.data && sessionWave.data.peaks.length > 100', timeout=60_000)
+                # A real drag on a handle moves that song's end.
+                handle = rows.nth(0).locator('.song-cut.end')
+                box = handle.bounding_box(); before = page.evaluate('fullSession.data.songs[0].end')
+                page.mouse.move(box['x'] + box['width'] / 2, box['y'] + box['height'] / 2); page.mouse.down()
+                page.mouse.move(box['x'] - 60, box['y'] + box['height'] / 2, steps=6); page.mouse.up()
+                assert page.evaluate('fullSession.data.songs[0].end') < before - 1
+                # Exact short windows for a quick export (same as dragging, without pixel arithmetic).
+                page.evaluate("fullSession.data.songs[0].start=5;fullSession.data.songs[0].end=20;fullSession.data.songs[1].start=215;fullSession.data.songs[1].end=230;drawSessionSongs()")
+                page.screenshot(path=str(output / '02b-waveforms.png'), full_page=True)
+                rows.nth(0).locator('[data-song-play]').click()
+                page.wait_for_function('sessionPlayer.audio && sessionPlayer.audio.currentTime > 0.2', timeout=60_000)
+                rows.nth(0).locator('[data-song-play]').click()
+                assert page.evaluate('sessionPlayer.audio') is None
+                rows.nth(0).locator('[data-song-mixer]').click()
                 page.wait_for_function("!document.querySelector('#mix').hidden && !document.querySelector('#useMix').disabled", timeout=180_000)
                 page.locator('#playMix').click(); page.wait_for_timeout(400); page.locator('#playMix').click()
-                page.screenshot(path=str(output / '03-common-mix.png'), full_page=True)
+                page.evaluate("(() => { const input = document.querySelector('#strips input[type=range]'); input.value = Number(input.value) - 3; input.dispatchEvent(new Event('input', {bubbles: true})); })()")
+                page.screenshot(path=str(output / '03-song-mix.png'), full_page=True)
                 page.locator('#useMix').click()
+                page.wait_for_function("!document.querySelector('#sessionReview').hidden && document.querySelector('.song-tag')")
+                page.locator('#sessionMix').click()
                 page.wait_for_function("document.querySelectorAll('#sessionResults audio').length===2", timeout=240_000)
                 data = page.evaluate('fullSession.data')
                 assert data['status'] == 'done'
+                saved = json.loads((output / 'data' / 'Sessions' / data['id'] / 'session.json').read_text())
+                assert list(saved['settings']['per_song']) == ['1'] and saved['settings']['per_song']['1']['faders']
                 for song in data['results']:
                     response = page.request.get(f'{url}/montara/session/{data["id"]}/result/{song["id"]}')
                     assert response.ok and len(response.body()) > 1000

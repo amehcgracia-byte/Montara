@@ -14,7 +14,7 @@ import uuid
 from pathlib import Path
 
 from flask import jsonify, request, send_file
-from mixer_adapter.session import original_windows, read, save, validate_songs
+from mixer_adapter.session import listen_range, original_windows, read, save, session_waveform, validate_songs
 from resumable_upload import preview_original
 
 ROOT = Path(__file__).resolve().parent
@@ -32,6 +32,26 @@ def public(data):
     result['results'] = [{k: v for k, v in r.items() if k != 'path'} for r in data.get('results', [])]
     result['uses_previews'] = bool(data.get('previews'))
     return result
+
+
+def mix_settings(body, names):
+    """Fader offsets, mutes and effects the person changed for one mix (validated)."""
+    settings = {}
+    for key in ('faders', 'mutes'):
+        values = body.get(key, {})
+        if not isinstance(values, dict) or set(values) - names:
+            raise ValueError('Unknown track settings.')
+        for value in values.values():
+            if key == 'mutes':
+                if not isinstance(value, bool):
+                    raise ValueError('Mute must be on or off.')
+            elif isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or not -100 <= value <= 100:
+                raise ValueError('Invalid fader level.')
+        settings[key] = values
+    if 'effects' in body:
+        from mixer_adapter.single_song import validate_effects
+        settings['effects'] = validate_effects(body['effects'], names)
+    return settings
 
 
 def register_full_session(app, data_root, fixtures):
@@ -118,41 +138,40 @@ def register_full_session(app, data_root, fixtures):
                 if data['status'] in BUSY:
                     return error('Wait for this session to finish or cancel it.', 409)
                 body = request.get_json(silent=True) or {}
-                if action == 'prepare':
+                if action in ('prepare', 'render', 'songs') and body.get('songs') is not None:
                     songs = validate_songs(body.get('songs'), data['duration'])
-                    if [(s['start'],s['end']) for s in songs] != [(s['start'],s['end']) for s in data.get('songs', [])]:
+                    key = lambda items: [(s.get('id'), s.get('start'), s.get('end'), s.get('selected', True)) for s in items]
+                    if [(s['start'], s['end']) for s in songs] != [(s['start'], s['end']) for s in data.get('songs', [])]:
                         data['previous_ai_review'] = data.get('ai_review')
                         data['ai_review'] = {'status': 'manual_revision'}
-                    # Changed boundaries invalidate extracted PCM, mixes and received original ranges.
-                    if [(s.get('id'), s.get('start'), s.get('end'), s.get('selected', True)) for s in songs] != [(s.get('id'), s.get('start'), s.get('end'), s.get('selected', True)) for s in data.get('songs', [])]:
+                    if key(songs) != key(data.get('songs', [])):
+                        # Changed boundaries invalidate extracted PCM, mixes and received original ranges.
                         data.pop('originals', None)
-                    shutil.rmtree(work / 'songs', ignore_errors=True)
-                    shutil.rmtree(work / 'preview', ignore_errors=True)
+                        shutil.rmtree(work / 'songs', ignore_errors=True)
                     data['songs'] = songs
+                elif action in ('prepare', 'songs'):
+                    raise ValueError('Send the songs.')
+                if action == 'songs':  # boundaries saved; nothing to run
+                    save(work / 'session.json', data)
+                    return jsonify(public(data))
+                if action == 'prepare':
+                    data['preview_song'] = body.get('song') if isinstance(body.get('song'), int) else None
+                    shutil.rmtree(work / 'preview', ignore_errors=True)
                     data.pop('preview_tracks', None)
                     data.pop('results', None)
                     data['status'] = 'preparing'
                 elif action == 'render':
-                    if not data.get('preview_tracks'):
+                    if not data.get('songs') or not data.get('tracks'):
                         return error('Review the song boundaries first.', 409)
                     if any(not w['received'] for w in original_windows(data)):
                         return error('Send the original audio of the selected songs first (keep the companion open).', 409)
-                    names = {Path(p).name for p in data['preview_tracks']}
-                    settings = {}
-                    for key in ('faders', 'mutes', 'base_gains'):
-                        values = body.get(key, {})
-                        if not isinstance(values, dict) or set(values) - names:
-                            raise ValueError('Unknown track settings.')
-                        for value in values.values():
-                            if key == 'mutes':
-                                if not isinstance(value, bool):
-                                    raise ValueError('Mute must be on or off.')
-                            elif isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or not -100 <= value <= 100:
-                                raise ValueError('Invalid fader level.')
-                        settings[key] = values
-                    if 'effects' in body:
-                        from mixer_adapter.single_song import validate_effects
-                        settings['effects'] = validate_effects(body['effects'], names)
+                    names = {t['file'] for t in data['tracks']}
+                    settings = mix_settings(body, names)
+                    per_song = body.get('per_song') or {}
+                    ids = {str(s['id']) for s in data['songs']}
+                    if not isinstance(per_song, dict) or set(per_song) - ids:
+                        raise ValueError('Unknown song mix.')
+                    settings['per_song'] = {key: mix_settings(value, names) for key, value in per_song.items() if isinstance(value, dict)}
                     if body.get('reference'):
                         reference = Path(str(body['reference'])).resolve()
                         if not any(reference.is_relative_to(a) for a in allowed) or not reference.is_file():
@@ -176,6 +195,30 @@ def register_full_session(app, data_root, fixtures):
                 return jsonify(public(data)), 202
         except ValueError as exc:
             return error(exc)
+
+    @app.get('/montara/session/<job_id>/waveform')
+    def session_wave(job_id):
+        try:
+            work = folder(job_id)
+            data = read(work)
+            if data['status'] in BUSY or not data.get('tracks'):
+                return error('Not ready yet.', 409)
+            return jsonify(session_waveform(work))
+        except ValueError as exc:
+            return error(exc, 404)
+
+    @app.get('/montara/session/<job_id>/listen')
+    def session_listen(job_id):
+        try:
+            work = folder(job_id)
+            if not read(work).get('tracks'):
+                return error('Not ready yet.', 409)
+            start, end = float(request.args.get('start', 'nan')), float(request.args.get('end', 'nan'))
+            if not (math.isfinite(start) and math.isfinite(end)):
+                raise ValueError('Invalid range.')
+            return send_file(listen_range(work, start, end), mimetype='audio/ogg', conditional=True)
+        except (ValueError, subprocess.CalledProcessError) as exc:
+            return error(exc if isinstance(exc, ValueError) else 'Could not prepare this range.')
 
     @app.get('/montara/session/<job_id>/originals')
     def session_originals(job_id):

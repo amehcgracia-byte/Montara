@@ -831,8 +831,12 @@ async function openMixer(sessionTracks = null) {
   $("#transport").hidden = true;
   $("#referenceRow").hidden = true;
   $("#useMix").disabled = true;
-  $("#strips").innerHTML = "";
-  const job = await api("/montara/mix", { tracks: sessionTracks || audioTracks().map((f) => f.path) });
+  const sources = sessionTracks || audioTracks().map((f) => f.path);
+  // Placeholder strips whose faders keep moving while the mix is worked out.
+  $("#strips").innerHTML = sources.map((path) => `<div class="strip loading"><small>&nbsp;</small><span class="db">&nbsp;</span><input type="range" min="-60" max="12" value="-20" disabled aria-hidden="true"><button class="mute" disabled>…</button><b>${escapeHtml(String(path).split("/").pop().replace(/\.[^.]+$/, ""))}</b></div>`).join("");
+  const dance = startFaderDance();
+  let job;
+  try { job = await api("/montara/mix", { tracks: sources }); } catch (error) { dance(); throw error; }
   mix.job = job.id;
   $("#referenceName").textContent = "Automatic (no reference)";
   $("#referenceStatus").hidden = true;
@@ -844,9 +848,11 @@ async function openMixer(sessionTracks = null) {
   const ready = await pollMix((j) => j.status !== "analyzing");
   if (ready.status === "failed") throw new Error(ready.error || "The automatic mix failed");
   mix.plan = { ...ready.plan, tracks: ready.plan.tracks.map(track => MixLevels.prepare(sessionTracks ? {...track, active: true} : track)) };
+  dance();
   renderStrips();
   $("#mixStatusText").textContent = "Loading the tracks for the preview…";
-  await loadBuffers();
+  const dance2 = startFaderDance();
+  try { await loadBuffers(); } finally { dance2(); }
   await animateMixFaders();
   $("#mixStatus").classList.add("done");
   $("#mixStatusText").textContent = "Auto-mix ready. Faders start where Montara put them.";
@@ -1080,11 +1086,11 @@ $("#referenceLinkForm").addEventListener("submit", async (event) => {
   } catch (error) { status.textContent = error.message; }
   finally { if (mix.job === jobId) { button.disabled = false; $("#pickReference").disabled = false; $("#useMix").disabled = false; } }
 });
-$("#mixBack").addEventListener("click", () => { stopMix(); show(fullSession.active ? 'sessionReview' : videos().length > 1 || videos().some(isSphere) ? "cameras" : "footage"); });
+$("#mixBack").addEventListener("click", () => { stopMix(); $("#useMix").textContent = "Use this mix"; show(fullSession.active ? 'sessionReview' : videos().length > 1 || videos().some(isSphere) ? "cameras" : "footage"); });
 
 $("#useMix").addEventListener("click", async () => {
   try {
-    if (fullSession.active) return await renderFullSession();
+    if (fullSession.active) return await saveSongMix();
     stopMix();
     $("#useMix").disabled = true;
     $("#mixStatus").classList.remove("done");
@@ -2106,6 +2112,26 @@ function rejectRaw360(files) {
   toast("Export a stitched 360 MP4 (equirectangular) from your camera app first. Camera-original INSV/MSV files cannot be edited here.", true);
   return true;
 }
+// Faders move up and down as if someone were working on them, until stop() is called.
+function startFaderDance() {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return () => {};
+  let running = true;
+  const seeds = [];
+  const frame = (now) => {
+    if (!running) return;
+    $$("#strips input[type=range]").forEach((input, i) => {
+      seeds[i] ??= { speed: .6 + Math.random() * .9, phase: Math.random() * 6.28, centre: -24 + Math.random() * 16 };
+      const s = seeds[i], value = s.centre + Math.sin(now / 1000 * s.speed + s.phase) * 9 + Math.sin(now / 1000 * s.speed * 2.7 + s.phase) * 3;
+      input.value = value;
+      const db = input.closest(".strip")?.querySelector(".db");
+      if (db && !input.closest(".strip").classList.contains("loading")) db.textContent = `${value >= 0 ? "+" : ""}${value.toFixed(1)} dB`;
+    });
+    requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+  return () => { running = false; };
+}
+
 async function animateMixFaders(keepLocked = false) {
   const strips = Array.from($("#strips").children), duration = matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 1050;
   const job = mix.job;

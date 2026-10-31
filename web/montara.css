@@ -496,6 +496,21 @@ body.is-intro .top,body.is-intro footer,body.is-intro #version{visibility:hidden
 
 /* Full sessions share the existing Stage mixer; only the song review is new. */
 .session-song {display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:14px 0; border-bottom:1px solid var(--line, #303034)}
+#sessionSongs .session-song{display:block}
+.song-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.song-head input[data-song-field="name"]{flex:1;min-width:140px}
+.song-num{color:var(--muted);font-variant-numeric:tabular-nums;min-width:2ch}
+.song-play{width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--fg);font-size:12px;cursor:pointer;flex:none}
+.song-play.on,.song-play:hover{border-color:var(--accent);color:var(--accent)}
+.song-tag{font-size:12px;color:var(--accent);border:1px solid var(--accent);border-radius:999px;padding:2px 8px}
+.song-wave{position:relative;height:64px;margin-top:10px;border-radius:10px;background:var(--surface);overflow:hidden;touch-action:none}
+.song-wave canvas{position:absolute;inset:0;width:100%;height:100%}
+.song-cut{position:absolute;top:0;bottom:0;width:14px;margin-left:-7px;cursor:ew-resize;z-index:2}
+.song-cut::before{content:"";position:absolute;left:6px;top:0;bottom:0;width:2px;background:var(--fg)}
+.song-cut::after{content:"";position:absolute;left:1px;top:50%;width:12px;height:22px;margin-top:-11px;border-radius:4px;background:var(--fg)}
+.song-cut:focus-visible::after{outline:2px solid var(--accent);outline-offset:2px}
+.song-playhead{position:absolute;top:0;bottom:0;width:2px;background:var(--accent);z-index:1;pointer-events:none}
+.song-time{position:absolute;right:8px;bottom:4px;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;pointer-events:none}
 .session-song input[data-song-field="name"] {flex:1; min-width:140px}
 .session-song input:not([type="checkbox"]) {background:var(--surface);color:var(--fg);border:1px solid var(--line);border-radius:10px;padding:9px;font:inherit}
 .session-song input[type="checkbox"], #stageSessionOptions input {accent-color:var(--accent)}

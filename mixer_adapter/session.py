@@ -85,6 +85,76 @@ def original_windows(data):
     return result
 
 
+WAVE_STEP = 0.25  # seconds per waveform column
+WAVE_RATE = 2000  # Hz; enough for an overview, cheap to decode
+
+
+def session_waveform(work):
+    """Peak overview of the whole session (all tracks, offsets honoured), cached as JSON.
+
+    One value 0..255 per WAVE_STEP seconds. Drawn under each song so the person can
+    see and drag its start and end."""
+    import numpy as np
+    work = Path(work)
+    cached = work / 'waveform.json'
+    if cached.is_file():
+        return json.loads(cached.read_text())
+    data = read(work)
+    columns = int(math.ceil(float(data['duration']) / WAVE_STEP))
+    peaks = np.zeros(columns, dtype='float32')
+    per = int(WAVE_RATE * WAVE_STEP)
+    for track in data['tracks']:
+        raw = subprocess.run(['ffmpeg', '-v', 'error', '-nostdin', '-i', track['path'], '-vn', '-ac', '1', '-ar', str(WAVE_RATE),
+                              '-f', 'f32le', '-'], capture_output=True, check=True, timeout=900).stdout
+        audio = np.abs(np.frombuffer(raw, dtype='<f4'))
+        usable = len(audio) // per * per
+        if not usable:
+            continue
+        column = audio[:usable].reshape(-1, per).max(axis=1)
+        first = int(round(float(track['offset']) / WAVE_STEP))
+        end = min(columns, first + len(column))
+        if end > first:
+            peaks[first:end] = np.maximum(peaks[first:end], column[:end - first])
+    top = float(np.percentile(peaks[peaks > 0], 99.5)) if (peaks > 0).any() else 1.0
+    result = dict(step=WAVE_STEP, duration=float(data['duration']),
+                  peaks=np.clip(peaks / max(top, 1e-6) * 255, 0, 255).astype(int).tolist())
+    save(cached, result)
+    return result
+
+
+def listen_range(work, start, end):
+    """A quick, rough mix of every track for one range, for listening while reviewing cuts.
+
+    Equal levels, a limiter, Opus. Not the automatic mix: that happens per song at export."""
+    work = Path(work)
+    data = read(work)
+    start, end = max(0.0, float(start)), min(float(data['duration']), float(end))
+    if end - start < .5 or end - start > 3600:
+        raise ValueError('Choose a range between half a second and one hour.')
+    folder = work / 'listen'
+    folder.mkdir(exist_ok=True)
+    target = folder / f'{start:.2f}-{end:.2f}.ogg'
+    if target.is_file():
+        return target
+    inputs, labels = [], []
+    for track in data['tracks']:
+        source_start, overlap = track_window(track, dict(start=start, end=end))
+        if overlap <= 0:
+            continue
+        delay = round(max(0, float(track['offset']) - start) * 1000)
+        inputs += ['-ss', f'{source_start:.3f}', '-t', f'{overlap:.3f}', '-i', track['path']]
+        labels.append(f'[{len(labels)}:a]aformat=channel_layouts=mono,adelay={delay}:all=1[a{len(labels)}]')
+    if not inputs:
+        raise ValueError('No audio in this range.')
+    mixed = ''.join(f'[a{i}]' for i in range(len(labels)))
+    graph = ';'.join(labels) + f';{mixed}amix=inputs={len(labels)}:normalize=0,dynaudnorm=f=250:g=15,alimiter=limit=0.9[out]'
+    pending = target.with_suffix('.part.ogg')
+    subprocess.run(['ffmpeg', '-v', 'error', '-nostdin', '-y', *inputs, '-filter_complex', graph, '-map', '[out]', '-t', f'{end - start:.3f}',
+                    '-c:a', 'libopus', '-b:a', '96k', '-f', 'ogg', str(pending)], check=True, capture_output=True, timeout=900)
+    pending.replace(target)
+    return target
+
+
 def silence_candidates(stems, timelines, duration, frame_seconds):
     """Reviewable fallback for sessions with clear collective instrument rests.
 
@@ -249,9 +319,15 @@ def execute(work, action):
             for cut in data['ai_review']['value']['cuts']:
                 data['songs'][cut['id']-1]['review_note'] = cut['reason']
                 data['songs'][cut['id']-1]['needs_review'] = cut['decision'] == 'review'
+        progress(dict(current_stage='Drawing the waveform', progress=97))
+        save(work / 'session.json', data)  # tracks and duration are needed by the drawing
+        try:
+            session_waveform(work)
+        except Exception as exc:  # the review still works without the drawing
+            print('waveform failed:', exc, flush=True)
         data['status'] = 'review'
     elif action == 'prepare':
-        song = next(s for s in data['songs'] if s['selected'])
+        song = next((s for s in data['songs'] if s['id'] == data.get('preview_song')), None) or next(s for s in data['songs'] if s['selected'])
         folder = prepare_tracks(work, song, preview=True)
         data['preview_tracks'] = [str(p) for p in sorted(folder.glob('*.wav'))]
         data['status'] = 'ready'
@@ -259,13 +335,16 @@ def execute(work, action):
         data['results'] = []
         selected = [s for s in data['songs'] if s['selected']]
         settings = data['settings']
+        per_song = settings.get('per_song') or {}
         for index, song in enumerate(selected):
+            # A song mixed in the mixer keeps its own changes; the rest use the automatic mix.
+            mine = per_song.get(str(song['id'])) or {}
             progress(dict(current_stage='mixing songs', stage_detail=f'{index + 1} / {len(selected)} · {song["name"]}',
                           progress=100 * index / len(selected)))
             folder = prepare_tracks(work, song)
-            mixer = SingleSongMix(folder, work / 'songs' / str(song['id']) / 'mix', reference=settings.get('reference'))
-            out = mixer.render(settings.get('faders', {}), work / 'exports' / f'song-{song["id"]:03d}.mp3',
-                               settings.get('mutes', {}), settings.get('effects'))  # per-song automatic mix; faders are offsets
+            mixer = SingleSongMix(folder, work / 'songs' / str(song['id']) / 'mix', reference=mine.get('reference') or settings.get('reference'))
+            out = mixer.render(mine.get('faders', settings.get('faders', {})), work / 'exports' / f'song-{song["id"]:03d}.mp3',
+                               mine.get('mutes', settings.get('mutes', {})), mine.get('effects', settings.get('effects')))  # per-song automatic mix; faders are offsets
             data['results'].append(dict(id=song['id'], name=song['name'], start=song['start'], end=song['end'], path=str(out)))
             save(work / 'session.json', data)
             # Keep the first song for the browser; release intermediate PCM for others.
