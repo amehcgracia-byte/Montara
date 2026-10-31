@@ -161,13 +161,16 @@ async function renderFullSession() {
   const mixJob = await api(`/montara/mix/${mix.job}`);
   const payload = {
     reference: mixJob.reference,
-    // Each song keeps its own automatic mix (computed from that song); the person's
-    // faders apply on top as offsets. Forcing the preview's gains on every song
-    // switched off per-song balance and the drum peak guard.
-    faders: Object.fromEntries(mix.plan.tracks.map(t => [t.file, MixLevels.offset(t)])),
-    mutes: Object.fromEntries(mix.plan.tracks.map(t => [t.file, Boolean(t.mute)])),
-    effects: Object.fromEntries(mix.plan.tracks.map(t => [t.file, Object.fromEntries(['reverb', 'delay'].map(key => [key, t.fx?.[key]?.enabled ? t.fx[key].amount / 100 : 0]))]))
+    // Each song keeps its own automatic mix, computed from that song. Only what the
+    // person changed travels: fader moves as offsets, mutes they toggled, effects they
+    // switched on. The preview's own automatic values (a track it found silent, its
+    // balance) must not be imposed on every song.
+    faders: Object.fromEntries(mix.plan.tracks.map(t => [t.file, Number(t.fader_db || 0) - Number(t.auto_fader_db ?? t.fader_db ?? 0)]).filter(([, v]) => Math.abs(v) > .05)),
+    mutes: Object.fromEntries(mix.plan.tracks.filter(t => Boolean(t.mute) !== Boolean(t.auto_mute ?? t.mute)).map(t => [t.file, Boolean(t.mute)])),
   };
+  const effects = Object.fromEntries(mix.plan.tracks.filter(t => ['reverb', 'delay'].some(key => t.fx?.[key]?.enabled))
+    .map(t => [t.file, Object.fromEntries(['reverb', 'delay'].map(key => [key, t.fx?.[key]?.enabled ? t.fx[key].amount / 100 : 0]))]));
+  if (Object.keys(effects).length) payload.effects = effects;  // otherwise the mixer's automatic space and echo stay on
   show('sessionReview'); $('#sessionSongs').hidden = true; $('#sessionMix').hidden = true;
   try {
     await sendSessionOriginals();
