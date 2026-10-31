@@ -407,7 +407,7 @@ async function uploadSmall(file, entry) {
     small = await montaraCompanion.smallVersion(file, (phase, progress) => { entry.phase = phase; entry.progress = progress; renderFiles(); }, () => entry.removed);
   } catch (error) { console.warn(error); }
   if (!entry.removed) {
-    entry.phase = small ? "Uploading small version" : "";
+    entry.phase = small ? (montaraCompanion.isAudio(file) ? "Uploading lossless copy" : "Uploading small version") : "";
     entry.progress = 0;
     if (small) { entry.small = true; entry.original = small.original; remember(entry); }
     upload(small ? small.file : file, entry);
@@ -417,8 +417,9 @@ async function uploadSmall(file, entry) {
 }
 
 function upload(file, entry) {
-  if (montaraCompanion.info && !entry.viaCompanion && montaraCompanion.isVideo(file)) return uploadSmall(file, entry);
-  if (file.size > 8 * 1024 * 1024) return uploadInParts(file, entry);
+  if (montaraCompanion.info && !entry.viaCompanion && montaraCompanion.helps(file)) return uploadSmall(file, entry);
+  // A lossless copy must reach the server through the resumable path, which restores the WAV.
+  if (file.size > 8 * 1024 * 1024 || /\.(wav|aiff?)\.flac$/i.test(file.name)) return uploadInParts(file, entry);
   state.uploads += 1;
   const xhr = new XMLHttpRequest();
   entry.xhr = xhr;
@@ -485,7 +486,7 @@ function fileRow(f) {
     <li>
       <span class="kind ${f.kind}">${fileLabel(f)}</span>
       <span class="name" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}</span>
-      <span class="state">${f.kind === "uploading" ? (f.phase ? escapeHtml(f.phase) + " " : "") + Math.round(f.progress * 100) + "%" : f.small && f.kind === "video" ? "Ready · small version" : f.kind === "error" ? escapeHtml(f.error) : f.kind === "ignored" ? escapeHtml(f.reason || "not used") : "Ready"}</span>
+      <span class="state">${f.kind === "uploading" ? (f.phase ? escapeHtml(f.phase) + " " : "") + Math.round(f.progress * 100) + "%" : f.small && f.kind === "video" ? "Ready · small version" : f.small ? "Ready · lossless" : f.kind === "error" ? escapeHtml(f.error) : f.kind === "ignored" ? escapeHtml(f.reason || "not used") : "Ready"}</span>
       <button class="remove" data-remove-file="${f.id}" type="button" aria-label="Remove ${escapeHtml(f.name)}" title="Remove">×</button>
       ${f.kind === "uploading" ? `<span class="bar"><i style="width:${Math.round(f.progress * 100)}%"></i></span>` : ""}
     </li>`;

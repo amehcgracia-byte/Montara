@@ -11,6 +11,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import uuid
 from pathlib import Path
 
@@ -19,7 +20,35 @@ from mixer_adapter.session import save
 
 CHUNK = 4 * 1024**2
 RESERVE = 128 * 1024**2
+LOSSLESS = ('.wav.flac', '.aif.flac', '.aiff.flac')  # the companion's lossless copy of a WAV/AIFF original
+PCM = {'8': 'pcm_u8', '16': 'pcm_s16le', '24': 'pcm_s24le', '32': 'pcm_s32le'}
 MEDIA = {'.mp4', '.mov', '.mkv', '.webm', '.mts', '.m2ts', '.wav', '.mp3', '.flac', '.aif', '.aiff', '.m4a', '.ogg'}
+
+
+def ffmpeg_tool(name):
+    return os.environ.get('MONTARA_' + name.upper()) or shutil.which(name) or name
+
+
+def restore_lossless(path: Path) -> Path:
+    """Turn the companion's FLAC back into the WAV the person recorded: same samples, same bit depth,
+    same BWF time reference (the mixer aligns tracks with it). The mixer never sees the FLAC."""
+    target = path.with_name(path.name[:-len('.flac')].rsplit('.', 1)[0] + '.wav')
+    if target.is_file():
+        return target
+    bits = subprocess.run([ffmpeg_tool('ffprobe'), '-v', 'error', '-select_streams', 'a:0', '-show_entries', 'stream=bits_per_raw_sample',
+                           '-of', 'default=nw=1:nk=1', str(path)], capture_output=True, text=True, timeout=60).stdout.strip()
+    codec = PCM.get(bits)
+    if not codec:
+        raise ValueError(f'Unsupported lossless audio ({bits or "unknown"} bit). Upload the original WAV.')
+    pending = target.with_name(target.stem + '.partial.wav')
+    done = subprocess.run([ffmpeg_tool('ffmpeg'), '-v', 'error', '-nostdin', '-y', '-i', str(path), '-map', '0:a:0', '-c:a', codec,
+                           '-write_bext', '1', '-rf64', 'auto', str(pending)], capture_output=True, text=True, timeout=3600)
+    if done.returncode != 0:
+        pending.unlink(missing_ok=True)
+        raise ValueError('Could not restore the WAV from its lossless copy: ' + (done.stderr.strip().splitlines() or ['FFmpeg failed'])[-1])
+    pending.replace(target)
+    path.unlink()
+    return target
 
 
 def register_resumable_upload(app, data_root, classify):
@@ -144,8 +173,10 @@ def register_resumable_upload(app, data_root, classify):
                     if digest.hexdigest() != data['fingerprint']:
                         return failure('The uploaded file does not match. Remove the unfinished upload and retry.', 409)
                     source.replace(work / data['name'])
+                    if data['name'].lower().endswith(LOSSLESS):
+                        data['restored'] = restore_lossless(work / data['name']).name
                     data['complete'] = True
                     save(work / 'upload.json', data)
-                return jsonify(classify([str(work / data['name'])]))
+                return jsonify(classify([str(work / data.get('restored', data['name']))]))
         except ValueError as exc:
             return failure(str(exc), 404)
