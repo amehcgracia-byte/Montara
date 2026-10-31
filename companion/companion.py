@@ -146,11 +146,12 @@ def audio_plan(info: dict) -> dict:
         return {"skip": "no audio stream"}
     codec = str(audio.get("codec_name") or "")
     bits = str(audio.get("bits_per_raw_sample") or audio.get("bits_per_sample") or "")
-    if not codec.startswith("pcm_") or codec.startswith(("pcm_f", "pcm_alaw", "pcm_mulaw")) or bits not in {"8", "16", "24", "32"}:
+    floating = codec.startswith("pcm_f")  # 32/64-bit float: fine for a preview, FLAC cannot hold it
+    if not codec.startswith("pcm_") or codec.startswith(("pcm_alaw", "pcm_mulaw")) or (not floating and bits not in {"8", "16", "24", "32"}):
         return {"skip": f"{codec or 'unknown'} audio: uploaded as it is"}
     duration = float(info.get("format", {}).get("duration") or audio.get("duration") or 0)
-    return {"audio": True, "duration": duration, "codec": codec, "bits": bits, "channels": audio.get("channels"),
-            "rate": audio.get("sample_rate")}
+    return {"audio": True, "duration": duration, "codec": codec, "bits": "float" if floating else bits, "channels": audio.get("channels"),
+            "rate": audio.get("sample_rate"), "float": floating}
 
 
 def preview_command(source: Path, target: Path, p: dict) -> list[str]:
@@ -235,6 +236,10 @@ def make_proxy(key: str) -> None:
         pending = output_path(key, pending=True)
         if p.get("audio"):
             job.update(info={k: p[k] for k in ("codec", "bits", "channels")})
+            if not key.endswith("p") and p["float"]:
+                job.update(status="skipped", reason="32-bit float audio: uploaded as it is")
+                log(f"skip {source.name}: float audio is uploaded as it is")
+                return
             if key.endswith("p"):
                 command = preview_command(source, pending, p)
                 log(f"light preview of {source.name} (Opus; the export uses the original)")
@@ -428,9 +433,11 @@ class Handler(BaseHTTPRequestHandler):
         source = sources[source_id]
         # A real file, not a pipe: FLAC writes its sample count and checksum at the end.
         CACHE.mkdir(parents=True, exist_ok=True)
-        target = CACHE / f"segment-{source_id}-{threading.get_ident()}.flac"
+        floating = bool(audio_plan(probe(source)).get("float"))  # FLAC has no float: send that range as float WAV
+        target = CACHE / f"segment-{source_id}-{threading.get_ident()}.{'wav' if floating else 'flac'}"
+        codec = ["-c:a", "pcm_f32le"] if floating else ["-c:a", "flac", "-compression_level", "5"]
         command = [FFMPEG, "-hide_banner", "-nostdin", "-v", "error", "-y", "-ss", f"{start:.6f}", "-t", f"{duration:.6f}", "-i", str(source),
-                   "-map", "0:a:0", "-c:a", "flac", "-compression_level", "5", str(target)]
+                   "-map", "0:a:0", *codec, str(target)]
         started = time.monotonic()
         try:
             done = subprocess.run(command, capture_output=True, text=True, timeout=900)
@@ -441,7 +448,7 @@ class Handler(BaseHTTPRequestHandler):
             log(f"original {source.name} {start:.1f}+{duration:.1f} s: {size / 1e6:.0f} MB in {time.monotonic() - started:.1f} s")
             self.send_response(200)
             self.cors(self.origin_ok())
-            self.send_header("Content-Type", "audio/flac")
+            self.send_header("Content-Type", "audio/wav" if floating else "audio/flac")
             self.send_header("Content-Length", str(size))
             self.end_headers()
             with target.open("rb") as handle:
