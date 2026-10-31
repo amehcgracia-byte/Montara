@@ -96,6 +96,13 @@ def search_roots() -> list[Path]:
 
 def candidates(name: str):
     seen = set()
+    # A session's tracks sit together: look first next to the files already found
+    # (external disks are often not in Spotlight and too big to walk in time).
+    for folder in dict.fromkeys(p.parent for p in list(sources.values())):
+        path = folder / name
+        if path.is_file():
+            seen.add(path)
+            yield path
     if sys.platform == "darwin" and shutil.which("mdfind"):  # Spotlight index: instant on indexed disks
         try:
             out = subprocess.run(["mdfind", "-name", name], capture_output=True, text=True, timeout=15).stdout
