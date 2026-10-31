@@ -104,7 +104,7 @@ async function openFullSession() {
   $('#sessionMix').hidden = true;
   try {
     const job = await api('/montara/session', { tracks: audioTracks().map(f => f.path) });
-    fullSession.id = job.id;
+    fullSession.id = job.id; fullSession.mixes = {};
     try { localStorage.setItem('montara-session', job.id); $('#sessionResume').hidden = false; } catch { /* optional */ }
     const data = await waitSession(job);
     drawSessionSongs(data.songs);
@@ -112,73 +112,232 @@ async function openFullSession() {
   } catch (error) { toast(error.message, true); }
 }
 
-function drawSessionSongs(songs) {
-  fullSession.data.songs = songs;
-  $('#sessionSongs').innerHTML = songs.map((song, i) => `<div class="session-song" data-session-song="${i}">
-    <label><input data-song-field="selected" type="checkbox" ${song.selected ? 'checked' : ''}> ${String(i + 1).padStart(2, '0')}</label>
-    <input aria-label="Song name" data-song-field="name" value="${escapeHtml(song.name)}" maxlength="80">
-    <label>From <input aria-label="Song start in seconds" data-song-field="start" type="number" step=".1" min="0" max="${fullSession.data.duration}" value="${song.start.toFixed(1)}"></label>
-    <label>To <input aria-label="Song end in seconds" data-song-field="end" type="number" step=".1" min="0" max="${fullSession.data.duration}" value="${song.end.toFixed(1)}"></label>
-    <button class="btn ghost small" data-song-split="${i}" type="button">Split</button>
-    <button class="btn ghost small" data-song-remove="${i}" type="button" ${songs.length === 1 ? 'disabled' : ''}>Remove</button>
-    ${song.review_note ? `<p class="hint">${song.needs_review ? 'Review · ' : ''}${escapeHtml(song.review_note)}</p>` : ''}
-  </div>`).join('');
-  $('#sessionMix').hidden = false;
+// ---------- song list: waveform, handles, listen, per-song mixer ----------
+// Songs live in fullSession.data.songs; the page edits that list directly.
+const sessionWave = { id: null, data: null, loading: null };
+const sessionPlayer = { audio: null, index: -1, raf: 0 };
+fullSession.mixes = fullSession.mixes || {};   // song id -> changes made in that song's mixer
+
+// clock() comes from montara.js (m:ss).
+const songList = () => fullSession.data.songs;
+
+async function loadSessionWave() {
+  if (sessionWave.id === fullSession.id && (sessionWave.data || sessionWave.loading)) return sessionWave.loading || sessionWave.data;
+  sessionWave.id = fullSession.id; sessionWave.data = null;
+  sessionWave.loading = api(`/montara/session/${fullSession.id}/waveform`).then(data => (sessionWave.data = data)).catch(() => null).finally(() => { sessionWave.loading = null; });
+  return sessionWave.loading;
 }
 
-function readSessionSongs() {
-  return [...document.querySelectorAll('[data-session-song]')].map(row => Object.fromEntries(
-    [...row.querySelectorAll('[data-song-field]')].map(input => [input.dataset.songField,
-      input.type === 'checkbox' ? input.checked : input.type === 'number' ? Number(input.value) : input.value])
-  ));
+// What each row shows: the song plus a margin, so a handle can be dragged outwards.
+function songView(i) {
+  const songs = songList(), song = songs[i], length = song.end - song.start;
+  const pad = Math.min(90, Math.max(12, length * .15));
+  return { from: Math.max(0, song.start - pad), to: Math.min(fullSession.data.duration, song.end + pad) };
+}
+
+function drawSessionSongs(songs) {
+  if (songs) fullSession.data.songs = songs;
+  stopSongPreview();
+  const list = songList();
+  $('#sessionSongs').innerHTML = list.map((song, i) => `<div class="session-song" data-session-song="${i}">
+    <div class="song-head">
+      <input data-song-field="selected" type="checkbox" ${song.selected ? 'checked' : ''} aria-label="Export song ${i + 1}">
+      <button class="song-play" type="button" data-song-play="${i}" aria-label="Listen to song ${i + 1}">▶</button>
+      <span class="song-num">${String(i + 1).padStart(2, '0')}</span>
+      <input aria-label="Song name" data-song-field="name" value="${escapeHtml(song.name)}" maxlength="80">
+      ${fullSession.mixes[song.id] ? '<span class="song-tag">Own mix</span>' : ''}
+      <button class="btn ghost small" data-song-mixer="${i}" type="button">Mixer</button>
+      <button class="btn ghost small" data-song-split="${i}" type="button">Split</button>
+      <button class="btn ghost small" data-song-remove="${i}" type="button" ${list.length === 1 ? 'disabled' : ''}>Remove</button>
+    </div>
+    <div class="song-wave" data-song-wave="${i}">
+      <canvas aria-hidden="true"></canvas>
+      <i class="song-cut start" data-handle="start" role="slider" tabindex="0" aria-label="Start of song ${i + 1}" aria-valuetext="${clock(song.start)}"></i>
+      <i class="song-cut end" data-handle="end" role="slider" tabindex="0" aria-label="End of song ${i + 1}" aria-valuetext="${clock(song.end)}"></i>
+      <i class="song-playhead" hidden></i>
+      <span class="song-time">${clock(song.start)} – ${clock(song.end)} · ${clock(song.end - song.start)}</span>
+    </div>
+    ${song.review_note ? `<p class="hint">${song.needs_review ? 'Review · ' : ''}${escapeHtml(song.review_note)}</p>` : ''}
+  </div>`).join('');
+  list.forEach((_, i) => paintSong(i));
+  loadSessionWave().then(() => list.forEach((_, i) => paintSong(i)));
+  $('#sessionMix').hidden = false;
+  $('#sessionMix').textContent = 'Export selected songs';
+}
+
+function paintSong(i) {
+  const row = document.querySelector(`[data-song-wave="${i}"]`);
+  if (!row) return;
+  const song = songList()[i], view = songView(i), canvas = row.querySelector('canvas');
+  const width = row.clientWidth || 600, height = row.clientHeight || 64, ratio = devicePixelRatio || 1;
+  canvas.width = width * ratio; canvas.height = height * ratio;
+  const g = canvas.getContext('2d'); g.scale(ratio, ratio); g.clearRect(0, 0, width, height);
+  const x = t => (t - view.from) / Math.max(.001, view.to - view.from) * width;
+  const wave = sessionWave.data, styles = getComputedStyle(document.documentElement);
+  const accent = styles.getPropertyValue('--accent').trim() || '#FF4F2E', muted = styles.getPropertyValue('--muted').trim() || '#8a8a8f';
+  if (wave) {
+    for (let px = 0; px < width; px++) {
+      const t0 = view.from + px / width * (view.to - view.from), t1 = view.from + (px + 1) / width * (view.to - view.from);
+      let peak = 0;
+      for (let c = Math.floor(t0 / wave.step); c <= Math.floor(t1 / wave.step); c++) peak = Math.max(peak, wave.peaks[c] || 0);
+      const h = Math.max(1, peak / 255 * (height - 8));
+      const inside = t1 > song.start && t0 < song.end;
+      g.fillStyle = inside ? accent : muted; g.globalAlpha = inside ? .9 : .35;
+      g.fillRect(px, (height - h) / 2, 1, h);
+    }
+    g.globalAlpha = 1;
+  } else {
+    g.fillStyle = muted; g.globalAlpha = .25; g.fillRect(0, height / 2 - 1, width, 2); g.globalAlpha = 1;
+  }
+  row.querySelector('.start').style.left = `${x(song.start)}px`;
+  row.querySelector('.end').style.left = `${x(song.end)}px`;
+  row.querySelector('.song-time').textContent = `${clock(song.start)} – ${clock(song.end)} · ${clock(song.end - song.start)}`;
+}
+
+// Drag a handle: the start can not pass the previous song's end, nor the end the next song's start.
+$('#sessionSongs').addEventListener('pointerdown', event => {
+  const handle = event.target.closest('[data-handle]');
+  if (!handle) return;
+  const row = handle.closest('[data-song-wave]'), i = Number(row.dataset.songWave), view = songView(i);
+  const songs = songList(), song = songs[i], rect = row.getBoundingClientRect();
+  handle.setPointerCapture(event.pointerId);
+  stopSongPreview();
+  const move = e => {
+    const t = view.from + Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) * (view.to - view.from);
+    if (handle.dataset.handle === 'start') song.start = Math.max(i ? songs[i - 1].end : 0, Math.min(t, song.end - 1));
+    else song.end = Math.min(i < songs.length - 1 ? songs[i + 1].start : fullSession.data.duration, Math.max(t, song.start + 1));
+    song.start = Math.round(song.start * 10) / 10; song.end = Math.round(song.end * 10) / 10;
+    handle.setAttribute('aria-valuetext', clock(song[handle.dataset.handle]));
+    paintSong(i);
+  };
+  const up = () => { handle.removeEventListener('pointermove', move); handle.removeEventListener('pointerup', up); paintSong(i); };
+  handle.addEventListener('pointermove', move); handle.addEventListener('pointerup', up);
+});
+// Keyboard: arrows move a handle by one second (shift: ten).
+$('#sessionSongs').addEventListener('keydown', event => {
+  const handle = event.target.closest('[data-handle]');
+  if (!handle || !['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+  event.preventDefault();
+  const i = Number(handle.closest('[data-song-wave]').dataset.songWave), songs = songList(), song = songs[i];
+  const step = (event.shiftKey ? 10 : 1) * (event.key === 'ArrowLeft' ? -1 : 1);
+  if (handle.dataset.handle === 'start') song.start = Math.max(i ? songs[i - 1].end : 0, Math.min(song.start + step, song.end - 1));
+  else song.end = Math.min(i < songs.length - 1 ? songs[i + 1].start : fullSession.data.duration, Math.max(song.end + step, song.start + 1));
+  paintSong(i);
+});
+$('#sessionSongs').addEventListener('input', event => {
+  const row = event.target.closest('[data-session-song]'), field = event.target.dataset.songField;
+  if (!row || !field) return;
+  songList()[Number(row.dataset.sessionSong)][field] = event.target.type === 'checkbox' ? event.target.checked : event.target.value;
+});
+addEventListener('resize', () => { if (!$('#sessionReview').hidden && fullSession.data?.songs) songList().forEach((_, i) => paintSong(i)); });
+
+function stopSongPreview() {
+  if (sessionPlayer.audio) { sessionPlayer.audio.pause(); sessionPlayer.audio = null; }
+  cancelAnimationFrame(sessionPlayer.raf);
+  document.querySelectorAll('.song-play.on').forEach(b => { b.classList.remove('on'); b.textContent = '▶'; });
+  document.querySelectorAll('.song-playhead').forEach(p => { p.hidden = true; });
+  sessionPlayer.index = -1;
+}
+
+async function playSong(i) {
+  const again = sessionPlayer.index === i;
+  stopSongPreview();
+  if (again) return;
+  const song = songList()[i], button = document.querySelector(`[data-song-play="${i}"]`);
+  const row = document.querySelector(`[data-song-wave="${i}"]`), head = row.querySelector('.song-playhead');
+  sessionPlayer.index = i; button.classList.add('on'); button.textContent = '■';
+  const audio = new Audio(`/montara/session/${fullSession.id}/listen?start=${song.start}&end=${song.end}`);
+  sessionPlayer.audio = audio;
+  $('#sessionStatus').textContent = `Preparing song ${i + 1} for listening…`;
+  audio.addEventListener('playing', () => { $('#sessionStatus').textContent = ''; }, { once: true });
+  audio.addEventListener('ended', stopSongPreview);
+  audio.addEventListener('error', () => { if (sessionPlayer.audio === audio) { stopSongPreview(); toast('Could not play this song. Try again.', true); } });
+  const view = songView(i);
+  const tick = () => {
+    if (sessionPlayer.audio !== audio) return;
+    const t = song.start + audio.currentTime;
+    head.hidden = false; head.style.left = `${(t - view.from) / (view.to - view.from) * row.clientWidth}px`;
+    sessionPlayer.raf = requestAnimationFrame(tick);
+  };
+  try { await audio.play(); tick(); } catch (error) { if (sessionPlayer.audio === audio) { stopSongPreview(); toast('Could not play this song.', true); } }
+}
+
+// Mixer for one song: prepares a short excerpt of that song, then opens the mixer.
+async function openSongMixer(i) {
+  const song = songList()[i];
+  stopSongPreview();
+  try {
+    const prepared = await waitSession(await api(`/montara/session/${fullSession.id}/prepare`, { songs: songList(), song: song.id }));
+    drawSessionSongs(prepared.songs);
+    fullSession.mixSong = song.id;
+    await openMixer(prepared.preview_tracks);
+    $('#useMix').textContent = 'Save mix for this song';
+    $('#mixStatusText').textContent = `${song.name}: first ${Math.ceil(mix.plan.duration)} s. Changes apply to this song only; the others keep their automatic mix.`;
+  } catch (error) { toast(error.message, true); show('sessionReview'); }
 }
 
 $('#sessionSongs').onclick = event => {
+  const play = event.target.closest('[data-song-play]');
+  if (play) return playSong(Number(play.dataset.songPlay));
+  const mixer = event.target.closest('[data-song-mixer]');
+  if (mixer) return openSongMixer(Number(mixer.dataset.songMixer));
   const split = event.target.closest('[data-song-split]'), remove = event.target.closest('[data-song-remove]');
   if (!split && !remove) return;
-  const songs = readSessionSongs(), index = Number((split || remove).dataset[split ? 'songSplit' : 'songRemove']);
+  const songs = songList().map(s => ({...s})), index = Number((split || remove).dataset[split ? 'songSplit' : 'songRemove']);
   if (split) {
-    const song = songs[index], middle = (song.start + song.end) / 2;
-    if (song.end - song.start < 1) return toast('This interval is too short to split.');
-    songs.splice(index, 1, {...song, end: middle}, {...song, start: middle, name: `${song.name} · 2`});
+    const song = songs[index], middle = Math.round((song.start + song.end) / 2 * 10) / 10;
+    if (song.end - song.start < 2) return toast('This song is too short to split.');
+    songs.splice(index, 1, {...song, end: middle}, {...song, id: undefined, start: middle, name: `${song.name} · 2`});
   } else songs.splice(index, 1);
+  // Songs are numbered by position on the server: keep each saved mix with its song.
+  const mixes = {};
+  songs.forEach((song, j) => { if (song.id !== undefined && fullSession.mixes[song.id]) mixes[j + 1] = fullSession.mixes[song.id]; song.id = j + 1; });
+  fullSession.mixes = mixes;
   drawSessionSongs(songs);
 };
 
-$('#sessionMix').onclick = async () => {
-  $('#sessionMix').disabled = true;
-  try {
-    const prepared = await waitSession(await api(`/montara/session/${fullSession.id}/prepare`, {songs: readSessionSongs()}));
-    await openMixer(prepared.preview_tracks);
-    $('#mixStatusText').textContent = `Preview: first ${Math.ceil(mix.plan.duration)} seconds of the first selected song. Fader adjustments apply to all selected songs.`;
-  } catch (error) { toast(error.message, true); }
-  finally { $('#sessionMix').disabled = false; }
-};
+$('#sessionMix').onclick = () => renderFullSession();
 
-async function renderFullSession() {
-  stopMix();
-  $('#useMix').disabled = true;
-  const mixJob = await api(`/montara/mix/${mix.job}`);
-  const payload = {
-    reference: mixJob.reference,
-    // Each song keeps its own automatic mix, computed from that song. Only what the
-    // person changed travels: fader moves as offsets, mutes they toggled, effects they
-    // switched on. The preview's own automatic values (a track it found silent, its
-    // balance) must not be imposed on every song.
+// The changes made in the mixer, relative to its automatic mix: nothing else travels.
+function mixChanges() {
+  const changes = {
     faders: Object.fromEntries(mix.plan.tracks.map(t => [t.file, Number(t.fader_db || 0) - Number(t.auto_fader_db ?? t.fader_db ?? 0)]).filter(([, v]) => Math.abs(v) > .05)),
     mutes: Object.fromEntries(mix.plan.tracks.filter(t => Boolean(t.mute) !== Boolean(t.auto_mute ?? t.mute)).map(t => [t.file, Boolean(t.mute)])),
   };
   const effects = Object.fromEntries(mix.plan.tracks.filter(t => ['reverb', 'delay'].some(key => t.fx?.[key]?.enabled))
     .map(t => [t.file, Object.fromEntries(['reverb', 'delay'].map(key => [key, t.fx?.[key]?.enabled ? t.fx[key].amount / 100 : 0]))]));
-  if (Object.keys(effects).length) payload.effects = effects;  // otherwise the mixer's automatic space and echo stay on
-  show('sessionReview'); $('#sessionSongs').hidden = true; $('#sessionMix').hidden = true;
+  if (Object.keys(effects).length) changes.effects = effects;  // otherwise the automatic space and echo stay on
+  return changes;
+}
+
+// "Save mix for this song" in the mixer: keep the changes, back to the list.
+async function saveSongMix() {
+  stopMix();
+  const mixJob = await api(`/montara/mix/${mix.job}`);
+  fullSession.mixes[fullSession.mixSong] = { ...mixChanges(), ...(mixJob.reference ? { reference: mixJob.reference } : {}) };
+  $('#useMix').textContent = 'Use this mix';
+  show('sessionReview');
+  drawSessionSongs();
+  toast('Mix saved for this song.');
+}
+
+async function renderFullSession() {
+  stopSongPreview();
+  const songs = songList();
+  if (!songs.some(s => s.selected)) return toast('Select at least one song.', true);
+  $('#sessionMix').hidden = true;
   try {
+    // Save the boundaries first: the original ranges and the per-song mixes follow them.
+    const saved = await api(`/montara/session/${fullSession.id}/songs`, { songs });
+    fullSession.data.songs = saved.songs;
+    const ids = new Set(saved.songs.map(s => String(s.id)));
+    const per_song = Object.fromEntries(Object.entries(fullSession.mixes).filter(([id]) => ids.has(String(id))));
     await sendSessionOriginals();
-    const data = await waitSession(await api(`/montara/session/${fullSession.id}/render`, payload));
+    const data = await waitSession(await api(`/montara/session/${fullSession.id}/render`, { songs: saved.songs, per_song }));
     $('#sessionStatus').textContent = 'Your selected songs are ready.';
     drawSessionResults(data);
   } catch (error) { toast(error.message, true); }
-  finally { $('#sessionSongs').hidden = false; $('#useMix').disabled = false; }
+  finally { $('#sessionMix').hidden = false; }
 }
 
 // Tracks sent as light previews: the export uses the originals, but only the song ranges.
