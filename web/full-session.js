@@ -143,8 +143,8 @@ async function sendSessionOriginals() {
     $('#sessionProgress').hidden = false; $('#sessionProgress').value = 100 * index / missing.length;
     const blob = await montaraCompanion.segment(w.original, w.start, w.duration);
     bytes += blob.size;
-    const flac = blob.type !== 'audio/wav';  // float originals come back as WAV (FLAC has no float)
-    const name = `${w.file.replace(/\.wav$/i, '')}${flac ? '.wav.flac' : '.wav'}`;
+    const ext = blob.type === 'audio/x-wavpack' ? '.wav.wv' : '.wav.flac';  // float originals: WavPack (FLAC has no float)
+    const name = `${w.file.replace(/\.wav$/i, '')}${ext}`;
     let uploadId = null;
     await sendResumableUpload(new File([blob], name, {type: blob.type || 'audio/flac'}), () => {}, id => { uploadId = id; });
     originals = (await api(`/montara/session/${fullSession.id}/originals`, {song: w.song, file: w.file, upload_id: uploadId})).originals;

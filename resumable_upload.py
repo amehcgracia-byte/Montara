@@ -20,10 +20,10 @@ from mixer_adapter.session import save
 
 CHUNK = 4 * 1024**2
 RESERVE = 128 * 1024**2
-LOSSLESS = ('.wav.flac', '.aif.flac', '.aiff.flac')  # the companion's lossless copy of a WAV/AIFF original
+LOSSLESS = ('.wav.flac', '.aif.flac', '.aiff.flac', '.wav.wv', '.aif.wv', '.aiff.wv')  # the companion's lossless copy of a WAV/AIFF original
 PREVIEW = ('.wav.opus', '.aif.opus', '.aiff.opus')  # the companion's light preview of a full-session track
 PCM = {'8': 'pcm_u8', '16': 'pcm_s16le', '24': 'pcm_s24le', '32': 'pcm_s32le'}
-MEDIA = {'.mp4', '.mov', '.mkv', '.webm', '.mts', '.m2ts', '.wav', '.mp3', '.flac', '.aif', '.aiff', '.m4a', '.ogg', '.opus'}
+MEDIA = {'.mp4', '.mov', '.mkv', '.webm', '.mts', '.m2ts', '.wav', '.mp3', '.flac', '.aif', '.aiff', '.m4a', '.ogg', '.opus', '.wv'}
 
 
 def ffmpeg_tool(name):
@@ -33,12 +33,13 @@ def ffmpeg_tool(name):
 def restore_lossless(path: Path) -> Path:
     """Turn the companion's FLAC back into the WAV the person recorded: same samples, same bit depth,
     same BWF time reference (the mixer aligns tracks with it). The mixer never sees the FLAC."""
-    target = path.with_name(path.name[:-len('.flac')].rsplit('.', 1)[0] + '.wav')
+    target = path.with_name(path.name[:-len(path.suffix)].rsplit('.', 1)[0] + '.wav')
     if target.is_file():
         return target
-    bits = subprocess.run([ffmpeg_tool('ffprobe'), '-v', 'error', '-select_streams', 'a:0', '-show_entries', 'stream=bits_per_raw_sample',
-                           '-of', 'default=nw=1:nk=1', str(path)], capture_output=True, text=True, timeout=60).stdout.strip()
-    codec = PCM.get(bits)
+    info = subprocess.run([ffmpeg_tool('ffprobe'), '-v', 'error', '-select_streams', 'a:0', '-show_entries', 'stream=sample_fmt,bits_per_raw_sample',
+                           '-of', 'default=nw=1:nk=1', str(path)], capture_output=True, text=True, timeout=60).stdout.split()
+    fmt, bits = (info + ['', ''])[:2]
+    codec = 'pcm_f64le' if fmt.startswith('dbl') else 'pcm_f32le' if fmt.startswith('flt') else PCM.get(bits)
     if not codec:
         raise ValueError(f'Unsupported lossless audio ({bits or "unknown"} bit). Upload the original WAV.')
     pending = target.with_name(target.stem + '.partial.wav')

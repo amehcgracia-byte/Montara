@@ -26,7 +26,9 @@ starts it. Next time, open Terminal and type `montara-companion`. Ctrl+C stops i
 ## Not yet
 - WAV/AIFF tracks (16/24/32-bit integer) are sent as lossless FLAC (`name.wav.flac`), usually
   30–60 % of the size. The server turns each back into the identical WAV, BWF time reference
-  included, before the mixer reads it. 32-bit float WAVs are uploaded as they are.
+  included, before the mixer reads it. 32-bit float WAVs go as WavPack (FLAC has no float), also lossless.
+- With *Full session · audio* ticked, tracks go as light Opus previews instead; at export only the
+  song ranges of the originals are sent (FLAC or WavPack).
 - The final video is made on the server from the small versions (720p source).
 - Rendering the originals on this computer is the next step. It needs the engine to relink
   a project from small versions to originals (`docs/lab/INVENTORY-FER.md`, F8 FOCUS_A_C).

@@ -3,7 +3,7 @@
 // instead of queueing behind them. Two parts at a time per lane.
 const PART_LANE_LIMIT = 2;
 const partLanes = { audio: { active: 0, waiting: [] }, video: { active: 0, waiting: [] } };
-const AUDIO_NAME = /\.(wav|mp3|m4a|aiff?|flac|ogg)$/i;
+const AUDIO_NAME = /\.(wav|mp3|m4a|aiff?|flac|ogg|opus|wv)$/i;
 const partLane = file => partLanes[AUDIO_NAME.test(file.name) ? 'audio' : 'video'];
 async function sendResumableUpload(file, progress, registered = () => {}, cancelled = () => false, extra = {}) {
   const lane = partLane(file);
