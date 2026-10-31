@@ -290,7 +290,7 @@ const songKey = song => `${fullSession.id}:${song.start}-${song.end}`;
 
 function applySavedMix(changes) {
   if (!changes) return;
-  const keys = { eq_low_cut_hz: ['low', 'hz'], eq_mid_gain_db: ['mid', 'db'], eq_air_gain_db: ['air', 'db'] };
+  const keys = { eq_low_cut_hz: ['low', 'hz'], eq_mid_gain_db: ['mid', 'db'], eq_air_gain_db: ['air', 'db'], eq_high_cut_hz: ['high', 'hz'] };
   for (const t of mix.plan.tracks) {
     if (changes.faders?.[t.file] !== undefined) t.fader_db = Number(t.auto_fader_db) + Number(changes.faders[t.file]);
     if (changes.mutes?.[t.file] !== undefined) t.mute = changes.mutes[t.file];

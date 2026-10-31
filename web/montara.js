@@ -878,15 +878,16 @@ function trackGain(track) {
 }
 // Only the EQ bands the person moved, in the mixer's own terms.
 function eqChanges() {
-  const keys = { low: ["eq_low_cut_hz", "hz"], mid: ["eq_mid_gain_db", "db"], air: ["eq_air_gain_db", "db"] };
+  const keys = { low: ["eq_low_cut_hz", "hz"], mid: ["eq_mid_gain_db", "db"], air: ["eq_air_gain_db", "db"], high: ["eq_high_cut_hz", "hz"] };
   return Object.fromEntries(mix.plan.tracks.map((t) => [t.file, Object.fromEntries(Object.entries(keys)
     .filter(([slot, [, field]]) => t.eq?.[slot] && t.auto_eq?.[slot] && Math.abs(t.eq[slot][field] - t.auto_eq[slot][field]) > 0.05)
     .map(([slot, [key, field]]) => [key, t.eq[slot][field]]))]).filter(([, bands]) => Object.keys(bands).length));
 }
 // Solo is for listening only (as on a desk): it never changes the export.
 function applyAllGains() { for (const t of mix.plan?.tracks || []) applyGain(t); }
-const EQ_SLOTS = [["low", "Low cut", "eq_low_cut_hz"], ["mid", "Mid", "eq_mid_gain_db"], ["air", "Air", "eq_air_gain_db"]];
-function eqLabel(slot, band) { return slot === "low" ? `${Math.round(band.hz)} Hz` : `${band.db >= 0 ? "+" : ""}${band.db.toFixed(1)} dB`; }
+const EQ_SLOTS = [["low", "Low cut", "eq_low_cut_hz"], ["mid", "Mid", "eq_mid_gain_db"], ["air", "Air", "eq_air_gain_db"], ["high", "High cut", "eq_high_cut_hz"]];
+const isCut = (slot) => slot === "low" || slot === "high";
+function eqLabel(slot, band) { return slot === "high" && band.hz >= 19999 ? "off" : isCut(slot) ? `${band.hz >= 1000 ? (band.hz / 1000).toFixed(1) + " kHz" : Math.round(band.hz) + " Hz"}` : `${band.db >= 0 ? "+" : ""}${band.db.toFixed(1)} dB`; }
 function applyEq(track) {
   const node = mix.nodes[track.file];
   if (!node?.eq || !mix.ctx) return;
@@ -894,7 +895,7 @@ function applyEq(track) {
     const band = track.eq?.[slot], filter = node.eq[slot];
     if (!band || !filter) continue;
     filter.frequency.setTargetAtTime(band.hz, mix.ctx.currentTime, 0.03);
-    if (slot !== "low") filter.gain.setTargetAtTime(band.db, mix.ctx.currentTime, 0.03);
+    if (!isCut(slot)) filter.gain.setTargetAtTime(band.db, mix.ctx.currentTime, 0.03);
   }
 }
 
@@ -907,7 +908,7 @@ function renderStrips() {
       ${t.active === false ? `<button class="mute" disabled>NO SIGNAL</button>` : `<button class="mute ${t.mute ? "on" : ""}">${t.mute ? "OFF" : "ON"}</button><button class="solo ${t.solo ? "on" : ""}" aria-pressed="${t.solo ? "true" : "false"}" title="Listen to this track alone (does not change the export)">SOLO</button>`}
       <b>${escapeHtml(t.name)}</b>
       ${t.eq ? `<button class="eq-toggle" aria-expanded="false">EQ</button>
-      <div class="track-eq" hidden>${EQ_SLOTS.filter(([slot]) => t.eq[slot]).map(([slot, label]) => `<label>${label}${slot === "mid" ? ` · ${Math.round(t.eq.mid.hz)} Hz` : slot === "air" ? ` · ${Math.round(t.eq.air.hz / 1000)} kHz` : ""}<input type="range" data-eq="${slot}" ${slot === "low" ? `min="20" max="1000" step="1"` : `min="-15" max="15" step="0.5"`} value="${slot === "low" ? t.eq[slot].hz : t.eq[slot].db}" aria-label="${escapeHtml(t.name)} ${label}"><output data-eq="${slot}">${eqLabel(slot, t.eq[slot])}</output></label>`).join("")}</div>` : ""}
+      <div class="track-eq" hidden>${EQ_SLOTS.filter(([slot]) => t.eq[slot]).map(([slot, label]) => `<label>${label}${slot === "mid" ? ` · ${Math.round(t.eq.mid.hz)} Hz` : slot === "air" ? ` · ${Math.round(t.eq.air.hz / 1000)} kHz` : ""}<input type="range" data-eq="${slot}" ${slot === "low" ? `min="20" max="1000" step="1"` : slot === "high" ? `min="1000" max="20000" step="100"` : `min="-15" max="15" step="0.5"`} value="${isCut(slot) ? t.eq[slot].hz : t.eq[slot].db}" aria-label="${escapeHtml(t.name)} ${label}"><output data-eq="${slot}">${eqLabel(slot, t.eq[slot])}</output></label>`).join("")}</div>` : ""}
       <button class="fx-toggle" aria-expanded="false">FX</button>
       <div class="track-fx" hidden>
         ${["reverb", "delay"].map((effect) => `<label><input type="checkbox" data-effect="${effect}" ${t.fx?.[effect]?.enabled ? "checked" : ""}>${effect === "reverb" ? "Reverb" : "Delay"}</label><input class="fx-amount" data-effect="${effect}" type="range" min="0" max="100" value="${t.fx?.[effect]?.amount ?? 35}" aria-label="${escapeHtml(t.name)} ${effect} intensity"><output data-effect="${effect}">${t.fx?.[effect]?.amount ?? 35}%</output>`).join("")}
@@ -924,7 +925,7 @@ function renderStrips() {
     });
     strip.querySelectorAll(".track-eq input").forEach((input) => input.addEventListener("input", () => {
       const slot = input.dataset.eq, band = track.eq[slot];
-      if (slot === "low") band.hz = Number(input.value); else band.db = Number(input.value);
+      if (isCut(slot)) band.hz = Number(input.value); else band.db = Number(input.value);
       strip.querySelector(`.track-eq output[data-eq="${slot}"]`).textContent = eqLabel(slot, band);
       strip.querySelector(".eq-toggle").classList.toggle("active", JSON.stringify(track.eq) !== JSON.stringify(track.auto_eq));
       applyEq(track);
@@ -1051,8 +1052,8 @@ function startMix(offset) {
       const band = t.eq?.[slot];
       if (!band) continue;
       const filter = ctx.createBiquadFilter();
-      filter.type = band.type; filter.frequency.value = band.hz; filter.Q.value = band.q || 0.707;
-      if (slot !== "low") filter.gain.value = band.db;
+      filter.type = band.type; filter.frequency.value = Math.min(band.hz, ctx.sampleRate / 2 - 100); filter.Q.value = band.q || 0.707;
+      if (!isCut(slot)) filter.gain.value = band.db;
       head.connect(filter); head = filter; eq[slot] = filter;
     }
     head.connect(gain);
