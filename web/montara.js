@@ -415,7 +415,8 @@ async function uploadSmall(file, entry) {
   let small = null;
   try {
     // A full session only needs light previews; the export asks for the original song ranges.
-    const preview = state.platform === 'youtube' && $('#fullSessionOn').checked;
+    // Big audio files in Stage are whole sessions in practice (20 min of 24-bit mono ≈ 170 MB).
+    const preview = state.platform === 'youtube' && ($('#fullSessionOn').checked || (montaraCompanion.isAudio(file) && file.size > LONG_AUDIO_BYTES && !videos().length));
     small = await montaraCompanion.smallVersion(file, (phase, progress) => { entry.phase = phase; entry.progress = progress; renderFiles(); }, () => entry.removed, {preview});
   } catch (error) { console.warn(error); }
   if (!entry.removed) {
@@ -612,7 +613,20 @@ function inputs() {
   };
 }
 
+const LONG_AUDIO_BYTES = 150 * 1024 * 1024, LONG_AUDIO_SECONDS = 20 * 60;
+// A whole jam goes to song detection, never to the one-song mixer: that mixer would
+// analyse and download every full-length track (and previews can only be exported per song).
+function isWholeSession() {
+  const audio = state.files.filter(isAudioEntry);
+  return audio.some(f => f.preview) || Math.max(0, ...audio.map(f => f.duration || 0)) > LONG_AUDIO_SECONDS;
+}
+
 async function registerProject() {
+  if (videos().length && state.files.some(f => f.preview)) return toast('Some audio was sent as a light session preview. Remove it and add it again to use it in a video.', true);
+  if (state.platform === 'youtube' && !videos().length && !$('#fullSessionOn').checked && isWholeSession()) {
+    $('#fullSessionOn').checked = true;
+    toast('This is a whole session: Montara finds the songs first, then mixes each one.');
+  }
   if (state.platform === 'youtube' && $('#fullSessionOn').checked) return openFullSession();
   $("#continueFootage").disabled = true;
   try {
