@@ -313,7 +313,7 @@ def create_montara_app(data_root: Path = DEFAULT_DATA, samples: bool = True):
                 else:
                     reference = payload.get("reference")
                     mixer.reference = Path(reference) if reference else None
-                    out = mixer.render(payload.get("faders") or {}, job["work_dir"] / "mix.wav", payload.get("mutes") or {}, payload.get("effects"))
+                    out = mixer.render(payload.get("faders") or {}, job["work_dir"] / "mix.wav", payload.get("mutes") or {}, payload.get("effects"), eq=payload.get("eq"))
                     job["master"] = classify_paths([str(out)])
                     job["master_path"] = str(out)
                 job["status"] = "ready" if action == "analyze" else "done"
@@ -368,7 +368,21 @@ def create_montara_app(data_root: Path = DEFAULT_DATA, samples: bool = True):
         job = mix_jobs.get(job_id)
         if not job:
             return jsonify({"error": {"message": "unknown mix"}}), 404
-        return send_from_directory(job["tracks_dir"], Path(name).name)
+        source = job["tracks_dir"] / Path(name).name
+        if request.args.get("format") == "wav" or not source.is_file():
+            return send_from_directory(job["tracks_dir"], Path(name).name)
+        from flask import send_file
+        # A compressed copy for the browser preview: a 60 s float WAV is ~10 MB, this ~1 MB.
+        light = job["work_dir"] / "preview-light" / (Path(name).stem + ".webm")
+        if not light.is_file():
+            light.parent.mkdir(parents=True, exist_ok=True)
+            pending = light.with_suffix(".part.webm")
+            done = subprocess.run(["ffmpeg", "-v", "error", "-nostdin", "-y", "-i", str(source), "-vn", "-c:a", "libopus", "-b:a", "160k",
+                                   "-f", "webm", str(pending)], capture_output=True, timeout=300)
+            if done.returncode != 0:
+                return send_from_directory(job["tracks_dir"], Path(name).name)
+            pending.replace(light)
+        return send_file(light, mimetype="audio/webm", conditional=True)
 
     @app.get("/montara/mix/<job_id>/result")
     def montara_mix_result(job_id: str):
@@ -445,12 +459,14 @@ def create_montara_app(data_root: Path = DEFAULT_DATA, samples: bool = True):
             return jsonify({"error": {"message": "The reference audio is still being prepared."}}), 409
         body = request.get_json(silent=True) or {}
         payload = {"faders": body.get("faders") or {}, "mutes": body.get("mutes") or {}, "reference": job.get("reference")}
-        if "effects" in body:
-            from mixer_adapter.single_song import validate_effects
-            try:
+        from mixer_adapter.single_song import validate_effects, validate_eq
+        try:
+            if "effects" in body:
                 payload["effects"] = validate_effects(body["effects"], [t["file"] for t in job["plan"]["tracks"]])
-            except ValueError as exc:
-                return jsonify({"error": {"message": str(exc)}}), 400
+            if body.get("eq"):
+                payload["eq"] = validate_eq(body["eq"], [t["file"] for t in job["plan"]["tracks"]])
+        except ValueError as exc:
+            return jsonify({"error": {"message": str(exc)}}), 400
         job["status"] = "rendering"
         job.pop("error", None)
         threading.Thread(target=_mix_worker, args=(job_id, "render", payload), daemon=True).start()

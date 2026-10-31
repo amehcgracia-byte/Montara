@@ -41,6 +41,26 @@ def validate_effects(effects, names):
     return result
 
 
+EQ_KEYS = {"eq_low_cut_hz": (20.0, 1000.0), "eq_mid_gain_db": (-15.0, 15.0), "eq_air_gain_db": (-15.0, 15.0)}
+
+
+def validate_eq(eq, names):
+    """Per-track EQ the person set: the mixer's own low cut, mid and air bands."""
+    if not isinstance(eq, dict) or set(eq) - set(names):
+        raise ValueError("Unknown track or invalid EQ settings")
+    result = {}
+    for name, settings in eq.items():
+        if not isinstance(settings, dict) or set(settings) - set(EQ_KEYS):
+            raise ValueError("Only low cut, mid and air can be set")
+        result[name] = {}
+        for key, value in settings.items():
+            low, high = EQ_KEYS[key]
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or not low <= value <= high:
+                raise ValueError("EQ value out of range")
+            result[name][key] = float(value)
+    return result
+
+
 def _load_mixer(work_dir: Path):
     # The mixer reads its state root once, at import: one root per Montara server.
     os.environ.setdefault("ZUCKER_MIXER_STATE_ROOT", str(work_dir / "state"))
@@ -122,6 +142,9 @@ class SingleSongMix:
                 "fader_db": round(float(params.get("level_gain_db", 0.0) or 0.0), 2),
                 "pan": float(params.get("pan", 0.0) or 0.0),
                 "mute": bool(params.get("mute", False)),
+                # The mixer's EQ for this role: the page shows it and the person can change it.
+                "eq": {slot: {"type": kind, "hz": float(freq), "q": float(q), "db": float(gain)}
+                       for slot, kind, freq, q, gain in self.pipeline.role_eq_bands(stem.role)},
             })
         order = ["kick", "snare", "hh", "drums", "overhead", "bass", "guitar", "keys", "keys_l", "synth", "horn", "sax", "vocal"]
         tracks.sort(key=lambda t: (order.index(t["role"]) if t["role"] in order else len(order), t["name"].lower()))
@@ -190,7 +213,7 @@ class SingleSongMix:
             result.append(replace(stem, path=target, channels=min(stem.channels, 2)))
         return result
 
-    def render(self, faders_db: dict[str, float], output: Path, mutes: dict[str, bool] | None = None, effects: dict | None = None, *, base_gains: dict[str, float] | None = None) -> Path:
+    def render(self, faders_db: dict[str, float], output: Path, mutes: dict[str, bool] | None = None, effects: dict | None = None, *, base_gains: dict[str, float] | None = None, eq: dict | None = None) -> Path:
         """Render the song with the person's faders (dB on top of the auto-mix)."""
         app, pipeline = self.app, self.pipeline
         state = self.state or self._register()
@@ -212,6 +235,8 @@ class SingleSongMix:
             entry["user_fader_confirmed"] = True
         for name, muted in (mutes or {}).items():
             stems.setdefault(name, {})["mute"] = bool(muted)
+        for name, values in validate_eq(eq or {}, [s.path.name for s in state["stems"]]).items():
+            stems.setdefault(name, {}).update(values)
         if effects is not None:
             for stem in state["stems"]:
                 # Explicit controls replace automatic sends; never apply the effects twice.
