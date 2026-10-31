@@ -201,7 +201,6 @@ $('#sessionSongs').addEventListener('pointerdown', event => {
   const row = handle.closest('[data-song-wave]'), i = Number(row.dataset.songWave), view = songView(i);
   const songs = songList(), song = songs[i], rect = row.getBoundingClientRect();
   handle.setPointerCapture(event.pointerId);
-  stopSongPreview();
   const move = e => {
     const t = view.from + Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) * (view.to - view.from);
     if (handle.dataset.handle === 'start') song.start = Math.max(i ? songs[i - 1].end : 0, Math.min(t, song.end - 1));
@@ -231,36 +230,58 @@ $('#sessionSongs').addEventListener('input', event => {
 });
 addEventListener('resize', () => { if (!$('#sessionReview').hidden && fullSession.data?.songs) songList().forEach((_, i) => paintSong(i)); });
 
+// One listening copy of the whole session, made once on the server; the page only
+// seeks in it, so moving cuts, switching songs or jumping to a point never waits.
+function sessionAudio() {
+  if (sessionPlayer.audio?.dataset.session !== fullSession.id) {
+    sessionPlayer.audio?.pause();
+    const audio = new Audio(`/montara/session/${fullSession.id}/listen`);
+    audio.preload = 'auto'; audio.dataset.session = fullSession.id;
+    audio.addEventListener('error', () => { if (sessionPlayer.audio === audio) { stopSongPreview(); toast('Could not play the session. Try again in a moment.', true); } });
+    sessionPlayer.audio = audio;
+  }
+  return sessionPlayer.audio;
+}
+
 function stopSongPreview() {
-  if (sessionPlayer.audio) { sessionPlayer.audio.pause(); sessionPlayer.audio = null; }
+  sessionPlayer.audio?.pause();
   cancelAnimationFrame(sessionPlayer.raf);
   document.querySelectorAll('.song-play.on').forEach(b => { b.classList.remove('on'); b.textContent = '▶'; });
   document.querySelectorAll('.song-playhead').forEach(p => { p.hidden = true; });
   sessionPlayer.index = -1;
 }
 
-async function playSong(i) {
-  const again = sessionPlayer.index === i;
+// Play song i from `from` (seconds in the session) until its end, wherever its end is by then.
+async function playSong(i, from = null) {
+  if (sessionPlayer.index === i && from === null) return stopSongPreview();
   stopSongPreview();
-  if (again) return;
-  const song = songList()[i], button = document.querySelector(`[data-song-play="${i}"]`);
-  const row = document.querySelector(`[data-song-wave="${i}"]`), head = row.querySelector('.song-playhead');
-  sessionPlayer.index = i; button.classList.add('on'); button.textContent = '■';
-  const audio = new Audio(`/montara/session/${fullSession.id}/listen?start=${song.start}&end=${song.end}`);
-  sessionPlayer.audio = audio;
-  $('#sessionStatus').textContent = `Preparing song ${i + 1} for listening…`;
-  audio.addEventListener('playing', () => { $('#sessionStatus').textContent = ''; }, { once: true });
-  audio.addEventListener('ended', stopSongPreview);
-  audio.addEventListener('error', () => { if (sessionPlayer.audio === audio) { stopSongPreview(); toast('Could not play this song. Try again.', true); } });
-  const view = songView(i);
+  const songs = songList(), song = songs[i], audio = sessionAudio();
+  const button = document.querySelector(`[data-song-play="${i}"]`);
+  sessionPlayer.index = i; button?.classList.add('on'); if (button) button.textContent = '■';
+  const start = from ?? song.start;
+  if (audio.readyState < 1) await new Promise(resolve => audio.addEventListener('loadedmetadata', resolve, { once: true }));
+  audio.currentTime = start;
   const tick = () => {
-    if (sessionPlayer.audio !== audio) return;
-    const t = song.start + audio.currentTime;
-    head.hidden = false; head.style.left = `${(t - view.from) / (view.to - view.from) * row.clientWidth}px`;
+    if (sessionPlayer.index !== i) return;
+    const t = audio.currentTime, row = document.querySelector(`[data-song-wave="${i}"]`);
+    if (t >= songList()[i].end) return stopSongPreview();
+    if (row) {
+      const view = songView(i), head = row.querySelector('.song-playhead');
+      head.hidden = false; head.style.left = `${(t - view.from) / (view.to - view.from) * row.clientWidth}px`;
+    }
     sessionPlayer.raf = requestAnimationFrame(tick);
   };
-  try { await audio.play(); tick(); } catch (error) { if (sessionPlayer.audio === audio) { stopSongPreview(); toast('Could not play this song.', true); } }
+  try { await audio.play(); tick(); } catch (error) { if (sessionPlayer.index === i) { stopSongPreview(); toast('Could not play this song.', true); } }
 }
+
+// Click on a waveform (not on a handle): play from that point.
+$('#sessionSongs').addEventListener('click', event => {
+  const row = event.target.closest('[data-song-wave]');
+  if (!row || event.target.closest('[data-handle]')) return;
+  const i = Number(row.dataset.songWave), view = songView(i), rect = row.getBoundingClientRect();
+  const t = view.from + (event.clientX - rect.left) / rect.width * (view.to - view.from);
+  playSong(i, Math.max(0, Math.min(t, songList()[i].end - .2)));
+});
 
 // Mixer for one song: prepares a short excerpt of that song, then opens the mixer.
 async function openSongMixer(i) {
@@ -365,7 +386,9 @@ async function sendSessionOriginals() {
 }
 
 function drawSessionResults(data) {
-    $('#sessionResults').innerHTML = data.results.map(song => `<div class="session-song"><b>${escapeHtml(song.name)}</b>
+  const songs = data.results.map(song => `<div class="session-song"><b>${escapeHtml(song.name)}</b>
       <audio controls preload="none" src="/montara/session/${fullSession.id}/result/${song.id}"></audio>
       <a class="btn ghost small" href="/montara/session/${fullSession.id}/result/${song.id}?download=1" download>Download</a></div>`).join('');
+  const all = data.results.length > 1 ? `<div class="session-song"><a class="btn primary small" href="/montara/session/${fullSession.id}/results.zip" download>Download all (${data.results.length} songs)</a></div>` : '';
+  $('#sessionResults').innerHTML = songs + all;
 }

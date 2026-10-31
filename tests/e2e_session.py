@@ -106,9 +106,18 @@ def run(output):
                 page.evaluate("fullSession.data.songs[0].start=5;fullSession.data.songs[0].end=20;fullSession.data.songs[1].start=215;fullSession.data.songs[1].end=230;drawSessionSongs()")
                 page.screenshot(path=str(output / '02b-waveforms.png'), full_page=True)
                 rows.nth(0).locator('[data-song-play]').click()
-                page.wait_for_function('sessionPlayer.audio && sessionPlayer.audio.currentTime > 0.2', timeout=60_000)
+                page.wait_for_function('sessionPlayer.audio && !sessionPlayer.audio.paused && sessionPlayer.audio.currentTime > 5.2', timeout=60_000)
+                # Moving a handle of another song does not stop what is playing.
+                box = rows.nth(1).locator('.song-cut.start').bounding_box()
+                page.mouse.move(box['x'] + 7, box['y'] + 30); page.mouse.down(); page.mouse.move(box['x'] + 1, box['y'] + 30, steps=3); page.mouse.up()
+                assert page.evaluate('!sessionPlayer.audio.paused && sessionPlayer.index === 0')
+                page.evaluate("fullSession.data.songs[1].start=215;paintSong(1)")
+                # Clicking the waveform jumps there.
+                wave = rows.nth(0).locator('[data-song-wave]').bounding_box()
+                page.mouse.click(wave['x'] + wave['width'] * .5, wave['y'] + 10)
+                page.wait_for_function('sessionPlayer.audio.currentTime > 9 && sessionPlayer.audio.currentTime < 20')
                 rows.nth(0).locator('[data-song-play]').click()
-                assert page.evaluate('sessionPlayer.audio') is None
+                assert page.evaluate('sessionPlayer.index') == -1
                 rows.nth(0).locator('[data-song-mixer]').click()
                 page.wait_for_function("!document.querySelector('#mix').hidden && !document.querySelector('#useMix').disabled", timeout=180_000)
                 page.locator('#playMix').click(); page.wait_for_timeout(400); page.locator('#playMix').click()
@@ -128,6 +137,9 @@ def run(output):
                     target = output / f'song-{song["id"]}.mp3'; target.write_bytes(response.body())
                     info = json.loads(subprocess.check_output(['ffprobe', '-v', 'error', '-show_format', '-of', 'json', str(target)]))
                     assert abs(float(info['format']['duration']) - 15) < 1
+                import zipfile, io
+                bundle = page.request.get(f'{url}/montara/session/{data["id"]}/results.zip')
+                assert bundle.ok and len(zipfile.ZipFile(io.BytesIO(bundle.body())).namelist()) == 2
                 page.screenshot(path=str(output / '04-exported.png'), full_page=True)
                 page.reload(); page.locator('#mode').wait_for(state='visible'); page.locator('[data-platform="youtube"]').click()
                 page.locator('#sessionResume').click()

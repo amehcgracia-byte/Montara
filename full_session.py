@@ -14,7 +14,7 @@ import uuid
 from pathlib import Path
 
 from flask import jsonify, request, send_file
-from mixer_adapter.session import listen_range, original_windows, read, save, session_waveform, validate_songs
+from mixer_adapter.session import listen_range, original_windows, read, save, session_listen, session_waveform, validate_songs
 from resumable_upload import preview_original
 
 ROOT = Path(__file__).resolve().parent
@@ -197,7 +197,7 @@ def register_full_session(app, data_root, fixtures):
             return error(exc)
 
     @app.get('/montara/session/<job_id>/waveform')
-    def session_wave(job_id):
+    def session_wave_route(job_id):
         try:
             work = folder(job_id)
             data = read(work)
@@ -208,11 +208,16 @@ def register_full_session(app, data_root, fixtures):
             return error(exc, 404)
 
     @app.get('/montara/session/<job_id>/listen')
-    def session_listen(job_id):
+    def session_listen_route(job_id):
         try:
             work = folder(job_id)
             if not read(work).get('tracks'):
                 return error('Not ready yet.', 409)
+            if 'start' not in request.args:  # the whole session, seekable (HTTP ranges)
+                data = read(work)
+                if data['status'] in BUSY and not (work / 'listen-all.webm').is_file():
+                    return error('Not ready yet.', 409)
+                return send_file(session_listen(work), mimetype='audio/webm', conditional=True, max_age=3600)
             start, end = float(request.args.get('start', 'nan')), float(request.args.get('end', 'nan'))
             if not (math.isfinite(start) and math.isfinite(end)):
                 raise ValueError('Invalid range.')
@@ -258,6 +263,32 @@ def register_full_session(app, data_root, fixtures):
             return jsonify(originals=original_windows(data))
         except ValueError as exc:
             return error(exc)
+
+    @app.get('/montara/session/<job_id>/results.zip')
+    def session_results_zip(job_id):
+        """Every exported song in one download (MP3s are already compressed: stored, not deflated)."""
+        import zipfile
+        try:
+            work = folder(job_id)
+            data = read(work)
+            results = [r for r in data.get('results', []) if Path(r['path']).resolve().is_relative_to(work.resolve()) and Path(r['path']).is_file()]
+            if not results:
+                return error('No exported songs yet.', 404)
+            target = work / 'exports' / 'songs.zip'
+            pending = target.with_suffix('.part')
+            used = set()
+            with zipfile.ZipFile(pending, 'w', zipfile.ZIP_STORED) as archive:
+                for index, result in enumerate(results, 1):
+                    title = re.sub(r'[^\w .-]', '_', result['name']).strip() or 'Song'  # no backslash inside f-strings (Python 3.11)
+                    name = f'{index:02d} - {title}.mp3'
+                    while name in used:
+                        name = name[:-4] + ' (2).mp3'
+                    used.add(name)
+                    archive.write(result['path'], name)
+            pending.replace(target)
+            return send_file(target, mimetype='application/zip', as_attachment=True, download_name='Montara session.zip')
+        except ValueError as exc:
+            return error(exc, 404)
 
     @app.get('/montara/session/<job_id>/result/<int:song_id>')
     def session_result(job_id, song_id):

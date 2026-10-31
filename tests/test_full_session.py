@@ -164,3 +164,18 @@ def test_waveform_and_listen_cover_offsets(tmp_path):
     assert abs(duration - 2.5) < .1
     with pytest.raises(ValueError):
         listen_range(work, 1, 1.2)
+
+
+def test_whole_session_listening_copy_is_seekable_webm(tmp_path):
+    from mixer_adapter.session import session_listen
+    rate = 8000
+    a = tmp_path / 'a.wav'; sf.write(a, np.ones(rate * 3) * .3, rate, subtype='FLOAT')
+    b = tmp_path / 'b.wav'; sf.write(b, np.ones(rate * 2) * .3, rate, subtype='FLOAT')
+    work = tmp_path / 'job'; work.mkdir()
+    save(work / 'session.json', {'duration': 5.0, 'tracks': [
+        dict(file='a.wav', path=str(a), samplerate=rate, channels=1, offset=0, duration=3),
+        dict(file='b.wav', path=str(b), samplerate=rate, channels=1, offset=3, duration=2)]})
+    copy = session_listen(work)
+    assert copy.suffix == '.webm' and session_listen(work) == copy
+    info = json.loads(subprocess.check_output(['ffprobe', '-v', 'error', '-show_format', '-show_streams', '-of', 'json', str(copy)]))
+    assert info['streams'][0]['codec_name'] == 'opus' and abs(float(info['format']['duration']) - 5) < .2

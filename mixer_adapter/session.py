@@ -122,6 +122,31 @@ def session_waveform(work):
     return result
 
 
+def session_listen(work):
+    """One light listening copy of the whole session (all tracks, offsets honoured).
+
+    Made once; the page seeks inside it, so moving a cut or jumping to a point never
+    waits for the server. Rough equal-level mix for checking cuts, not the export."""
+    work = Path(work)
+    target = work / 'listen-all.webm'
+    if target.is_file():
+        return target
+    data = read(work)
+    inputs, labels = [], []
+    for track in data['tracks']:
+        delay = round(float(track['offset']) * 1000)
+        inputs += ['-i', track['path']]
+        labels.append(f'[{len(labels)}:a]aformat=channel_layouts=mono,adelay={delay}:all=1[a{len(labels)}]')
+    mixed = ''.join(f'[a{i}]' for i in range(len(labels)))
+    graph = ';'.join(labels) + f';{mixed}amix=inputs={len(labels)}:normalize=0:duration=longest,dynaudnorm=f=500:g=31,alimiter=limit=0.9[out]'
+    pending = target.with_suffix('.part.webm')  # WebM keeps a seek index: jumps are instant in the browser
+    subprocess.run(['ffmpeg', '-v', 'error', '-nostdin', '-y', *inputs, '-filter_complex', graph, '-map', '[out]', '-ac', '1',
+                    '-c:a', 'libopus', '-b:a', '48k', '-application', 'audio', '-f', 'webm', str(pending)],
+                   check=True, capture_output=True, timeout=3600)
+    pending.replace(target)
+    return target
+
+
 def listen_range(work, start, end):
     """A quick, rough mix of every track for one range, for listening while reviewing cuts.
 
@@ -325,6 +350,11 @@ def execute(work, action):
             session_waveform(work)
         except Exception as exc:  # the review still works without the drawing
             print('waveform failed:', exc, flush=True)
+        progress(dict(current_stage='Preparing a listening copy', progress=98))
+        try:
+            session_listen(work)
+        except Exception as exc:  # listening falls back to short ranges
+            print('listening copy failed:', exc, flush=True)
         data['status'] = 'review'
     elif action == 'prepare':
         song = next((s for s in data['songs'] if s['id'] == data.get('preview_song')), None) or next(s for s in data['songs'] if s['selected'])
