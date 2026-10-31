@@ -2,7 +2,8 @@
 """Montara companion: runs on the person's computer, next to their original videos.
 
 Montara's page asks it for a small version of a video the person dropped; the original
-never leaves the computer. Only files the page already holds can be found: a request
+never leaves the computer. A WAV/AIFF becomes a lossless FLAC (same samples, about half
+the bytes); the server turns it back into the identical WAV before mixing. Only files the page already holds can be found: a request
 must carry the file's name, size and the SHA-256 of its first and last 64 KiB, which
 only someone who has the file can compute. Listens on 127.0.0.1 only. Standard library
 and FFmpeg only; no window, no wizard. Stop it with Ctrl+C.
@@ -23,12 +24,13 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 PORT = int(os.environ.get("MONTARA_COMPANION_PORT", "47820"))
 HOME = Path(os.environ.get("MONTARA_COMPANION_HOME", Path.home() / ".montara-companion"))
 CACHE = HOME / "proxies"
 EDGE = 65536
 VIDEO_SUFFIXES = {".mp4", ".mov", ".m4v", ".mts", ".mkv", ".avi", ".webm"}
+AUDIO_SUFFIXES = {".wav", ".aif", ".aiff"}
 DEFAULT_ORIGINS = r"https://[a-z0-9-]+\.trycloudflare\.com|https?://(127\.0\.0\.1|localhost)(:\d+)?|https://[a-z0-9-]+\.vercel\.app"
 ORIGINS = re.compile("^(" + os.environ.get("MONTARA_COMPANION_ORIGINS", DEFAULT_ORIGINS) + ")$")
 SEARCH_BUDGET_SEC = 25
@@ -125,6 +127,32 @@ def locate(name: str, size: int, print_: str) -> Path | None:
 
 
 # ---------- small version ----------
+def is_audio(path: Path) -> bool:
+    return path.suffix.lower() in AUDIO_SUFFIXES
+
+
+def output_path(source_id: str, pending: bool = False) -> Path:
+    ext = ".flac" if is_audio(sources[source_id]) else ".mp4"
+    return CACHE / f"{source_id}{'.part' if pending else ''}{ext}"
+
+
+def audio_plan(info: dict) -> dict:
+    audio = next((s for s in info.get("streams", []) if s.get("codec_type") == "audio"), None)
+    if not audio:
+        return {"skip": "no audio stream"}
+    codec = str(audio.get("codec_name") or "")
+    bits = str(audio.get("bits_per_raw_sample") or audio.get("bits_per_sample") or "")
+    if not codec.startswith("pcm_") or codec.startswith(("pcm_f", "pcm_alaw", "pcm_mulaw")) or bits not in {"8", "16", "24", "32"}:
+        return {"skip": f"{codec or 'unknown'} audio: uploaded as it is"}
+    duration = float(info.get("format", {}).get("duration") or audio.get("duration") or 0)
+    return {"audio": True, "duration": duration, "codec": codec, "bits": bits, "channels": audio.get("channels")}
+
+
+def audio_command(source: Path, target: Path) -> list[str]:
+    # Lossless: FLAC keeps every sample and the BWF time reference (as a tag).
+    return [FFMPEG, "-hide_banner", "-nostdin", "-y", "-i", str(source), "-map", "0:a:0", "-c:a", "flac",
+            "-compression_level", "5", "-progress", "pipe:1", "-nostats", str(target)]
+
 def probe(path: Path) -> dict:
     out = subprocess.run([FFPROBE, "-v", "error", "-print_format", "json", "-show_streams", "-show_format", str(path)],
                          capture_output=True, text=True, timeout=60)
@@ -179,21 +207,26 @@ def proxy_command(source: Path, target: Path, p: dict) -> list[str]:
 def make_proxy(source_id: str) -> None:
     job = jobs[source_id]
     source = sources[source_id]
-    target = CACHE / f"{source_id}.mp4"
+    target = output_path(source_id)
     if target.is_file() and target.stat().st_size:
         job.update(status="ready", progress=1.0, bytes=target.stat().st_size)
         return
     try:
-        p = plan(probe(source))
+        p = audio_plan(probe(source)) if is_audio(source) else plan(probe(source))
         if p.get("skip"):
             job.update(status="skipped", reason=p["skip"])
             log(f"skip {source.name}: {p['skip']}")
             return
-        job.update(info={k: p[k] for k in ("fps", "hdr", "codec", "size")})
-        pending = CACHE / f"{source_id}.part.mp4"
-        command = proxy_command(source, pending, p)
-        log(f"small version of {source.name} ({p['codec']} {p['size'][0]}x{p['size'][1]}{' HDR' if p['hdr'] else ''}, "
-            f"{'hardware' if HW_H264 else 'software'} encoder)")
+        pending = output_path(source_id, pending=True)
+        if p.get("audio"):
+            job.update(info={k: p[k] for k in ("codec", "bits", "channels")})
+            command = audio_command(source, pending)
+            log(f"lossless FLAC of {source.name} ({p['bits']}-bit, {p['channels']} ch)")
+        else:
+            job.update(info={k: p[k] for k in ("fps", "hdr", "codec", "size")})
+            command = proxy_command(source, pending, p)
+            log(f"small version of {source.name} ({p['codec']} {p['size'][0]}x{p['size'][1]}{' HDR' if p['hdr'] else ''}, "
+                f"{'hardware' if HW_H264 else 'software'} encoder)")
         started = time.monotonic()
         process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         job["process"] = process
@@ -209,7 +242,8 @@ def make_proxy(source_id: str) -> None:
         pending.replace(target)
         elapsed = time.monotonic() - started
         job.update(status="ready", progress=1.0, bytes=target.stat().st_size, seconds=round(elapsed, 1))
-        log(f"ready {source.name}: {target.stat().st_size / 1e6:.0f} MB in {elapsed:.0f} s "
+        log(f"ready {source.name}: {target.stat().st_size / 1e6:.0f} MB "
+            f"({100 * target.stat().st_size / max(1, source.stat().st_size):.0f}% of the original) in {elapsed:.0f} s "
             f"({p['duration'] / max(elapsed, 0.1):.1f}x real time)")
     except Exception as error:  # reported to the page, which then uploads the original
         job.update(status="failed", error=str(error)[:300])
@@ -291,19 +325,19 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply(403, {"error": "origin not allowed"})
         if self.path == "/health":
             return self.reply(200, {"app": "montara-companion", "version": VERSION, "ffmpeg": bool(FFMPEG and FFPROBE),
-                                    "hardware_encoder": HW_H264, "tonemap": TONEMAP})
+                                    "hardware_encoder": HW_H264, "tonemap": TONEMAP, "lossless_audio": True})
         match = re.fullmatch(r"/proxies/([a-f0-9]{24})(/file)?", self.path)
         if not match or match.group(1) not in jobs:
             return self.reply(404, {"error": "unknown"})
         job = jobs[match.group(1)]
         if not match.group(2):
             return self.reply(200, {k: v for k, v in job.items() if k != "process"})
-        target = CACHE / f"{match.group(1)}.mp4"
+        target = output_path(match.group(1))
         if job.get("status") != "ready" or not target.is_file():
             return self.reply(409, {"error": "not ready"})
         self.send_response(200)
         self.cors(self.origin_ok())
-        self.send_header("Content-Type", "video/mp4")
+        self.send_header("Content-Type", "audio/flac" if target.suffix == ".flac" else "video/mp4")
         self.send_header("Content-Length", str(target.stat().st_size))
         self.end_headers()
         with target.open("rb") as handle:
@@ -321,7 +355,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply(400, {"error": "invalid request"})
         if self.path == "/locate":
             name, size, print_ = body.get("name"), body.get("size"), body.get("fingerprint")
-            if (not isinstance(name, str) or "/" in name or "\\" in name or Path(name).suffix.lower() not in VIDEO_SUFFIXES
+            if (not isinstance(name, str) or "/" in name or "\\" in name or Path(name).suffix.lower() not in VIDEO_SUFFIXES | AUDIO_SUFFIXES
                     or not isinstance(size, int) or not isinstance(print_, str) or not re.fullmatch(r"[a-f0-9]{64}", print_)):
                 return self.reply(400, {"error": "invalid file description"})
             source_id = hashlib.sha256(f"{name}|{size}|{print_}".encode()).hexdigest()[:24]
@@ -338,7 +372,7 @@ class Handler(BaseHTTPRequestHandler):
             if source_id not in sources:
                 return self.reply(404, {"error": "locate the file first"})
             with lock:
-                stale = jobs.get(source_id, {}).get("status") == "ready" and not (CACHE / f"{source_id}.mp4").is_file()
+                stale = jobs.get(source_id, {}).get("status") == "ready" and not output_path(source_id).is_file()
                 if source_id not in jobs or stale or jobs[source_id].get("status") == "failed":
                     jobs[source_id] = {"status": "working", "progress": 0.0}
                     threading.Thread(target=make_proxy, args=(source_id,), daemon=True).start()
