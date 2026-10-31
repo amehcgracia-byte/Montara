@@ -14,6 +14,7 @@ Run: python3 companion.py   (or the 'montara-companion' command the installer ad
 """
 from __future__ import annotations
 
+import functools
 import hashlib
 import json
 import os
@@ -141,9 +142,18 @@ def is_audio(path: Path) -> bool:
     return path.suffix.lower() in AUDIO_SUFFIXES
 
 
+@functools.lru_cache(maxsize=512)
+def lossless_ext(path: Path) -> str:
+    """FLAC for integer PCM; WavPack for 32/64-bit float, which FLAC cannot hold (both lossless)."""
+    try:
+        return ".wv" if audio_plan(probe(path)).get("float") else ".flac"
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return ".flac"
+
+
 def output_path(key: str, pending: bool = False) -> Path:
     """key is a source id, or a source id + 'p' for the light preview of an audio track."""
-    ext = ".opus" if key.endswith("p") else ".flac" if is_audio(sources[key[:24]]) else ".mp4"
+    ext = ".opus" if key.endswith("p") else lossless_ext(sources[key[:24]]) if is_audio(sources[key[:24]]) else ".mp4"
     return CACHE / f"{key}{'.part' if pending else ''}{ext}"
 
 
@@ -172,9 +182,10 @@ def preview_command(source: Path, target: Path, p: dict) -> list[str]:
 
 
 def audio_command(source: Path, target: Path) -> list[str]:
-    # Lossless: FLAC keeps every sample and the BWF time reference (as a tag).
-    return [FFMPEG, "-hide_banner", "-nostdin", "-y", "-i", str(source), "-map", "0:a:0", "-c:a", "flac",
-            "-compression_level", "5", "-progress", "pipe:1", "-nostats", str(target)]
+    # Lossless: FLAC (or WavPack for float) keeps every sample and the BWF time reference (as a tag).
+    codec = ["-c:a", "wavpack"] if target.suffix == ".wv" else ["-c:a", "flac", "-compression_level", "5"]
+    return [FFMPEG, "-hide_banner", "-nostdin", "-y", "-i", str(source), "-map", "0:a:0", *codec,
+            "-progress", "pipe:1", "-nostats", str(target)]
 
 def probe(path: Path) -> dict:
     out = subprocess.run([FFPROBE, "-v", "error", "-print_format", "json", "-show_streams", "-show_format", str(path)],
@@ -243,16 +254,12 @@ def make_proxy(key: str) -> None:
         pending = output_path(key, pending=True)
         if p.get("audio"):
             job.update(info={k: p[k] for k in ("codec", "bits", "channels")})
-            if not key.endswith("p") and p["float"]:
-                job.update(status="skipped", reason="32-bit float audio: uploaded as it is")
-                log(f"skip {source.name}: float audio is uploaded as it is")
-                return
             if key.endswith("p"):
                 command = preview_command(source, pending, p)
                 log(f"light preview of {source.name} (Opus; the export uses the original)")
             else:
                 command = audio_command(source, pending)
-                log(f"lossless FLAC of {source.name} ({p['bits']}-bit, {p['channels']} ch)")
+                log(f"lossless {'WavPack' if pending.suffix == '.wv' else 'FLAC'} of {source.name} ({p['bits']}, {p['channels']} ch)")
         else:
             job.update(info={k: p[k] for k in ("fps", "hdr", "codec", "size")})
             command = proxy_command(source, pending, p)
@@ -369,7 +376,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply(409, {"error": "not ready"})
         self.send_response(200)
         self.cors(self.origin_ok())
-        self.send_header("Content-Type", {".flac": "audio/flac", ".opus": "audio/ogg"}.get(target.suffix, "video/mp4"))
+        self.send_header("Content-Type", {".flac": "audio/flac", ".wv": "audio/x-wavpack", ".opus": "audio/ogg"}.get(target.suffix, "video/mp4"))
         self.send_header("Content-Length", str(target.stat().st_size))
         self.end_headers()
         with target.open("rb") as handle:
@@ -440,9 +447,9 @@ class Handler(BaseHTTPRequestHandler):
         source = sources[source_id]
         # A real file, not a pipe: FLAC writes its sample count and checksum at the end.
         CACHE.mkdir(parents=True, exist_ok=True)
-        floating = bool(audio_plan(probe(source)).get("float"))  # FLAC has no float: send that range as float WAV
-        target = CACHE / f"segment-{source_id}-{threading.get_ident()}.{'wav' if floating else 'flac'}"
-        codec = ["-c:a", "pcm_f32le"] if floating else ["-c:a", "flac", "-compression_level", "5"]
+        floating = bool(audio_plan(probe(source)).get("float"))  # FLAC has no float: WavPack, also lossless
+        target = CACHE / f"segment-{source_id}-{threading.get_ident()}.{'wv' if floating else 'flac'}"
+        codec = ["-c:a", "wavpack"] if floating else ["-c:a", "flac", "-compression_level", "5"]
         command = [FFMPEG, "-hide_banner", "-nostdin", "-v", "error", "-y", "-ss", f"{start:.6f}", "-t", f"{duration:.6f}", "-i", str(source),
                    "-map", "0:a:0", *codec, str(target)]
         started = time.monotonic()
@@ -455,7 +462,7 @@ class Handler(BaseHTTPRequestHandler):
             log(f"original {source.name} {start:.1f}+{duration:.1f} s: {size / 1e6:.0f} MB in {time.monotonic() - started:.1f} s")
             self.send_response(200)
             self.cors(self.origin_ok())
-            self.send_header("Content-Type", "audio/wav" if floating else "audio/flac")
+            self.send_header("Content-Type", "audio/x-wavpack" if floating else "audio/flac")
             self.send_header("Content-Length", str(size))
             self.end_headers()
             with target.open("rb") as handle:

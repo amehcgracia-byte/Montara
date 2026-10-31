@@ -131,3 +131,21 @@ def test_opus_preview_decodes_at_original_rate_with_time_reference_and_names_its
     assert out == ['44100', '88200']
     assert _bext_samples(decoded) == 88200
     assert preview_original(wav) is None
+
+
+@pytest.mark.skipif(not __import__('shutil').which('ffmpeg'), reason='needs ffmpeg')
+def test_float_wav_travels_as_wavpack_and_comes_back_bit_identical(tmp_path):
+    import subprocess
+    import numpy as np
+    import soundfile as sf
+    wav, wv = tmp_path / 'src.wav', tmp_path / 'Keys.wav.wv'
+    sf.write(wav, (np.sin(np.arange(44100 * 2) / 7) * 1.4).astype('float32'), 44100, subtype='FLOAT')  # peaks above 0 dBFS
+    subprocess.run(['ffmpeg', '-v', 'error', '-i', str(wav), '-c:a', 'wavpack', str(wv)], check=True)
+    payload = wv.read_bytes()
+    c = make_client(tmp_path / 'data')
+    job = c.post('/montara/uploads', json=dict(name=wv.name, size=len(payload), fingerprint=fingerprint(payload))).json
+    url = '/montara/uploads/' + job['id']
+    assert c.put(url, data=payload, headers={'Upload-Offset': '0'}).status_code == 200
+    restored = Path(c.post(url + '/finish', json={}).json['videos'][0]['path'])
+    assert restored.name == 'Keys.wav' and sf.info(restored).subtype == 'FLOAT'
+    assert np.array_equal(sf.read(restored, dtype='float32')[0], sf.read(wav, dtype='float32')[0])

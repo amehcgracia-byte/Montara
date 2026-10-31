@@ -421,7 +421,7 @@ async function uploadSmall(file, entry) {
 function upload(file, entry) {
   if (montaraCompanion.info && !entry.viaCompanion && montaraCompanion.helps(file)) return uploadSmall(file, entry);
   // A lossless copy must reach the server through the resumable path, which restores the WAV.
-  if (file.size > 8 * 1024 * 1024 || /\.(wav|aiff?)\.(flac|opus)$/i.test(file.name)) return uploadInParts(file, entry);
+  if (file.size > 8 * 1024 * 1024 || /\.(wav|aiff?)\.(flac|opus|wv)$/i.test(file.name)) return uploadInParts(file, entry);
   state.uploads += 1;
   const xhr = new XMLHttpRequest();
   entry.xhr = xhr;
