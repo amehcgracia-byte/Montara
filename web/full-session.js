@@ -69,7 +69,10 @@ function showSessionProgress(data) {
     [...bars.children].forEach((bar, i) => bar.style.setProperty('--p', i < done ? '1' : i === done ? (currentShare || .06).toFixed(3) : '0'));
     bars.hidden = false;
   } else {
-    $('#sessionBars').hidden = data.status !== 'done';
+    const bars = $('#sessionBars');
+    bars.hidden = data.status !== 'done' || !bars.children.length;
+    // Finished: every exported song is green (the last poll may arrive after the final song).
+    if (data.status === 'done') [...bars.children].forEach((bar, i) => bar.style.setProperty('--p', i < (data.results || []).length ? '1' : '0'));
     if (fullSession.busy && percent > 2) {
       const elapsed = now - sessionClock.started;
       eta = minutesLeft(elapsed * (100 - percent) / percent);
