@@ -117,8 +117,10 @@ async function renderFullSession() {
   const mixJob = await api(`/montara/mix/${mix.job}`);
   const payload = {
     reference: mixJob.reference,
+    // Each song keeps its own automatic mix (computed from that song); the person's
+    // faders apply on top as offsets. Forcing the preview's gains on every song
+    // switched off per-song balance and the drum peak guard.
     faders: Object.fromEntries(mix.plan.tracks.map(t => [t.file, MixLevels.offset(t)])),
-    base_gains: Object.fromEntries(mix.plan.tracks.map(t => [t.file, Number(t.base_gain_db || 0)])),
     mutes: Object.fromEntries(mix.plan.tracks.map(t => [t.file, Boolean(t.mute)])),
     effects: Object.fromEntries(mix.plan.tracks.map(t => [t.file, Object.fromEntries(['reverb', 'delay'].map(key => [key, t.fx?.[key]?.enabled ? t.fx[key].amount / 100 : 0]))]))
   };

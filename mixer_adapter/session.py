@@ -265,7 +265,7 @@ def execute(work, action):
             folder = prepare_tracks(work, song)
             mixer = SingleSongMix(folder, work / 'songs' / str(song['id']) / 'mix', reference=settings.get('reference'))
             out = mixer.render(settings.get('faders', {}), work / 'exports' / f'song-{song["id"]:03d}.mp3',
-                               settings.get('mutes', {}), settings.get('effects'), base_gains=settings.get('base_gains'))
+                               settings.get('mutes', {}), settings.get('effects'))  # per-song automatic mix; faders are offsets
             data['results'].append(dict(id=song['id'], name=song['name'], start=song['start'], end=song['end'], path=str(out)))
             save(work / 'session.json', data)
             # Keep the first song for the browser; release intermediate PCM for others.
