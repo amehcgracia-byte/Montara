@@ -369,13 +369,23 @@ body[data-show-kind=podcast] #showLiveEdit,body[data-show-kind=podcast] #showUnd
 
 /* Fixed mixer effects: only enable and amount, per track. */
 .strip{flex-basis:110px}
-.strip .fx-toggle{border:1px solid var(--line);border-radius:7px;width:100%;padding:5px;color:var(--muted);font-size:12px}
-.strip .fx-toggle.active{color:var(--accent);border-color:var(--accent)}
+/* Two buttons above the name (ON, SOLO), two below (EQ, FX): same size; the name is the largest text. */
+.strip-buttons{display:grid;grid-template-columns:1fr 1fr;gap:6px;width:100%}
+.strip-buttons .wide{grid-column:1/-1}
+.strip .mute,.strip .solo,.strip .eq-toggle,.strip .fx-toggle{width:100%;height:30px;padding:0;border-radius:8px;border:1px solid var(--line);background:none;font-size:11px;font-weight:700;letter-spacing:.3px;color:var(--muted);cursor:pointer}
+.strip .solo.on{background:var(--fg);border-color:var(--fg);color:var(--bg)}
+.strip .eq-toggle.active,.strip .fx-toggle.active{color:var(--accent);border-color:var(--accent)}
+.strip .strip-name{font-size:16px;font-weight:700;line-height:1.15;text-align:center;white-space:normal;overflow-wrap:anywhere;max-width:100%;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .track-fx{width:100%;border-top:1px solid var(--line);padding-top:8px}
 .track-fx[hidden]{display:none}
 .track-fx label{display:flex;align-items:center;gap:5px;font-size:11px;margin-top:6px}
 .strip .track-fx input[type=range]{writing-mode:horizontal-tb;direction:ltr;width:100%;height:20px}
 .track-fx output{display:block;text-align:right;font-size:10px;color:var(--muted)}
+.track-eq{width:100%;border-top:1px solid var(--line);padding-top:8px}
+.track-eq[hidden]{display:none}
+.track-eq label{display:flex;flex-direction:column;gap:2px;font-size:11px;margin-top:6px;color:var(--muted)}
+.strip .track-eq input[type=range]{writing-mode:horizontal-tb;direction:ltr;width:100%;height:20px}
+.track-eq output{display:block;text-align:right;font-size:10px;color:var(--fg)}
 
 /* A short wordmark introduction, then the three editing paths. */
 body.is-intro .top,body.is-intro footer,body.is-intro #version{visibility:hidden}

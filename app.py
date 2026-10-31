@@ -42,7 +42,7 @@ SAMPLE_SETS = {
 }
 DEFAULT_DATA = Path.home() / "MontaraData"
 # Shown at the bottom of every page, so it is obvious which build is running.
-MONTARA_VERSION = "0.44 · 2026-10-31 · Session review with waveforms, per-song mixes"
+MONTARA_VERSION = "0.47 · 2026-10-31 · Mixer strips: ON and SOLO, EQ and FX, solo and EQ"
 
 
 def _build_label() -> str:
