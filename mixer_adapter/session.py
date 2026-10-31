@@ -211,6 +211,27 @@ def silence_candidates(stems, timelines, duration, frame_seconds):
     return [dict(start=a, end=b, name=f'Song {i:02d}') for i, (a, b) in enumerate(zip(cuts, cuts[1:]), 1)]
 
 
+def busiest_window(work, start, end, seconds):
+    """The part of a song where most is playing (from the waveform), else its middle.
+
+    The mixer preview is judged on this excerpt: an intro often lacks voice or drums."""
+    if end - start <= seconds:
+        return start, end
+    middle = (start + end) / 2
+    best = max(start, min(middle - seconds / 2, end - seconds))
+    try:
+        wave = json.loads((Path(work) / 'waveform.json').read_text())
+        step, peaks = float(wave['step']), wave['peaks']
+        first, last, width = int(start / step), int((end - seconds) / step), max(1, int(seconds / step))
+        if last > first:
+            sums = [sum(peaks[i:i + width]) for i in range(first, last + 1, max(1, width // 8))]
+            index = max(range(len(sums)), key=sums.__getitem__)
+            best = (first + index * max(1, width // 8)) * step
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    return best, best + seconds
+
+
 def prepare_tracks(work, song, preview=False):
     """Extract just this window; honor recorder offsets and pad missing regions."""
     work = Path(work)
@@ -220,7 +241,7 @@ def prepare_tracks(work, song, preview=False):
         bytes_per_second = sum(t['samplerate'] * min(t['channels'], 2) * 4 for t in data['tracks'])
         # decodeAudioData expands compressed sources to PCM in the browser.
         seconds = min(60, 96 * 1024**2 / max(1, bytes_per_second))
-        song['end'] = min(song['end'], song['start'] + seconds)
+        song['start'], song['end'] = busiest_window(work, song['start'], song['end'], seconds)
     destination = work / ('preview' if preview else 'songs') / str(song['id']) / 'tracks'
     destination.mkdir(parents=True, exist_ok=True)
     duration = song['end'] - song['start']
@@ -256,6 +277,32 @@ def prepare_tracks(work, song, preview=False):
                                   '-ar', str(track['samplerate']), '-c:a', 'pcm_f32le', str(temporary)], check=True)
         temporary.replace(target)
     return destination
+
+
+def parallel_songs():
+    """How many songs to mix at once: about one per three cores, at most four."""
+    try:
+        return max(1, int(os.environ['MONTARA_PARALLEL_SONGS']))
+    except (KeyError, ValueError):
+        return max(1, min(4, (os.cpu_count() or 2) // 3))
+
+
+def render_song(work, song_id):
+    """Child process: mix and master one song; the parent collects results/<id>.json."""
+    work = Path(work).resolve()
+    data = read(work)
+    os.environ['ZUCKER_MIXER_STATE_ROOT'] = str(work / 'vendor-state' / f'song-{song_id}')
+    from mixer_adapter.single_song import SingleSongMix
+    song = next(s for s in data['songs'] if s['id'] == song_id)
+    settings = data['settings']
+    # A song mixed in the mixer keeps its own changes; the rest use the automatic mix.
+    mine = (settings.get('per_song') or {}).get(str(song_id)) or {}
+    folder = prepare_tracks(work, song)
+    mixer = SingleSongMix(folder, work / 'songs' / str(song_id) / 'mix', reference=mine.get('reference') or settings.get('reference'))
+    out = mixer.render(mine.get('faders', settings.get('faders', {})), work / 'exports' / f'song-{song_id:03d}.mp3',
+                       mine.get('mutes', settings.get('mutes', {})), mine.get('effects', settings.get('effects')),
+                       eq=mine.get('eq'))  # per-song automatic mix; faders are offsets
+    save(work / 'results' / f'{song_id}.json', dict(id=song_id, name=song['name'], start=song['start'], end=song['end'], path=str(out)))
 
 
 def execute(work, action):
@@ -362,24 +409,43 @@ def execute(work, action):
         data['preview_tracks'] = [str(p) for p in sorted(folder.glob('*.wav'))]
         data['status'] = 'ready'
     elif action == 'render':
+        # Songs are independent: several are mixed at once, each in its own process
+        # (the mixer keeps state in module globals), so an 8-core server is not idle.
         data['results'] = []
         selected = [s for s in data['songs'] if s['selected']]
-        settings = data['settings']
-        per_song = settings.get('per_song') or {}
-        for index, song in enumerate(selected):
-            # A song mixed in the mixer keeps its own changes; the rest use the automatic mix.
-            mine = per_song.get(str(song['id'])) or {}
-            progress(dict(current_stage='mixing songs', stage_detail=f'{index + 1} / {len(selected)} · {song["name"]}',
-                          progress=100 * index / len(selected)))
-            folder = prepare_tracks(work, song)
-            mixer = SingleSongMix(folder, work / 'songs' / str(song['id']) / 'mix', reference=mine.get('reference') or settings.get('reference'))
-            out = mixer.render(mine.get('faders', settings.get('faders', {})), work / 'exports' / f'song-{song["id"]:03d}.mp3',
-                               mine.get('mutes', settings.get('mutes', {})), mine.get('effects', settings.get('effects')))  # per-song automatic mix; faders are offsets
-            data['results'].append(dict(id=song['id'], name=song['name'], start=song['start'], end=song['end'], path=str(out)))
-            save(work / 'session.json', data)
-            # Keep the first song for the browser; release intermediate PCM for others.
-            if index > 0:
-                shutil.rmtree(work / 'songs' / str(song['id']))
+        results = work / 'results'
+        shutil.rmtree(results, ignore_errors=True)
+        results.mkdir()
+        save(work / 'session.json', data)
+        pending, running, finished = list(selected), {}, 0
+        slots = min(len(selected), parallel_songs())
+        root = Path(__file__).resolve().parents[1]
+        with (work / 'worker.log').open('ab') as log:
+            try:
+                while pending or running:
+                    while pending and len(running) < slots:
+                        song = pending.pop(0)
+                        running[song['id']] = (song, subprocess.Popen([sys.executable, '-m', 'mixer_adapter.session', str(work), 'render-song', str(song['id'])],
+                                                                      cwd=root, stdout=log, stderr=log))
+                    for song_id, (song, process) in list(running.items()):
+                        code = process.poll()
+                        if code is None:
+                            continue
+                        del running[song_id]
+                        if code != 0:
+                            raise RuntimeError(f"{song['name']} could not be mixed. Your originals are unchanged; retry the export.")
+                        data['results'].append(json.loads((results / f'{song_id}.json').read_text()))
+                        finished += 1
+                        if song is not selected[0]:  # keep the first song's PCM for the browser; release the rest
+                            shutil.rmtree(work / 'songs' / str(song_id), ignore_errors=True)
+                    names = ', '.join(song['name'] for song, _ in running.values())
+                    progress(dict(current_stage='mixing songs', stage_detail=f'{finished} of {len(selected)} done' + (f' · now: {names}' if names else ''),
+                                  progress=100 * finished / len(selected)))
+                    time.sleep(.5)
+            finally:
+                for _, process in running.values():
+                    process.kill()
+        data['results'].sort(key=lambda r: r['id'])
         data['status'] = 'done'
     else:
         raise ValueError('Unknown session action.')
@@ -390,6 +456,9 @@ def execute(work, action):
 
 if __name__ == '__main__':
     work, action = Path(sys.argv[1]), sys.argv[2]
+    if action == 'render-song':  # child of a render; the parent holds the locks and handles cancel
+        render_song(work, int(sys.argv[3]))
+        sys.exit(0)
     import fcntl
     import signal
     import threading

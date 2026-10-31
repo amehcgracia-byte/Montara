@@ -283,17 +283,50 @@ $('#sessionSongs').addEventListener('click', event => {
   playSong(i, Math.max(0, Math.min(t, songList()[i].end - .2)));
 });
 
-// Mixer for one song: prepares a short excerpt of that song, then opens the mixer.
+// Mixer for one song. The first time it prepares an excerpt of the busiest part of that
+// song; afterwards it reopens at once, with the changes the person saved.
+fullSession.mixCache = fullSession.mixCache || {};
+const songKey = song => `${fullSession.id}:${song.start}-${song.end}`;
+
+function applySavedMix(changes) {
+  if (!changes) return;
+  const keys = { eq_low_cut_hz: ['low', 'hz'], eq_mid_gain_db: ['mid', 'db'], eq_air_gain_db: ['air', 'db'] };
+  for (const t of mix.plan.tracks) {
+    if (changes.faders?.[t.file] !== undefined) t.fader_db = Number(t.auto_fader_db) + Number(changes.faders[t.file]);
+    if (changes.mutes?.[t.file] !== undefined) t.mute = changes.mutes[t.file];
+    for (const [key, value] of Object.entries(changes.eq?.[t.file] || {})) { const [slot, field] = keys[key]; if (t.eq?.[slot]) t.eq[slot][field] = value; }
+    for (const [effect, amount] of Object.entries(changes.effects?.[t.file] || {})) {
+      t.fx ||= { reverb: { enabled: false, amount: 35 }, delay: { enabled: false, amount: 35 } };
+      t.fx[effect] = { enabled: amount > 0, amount: amount > 0 ? Math.round(amount * 100) : t.fx[effect]?.amount ?? 35 };
+    }
+  }
+}
+
 async function openSongMixer(i) {
   const song = songList()[i];
   stopSongPreview();
+  fullSession.mixSong = song.id;
+  const cached = fullSession.mixCache[song.id];
   try {
-    const prepared = await waitSession(await api(`/montara/session/${fullSession.id}/prepare`, { songs: songList(), song: song.id }));
-    drawSessionSongs(prepared.songs);
-    fullSession.mixSong = song.id;
-    await openMixer(prepared.preview_tracks);
+    if (cached && cached.key === songKey(song)) {
+      Object.assign(mix, { job: cached.job, plan: cached.plan, buffers: cached.buffers, fxBuffers: cached.fxBuffers, offset: 0 });
+      show('mix'); stopMix();
+      renderStrips();
+      $$('#strips input, #strips button').forEach((el, index) => { el.disabled = false; });
+      $$('#strips .strip').forEach((strip, index) => { if (mix.plan.tracks[index].active === false) strip.querySelectorAll('input,button').forEach(el => { el.disabled = true; }); });
+      $('#mixStatus').classList.add('done'); $('#transport').hidden = false; $('#referenceRow').hidden = false;
+      $('#useMix').disabled = false; $('#playMix').disabled = false; $('#resetMix').disabled = false; $('#mixBack').disabled = false;
+    } else {
+      const prepared = await waitSession(await api(`/montara/session/${fullSession.id}/prepare`, { songs: songList(), song: song.id }));
+      drawSessionSongs(prepared.songs);
+      await openMixer(prepared.preview_tracks);
+      applySavedMix(fullSession.mixes[song.id]);
+      renderStrips();
+      $$('#strips .strip').forEach((strip, index) => { if (mix.plan.tracks[index].active === false) strip.querySelectorAll('input,button').forEach(el => { el.disabled = true; }); });
+      fullSession.mixCache[song.id] = { key: songKey(song), job: mix.job, plan: mix.plan, buffers: mix.buffers, fxBuffers: mix.fxBuffers };
+    }
     $('#useMix').textContent = 'Save mix for this song';
-    $('#mixStatusText').textContent = `${song.name}: first ${Math.ceil(mix.plan.duration)} s. Changes apply to this song only; the others keep their automatic mix.`;
+    $('#mixStatusText').textContent = `${song.name}: ${Math.ceil(mix.plan.duration)} s from the busiest part. Changes apply to this song only; the others keep their automatic mix.`;
   } catch (error) { toast(error.message, true); show('sessionReview'); }
 }
 
@@ -328,6 +361,8 @@ function mixChanges() {
   const effects = Object.fromEntries(mix.plan.tracks.filter(t => ['reverb', 'delay'].some(key => t.fx?.[key]?.enabled))
     .map(t => [t.file, Object.fromEntries(['reverb', 'delay'].map(key => [key, t.fx?.[key]?.enabled ? t.fx[key].amount / 100 : 0]))]));
   if (Object.keys(effects).length) changes.effects = effects;  // otherwise the automatic space and echo stay on
+  const eq = eqChanges();
+  if (Object.keys(eq).length) changes.eq = eq;
   return changes;
 }
 
@@ -363,6 +398,10 @@ async function renderFullSession() {
 
 // Tracks sent as light previews: the export uses the originals, but only the song ranges.
 async function sendSessionOriginals() {
+  fullSession.sending = true;
+  try { await sendSessionOriginalsNow(); } finally { fullSession.sending = false; }
+}
+async function sendSessionOriginalsNow() {
   let {originals} = await api(`/montara/session/${fullSession.id}/originals`);
   const missing = originals.filter(w => !w.received);
   const started = performance.now();

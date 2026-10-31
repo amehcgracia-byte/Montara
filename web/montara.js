@@ -299,7 +299,9 @@ const IDLE_PAGE_MS = 30 * 60 * 1000;
 let lastInput = Date.now();
 ["pointerdown", "keydown", "wheel", "touchstart"].forEach((name) => addEventListener(name, () => { lastInput = Date.now(); }, { passive: true }));
 setInterval(() => {
-  if (Date.now() - lastInput < IDLE_PAGE_MS || state.polling || state.uploads || document.querySelector("#idlePause")) return;
+  // Never pause while work is running (a long export, original ranges being sent, a mix being prepared).
+  const working = state.polling || state.uploads || (typeof fullSession !== "undefined" && (fullSession.busy || fullSession.sending)) || mix.job && $("#mixStatus") && !$("#mixStatus").classList.contains("done");
+  if (Date.now() - lastInput < IDLE_PAGE_MS || working || document.querySelector("#idlePause")) return;
   clearTimeout(companionWatch);
   const dialog = document.createElement("dialog");
   dialog.id = "idlePause"; dialog.className = "cut-dialog";
@@ -872,7 +874,28 @@ async function pollMix(done) {
 
 const dbToGain = (db) => Math.pow(10, db / 20);
 function trackGain(track) {
-  return MixLevels.gain(track);
+  return MixLevels.gain(track, mix.plan?.tracks.some((t) => t.solo));
+}
+// Only the EQ bands the person moved, in the mixer's own terms.
+function eqChanges() {
+  const keys = { low: ["eq_low_cut_hz", "hz"], mid: ["eq_mid_gain_db", "db"], air: ["eq_air_gain_db", "db"] };
+  return Object.fromEntries(mix.plan.tracks.map((t) => [t.file, Object.fromEntries(Object.entries(keys)
+    .filter(([slot, [, field]]) => t.eq?.[slot] && t.auto_eq?.[slot] && Math.abs(t.eq[slot][field] - t.auto_eq[slot][field]) > 0.05)
+    .map(([slot, [key, field]]) => [key, t.eq[slot][field]]))]).filter(([, bands]) => Object.keys(bands).length));
+}
+// Solo is for listening only (as on a desk): it never changes the export.
+function applyAllGains() { for (const t of mix.plan?.tracks || []) applyGain(t); }
+const EQ_SLOTS = [["low", "Low cut", "eq_low_cut_hz"], ["mid", "Mid", "eq_mid_gain_db"], ["air", "Air", "eq_air_gain_db"]];
+function eqLabel(slot, band) { return slot === "low" ? `${Math.round(band.hz)} Hz` : `${band.db >= 0 ? "+" : ""}${band.db.toFixed(1)} dB`; }
+function applyEq(track) {
+  const node = mix.nodes[track.file];
+  if (!node?.eq || !mix.ctx) return;
+  for (const [slot] of EQ_SLOTS) {
+    const band = track.eq?.[slot], filter = node.eq[slot];
+    if (!band || !filter) continue;
+    filter.frequency.setTargetAtTime(band.hz, mix.ctx.currentTime, 0.03);
+    if (slot !== "low") filter.gain.setTargetAtTime(band.db, mix.ctx.currentTime, 0.03);
+  }
 }
 
 function renderStrips() {
@@ -881,8 +904,10 @@ function renderStrips() {
       <small>${escapeHtml(t.role)}</small>
       <span class="db">${(t.fader_db >= 0 ? "+" : "") + Number(t.fader_db).toFixed(1)} dB</span>
       <input type="range" min="${Math.min(-60, Math.floor(t.fader_db))}" max="${Math.max(12, Math.ceil(t.fader_db))}" step="0.01" value="${t.fader_db}" aria-label="${escapeHtml(t.name)} fader">
-      ${t.active === false ? `<button class="mute" disabled>NO SIGNAL</button>` : `<button class="mute ${t.mute ? "on" : ""}">${t.mute ? "OFF" : "ON"}</button>`}
+      ${t.active === false ? `<button class="mute" disabled>NO SIGNAL</button>` : `<button class="mute ${t.mute ? "on" : ""}">${t.mute ? "OFF" : "ON"}</button><button class="solo ${t.solo ? "on" : ""}" aria-pressed="${t.solo ? "true" : "false"}" title="Listen to this track alone (does not change the export)">SOLO</button>`}
       <b>${escapeHtml(t.name)}</b>
+      ${t.eq ? `<button class="eq-toggle" aria-expanded="false">EQ</button>
+      <div class="track-eq" hidden>${EQ_SLOTS.filter(([slot]) => t.eq[slot]).map(([slot, label]) => `<label>${label}${slot === "mid" ? ` · ${Math.round(t.eq.mid.hz)} Hz` : slot === "air" ? ` · ${Math.round(t.eq.air.hz / 1000)} kHz` : ""}<input type="range" data-eq="${slot}" ${slot === "low" ? `min="20" max="1000" step="1"` : `min="-15" max="15" step="0.5"`} value="${slot === "low" ? t.eq[slot].hz : t.eq[slot].db}" aria-label="${escapeHtml(t.name)} ${label}"><output data-eq="${slot}">${eqLabel(slot, t.eq[slot])}</output></label>`).join("")}</div>` : ""}
       <button class="fx-toggle" aria-expanded="false">FX</button>
       <div class="track-fx" hidden>
         ${["reverb", "delay"].map((effect) => `<label><input type="checkbox" data-effect="${effect}" ${t.fx?.[effect]?.enabled ? "checked" : ""}>${effect === "reverb" ? "Reverb" : "Delay"}</label><input class="fx-amount" data-effect="${effect}" type="range" min="0" max="100" value="${t.fx?.[effect]?.amount ?? 35}" aria-label="${escapeHtml(t.name)} ${effect} intensity"><output data-effect="${effect}">${t.fx?.[effect]?.amount ?? 35}%</output>`).join("")}
@@ -891,6 +916,19 @@ function renderStrips() {
   $$(".strip").forEach((strip) => {
     const track = mix.plan.tracks[Number(strip.dataset.track)];
     track.auto_mute = track.auto_mute ?? track.mute;
+    if (track.eq && !track.auto_eq) track.auto_eq = JSON.parse(JSON.stringify(track.eq));
+    strip.querySelector(".eq-toggle")?.addEventListener("click", (e) => {
+      const panel = strip.querySelector(".track-eq");
+      panel.hidden = !panel.hidden;
+      e.target.setAttribute("aria-expanded", String(!panel.hidden));
+    });
+    strip.querySelectorAll(".track-eq input").forEach((input) => input.addEventListener("input", () => {
+      const slot = input.dataset.eq, band = track.eq[slot];
+      if (slot === "low") band.hz = Number(input.value); else band.db = Number(input.value);
+      strip.querySelector(`.track-eq output[data-eq="${slot}"]`).textContent = eqLabel(slot, band);
+      strip.querySelector(".eq-toggle").classList.toggle("active", JSON.stringify(track.eq) !== JSON.stringify(track.auto_eq));
+      applyEq(track);
+    }));
     track.fx ||= { reverb: { enabled: false, amount: 35 }, delay: { enabled: false, amount: 35 } };
     strip.querySelector(".fx-toggle").addEventListener("click", (e) => {
       const panel = strip.querySelector(".track-fx");
@@ -913,7 +951,7 @@ function renderStrips() {
         toast(error.message || "Could not prepare the effect", true);
       }
     }));
-    strip.querySelector("input").addEventListener("input", (e) => {
+    strip.querySelector('input[type="range"]').addEventListener("input", (e) => {
       track.fader_db = Number(e.target.value);
       strip.querySelector(".db").textContent = `${track.fader_db >= 0 ? "+" : ""}${track.fader_db.toFixed(1)} dB`;
       applyGain(track);
@@ -925,6 +963,12 @@ function renderStrips() {
       e.target.textContent = track.mute ? "OFF" : "ON";
       strip.classList.toggle("off", track.mute);
       applyGain(track);
+    });
+    strip.querySelector(".solo").addEventListener("click", (e) => {
+      track.solo = !track.solo;
+      e.target.classList.toggle("on", track.solo);
+      e.target.setAttribute("aria-pressed", String(track.solo));
+      applyAllGains();
     });
   });
 }
@@ -976,7 +1020,7 @@ async function loadBuffers() {
     const url = `/montara/mix/${mix.job}/track/${encodeURIComponent(t.file)}`;
     for (let attempt = 0; ; attempt++) {
       try {
-        const response = await fetch(url);
+        const response = await fetch(attempt ? `${url}?format=wav` : url);  // compressed first; WAV if this browser can not decode it
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         mix.buffers[t.file] = await mix.ctx.decodeAudioData(await response.arrayBuffer());
         return;
@@ -1000,10 +1044,21 @@ function startMix(offset) {
     gain.gain.value = trackGain(t);
     const pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
     if (pan) pan.pan.value = Math.max(-1, Math.min(1, Number(t.pan || 0)));
-    source.connect(gain);
+    // The same three bands the mixer applies (its low cut, mid and air), so the preview matches the export.
+    const eq = {};
+    let head = source;
+    for (const [slot] of EQ_SLOTS) {
+      const band = t.eq?.[slot];
+      if (!band) continue;
+      const filter = ctx.createBiquadFilter();
+      filter.type = band.type; filter.frequency.value = band.hz; filter.Q.value = band.q || 0.707;
+      if (slot !== "low") filter.gain.value = band.db;
+      head.connect(filter); head = filter; eq[slot] = filter;
+    }
+    head.connect(gain);
     (pan ? gain.connect(pan) && pan : gain).connect(mix.master);
     source.start(0, offset);
-    mix.nodes[t.file] = { source, gain, fx: {} };
+    mix.nodes[t.file] = { source, gain, fx: {}, eq };
   }
   mix.startedAt = ctx.currentTime - offset;
   mix.playing = true;
@@ -1049,7 +1104,7 @@ $("#mixSeek").addEventListener("input", (e) => {
 $("#resetMix").addEventListener("click", async () => {
   stopMix();
   for (const t of mix.plan.tracks) {
-    t.fader_db = t.auto_fader_db; t.mute = t.auto_mute;
+    t.fader_db = t.auto_fader_db; t.mute = t.auto_mute; t.solo = false; if (t.auto_eq) t.eq = JSON.parse(JSON.stringify(t.auto_eq));
     t.fx = { reverb: { enabled: false, amount: 35 }, delay: { enabled: false, amount: 35 } };
     applyGain(t); syncTrackFx(t).catch((error) => toast(error.message, true));
   }
@@ -1098,8 +1153,9 @@ $("#useMix").addEventListener("click", async () => {
     const faders = Object.fromEntries(mix.plan.tracks.map((t) => [t.file, MixLevels.offset(t)]));
     const mutes = Object.fromEntries(mix.plan.tracks.map((t) => [t.file, Boolean(t.mute)]));
     const effects = Object.fromEntries(mix.plan.tracks.map((t) => [t.file, Object.fromEntries(["reverb", "delay"].map((key) => [key, t.fx?.[key]?.enabled ? t.fx[key].amount / 100 : 0]))]));
+    const eq = eqChanges();
     const animation = animateMixFaders(true);
-    await api(`/montara/mix/${mix.job}/render`, { faders, mutes, effects });
+    await api(`/montara/mix/${mix.job}/render`, { faders, mutes, effects, ...(Object.keys(eq).length ? { eq } : {}) });
     const job = await pollMix((j) => j.status === "done");
     await animation;
     if (job.status === "failed") throw new Error(job.error || "The final mix failed");

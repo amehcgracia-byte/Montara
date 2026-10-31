@@ -48,9 +48,11 @@ def mix_settings(body, names):
             elif isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or not -100 <= value <= 100:
                 raise ValueError('Invalid fader level.')
         settings[key] = values
+    from mixer_adapter.single_song import validate_effects, validate_eq
     if 'effects' in body:
-        from mixer_adapter.single_song import validate_effects
         settings['effects'] = validate_effects(body['effects'], names)
+    if body.get('eq'):
+        settings['eq'] = validate_eq(body['eq'], names)
     return settings
 
 
