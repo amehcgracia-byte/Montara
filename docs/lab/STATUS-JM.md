@@ -33,4 +33,6 @@ Cada resultado: fila en `docs/lab/RUNS.md` + `runs.jsonl` y una línea en STATUS
 
 ## Pendiente
 - `run_history.py` no guarda qué cámara usa cada plano: sin eso no se puede separar cuánto gana cada factor.
-- Cambiar las contraseñas web de la VM, que pasaron por chat.
+- Cambiar las contraseñas web de la VM, que pasaron por chat (Fer quizá ya lo hizo; sin confirmar).
+- Caché del companion (`~/.montara-companion/proxies`) sin limpieza: crece sin límite.
+- **Diccionario de instrumentos para el mezclador** (idea de Chema, 31-10, no urgente): hoy los roles son fijos de jam (kick, snare, hh, overheads, bajo, teclas, guitarra, saxo, metales, synth, voz) y salen del nombre del archivo (`classify_role` en `mixer/`). Para un producto comercial: una ficha por instrumento (violín, cuerdas, orquesta, acústica, coros, percusión…) con EQ, compresión, efectos y rango de frecuencias sacados de manuales de mezcla de referencia, y detección por audio, no solo por nombre. Se hace en el repo del mezclador.

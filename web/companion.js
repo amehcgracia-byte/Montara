@@ -2,7 +2,9 @@
    When it is running, a dropped video is not uploaded: the companion finds the
    original by name, size and edge fingerprint, makes a small version (720p H.264,
    constant frame rate, SDR) and only that small version is uploaded. A WAV/AIFF becomes
-   a lossless FLAC (name.wav.flac); the server restores the identical WAV. Without the
+   a lossless FLAC (name.wav.flac); the server restores the identical WAV. For a full session
+   it becomes a light Opus preview (name.wav.opus); at export only the song ranges of the
+   originals are sent, lossless (segment). Without the
    companion, or if it cannot help with a file, Montara uploads the original as before. */
 const montaraCompanion = (() => {
   const BASE = 'http://127.0.0.1:47820';
@@ -46,33 +48,45 @@ const montaraCompanion = (() => {
       return (await response.json()).saved;
     },
     /* Resolves to {file, original} with the small version, or null to upload the original. */
-    async smallVersion(file, onProgress, cancelled = () => false) {
+    async smallVersion(file, onProgress, cancelled = () => false, {preview = false} = {}) {
       if (!info || !this.helps(file)) return null;
       const audio = this.isAudio(file);
+      preview = preview && audio && !!info.audio_preview;
       try {
         onProgress('Finding it on your computer', 0);
         const print = await fingerprint(file);
         const located = await call('/locate', json({name: file.name, size: file.size, fingerprint: print}));
         if (!located.ok) return null;
-        const {id} = await located.json();
-        await call('/proxies', json({id}));
+        const located_ = await located.json();
+        const {id} = await (await call('/proxies', json({id: located_.id, preview}))).json();
         for (;;) {
           if (cancelled()) return null;
           const state = await (await call(`/proxies/${id}`)).json();
           if (state.status === 'ready') break;
           if (state.status === 'skipped' || state.status === 'failed') { console.info('Companion:', state.reason || state.error); return null; }
-          onProgress(audio ? 'Lossless copy' : 'Small version', state.progress || 0);
+          onProgress(preview ? 'Light preview' : audio ? 'Lossless copy' : 'Small version', state.progress || 0);
           await new Promise(resolve => setTimeout(resolve, 800));
         }
         const download = await call(`/proxies/${id}/file`);
         if (!download.ok) return null;
         const blob = await download.blob();
-        const name = audio ? file.name + '.flac' : file.name.replace(/\.[^.]+$/, '') + '.small.mp4';
-        return {file: new File([blob], name, {type: audio ? 'audio/flac' : 'video/mp4'}), original: {name: file.name, size: file.size, lastModified: file.lastModified, fingerprint: print, companion: id}};
+        const name = preview ? file.name + '.opus' : audio ? file.name + '.flac' : file.name.replace(/\.[^.]+$/, '') + '.small.mp4';
+        const type = preview ? 'audio/ogg' : audio ? 'audio/flac' : 'video/mp4';
+        return {file: new File([blob], name, {type}), preview, original: {name: file.name, size: file.size, lastModified: file.lastModified, fingerprint: print, companion: id}};
       } catch (error) {
         console.warn('Companion unavailable for this file', error);
         return null;
       }
+    },
+    /* Lossless FLAC of one range of an original audio file; resolves to a Blob. */
+    async segment(original, start, duration) {
+      if (!info?.audio_preview) throw new Error('Open the companion on this computer to export with your original audio.');
+      const located = await call('/locate', json({name: original.name, size: original.size, fingerprint: original.fingerprint}));
+      if (!located.ok) throw new Error(`${original.name} was not found on this computer.`);
+      const {id} = await located.json();
+      const response = await call('/segment', json({id, start, duration}));
+      if (!response.ok) throw new Error(`Could not read ${original.name} on this computer.`);
+      return await response.blob();
     },
   };
 })();

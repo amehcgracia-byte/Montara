@@ -5,7 +5,7 @@ const PART_LANE_LIMIT = 2;
 const partLanes = { audio: { active: 0, waiting: [] }, video: { active: 0, waiting: [] } };
 const AUDIO_NAME = /\.(wav|mp3|m4a|aiff?|flac|ogg)$/i;
 const partLane = file => partLanes[AUDIO_NAME.test(file.name) ? 'audio' : 'video'];
-async function sendResumableUpload(file, progress, registered = () => {}, cancelled = () => false) {
+async function sendResumableUpload(file, progress, registered = () => {}, cancelled = () => false, extra = {}) {
   const lane = partLane(file);
   if (lane.active >= PART_LANE_LIMIT) await new Promise(resolve => lane.waiting.push(resolve));
   else lane.active += 1;
@@ -16,7 +16,7 @@ async function sendResumableUpload(file, progress, registered = () => {}, cancel
     if (file.size > limits.max_file_bytes) throw new Error(`This test environment accepts up to ${Math.round(limits.max_file_bytes / 1048576)} MiB per file.`);
     const edges = await new Blob([file.slice(0, 65536), file.slice(Math.max(0, file.size - 65536))]).arrayBuffer();
     const fingerprint = [...new Uint8Array(await crypto.subtle.digest('SHA-256', edges))].map(n => n.toString(16).padStart(2, '0')).join('');
-    let job = await api('/montara/uploads', {name: file.name, size: file.size, fingerprint});
+    let job = await api('/montara/uploads', {...extra, name: file.name, size: file.size, fingerprint});
     registered(job.id);
     let offset = job.received;
     progress(offset / file.size);

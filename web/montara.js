@@ -367,8 +367,8 @@ async function watchCompanion() {
 // ---------- footage memory: survive a reload ----------
 function remember(entry) {
   if (!entry.memory) return;
-  const { id, name, kind, path, reason, projection, duration, uploadId, small, original } = entry;
-  footageMemory.save({ id, name, kind: kind === "error" ? "uploading" : kind, path, reason, projection, duration, uploadId, small, original, ...entry.memory });
+  const { id, name, kind, path, reason, projection, duration, uploadId, small, preview, original } = entry;
+  footageMemory.save({ id, name, kind: kind === "error" ? "uploading" : kind, path, reason, projection, duration, uploadId, small, preview, original, ...entry.memory });
 }
 async function offerRestore() {
   const records = (await footageMemory.list(state.platform)).filter((r) => !state.files.some((f) => f.id === r.id));
@@ -385,7 +385,7 @@ $("#restoreFiles").addEventListener("click", async () => {
   $("#sampleNote").hidden = true;
   for (const record of records) {
     const entry = { id: record.id, name: record.name, kind: record.kind, path: record.path, reason: record.reason, projection: record.projection,
-      duration: record.duration, uploadId: record.uploadId, small: record.small, original: record.original, progress: 0,
+      duration: record.duration, uploadId: record.uploadId, small: record.small, preview: record.preview, original: record.original, progress: 0,
       memory: { platform: record.platform, size: record.size, lastModified: record.lastModified, handle: record.handle } };
     state.files.push(entry);
     if (record.path) continue;
@@ -404,12 +404,14 @@ async function uploadSmall(file, entry) {
   state.uploads += 1;
   let small = null;
   try {
-    small = await montaraCompanion.smallVersion(file, (phase, progress) => { entry.phase = phase; entry.progress = progress; renderFiles(); }, () => entry.removed);
+    // A full session only needs light previews; the export asks for the original song ranges.
+    const preview = state.platform === 'youtube' && $('#fullSessionOn').checked;
+    small = await montaraCompanion.smallVersion(file, (phase, progress) => { entry.phase = phase; entry.progress = progress; renderFiles(); }, () => entry.removed, {preview});
   } catch (error) { console.warn(error); }
   if (!entry.removed) {
-    entry.phase = small ? (montaraCompanion.isAudio(file) ? "Uploading lossless copy" : "Uploading small version") : "";
+    entry.phase = small ? (small.preview ? "Uploading preview" : montaraCompanion.isAudio(file) ? "Uploading lossless copy" : "Uploading small version") : "";
     entry.progress = 0;
-    if (small) { entry.small = true; entry.original = small.original; remember(entry); }
+    if (small) { entry.small = true; entry.preview = small.preview; entry.original = small.original; remember(entry); }
     upload(small ? small.file : file, entry);
   }
   state.uploads -= 1;
@@ -419,7 +421,7 @@ async function uploadSmall(file, entry) {
 function upload(file, entry) {
   if (montaraCompanion.info && !entry.viaCompanion && montaraCompanion.helps(file)) return uploadSmall(file, entry);
   // A lossless copy must reach the server through the resumable path, which restores the WAV.
-  if (file.size > 8 * 1024 * 1024 || /\.(wav|aiff?)\.flac$/i.test(file.name)) return uploadInParts(file, entry);
+  if (file.size > 8 * 1024 * 1024 || /\.(wav|aiff?)\.(flac|opus)$/i.test(file.name)) return uploadInParts(file, entry);
   state.uploads += 1;
   const xhr = new XMLHttpRequest();
   entry.xhr = xhr;
@@ -458,7 +460,8 @@ function upload(file, entry) {
 async function uploadInParts(file, entry) {
   state.uploads += 1;
   try {
-    const data = await sendResumableUpload(file, progress => { entry.progress = progress; renderFiles(); }, id => {entry.uploadId = id; remember(entry);}, () => entry.removed);
+    const extra = /\.opus$/i.test(file.name) && entry.original ? {original: {name: entry.original.name, size: entry.original.size, fingerprint: entry.original.fingerprint}} : {};
+    const data = await sendResumableUpload(file, progress => { entry.progress = progress; renderFiles(); }, id => {entry.uploadId = id; remember(entry);}, () => entry.removed, extra);
     const found = ['videos', 'master', 'songs', 'ignored'].map(kind => [kind, (data[kind] || [])[0]]).find(([, item]) => item);
     if (!found) throw new Error('Not a usable media file');
     entry.kind = found[0] === 'videos' ? 'video' : found[0];
@@ -486,7 +489,7 @@ function fileRow(f) {
     <li>
       <span class="kind ${f.kind}">${fileLabel(f)}</span>
       <span class="name" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}</span>
-      <span class="state">${f.kind === "uploading" ? (f.phase ? escapeHtml(f.phase) + " " : "") + Math.round(f.progress * 100) + "%" : f.small && f.kind === "video" ? "Ready · small version" : f.small ? "Ready · lossless" : f.kind === "error" ? escapeHtml(f.error) : f.kind === "ignored" ? escapeHtml(f.reason || "not used") : "Ready"}</span>
+      <span class="state">${f.kind === "uploading" ? (f.phase ? escapeHtml(f.phase) + " " : "") + Math.round(f.progress * 100) + "%" : f.small && f.kind === "video" ? "Ready · small version" : f.preview ? "Ready · preview" : f.small ? "Ready · lossless" : f.kind === "error" ? escapeHtml(f.error) : f.kind === "ignored" ? escapeHtml(f.reason || "not used") : "Ready"}</span>
       <button class="remove" data-remove-file="${f.id}" type="button" aria-label="Remove ${escapeHtml(f.name)}" title="Remove">×</button>
       ${f.kind === "uploading" ? `<span class="bar"><i style="width:${Math.round(f.progress * 100)}%"></i></span>` : ""}
     </li>`;

@@ -3,7 +3,9 @@
 
 Montara's page asks it for a small version of a video the person dropped; the original
 never leaves the computer. A WAV/AIFF becomes a lossless FLAC (same samples, about half
-the bytes); the server turns it back into the identical WAV before mixing. Only files the page already holds can be found: a request
+the bytes); the server turns it back into the identical WAV before mixing. For a full
+session it becomes a light Opus preview instead, and at export the page asks here for
+only the song ranges of the originals (lossless). Only files the page already holds can be found: a request
 must carry the file's name, size and the SHA-256 of its first and last 64 KiB, which
 only someone who has the file can compute. Listens on 127.0.0.1 only. Standard library
 and FFmpeg only; no window, no wizard. Stop it with Ctrl+C.
@@ -24,7 +26,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-VERSION = "0.2.0"
+VERSION = "0.3.0"
 PORT = int(os.environ.get("MONTARA_COMPANION_PORT", "47820"))
 HOME = Path(os.environ.get("MONTARA_COMPANION_HOME", Path.home() / ".montara-companion"))
 CACHE = HOME / "proxies"
@@ -66,6 +68,7 @@ def ffmpeg_has(kind: str, name: str) -> bool:
 
 
 HW_H264 = ffmpeg_has("encoders", "h264_videotoolbox")
+OPUS = ffmpeg_has("encoders", "libopus")
 SOFT_H264 = ffmpeg_has("encoders", "libx264")
 TONEMAP = ffmpeg_has("filters", "zscale") and ffmpeg_has("filters", "tonemap")
 
@@ -131,9 +134,10 @@ def is_audio(path: Path) -> bool:
     return path.suffix.lower() in AUDIO_SUFFIXES
 
 
-def output_path(source_id: str, pending: bool = False) -> Path:
-    ext = ".flac" if is_audio(sources[source_id]) else ".mp4"
-    return CACHE / f"{source_id}{'.part' if pending else ''}{ext}"
+def output_path(key: str, pending: bool = False) -> Path:
+    """key is a source id, or a source id + 'p' for the light preview of an audio track."""
+    ext = ".opus" if key.endswith("p") else ".flac" if is_audio(sources[key[:24]]) else ".mp4"
+    return CACHE / f"{key}{'.part' if pending else ''}{ext}"
 
 
 def audio_plan(info: dict) -> dict:
@@ -145,7 +149,18 @@ def audio_plan(info: dict) -> dict:
     if not codec.startswith("pcm_") or codec.startswith(("pcm_f", "pcm_alaw", "pcm_mulaw")) or bits not in {"8", "16", "24", "32"}:
         return {"skip": f"{codec or 'unknown'} audio: uploaded as it is"}
     duration = float(info.get("format", {}).get("duration") or audio.get("duration") or 0)
-    return {"audio": True, "duration": duration, "codec": codec, "bits": bits, "channels": audio.get("channels")}
+    return {"audio": True, "duration": duration, "codec": codec, "bits": bits, "channels": audio.get("channels"),
+            "rate": audio.get("sample_rate")}
+
+
+def preview_command(source: Path, target: Path, p: dict) -> list[str]:
+    # Light preview for song detection and the browser mixer; the export uses the originals.
+    # The tags let the server decode it back at the original rate with the BWF time reference.
+    rate = str(p.get("rate") or 48000)
+    bitrate = f"{min(256, 96 * int(p.get('channels') or 1))}k"
+    return [FFMPEG, "-hide_banner", "-nostdin", "-y", "-i", str(source), "-map", "0:a:0", "-c:a", "libopus", "-b:a", bitrate,
+            "-vbr", "on", "-application", "audio", "-metadata", f"montara_sample_rate={rate}", "-metadata", f"montara_bits={p['bits']}",
+            "-progress", "pipe:1", "-nostats", "-f", "ogg", str(target)]
 
 
 def audio_command(source: Path, target: Path) -> list[str]:
@@ -204,10 +219,10 @@ def proxy_command(source: Path, target: Path, p: dict) -> list[str]:
                    "-movflags", "+faststart", "-progress", "pipe:1", "-nostats", str(target)]
 
 
-def make_proxy(source_id: str) -> None:
-    job = jobs[source_id]
-    source = sources[source_id]
-    target = output_path(source_id)
+def make_proxy(key: str) -> None:
+    job = jobs[key]
+    source = sources[key[:24]]
+    target = output_path(key)
     if target.is_file() and target.stat().st_size:
         job.update(status="ready", progress=1.0, bytes=target.stat().st_size)
         return
@@ -217,11 +232,15 @@ def make_proxy(source_id: str) -> None:
             job.update(status="skipped", reason=p["skip"])
             log(f"skip {source.name}: {p['skip']}")
             return
-        pending = output_path(source_id, pending=True)
+        pending = output_path(key, pending=True)
         if p.get("audio"):
             job.update(info={k: p[k] for k in ("codec", "bits", "channels")})
-            command = audio_command(source, pending)
-            log(f"lossless FLAC of {source.name} ({p['bits']}-bit, {p['channels']} ch)")
+            if key.endswith("p"):
+                command = preview_command(source, pending, p)
+                log(f"light preview of {source.name} (Opus; the export uses the original)")
+            else:
+                command = audio_command(source, pending)
+                log(f"lossless FLAC of {source.name} ({p['bits']}-bit, {p['channels']} ch)")
         else:
             job.update(info={k: p[k] for k in ("fps", "hdr", "codec", "size")})
             command = proxy_command(source, pending, p)
@@ -325,8 +344,9 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply(403, {"error": "origin not allowed"})
         if self.path == "/health":
             return self.reply(200, {"app": "montara-companion", "version": VERSION, "ffmpeg": bool(FFMPEG and FFPROBE),
-                                    "hardware_encoder": HW_H264, "tonemap": TONEMAP, "lossless_audio": True})
-        match = re.fullmatch(r"/proxies/([a-f0-9]{24})(/file)?", self.path)
+                                    "hardware_encoder": HW_H264, "tonemap": TONEMAP, "lossless_audio": True,
+                                    "audio_preview": OPUS})
+        match = re.fullmatch(r"/proxies/([a-f0-9]{24}p?)(/file)?", self.path)
         if not match or match.group(1) not in jobs:
             return self.reply(404, {"error": "unknown"})
         job = jobs[match.group(1)]
@@ -337,7 +357,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply(409, {"error": "not ready"})
         self.send_response(200)
         self.cors(self.origin_ok())
-        self.send_header("Content-Type", "audio/flac" if target.suffix == ".flac" else "video/mp4")
+        self.send_header("Content-Type", {".flac": "audio/flac", ".opus": "audio/ogg"}.get(target.suffix, "video/mp4"))
         self.send_header("Content-Length", str(target.stat().st_size))
         self.end_headers()
         with target.open("rb") as handle:
@@ -371,12 +391,16 @@ class Handler(BaseHTTPRequestHandler):
             source_id = body.get("id")
             if source_id not in sources:
                 return self.reply(404, {"error": "locate the file first"})
+            preview = body.get("preview") is True and is_audio(sources[source_id]) and OPUS
+            key = source_id + ("p" if preview else "")
             with lock:
-                stale = jobs.get(source_id, {}).get("status") == "ready" and not output_path(source_id).is_file()
-                if source_id not in jobs or stale or jobs[source_id].get("status") == "failed":
-                    jobs[source_id] = {"status": "working", "progress": 0.0}
-                    threading.Thread(target=make_proxy, args=(source_id,), daemon=True).start()
-            return self.reply(202, {"id": source_id})
+                stale = jobs.get(key, {}).get("status") == "ready" and not output_path(key).is_file()
+                if key not in jobs or stale or jobs[key].get("status") == "failed":
+                    jobs[key] = {"status": "working", "progress": 0.0}
+                    threading.Thread(target=make_proxy, args=(key,), daemon=True).start()
+            return self.reply(202, {"id": key, "preview": bool(preview)})
+        if self.path == "/segment":
+            return self.send_segment(body)
         if self.path == "/projects":
             folder = choose_folder("Where should Montara keep this project?")
             if not folder or not folder.is_dir():
@@ -394,6 +418,36 @@ class Handler(BaseHTTPRequestHandler):
             log(f"project folder: {target}")
             return self.reply(200, {"id": project_id, "folder": str(target)})
         return self.reply(404, {"error": "unknown"})
+
+    def send_segment(self, body: dict):
+        """Lossless FLAC of one time range of a located original (a song of a full session)."""
+        source_id, start, duration = body.get("id"), body.get("start"), body.get("duration")
+        if (source_id not in sources or not is_audio(sources[source_id]) or isinstance(start, bool) or isinstance(duration, bool)
+                or not isinstance(start, (int, float)) or not isinstance(duration, (int, float)) or start < 0 or not 0 < duration <= 4 * 3600):
+            return self.reply(400, {"error": "invalid segment"})
+        source = sources[source_id]
+        # A real file, not a pipe: FLAC writes its sample count and checksum at the end.
+        CACHE.mkdir(parents=True, exist_ok=True)
+        target = CACHE / f"segment-{source_id}-{threading.get_ident()}.flac"
+        command = [FFMPEG, "-hide_banner", "-nostdin", "-v", "error", "-y", "-ss", f"{start:.6f}", "-t", f"{duration:.6f}", "-i", str(source),
+                   "-map", "0:a:0", "-c:a", "flac", "-compression_level", "5", str(target)]
+        started = time.monotonic()
+        try:
+            done = subprocess.run(command, capture_output=True, text=True, timeout=900)
+            if done.returncode != 0 or not target.is_file():
+                log(f"segment failed {source.name}: {done.stderr.strip()[-200:]}")
+                return self.reply(500, {"error": "could not read that part of the original"})
+            size = target.stat().st_size
+            log(f"original {source.name} {start:.1f}+{duration:.1f} s: {size / 1e6:.0f} MB in {time.monotonic() - started:.1f} s")
+            self.send_response(200)
+            self.cors(self.origin_ok())
+            self.send_header("Content-Type", "audio/flac")
+            self.send_header("Content-Length", str(size))
+            self.end_headers()
+            with target.open("rb") as handle:
+                shutil.copyfileobj(handle, self.wfile, 1024 * 1024)
+        finally:
+            target.unlink(missing_ok=True)
 
     def save_file(self, project_id: str, raw_name: str):
         from urllib.parse import unquote

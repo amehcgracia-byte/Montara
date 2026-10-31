@@ -124,11 +124,31 @@ async function renderFullSession() {
   };
   show('sessionReview'); $('#sessionSongs').hidden = true; $('#sessionMix').hidden = true;
   try {
+    await sendSessionOriginals();
     const data = await waitSession(await api(`/montara/session/${fullSession.id}/render`, payload));
     $('#sessionStatus').textContent = 'Your selected songs are ready.';
     drawSessionResults(data);
   } catch (error) { toast(error.message, true); }
   finally { $('#sessionSongs').hidden = false; $('#useMix').disabled = false; }
+}
+
+// Tracks sent as light previews: the export uses the originals, but only the song ranges.
+async function sendSessionOriginals() {
+  let {originals} = await api(`/montara/session/${fullSession.id}/originals`);
+  const missing = originals.filter(w => !w.received);
+  const started = performance.now();
+  let bytes = 0;
+  for (const [index, w] of missing.entries()) {
+    $('#sessionStatus').textContent = `Original audio ${index + 1} / ${missing.length} · ${w.song_name} · ${w.original.name}`;
+    $('#sessionProgress').hidden = false; $('#sessionProgress').value = 100 * index / missing.length;
+    const blob = await montaraCompanion.segment(w.original, w.start, w.duration);
+    bytes += blob.size;
+    const name = `${w.file.replace(/\.wav$/i, '')}.wav.flac`;
+    let uploadId = null;
+    await sendResumableUpload(new File([blob], name, {type: 'audio/flac'}), () => {}, id => { uploadId = id; });
+    originals = (await api(`/montara/session/${fullSession.id}/originals`, {song: w.song, file: w.file, upload_id: uploadId})).originals;
+  }
+  if (missing.length) console.info(`Montara: ${missing.length} original ranges, ${(bytes / 1e6).toFixed(0)} MB in ${((performance.now() - started) / 1000).toFixed(0)} s`);
 }
 
 function drawSessionResults(data) {
