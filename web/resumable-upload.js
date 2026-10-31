@@ -1,7 +1,7 @@
 /* Files are sliced on disk; never read a multi-GB original into one ArrayBuffer. */
 // Audio and video have separate lanes so tracks upload alongside long videos
-// instead of queueing behind them. Two parts at a time per lane.
-const PART_LANE_LIMIT = 2;
+// instead of queueing behind them. Four files at a time per lane: no idle line while one file finishes.
+const PART_LANE_LIMIT = 4;
 const partLanes = { audio: { active: 0, waiting: [] }, video: { active: 0, waiting: [] } };
 const AUDIO_NAME = /\.(wav|mp3|m4a|aiff?|flac|ogg|opus|wv)$/i;
 const partLane = file => partLanes[AUDIO_NAME.test(file.name) ? 'audio' : 'video'];

@@ -68,7 +68,17 @@ const $$ = (sel) => [...document.querySelectorAll(sel)];
 
 async function api(path, body) {
   const options = body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
-  const response = await fetch(path.startsWith("/montara") ? path : `/api/v1${path}`, options);
+  const url = path.startsWith("/montara") ? path : `/api/v1${path}`;
+  let response;
+  for (let attempt = 0; ; attempt++) {
+    try { response = await fetch(url, options); break; }
+    catch (error) {
+      // A dropped connection (tunnel, Wi-Fi) is retried for reads; never resend a POST blindly.
+      if (body === undefined && attempt < 2) { await new Promise((resolve) => setTimeout(resolve, 1500 * (attempt + 1))); continue; }
+      console.warn('Montara request failed', url, error);
+      throw new Error(`Lost the connection to Montara (${url.split('?')[0]}). Check that the server window is still open, then retry.`);
+    }
+  }
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     if(response.status===410 || location.hostname.endsWith('.vercel.run') && (response.status===401 || [502,503,504].includes(response.status) && !data.error)){
@@ -934,8 +944,18 @@ async function loadBuffers() {
   mix.ctx = mix.ctx || new (window.AudioContext || window.webkitAudioContext)();
   await Promise.all(mix.plan.tracks.map(async (t) => {
     if (mix.buffers[t.file]) return;
-    const response = await fetch(`/montara/mix/${mix.job}/track/${encodeURIComponent(t.file)}`);
-    mix.buffers[t.file] = await mix.ctx.decodeAudioData(await response.arrayBuffer());
+    const url = `/montara/mix/${mix.job}/track/${encodeURIComponent(t.file)}`;
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        mix.buffers[t.file] = await mix.ctx.decodeAudioData(await response.arrayBuffer());
+        return;
+      } catch (error) {
+        if (attempt >= 2) { console.warn('Montara track failed', url, error); throw new Error(`Could not load ${t.file} for the preview (${error.message}). Retry.`); }
+        await new Promise((resolve) => setTimeout(resolve, 1500 * (attempt + 1)));
+      }
+    }
   }));
   $("#mixSeek").max = String(mix.plan.duration || 60);
 }

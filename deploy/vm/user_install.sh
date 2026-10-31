@@ -54,7 +54,7 @@ Description=Montara ($(whoami), $branch) on 127.0.0.1:$port
 [Service]
 WorkingDirectory=$root
 EnvironmentFile=$conf/env
-ExecStart=$root/.venv/bin/gunicorn --bind 127.0.0.1:$port --workers 1 --threads 8 --timeout 1800 deploy.entry:app
+ExecStart=$root/.venv/bin/gunicorn --bind 127.0.0.1:$port --workers 1 --threads 8 --timeout 1800 --access-logfile - --access-logformat '%%(t)s %%(m)s %%(U)s %%(s)s %%(b)s %%(L)ss' deploy.entry:app
 Restart=on-failure
 [Install]
 WantedBy=default.target
