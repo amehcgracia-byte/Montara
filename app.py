@@ -321,6 +321,10 @@ def create_montara_app(data_root: Path = DEFAULT_DATA, samples: bool = True):
             )
         except ValueError as exc:
             return jsonify({"error": {"message": str(exc)}}), 400
+        from resumable_upload import preview_original
+        if any(preview_original(path) for path in files):
+            return jsonify({"error": {"message": "These tracks were sent as light previews for Full session. "
+                                                 "Tick Full session, or remove them and add them again."}}), 400
         job_id = uuid.uuid4().hex[:12]
         work = data_root / "Mixer" / job_id
         tracks_dir = work / "tracks"

@@ -21,8 +21,9 @@ from mixer_adapter.session import save
 CHUNK = 4 * 1024**2
 RESERVE = 128 * 1024**2
 LOSSLESS = ('.wav.flac', '.aif.flac', '.aiff.flac')  # the companion's lossless copy of a WAV/AIFF original
+PREVIEW = ('.wav.opus', '.aif.opus', '.aiff.opus')  # the companion's light preview of a full-session track
 PCM = {'8': 'pcm_u8', '16': 'pcm_s16le', '24': 'pcm_s24le', '32': 'pcm_s32le'}
-MEDIA = {'.mp4', '.mov', '.mkv', '.webm', '.mts', '.m2ts', '.wav', '.mp3', '.flac', '.aif', '.aiff', '.m4a', '.ogg'}
+MEDIA = {'.mp4', '.mov', '.mkv', '.webm', '.mts', '.m2ts', '.wav', '.mp3', '.flac', '.aif', '.aiff', '.m4a', '.ogg', '.opus'}
 
 
 def ffmpeg_tool(name):
@@ -49,6 +50,38 @@ def restore_lossless(path: Path) -> Path:
     pending.replace(target)
     path.unlink()
     return target
+
+
+def restore_preview(path: Path) -> Path:
+    """Decode the companion's Opus preview to a WAV at the original rate, keeping the BWF time
+    reference, so song detection and the browser mixer work as with the original. Never exported:
+    the session asks for the original song ranges before it renders."""
+    target = path.with_name(path.name[:-len('.opus')].rsplit('.', 1)[0] + '.wav')
+    if target.is_file():
+        return target
+    tags = subprocess.run([ffmpeg_tool('ffprobe'), '-v', 'error', '-select_streams', 'a:0', '-show_entries',
+                           'stream_tags=montara_sample_rate', '-of', 'default=nw=1:nk=1', str(path)],
+                          capture_output=True, text=True, timeout=60).stdout.split()
+    rate = tags[0] if tags and tags[0].isdigit() and 8000 <= int(tags[0]) <= 384000 else '48000'
+    pending = target.with_name(target.stem + '.partial.wav')
+    done = subprocess.run([ffmpeg_tool('ffmpeg'), '-v', 'error', '-nostdin', '-y', '-i', str(path), '-map', '0:a:0', '-map_metadata', '0:s:a:0',
+                           '-ar', rate, '-c:a', 'pcm_s24le', '-write_bext', '1', '-rf64', 'auto', str(pending)],
+                          capture_output=True, text=True, timeout=3600)
+    if done.returncode != 0:
+        pending.unlink(missing_ok=True)
+        raise ValueError('Could not read the audio preview: ' + (done.stderr.strip().splitlines() or ['FFmpeg failed'])[-1])
+    pending.replace(target)
+    path.unlink()
+    return target
+
+
+def preview_original(path) -> dict | None:
+    """The original a decoded preview stands for ({name, size, fingerprint}), or None for a real file."""
+    try:
+        data = json.loads((Path(path).parent / 'upload.json').read_text())
+    except (OSError, ValueError):
+        return None
+    return data.get('preview_of') if data.get('restored') == Path(path).name else None
 
 
 def register_resumable_upload(app, data_root, classify):
@@ -106,7 +139,15 @@ def register_resumable_upload(app, data_root, classify):
                 return failure('Not enough storage for this file. Remove an unfinished upload or use a smaller file.', 507)
             work = root / uuid.uuid4().hex
             work.mkdir()
-            save(work / 'upload.json', dict(name=name, size=size, fingerprint=fingerprint, complete=False))
+            record = dict(name=name, size=size, fingerprint=fingerprint, complete=False)
+            original = body.get('original')
+            if name.lower().endswith(PREVIEW):
+                if (not isinstance(original, dict) or not isinstance(original.get('name'), str) or Path(original['name']).name != original['name']
+                        or isinstance(original.get('size'), bool) or not isinstance(original.get('size'), int)
+                        or not re.fullmatch('[a-f0-9]{64}', str(original.get('fingerprint')))):
+                    return failure('A preview must name its original.')
+                record['preview_of'] = dict(name=original['name'], size=original['size'], fingerprint=original['fingerprint'])
+            save(work / 'upload.json', record)
             (work / 'source.part').touch()
             return jsonify(public(work, load(work))), 201
 
@@ -175,6 +216,8 @@ def register_resumable_upload(app, data_root, classify):
                     source.replace(work / data['name'])
                     if data['name'].lower().endswith(LOSSLESS):
                         data['restored'] = restore_lossless(work / data['name']).name
+                    elif data['name'].lower().endswith(PREVIEW):
+                        data['restored'] = restore_preview(work / data['name']).name
                     data['complete'] = True
                     save(work / 'upload.json', data)
                 return jsonify(classify([str(work / data.get('restored', data['name']))]))

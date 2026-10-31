@@ -48,6 +48,43 @@ def validate_songs(songs, duration):
     return result
 
 
+MARGIN = 0.5  # seconds of original kept around each song range
+
+
+def track_window(track, song):
+    """(source_start, overlap) of a song inside one track file, in that file's own seconds."""
+    offset = float(track['offset'])
+    return max(0, song['start'] - offset), min(song['end'], offset + track['duration']) - max(song['start'], offset)
+
+
+def original_windows(data):
+    """Ranges of the originals a preview-based session needs before it can export.
+
+    One entry per selected song and preview track that plays in that song. 'start' and
+    'duration' are in the original file's own seconds, with a small margin.
+    """
+    previews = data.get('previews') or {}
+    if not previews or not data.get('tracks'):
+        return []
+    received = data.get('originals') or {}
+    result = []
+    for song in data.get('songs') or []:
+        if not song.get('selected'):
+            continue
+        for track in data['tracks']:
+            original = previews.get(track['file'])
+            source_start, overlap = track_window(track, song)
+            if not original or overlap <= 0:
+                continue
+            start = max(0.0, source_start - MARGIN)
+            window = [round(song['start'], 6), round(song['end'], 6)]
+            got = received.get(f"{song['id']}/{track['file']}")
+            result.append(dict(song=song['id'], song_name=song['name'], file=track['file'], original=original,
+                               start=round(start, 6), duration=round(source_start - start + overlap + MARGIN, 6), window=window,
+                               received=bool(got and got.get('window') == window and Path(got['path']).is_file())))
+    return result
+
+
 def silence_candidates(stems, timelines, duration, frame_seconds):
     """Reviewable fallback for sessions with clear collective instrument rests.
 
@@ -102,9 +139,15 @@ def prepare_tracks(work, song, preview=False):
         if target.is_file():
             continue
         offset = float(track['offset'])
-        source_start = max(0, song['start'] - offset)
-        overlap = min(song['end'], offset + track['duration']) - max(song['start'], offset)
+        source_start, overlap = track_window(track, song)
         delay_ms = round(max(0, offset - song['start']) * 1000)
+        source = track['path']
+        # Export of a preview-based session: read the received original range, never the preview.
+        original = None if preview else (data.get('originals') or {}).get(f"{song['id']}/{track['file']}")
+        if original and original.get('window') == [round(song['start'], 6), round(song['end'], 6)]:
+            source, source_start = original['path'], source_start - float(original['start'])
+        elif not preview and track['file'] in (data.get('previews') or {}) and overlap > 0:
+            raise ValueError(f"The original of {track['file']} for {song['name']} has not arrived. Keep the companion open and export again.")
         temporary = target.with_suffix('.partial.wav')
         if overlap <= 0:
             command = ['ffmpeg', '-v', 'error', '-nostdin', '-y', '-f', 'lavfi', '-i',
@@ -112,7 +155,7 @@ def prepare_tracks(work, song, preview=False):
             filters = 'anull'
         else:
             command = ['ffmpeg', '-v', 'error', '-nostdin', '-y', '-ss', str(source_start),
-                       '-t', str(overlap), '-i', track['path']]
+                       '-t', str(overlap), '-i', source]
             filters = f'adelay={delay_ms}:all=1,apad'
         subprocess.run(command + ['-vn', '-af', filters, '-t', str(duration), '-ac', str(min(track['channels'], 2)),
                                   '-ar', str(track['samplerate']), '-c:a', 'pcm_f32le', str(temporary)], check=True)

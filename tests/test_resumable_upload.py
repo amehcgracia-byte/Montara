@@ -105,3 +105,29 @@ def test_companion_flac_becomes_the_identical_wav_with_its_time_reference(tmp_pa
     assert _pcm(restored) == _pcm(wav)
     assert _bext_samples(restored) == 172800000
     assert c.post(url + '/finish', json={}).json['videos'][0]['path'] == str(restored)
+
+
+@pytest.mark.skipif(not __import__('shutil').which('ffmpeg'), reason='needs ffmpeg')
+def test_opus_preview_decodes_at_original_rate_with_time_reference_and_names_its_original(tmp_path):
+    import subprocess
+    from resumable_upload import preview_original
+    wav, opus = tmp_path / 'src.wav', tmp_path / 'Keys.wav.opus'
+    subprocess.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'sine=f=220:d=3', '-ar', '44100', '-c:a', 'pcm_s24le',
+                    '-write_bext', '1', '-metadata', 'time_reference=88200', str(wav)], check=True)
+    subprocess.run(['ffmpeg', '-v', 'error', '-i', str(wav), '-c:a', 'libopus', '-b:a', '96k', '-metadata', 'montara_sample_rate=44100',
+                    '-metadata', 'montara_bits=24', '-f', 'ogg', str(opus)], check=True)
+    payload = opus.read_bytes()
+    c = make_client(tmp_path / 'data')
+    body = dict(name=opus.name, size=len(payload), fingerprint=fingerprint(payload))
+    assert c.post('/montara/uploads', json=body).status_code == 400          # a preview must name its original
+    original = {'name': 'Keys.wav', 'size': wav.stat().st_size, 'fingerprint': 'b' * 64}
+    job = c.post('/montara/uploads', json={**body, 'original': original}).json
+    url = '/montara/uploads/' + job['id']
+    assert c.put(url, data=payload, headers={'Upload-Offset': '0'}).status_code == 200
+    decoded = Path(c.post(url + '/finish', json={}).json['videos'][0]['path'])
+    assert decoded.name == 'Keys.wav' and preview_original(decoded) == original
+    out = subprocess.run(['ffprobe', '-v', 'error', '-show_entries', 'stream=sample_rate:format_tags=time_reference', '-of', 'default=nw=1:nk=1',
+                          str(decoded)], capture_output=True, text=True).stdout.split()
+    assert out == ['44100', '88200']
+    assert _bext_samples(decoded) == 88200
+    assert preview_original(wav) is None

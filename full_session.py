@@ -14,7 +14,8 @@ import uuid
 from pathlib import Path
 
 from flask import jsonify, request, send_file
-from mixer_adapter.session import read, save, validate_songs
+from mixer_adapter.session import original_windows, read, save, validate_songs
+from resumable_upload import preview_original
 
 ROOT = Path(__file__).resolve().parent
 BUSY = {'detecting', 'preparing', 'rendering'}
@@ -29,6 +30,7 @@ def launch(work, action):
 def public(data):
     result = {k: data[k] for k in ('id', 'status', 'duration', 'songs', 'progress', 'error', 'preview_tracks', 'detection', 'ai_review') if k in data}
     result['results'] = [{k: v for k, v in r.items() if k != 'path'} for r in data.get('results', [])]
+    result['uses_previews'] = bool(data.get('previews'))
     return result
 
 
@@ -71,6 +73,10 @@ def register_full_session(app, data_root, fixtures):
                 # Never duplicate multi-GB source tracks just to register a folder.
                 (work / 'tracks' / path.name).symlink_to(path)
             data = dict(id=job_id, ai_data_root=str(Path(data_root).resolve()), status='detecting', started_at=time.time(), progress={'current_stage': 'Inspecting session', 'progress': 0})
+            # Light previews from the companion: the export asks for the original song ranges.
+            previews = {p.stem + '.wav': o for p in files if (o := preview_original(p))}
+            if previews:
+                data['previews'] = previews
             save(work / 'session.json', data)
             launch(work, 'detect')
         except Exception:
@@ -117,7 +123,9 @@ def register_full_session(app, data_root, fixtures):
                     if [(s['start'],s['end']) for s in songs] != [(s['start'],s['end']) for s in data.get('songs', [])]:
                         data['previous_ai_review'] = data.get('ai_review')
                         data['ai_review'] = {'status': 'manual_revision'}
-                    # Changed boundaries invalidate extracted PCM and mixes.
+                    # Changed boundaries invalidate extracted PCM, mixes and received original ranges.
+                    if [(s.get('id'), s.get('start'), s.get('end'), s.get('selected', True)) for s in songs] != [(s.get('id'), s.get('start'), s.get('end'), s.get('selected', True)) for s in data.get('songs', [])]:
+                        data.pop('originals', None)
                     shutil.rmtree(work / 'songs', ignore_errors=True)
                     shutil.rmtree(work / 'preview', ignore_errors=True)
                     data['songs'] = songs
@@ -127,6 +135,8 @@ def register_full_session(app, data_root, fixtures):
                 elif action == 'render':
                     if not data.get('preview_tracks'):
                         return error('Review the song boundaries first.', 409)
+                    if any(not w['received'] for w in original_windows(data)):
+                        return error('Send the original audio of the selected songs first (keep the companion open).', 409)
                     names = {Path(p).name for p in data['preview_tracks']}
                     settings = {}
                     for key in ('faders', 'mutes', 'base_gains'):
@@ -164,6 +174,45 @@ def register_full_session(app, data_root, fixtures):
                     save(work / 'session.json', data)
                     raise
                 return jsonify(public(data)), 202
+        except ValueError as exc:
+            return error(exc)
+
+    @app.get('/montara/session/<job_id>/originals')
+    def session_originals(job_id):
+        """Song ranges of the originals the export still needs (only when the tracks are previews)."""
+        try:
+            data = read(folder(job_id))
+            return jsonify(originals=original_windows(data))
+        except ValueError as exc:
+            return error(exc, 404)
+
+    @app.post('/montara/session/<job_id>/originals')
+    def session_original_received(job_id):
+        try:
+            work = folder(job_id)
+            body = request.get_json(silent=True) or {}
+            uploads = (Path(data_root).resolve() / 'Uploads').resolve()
+            upload_id = str(body.get('upload_id') or '')
+            if not re.fullmatch('[a-f0-9]{32}', upload_id):
+                raise ValueError('Unknown upload.')
+            record = json.loads((uploads / upload_id / 'upload.json').read_text()) if (uploads / upload_id / 'upload.json').is_file() else {}
+            if not record.get('complete'):
+                raise ValueError('Finish this upload first.')
+            path = (uploads / upload_id / record.get('restored', record['name'])).resolve()
+            if not path.is_relative_to(uploads) or not path.is_file() or path.suffix.lower() != '.wav':
+                raise ValueError('Send the original as lossless audio.')
+            with (work / 'request.lock').open('a') as lock:
+                fcntl.flock(lock, fcntl.LOCK_EX)
+                data = read(work)
+                if data['status'] in BUSY:
+                    return error('Wait for this session to finish or cancel it.', 409)
+                window = next((w for w in original_windows(data) if w['song'] == body.get('song') and w['file'] == body.get('file')), None)
+                if not window:
+                    raise ValueError('This song range is not needed.')
+                # Server-side window (never the browser's numbers) decides where the range starts.
+                data.setdefault('originals', {})[f"{window['song']}/{window['file']}"] = dict(path=str(path), start=window['start'], window=window['window'])
+                save(work / 'session.json', data)
+            return jsonify(originals=original_windows(data))
         except ValueError as exc:
             return error(exc)
 
