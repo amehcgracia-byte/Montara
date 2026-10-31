@@ -522,3 +522,4 @@ body.is-intro .top,body.is-intro footer,body.is-intro #version{visibility:hidden
 .render-bars i::after{content:"";position:absolute;left:0;right:0;bottom:0;height:calc(var(--p,0) * 100%);
   background:color-mix(in srgb,#2EBD6B calc(var(--p,0) * 100%),#FF4F2E);transition:height .4s ease}
 .render-bars.many i{width:3px;height:16px}
+.session-bars{justify-content:flex-start;margin:6px 0 14px}.session-bars i{width:28px;height:10px}

@@ -27,14 +27,55 @@ $('#sessionCancel').onclick = async () => {
   catch (error) { toast(error.message, true); }
 };
 
+const SESSION_STAGE = {
+  detecting: ['Finding the songs in your session', 'Listening to every track to find where each song starts and ends.'],
+  preparing: ['Preparing the mixer preview', 'Cutting a short excerpt of the first selected song for the mixer.'],
+  rendering: ['Mixing and mastering each song', 'Every selected song gets its own automatic mix and master.'],
+};
+const sessionClock = { status: null, started: 0, songStarted: 0, songIndex: -1, perSong: [] };
+
+const minutesLeft = seconds => seconds < 50 ? 'less than a minute left' : `about ${Math.round(seconds / 60)} min left`;
+
 function showSessionProgress(data) {
   fullSession.data = data;
   fullSession.busy = ['detecting', 'preparing', 'rendering'].includes(data.status);
+  const now = performance.now() / 1000;
+  if (sessionClock.status !== data.status) Object.assign(sessionClock, { status: data.status, started: now, songStarted: now, songIndex: -1, perSong: [] });
+  const [title, hint] = SESSION_STAGE[data.status] || [];
+  $('#sessionHint').textContent = hint || 'Review the suggested boundaries and choose the songs. Each song gets its own automatic mix; your fader moves apply on top.';
   $('#sessionCancel').hidden = !fullSession.busy;
   $('#sessionBack').disabled = fullSession.busy;
+  $('#sessionWorking').hidden = !fullSession.busy && !data.error;
+  $('#sessionWorking').classList.toggle('done', !fullSession.busy);
   $('#sessionProgress').hidden = !fullSession.busy;
-  $('#sessionProgress').value = Math.max(0, Math.min(100, Number(data.progress?.progress || 0)));
-  $('#sessionStatus').textContent = data.error || data.progress?.stage_detail || data.progress?.current_stage || data.status;
+  const percent = Math.max(0, Math.min(100, Number(data.progress?.progress || 0)));
+  $('#sessionProgress').value = percent;
+  const detail = data.progress?.stage_detail || '';
+  $('#sessionStatus').textContent = data.error || (fullSession.busy ? `${title}${detail && detail !== data.status ? ' · ' + detail : ''}…` : '');
+  // Remaining time from the pace so far; songs are timed one by one while rendering.
+  let eta = '';
+  const selected = (data.songs || []).filter(s => s.selected);
+  if (data.status === 'rendering' && selected.length) {
+    const done = (data.results || []).length;
+    if (done !== sessionClock.songIndex) { if (sessionClock.songIndex >= 0) sessionClock.perSong.push(now - sessionClock.songStarted); sessionClock.songIndex = done; sessionClock.songStarted = now; }
+    const seconds = song => Math.max(1, song.end - song.start);
+    const pace = sessionClock.perSong.length ? sessionClock.perSong.reduce((a, b) => a + b, 0) / selected.slice(0, sessionClock.perSong.length).reduce((a, s) => a + seconds(s), 0) : null;
+    const current = selected[done];
+    const currentShare = pace && current ? Math.min(.97, (now - sessionClock.songStarted) / (pace * seconds(current))) : 0;
+    if (pace) eta = minutesLeft(Math.max(0, pace * selected.slice(done).reduce((a, s) => a + seconds(s), 0) - (now - sessionClock.songStarted)));
+    else eta = current ? `Song ${done + 1} of ${selected.length} · timing the first song…` : '';
+    const bars = $('#sessionBars');
+    if (bars.children.length !== selected.length) bars.innerHTML = selected.map(() => '<i></i>').join('');
+    [...bars.children].forEach((bar, i) => bar.style.setProperty('--p', i < done ? '1' : i === done ? (currentShare || .06).toFixed(3) : '0'));
+    bars.hidden = false;
+  } else {
+    $('#sessionBars').hidden = data.status !== 'done';
+    if (fullSession.busy && percent > 2) {
+      const elapsed = now - sessionClock.started;
+      eta = minutesLeft(elapsed * (100 - percent) / percent);
+    }
+  }
+  $('#sessionEta').textContent = fullSession.busy ? eta : '';
 }
 
 async function waitSession(initial) {
@@ -117,8 +158,10 @@ async function renderFullSession() {
   const mixJob = await api(`/montara/mix/${mix.job}`);
   const payload = {
     reference: mixJob.reference,
+    // Each song keeps its own automatic mix (computed from that song); the person's
+    // faders apply on top as offsets. Forcing the preview's gains on every song
+    // switched off per-song balance and the drum peak guard.
     faders: Object.fromEntries(mix.plan.tracks.map(t => [t.file, MixLevels.offset(t)])),
-    base_gains: Object.fromEntries(mix.plan.tracks.map(t => [t.file, Number(t.base_gain_db || 0)])),
     mutes: Object.fromEntries(mix.plan.tracks.map(t => [t.file, Boolean(t.mute)])),
     effects: Object.fromEntries(mix.plan.tracks.map(t => [t.file, Object.fromEntries(['reverb', 'delay'].map(key => [key, t.fx?.[key]?.enabled ? t.fx[key].amount / 100 : 0]))]))
   };
@@ -139,8 +182,12 @@ async function sendSessionOriginals() {
   const started = performance.now();
   let bytes = 0;
   for (const [index, w] of missing.entries()) {
-    $('#sessionStatus').textContent = `Original audio ${index + 1} / ${missing.length} · ${w.song_name} · ${w.original.name}`;
+    $('#sessionWorking').hidden = false; $('#sessionWorking').classList.remove('done');
+    $('#sessionHint').textContent = 'Sending only the song ranges of your original tracks, lossless, from this computer.';
+    $('#sessionStatus').textContent = `Original audio ${index + 1} / ${missing.length} · ${w.song_name} · ${w.original.name}…`;
     $('#sessionProgress').hidden = false; $('#sessionProgress').value = 100 * index / missing.length;
+    const spent = (performance.now() - started) / 1000;
+    $('#sessionEta').textContent = index ? minutesLeft(spent / index * (missing.length - index)) : '';
     const blob = await montaraCompanion.segment(w.original, w.start, w.duration);
     bytes += blob.size;
     const ext = blob.type === 'audio/x-wavpack' ? '.wav.wv' : '.wav.flac';  // float originals: WavPack (FLAC has no float)
