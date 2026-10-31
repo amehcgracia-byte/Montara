@@ -494,12 +494,21 @@ function fileLabel(f) {
   if (f.kind === "master" || f.kind === "songs") return mixerMode() ? "TRACK" : "MASTER";
   return KIND_LABEL[f.kind] || f.kind.toUpperCase();
 }
+// Minutes left for one file, from its own pace (restarts when its phase changes).
+function uploadEta(f) {
+  const now = performance.now() / 1000;
+  if (f.etaPhase !== f.phase || f.progress < (f.etaFrom ?? 0)) Object.assign(f, { etaPhase: f.phase, etaFrom: f.progress, etaStart: now });
+  const done = f.progress - f.etaFrom, spent = now - f.etaStart;
+  if (done < .03 || spent < 3) return "";
+  const left = spent / done * (1 - f.progress);
+  return left < 50 ? " · <1 min" : ` · ${Math.round(left / 60)} min`;
+}
 function fileRow(f) {
   return `
     <li>
       <span class="kind ${f.kind}">${fileLabel(f)}</span>
       <span class="name" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}</span>
-      <span class="state">${f.kind === "uploading" ? (f.phase ? escapeHtml(f.phase) + " " : "") + Math.round(f.progress * 100) + "%" : f.small && f.kind === "video" ? "Ready · small version" : f.preview ? "Ready · preview" : f.small ? "Ready · lossless" : f.kind === "error" ? escapeHtml(f.error) : f.kind === "ignored" ? escapeHtml(f.reason || "not used") : "Ready"}</span>
+      <span class="state">${f.kind === "uploading" ? (f.phase ? escapeHtml(f.phase) + " " : "") + Math.round(f.progress * 100) + "%" + uploadEta(f) : f.small && f.kind === "video" ? "Ready · small version" : f.preview ? "Ready · preview" : f.small ? "Ready · lossless" : f.kind === "error" ? escapeHtml(f.error) : f.kind === "ignored" ? escapeHtml(f.reason || "not used") : "Ready"}</span>
       <button class="remove" data-remove-file="${f.id}" type="button" aria-label="Remove ${escapeHtml(f.name)}" title="Remove">×</button>
       ${f.kind === "uploading" ? `<span class="bar"><i style="width:${Math.round(f.progress * 100)}%"></i></span>` : ""}
     </li>`;
