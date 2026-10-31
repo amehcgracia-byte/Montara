@@ -17,6 +17,7 @@ import json
 import re
 import logging
 import os
+import subprocess
 import sys
 import threading
 import time
@@ -41,7 +42,22 @@ SAMPLE_SETS = {
 }
 DEFAULT_DATA = Path.home() / "MontaraData"
 # Shown at the bottom of every page, so it is obvious which build is running.
-MONTARA_VERSION = "0.39 · 2026-10-27 · Session mixes and resumable uploads"
+MONTARA_VERSION = "0.44 · 2026-10-31 · Session review with waveforms, per-song mixes"
+
+
+def _build_label() -> str:
+    """Version plus the exact commit, so every update shows a different footer."""
+    sha = os.environ.get("MONTARA_BUILD_SHA", "")[:7]
+    if not sha:
+        try:
+            sha = subprocess.run(["git", "-C", str(Path(__file__).resolve().parent), "rev-parse", "--short", "HEAD"],
+                                 capture_output=True, text=True, timeout=5).stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            sha = ""
+    return f"{MONTARA_VERSION} · {sha}" if sha else MONTARA_VERSION
+
+
+BUILD_LABEL = _build_label()
 BRANDING_MODES = {"montara", "mine", "none"}
 
 
@@ -191,7 +207,7 @@ def create_montara_app(data_root: Path = DEFAULT_DATA, samples: bool = True):
 
     @app.get("/montara/version")
     def montara_version():
-        return jsonify({"version": MONTARA_VERSION})
+        return jsonify({"version": BUILD_LABEL})
 
     @app.get("/montara/audio")
     def montara_audio():
