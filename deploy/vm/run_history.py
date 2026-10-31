@@ -67,6 +67,30 @@ def probe_output(path: Path) -> dict:
     return out
 
 
+def shots(folder: Path) -> dict | None:
+    """Shots per camera in the final edit plan: count, seconds and how many were 360 reframes."""
+    try:
+        plan = json.loads((folder / "artifacts" / "edit_plan.json").read_text())
+    except (OSError, ValueError):
+        return None
+    cameras: dict[str, dict] = {}
+    for seg in plan.get("segments") or []:
+        name = Path(str(seg.get("filename") or seg.get("clip_path") or "?")).name
+        cam = cameras.setdefault(name, {"shots": 0, "seconds": 0.0, "shots_360": 0, "seconds_360": 0.0})
+        dur = float(seg.get("duration_sec") or 0)
+        cam["shots"] += 1
+        cam["seconds"] += dur
+        if seg.get("spherical_shot"):
+            cam["shots_360"] += 1
+            cam["seconds_360"] += dur
+    total = sum(c["seconds"] for c in cameras.values())
+    total_360 = sum(c["seconds_360"] for c in cameras.values())
+    for cam in cameras.values():
+        cam["seconds"], cam["seconds_360"] = round(cam["seconds"], 1), round(cam["seconds_360"], 1)
+    return {"count": sum(c["shots"] for c in cameras.values()), "seconds_360": round(total_360, 1),
+            "share_360": round(total_360 / total, 3) if total else None, "by_camera": cameras}
+
+
 def record(folder: Path, base: dict) -> dict | None:
     try:
         project = json.loads((folder / "project.json").read_text())
@@ -100,6 +124,7 @@ def record(folder: Path, base: dict) -> dict | None:
         "videos": videos,
         "master": Path(str(master.get("path") if isinstance(master, dict) else master or "")).name or None,
         "song_range": wizard.get("audio_trim") or None,
+        "shots": shots(folder),
         "output": probe_output(exports[-1]) if exports else None,
     }
 
