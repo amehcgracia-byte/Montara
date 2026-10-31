@@ -130,15 +130,17 @@ def test_preview_session_exports_from_received_original_ranges_only(tmp_path):
             'songs': [song, dict(id=2, name='Song 02', start=12.0, end=14.0, selected=False)],
             'previews': {'keys.wav': {'name': 'keys.wav', 'size': 1, 'fingerprint': 'a' * 64}}}
     save(work / 'session.json', data)
-    [window] = original_windows(data)                                   # unselected song needs nothing
+    [window] = original_windows(data, work)                             # unselected song needs nothing
     assert (window['song'], window['start'], window['duration'], window['received']) == (1, 3.5, 5.0, False)
     with pytest.raises(ValueError):                                     # never export the preview
         prepare_tracks(work, song)
     start = int(window['start'] * rate)
     segment = tmp_path / 'segment.wav'; sf.write(segment, original[start:start + int(window['duration'] * rate)], rate, subtype='FLOAT')
-    data['originals'] = {'1/keys.wav': dict(path=str(segment), start=window['start'], window=window['window'])}
-    save(work / 'session.json', data)
-    assert original_windows(data)[0]['received']
+    from mixer_adapter.session import register_original
+    register_original(work, window, segment)
+    assert original_windows(data, work)[0]['received']
+    moved = {**data, 'songs': [dict(song, end=11.0), data['songs'][1]]}
+    assert not original_windows(moved, work)[0]['received']            # a range belongs to its exact window
     audio, _ = sf.read(prepare_tracks(work, song) / 'keys.wav', dtype='float32')
     np.testing.assert_allclose(audio, original[4 * rate:8 * rate], atol=1e-6)   # song 6–10 s = file 4–8 s (offset 2)
     audio, _ = sf.read(prepare_tracks(work, song, preview=True) / 'keys.wav', dtype='float32')
@@ -179,3 +181,23 @@ def test_whole_session_listening_copy_is_seekable_webm(tmp_path):
     assert copy.suffix == '.webm' and session_listen(work) == copy
     info = json.loads(subprocess.check_output(['ffprobe', '-v', 'error', '-show_format', '-show_streams', '-of', 'json', str(copy)]))
     assert info['streams'][0]['codec_name'] == 'opus' and abs(float(info['format']['duration']) - 5) < .2
+
+
+def test_original_ranges_are_accepted_while_an_export_runs(tmp_path):
+    c = client(tmp_path)
+    data_root = tmp_path / 'data'
+    work = data_root / 'Sessions' / 'abcdefabcdef'; work.mkdir(parents=True)
+    rate = 8000
+    preview = tmp_path / 'keys.wav'; sf.write(preview, np.zeros(rate * 20), rate, subtype='FLOAT')
+    song = dict(id=1, name='Song 01', start=6.0, end=10.0, selected=True)
+    save(work / 'session.json', {'id': 'abcdefabcdef', 'status': 'rendering', 'started_at': time.time(), 'duration': 20.0, 'songs': [song],
+                                 'tracks': [dict(file='keys.wav', path=str(preview), samplerate=rate, channels=1, offset=2, duration=20)],
+                                 'previews': {'keys.wav': {'name': 'keys.wav', 'size': 1, 'fingerprint': 'a' * 64}}})
+    upload = data_root / 'Uploads' / ('b' * 32); upload.mkdir(parents=True)
+    sf.write(upload / 'keys.wav', np.ones(rate * 5) * .1, rate, subtype='FLOAT')
+    (upload / 'upload.json').write_text(json.dumps({'name': 'keys.wav.flac', 'restored': 'keys.wav', 'complete': True}))
+    windows = c.get('/montara/session/abcdefabcdef/originals?song=1').json['originals']
+    assert len(windows) == 1 and not windows[0]['received']
+    response = c.post('/montara/session/abcdefabcdef/originals', json={'song': 1, 'file': 'keys.wav', 'upload_id': 'b' * 32})
+    assert response.status_code == 200 and response.json['originals'][0]['received']
+    assert json.loads((work / 'session.json').read_text())['status'] == 'rendering'   # session.json untouched by the range

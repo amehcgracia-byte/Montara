@@ -14,7 +14,7 @@ import uuid
 from pathlib import Path
 
 from flask import jsonify, request, send_file
-from mixer_adapter.session import listen_range, original_windows, read, save, session_listen, session_waveform, validate_songs
+from mixer_adapter.session import listen_range, original_windows, read, register_original, save, session_listen, session_waveform, validate_songs
 from resumable_upload import preview_original
 
 ROOT = Path(__file__).resolve().parent
@@ -147,8 +147,8 @@ def register_full_session(app, data_root, fixtures):
                         data['previous_ai_review'] = data.get('ai_review')
                         data['ai_review'] = {'status': 'manual_revision'}
                     if key(songs) != key(data.get('songs', [])):
-                        # Changed boundaries invalidate extracted PCM, mixes and received original ranges.
-                        data.pop('originals', None)
+                        # Changed boundaries invalidate extracted PCM and mixes. Received original
+                        # ranges stay: each one belongs to the exact window it was cut for.
                         shutil.rmtree(work / 'songs', ignore_errors=True)
                     data['songs'] = songs
                 elif action in ('prepare', 'songs'):
@@ -165,8 +165,6 @@ def register_full_session(app, data_root, fixtures):
                 elif action == 'render':
                     if not data.get('songs') or not data.get('tracks'):
                         return error('Review the song boundaries first.', 409)
-                    if any(not w['received'] for w in original_windows(data)):
-                        return error('Send the original audio of the selected songs first (keep the companion open).', 409)
                     names = {t['file'] for t in data['tracks']}
                     settings = mix_settings(body, names)
                     per_song = body.get('per_song') or {}
@@ -231,8 +229,9 @@ def register_full_session(app, data_root, fixtures):
     def session_originals(job_id):
         """Song ranges of the originals the export still needs (only when the tracks are previews)."""
         try:
-            data = read(folder(job_id))
-            return jsonify(originals=original_windows(data))
+            work = folder(job_id)
+            song = request.args.get('song', type=int)
+            return jsonify(originals=original_windows(read(work), work, song))
         except ValueError as exc:
             return error(exc, 404)
 
@@ -251,18 +250,14 @@ def register_full_session(app, data_root, fixtures):
             path = (uploads / upload_id / record.get('restored', record['name'])).resolve()
             if not path.is_relative_to(uploads) or not path.is_file() or path.suffix.lower() != '.wav':
                 raise ValueError('Send the original as lossless audio.')
-            with (work / 'request.lock').open('a') as lock:
-                fcntl.flock(lock, fcntl.LOCK_EX)
-                data = read(work)
-                if data['status'] in BUSY:
-                    return error('Wait for this session to finish or cancel it.', 409)
-                window = next((w for w in original_windows(data) if w['song'] == body.get('song') and w['file'] == body.get('file')), None)
-                if not window:
-                    raise ValueError('This song range is not needed.')
-                # Server-side window (never the browser's numbers) decides where the range starts.
-                data.setdefault('originals', {})[f"{window['song']}/{window['file']}"] = dict(path=str(path), start=window['start'], window=window['window'])
-                save(work / 'session.json', data)
-            return jsonify(originals=original_windows(data))
+            # Accepted while an export runs: ranges are separate files, not session.json.
+            data = read(work)
+            window = next((w for w in original_windows(data, work, body.get('song')) if w['file'] == body.get('file')), None)
+            if not window:
+                raise ValueError('This song range is not needed.')
+            # Server-side window (never the browser's numbers) decides where the range starts.
+            register_original(work, window, path)
+            return jsonify(originals=original_windows(data, work, body.get('song')))
         except ValueError as exc:
             return error(exc)
 
