@@ -88,6 +88,7 @@ input[type=range]{accent-color:var(--accent);width:180px}
 output{color:var(--fg);font-weight:600;min-width:42px}
 .actions{display:flex;gap:12px;margin-top:28px}
 .link{color:var(--accent);font-weight:600;text-decoration:underline;text-underline-offset:3px}
+.files .whole{grid-column:1/-1;justify-self:start;font-size:13px;background:none;border:0;padding:0;cursor:pointer}
 .files .kind.sample{background:var(--panel)}
 
 /* making */

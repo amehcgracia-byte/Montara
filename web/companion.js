@@ -47,7 +47,8 @@ const montaraCompanion = (() => {
       if (!response.ok) throw new Error('The companion could not save the video.');
       return (await response.json()).saved;
     },
-    /* Resolves to {file, original} with the small version, or null to upload the original. */
+    /* Resolves to {file, original} with the small version, {missing: true} if it is not on this
+       computer, or null when the companion cannot help with this file. */
     async smallVersion(file, onProgress, cancelled = () => false, {preview = false} = {}) {
       if (!info || !this.helps(file)) return null;
       const audio = this.isAudio(file);
@@ -56,7 +57,7 @@ const montaraCompanion = (() => {
         onProgress('Finding it on your computer', 0);
         const print = await fingerprint(file);
         const located = await call('/locate', json({name: file.name, size: file.size, fingerprint: print}));
-        if (!located.ok) return null;
+        if (!located.ok) return located.status === 404 ? {missing: true} : null;
         const located_ = await located.json();
         const {id} = await (await call('/proxies', json({id: located_.id, preview}))).json();
         for (;;) {

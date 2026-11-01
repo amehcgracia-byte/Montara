@@ -409,6 +409,8 @@ $("#restoreFiles").addEventListener("click", async () => {
   renderFiles();
 });
 
+const WHOLE_FILE_ASK_BYTES = 200 * 1024 * 1024;
+
 // With the companion running, a video becomes a small version on the person's
 // computer and only that is uploaded; the original stays where it is.
 async function uploadSmall(file, entry) {
@@ -421,8 +423,16 @@ async function uploadSmall(file, entry) {
     const preview = state.platform === 'youtube' && ($('#fullSessionOn').checked || (montaraCompanion.isAudio(file) && file.size > LONG_AUDIO_BYTES && !videos().length));
     small = await montaraCompanion.smallVersion(file, (phase, progress) => { entry.phase = phase; entry.progress = progress; renderFiles(); }, () => entry.removed, {preview});
   } catch (error) { console.warn(error); }
+  // A big original never travels without asking: the point of the companion is not to upload it.
+  if (!entry.removed && small?.missing && file.size > WHOLE_FILE_ASK_BYTES) {
+    entry.kind = "error"; entry.error = "Not found on this computer"; entry.wholeFile = file;
+    state.uploads -= 1;
+    renderFiles();
+    return;
+  }
+  if (small?.missing) small = null;
   if (!entry.removed) {
-    entry.phase = small ? (small.preview ? "Uploading preview" : montaraCompanion.isAudio(file) ? "Uploading lossless copy" : "Uploading small version") : "";
+    entry.phase = small ? (small.preview ? "Uploading preview" : montaraCompanion.isAudio(file) ? "Uploading lossless copy" : "Uploading small version") : montaraCompanion.info ? "Uploading the whole file" : "";
     entry.progress = 0;
     if (small) { entry.small = true; entry.preview = small.preview; entry.original = small.original; remember(entry); }
     upload(small ? small.file : file, entry);
@@ -513,10 +523,21 @@ function fileRow(f, typed = false) {
       <span class="name" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}</span>
       <span class="state">${f.kind === "uploading" ? (f.phase ? escapeHtml(f.phase) + " " : "") + Math.round(f.progress * 100) + "%" + uploadEta(f) : f.small && f.kind === "video" ? "Ready · small version" : f.preview ? "Ready · preview" : f.small ? "Ready · lossless" : f.kind === "error" ? escapeHtml(f.error) : f.kind === "ignored" ? escapeHtml(f.reason || "not used") : "Ready"}</span>
       <button class="remove" data-remove-file="${f.id}" type="button" aria-label="Remove ${escapeHtml(f.name)}" title="Remove">×</button>
+      ${f.wholeFile && f.kind === "error" ? `<button class="link whole" data-upload-whole="${f.id}" type="button">Upload the whole file (${(f.wholeFile.size / 1e9).toFixed(1)} GB)</button>` : ""}
       ${typed && (f.kind === "master" || f.kind === "songs") ? TrackTypes.controls(f.name) : ""}
       ${f.kind === "uploading" ? `<span class="bar"><i style="width:${Math.round(f.progress * 100)}%"></i></span>` : ""}
     </li>`;
 }
+document.addEventListener('click', event => {
+  const button = event.target.closest('[data-upload-whole]');
+  const entry = button && state.files.find(f => f.id === button.dataset.uploadWhole);
+  if (!entry?.wholeFile) return;
+  const file = entry.wholeFile;
+  Object.assign(entry, { kind: "uploading", error: null, wholeFile: null, phase: "Uploading the whole file", progress: 0 });
+  upload(file, entry);
+  renderFiles();
+});
+
 // Every file row can be removed, also while it uploads: the upload stops and
 // an unfinished server copy is discarded. Finished files simply leave this project.
 document.addEventListener('click', event => {
