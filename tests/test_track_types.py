@@ -53,3 +53,20 @@ def test_single_song_mixer_uses_the_chosen_role_and_side(tmp_path):
     other = SingleSongMix(tracks, tmp_path / 'other')
     other._register()
     assert other.pipeline.NOISE_EXEMPT_STEMS == set() and other.pipeline.STEREO_SIDES == {}
+
+
+def test_every_type_has_a_dictionary_entry_with_the_same_role():
+    sys.path.insert(0, str(ROOT / 'mixer'))
+    import instrument_dictionary
+    for key, (_label, role) in track_types.TYPES.items():
+        assert instrument_dictionary.INSTRUMENTS[key]['role'] == role, key
+
+
+def test_the_mixer_gets_the_instrument_of_each_track(tmp_path):
+    tracks = tmp_path / 'tracks'; tracks.mkdir()
+    sr = 44100
+    sf.write(tracks / 'Host.wav', (.1 * np.sin(np.arange(sr) / 5)).astype('float32'), sr, subtype='FLOAT')
+    job = SingleSongMix(tracks, tmp_path / 'job', track_types=track_types.validate({'Host.wav': {'type': 'podcast_voice', 'chosen': True}}))
+    job._register()
+    assert job.pipeline.STEM_INSTRUMENTS == {'Host.wav': 'podcast_voice'}
+    assert job.pipeline.role_eq_bands('vocal', name='Host.wav')[0][2] == 80

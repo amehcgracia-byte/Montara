@@ -14,7 +14,7 @@ const TrackTypes = (() => {
     kick: ['kick', 'kickdrum', 'bd', 'bdjam', 'bombo', 'bass drum', 'low drum'],
     snare: ['snare', 'snr'],
     hh: ['hh', 'hihat', 'hi-hat', 'hi hat', 'high hat', 'cymbal'],
-    overhead: ['overhead', 'overheads', 'ov', 'ovjam'],
+    overhead: ['overhead', 'overheads', 'ov', 'ovjam', 'oh', 'ohl', 'ohr'],
     percussion: ['percussion', 'perc', 'conga', 'bongo', 'cajon', 'shaker', 'tambourine'],
     drums: ['drum', 'drums', 'kit', 'beatbox'],
     bass: ['bass', 'bassgtr', 'bass gtr', 'low end', 'electric bass'],
@@ -47,7 +47,7 @@ const TrackTypes = (() => {
     return list.some(s => n.includes(s.trim()) || compact.includes(s.trim().replace(/ /g, '')));
   };
   // Short labels (bd, ov, vo, bv...) only as whole words: "Robi" is not "bd", "Novo" not "ov".
-  const SHORT = new Set(['bd', 'ov', 'hh', 'vo', 'bv', 'amb', 'bone', 'box', 'mic', 'kit', 'perc', 'host']);
+  const SHORT = new Set(['bd', 'ov', 'oh', 'ohl', 'ohr', 'hh', 'vo', 'bv', 'amb', 'bone', 'box', 'mic', 'kit', 'perc', 'host']);
   const hasWord = (low, list) => {
     const n = ` ${words(low)} `;
     return list.some(s => SHORT.has(s.trim()) ? n.includes(` ${s.trim()} `) : has(low, [s]));
@@ -60,10 +60,15 @@ const TrackTypes = (() => {
     return 'other';
   }
   // Left / right from the name: "Keys L", "Piano_R", "OH Left".
+  // Glued forms too: "KeysL", "PianoR", "OHL" (an instrument word followed by L or R).
+  const SIDE_WORDS = new Set(['keys', 'key', 'piano', 'pno', 'synth', 'oh', 'ov', 'overhead', 'gtr', 'guit', 'guitar', 'strings', 'str', 'room', 'amb', 'bv', 'vox', 'pad', 'organ', 'rhodes']);
   function guessSide(name) {
     const n = ` ${words(label(name))} `;
     if (/ (l|left|izq|izquierda) $/.test(n)) return 'L';
     if (/ (r|right|der|derecha) $/.test(n)) return 'R';
+    const compact = words(label(name)).replace(/ /g, '');
+    const glued = compact.match(/^(.*?)(l|r)$/);
+    if (glued && SIDE_WORDS.has(glued[1])) return glued[2].toUpperCase();
     return '';
   }
 
@@ -90,5 +95,6 @@ const TrackTypes = (() => {
     if (type || side) event.target.closest('.track-type')?.querySelector('small')?.remove();
   });
 
-  return { TYPES, guess, guessSide, of, set, forFiles, controls };
+  const labelOf = name => (TYPES.find(([v]) => v === of(name).type) || [, 'Other'])[1];
+  return { TYPES, guess, guessSide, of, set, forFiles, controls, label: labelOf };
 })();

@@ -79,13 +79,15 @@ const montaraCompanion = (() => {
         return null;
       }
     },
-    /* Lossless FLAC of one range of an original audio file; resolves to a Blob. */
-    async segment(original, start, duration) {
+    /* One range of an original audio file; resolves to a Blob. 'opus' (Fast, high bitrate) when this
+       companion can, otherwise lossless (FLAC, or WavPack for float). */
+    canFastSegments() { return Boolean(info?.segment_formats?.includes('opus')); },
+    async segment(original, start, duration, format = 'lossless') {
       if (!info?.audio_preview) throw new Error('Open the companion on this computer to export with your original audio.');
       const located = await call('/locate', json({name: original.name, size: original.size, fingerprint: original.fingerprint}));
       if (!located.ok) throw new Error(`${original.name} was not found on this computer.`);
       const {id} = await located.json();
-      const response = await call('/segment', json({id, start, duration}));
+      const response = await call('/segment', json({id, start, duration, format}));
       if (!response.ok) throw new Error(`Could not read ${original.name} on this computer.`);
       return await response.blob();
     },

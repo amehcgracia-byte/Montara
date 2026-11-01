@@ -371,7 +371,13 @@ body[data-show-kind=podcast] #showLiveEdit,body[data-show-kind=podcast] #showUnd
 .cut-dialog,.show-effect-dialog{color-scheme:dark;scrollbar-width:thin;scrollbar-color:#606065 #1b1b1e}
 
 /* Fixed mixer effects: only enable and amount, per track. */
-.strip{flex-basis:110px}
+.strip{flex-basis:100px}
+.strip small{max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* The mixer uses the whole window: twelve strips across on a laptop screen at full size. */
+body:has(#mix:not([hidden])) main{max-width:min(1640px,100%)}
+.strip.pair-l{border-top-right-radius:4px;border-bottom-right-radius:4px;margin-right:-7px;border-right-color:transparent}
+.strip.pair-r{border-top-left-radius:4px;border-bottom-left-radius:4px}
+.strip.pair-l small::after{content:' · L'}.strip.pair-r small::after{content:' · R'}
 /* Two buttons above the name (ON, SOLO), two below (EQ, FX): same size; the name is the largest text. */
 .strip-buttons{display:grid;grid-template-columns:1fr 1fr;gap:6px;width:100%}
 .strip-buttons .wide{grid-column:1/-1}
@@ -515,6 +521,9 @@ body.is-intro .top,body.is-intro footer,body.is-intro #version{visibility:hidden
 .song-num{color:var(--muted);font-variant-numeric:tabular-nums;min-width:2ch}
 .song-play{width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--fg);font-size:12px;cursor:pointer;flex:none}
 .song-play.on,.song-play:hover{border-color:var(--accent);color:var(--accent)}
+.song-play{position:relative}.song-play.loading{border-color:var(--line)}
+.song-play.loading::after{content:'';position:absolute;inset:-3px;border-radius:50%;border:2px solid transparent;border-top-color:var(--accent);border-right-color:var(--accent);animation:spin .8s linear infinite;pointer-events:none}
+.confirm-state:not(.done){color:var(--muted);border-color:var(--line)}
 .song-tag:empty{display:none}
 .song-tag{font-size:12px;color:var(--accent);border:1px solid var(--accent);border-radius:999px;padding:2px 8px}
 .song-wave{position:relative;height:64px;margin-top:10px;border-radius:10px;background:var(--surface);overflow:hidden;touch-action:none}

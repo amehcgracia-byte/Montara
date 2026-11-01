@@ -84,14 +84,68 @@ def register_original(work, window, path):
          dict(file=window['file'], window=window['window'], start=window['start'], path=str(path)))
 
 
-def original_windows(data, work=None, only_song=None):
-    """Ranges of the originals a preview-based session needs before it can export.
+EMPTY_LEVEL_DBFS = -45.0   # a track counts as sounding only above this level
+EMPTY_MAX_SECONDS = 5.0    # ...for at least this long over the whole session
 
-    One entry per selected song (or just `only_song`) and preview track that plays in it.
+
+def empty_tracks(stems, timelines, frame_seconds):
+    """File names of tracks that never really sound (detection envelopes, linear amplitude)."""
+    import numpy as np
+    floor = 10 ** (EMPTY_LEVEL_DBFS / 20)
+    result = []
+    for stem in stems:
+        env = timelines.get(stem.path.name)
+        if env is None or not len(env):
+            continue
+        if float(np.count_nonzero(np.asarray(env) > floor)) * frame_seconds < EMPTY_MAX_SECONDS:
+            result.append(stem.path.stem + '.wav')
+    return result if len(result) < len(stems) else []   # never leave a session without tracks
+
+
+def used_tracks(data):
+    """The session's tracks minus the empty ones the page has not brought back."""
+    empty = set(data.get('empty_tracks') or [])
+    return [t for t in data.get('tracks') or [] if t['file'] not in empty]
+
+
+def song_windows(data, song, received=None):
+    """Original ranges one song window needs: one per preview track that plays in it.
+
     'start' and 'duration' are in the original file's own seconds, with a small margin.
-    """
+    The key is the track and the window, so a range stays valid however songs are renumbered."""
     previews = data.get('previews') or {}
-    if not previews or not data.get('tracks'):
+    received = received or {}
+    result = []
+    for track in used_tracks(data):
+        original = previews.get(track['file'])
+        source_start, overlap = track_window(track, song)
+        if not original or overlap <= 0:
+            continue
+        start = max(0.0, source_start - MARGIN)
+        window = [round(song['start'], 6), round(song['end'], 6)]
+        got = received.get(original_key(track['file'], window))
+        result.append(dict(song=song.get('id'), song_name=song.get('name') or '', file=track['file'], original=original,
+                           start=round(start, 6), duration=round(source_start - start + overlap + MARGIN, 6), window=window,
+                           received=bool(got and Path(got['path']).is_file())))
+    return result
+
+
+def window_song(data, window, song_id=None, name=''):
+    """A song made from a [start, end] window the page sends (validated against the session)."""
+    if not isinstance(window, (list, tuple)) or len(window) != 2:
+        raise ValueError('Invalid song window.')
+    start, end = window
+    if any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) for v in (start, end)):
+        raise ValueError('Invalid song window.')
+    if start < 0 or end > float(data.get('duration') or 0) + .001 or end - start < .5:
+        raise ValueError('Invalid song window.')
+    return dict(id=song_id, name=str(name)[:80], start=float(start), end=float(end))
+
+
+def original_windows(data, work=None, only_song=None):
+    """Ranges of the originals a preview-based session needs before it can export:
+    every selected song (or just `only_song`, a song id)."""
+    if not data.get('previews') or not data.get('tracks'):
         return []
     received = received_originals(work) if work else {}
     result = []
@@ -100,17 +154,7 @@ def original_windows(data, work=None, only_song=None):
             continue
         if only_song is None and not song.get('selected'):
             continue
-        for track in data['tracks']:
-            original = previews.get(track['file'])
-            source_start, overlap = track_window(track, song)
-            if not original or overlap <= 0:
-                continue
-            start = max(0.0, source_start - MARGIN)
-            window = [round(song['start'], 6), round(song['end'], 6)]
-            got = received.get(original_key(track['file'], window))
-            result.append(dict(song=song['id'], song_name=song['name'], file=track['file'], original=original,
-                               start=round(start, 6), duration=round(source_start - start + overlap + MARGIN, 6), window=window,
-                               received=bool(got and Path(got['path']).is_file())))
+        result += song_windows(data, song, received)
     return result
 
 
@@ -299,10 +343,10 @@ def prepare_tracks(work, song, preview=False):
     destination = work / ('preview' if preview else 'songs') / str(song['id']) / 'tracks'
     destination.mkdir(parents=True, exist_ok=True)
     duration = song['end'] - song['start']
-    needed = sum(int(duration * t['samplerate'] * min(t['channels'], 2) * 4) for t in data['tracks'])
+    needed = sum(int(duration * t['samplerate'] * min(t['channels'], 2) * 4) for t in used_tracks(data))
     if shutil.disk_usage(work).free < needed * (1 if preview else 4) + 128 * 1024**2:
         raise ValueError('Not enough working space for this song. Free space or choose a shorter interval.')
-    for track in data['tracks']:
+    for track in used_tracks(data):
         if (work / 'cancel').exists():
             raise InterruptedError('Session cancelled. Your originals are unchanged.')
         target = destination / track['file']
@@ -352,6 +396,10 @@ def render_song(work, song_id):
     # A song mixed in the mixer keeps its own changes; the rest use the automatic mix.
     mine = (settings.get('per_song') or {}).get(str(song_id)) or {}
     folder = prepare_tracks(work, song)
+    present = {p.name for p in folder.glob('*.wav')}
+    only = lambda values: None if values is None else {k: v for k, v in values.items() if k in present}  # empty tracks are not mixed
+    mine = {k: only(v) if k in ('faders', 'mutes', 'effects', 'eq') and isinstance(v, dict) else v for k, v in mine.items()}
+    settings = {k: only(v) if k in ('faders', 'mutes', 'effects') and isinstance(v, dict) else v for k, v in settings.items()}
     mixer = SingleSongMix(folder, work / 'songs' / str(song_id) / 'mix', reference=mine.get('reference') or settings.get('reference'),
                           track_types=data.get('track_types'))
     out = mixer.render(mine.get('faders', settings.get('faders', {})), work / 'exports' / f'song-{song_id:03d}.mp3',
@@ -402,6 +450,10 @@ def execute(work, action):
             subprocess.Popen([sys.executable, '-m', 'mixer_adapter.session', str(work), 'extras'], cwd=Path(__file__).resolve().parents[1],
                              stdout=log, stderr=log, start_new_session=True)
         timelines = pipeline.ensure_detection_cache(stems)
+        # Tracks with no sound in the whole session (a channel left open for another band):
+        # never uploaded as originals, never mixed. The page shows them and can bring one back.
+        data['empty_tracks'] = empty_tracks(stems, timelines, pipeline.DETECTION_FRAME_SECONDS)
+        save(work / 'session.json', data)
         try:  # the waveform comes from the envelopes detection just computed: no second decode
             waveform_from_timelines(work, timelines, data['duration'], pipeline.DETECTION_FRAME_SECONDS)
         except Exception as exc:

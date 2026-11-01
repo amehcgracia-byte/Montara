@@ -97,4 +97,6 @@ def apply(pipeline, stems, types):
     roles = mixer_roles(types)
     pipeline.STEREO_SIDES = stereo_sides(types)
     pipeline.NOISE_EXEMPT_STEMS = noise_exempt(types)
+    # The instrument dictionary refines each track's processing (EQ, compressor, pan, level, sends).
+    pipeline.STEM_INSTRUMENTS = {name: item["type"] for name, item in (types or {}).items()}
     return [replace(s, role=roles[s.path.name]) if s.path.name in roles else s for s in stems]

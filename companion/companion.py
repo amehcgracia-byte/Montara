@@ -27,7 +27,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-VERSION = "0.3.0"
+VERSION = "0.4.0"
 PORT = int(os.environ.get("MONTARA_COMPANION_PORT", "47820"))
 HOME = Path(os.environ.get("MONTARA_COMPANION_HOME", Path.home() / ".montara-companion"))
 CACHE = HOME / "proxies"
@@ -364,7 +364,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/health":
             return self.reply(200, {"app": "montara-companion", "version": VERSION, "ffmpeg": bool(FFMPEG and FFPROBE),
                                     "hardware_encoder": HW_H264, "tonemap": TONEMAP, "lossless_audio": True,
-                                    "audio_preview": OPUS})
+                                    "audio_preview": OPUS, "segment_formats": ["lossless"] + (["opus"] if OPUS else [])})
         match = re.fullmatch(r"/proxies/([a-f0-9]{24}p?)(/file)?", self.path)
         if not match or match.group(1) not in jobs:
             return self.reply(404, {"error": "unknown"})
@@ -447,9 +447,18 @@ class Handler(BaseHTTPRequestHandler):
         source = sources[source_id]
         # A real file, not a pipe: FLAC writes its sample count and checksum at the end.
         CACHE.mkdir(parents=True, exist_ok=True)
-        floating = bool(audio_plan(probe(source)).get("float"))  # FLAC has no float: WavPack, also lossless
-        target = CACHE / f"segment-{source_id}-{threading.get_ident()}.{'wv' if floating else 'flac'}"
-        codec = ["-c:a", "wavpack"] if floating else ["-c:a", "flac", "-compression_level", "5"]
+        plan = audio_plan(probe(source))
+        if body.get("format") == "opus" and OPUS:
+            # Fast: high-bitrate Opus, several times lighter than lossless; the server decodes it
+            # back to WAV at the original rate (tag). Sample-aligned with the other tracks.
+            kind = "opus"
+            codec = ["-c:a", "libopus", "-b:a", f"{192 if int(plan.get('channels') or 1) == 1 else 256}k", "-vbr", "on",
+                     "-application", "audio", "-metadata", f"montara_sample_rate={plan.get('rate') or 48000}", "-f", "ogg"]
+        else:
+            kind = "wv" if plan.get("float") else "flac"  # FLAC has no float: WavPack, also lossless
+            codec = ["-c:a", "wavpack"] if kind == "wv" else ["-c:a", "flac", "-compression_level", "5"]
+        floating = kind == "wv"
+        target = CACHE / f"segment-{source_id}-{threading.get_ident()}.{kind}"
         command = [FFMPEG, "-hide_banner", "-nostdin", "-v", "error", "-y", "-ss", f"{start:.6f}", "-t", f"{duration:.6f}", "-i", str(source),
                    "-map", "0:a:0", *codec, str(target)]
         started = time.monotonic()
@@ -462,7 +471,7 @@ class Handler(BaseHTTPRequestHandler):
             log(f"original {source.name} {start:.1f}+{duration:.1f} s: {size / 1e6:.0f} MB in {time.monotonic() - started:.1f} s")
             self.send_response(200)
             self.cors(self.origin_ok())
-            self.send_header("Content-Type", "audio/x-wavpack" if floating else "audio/flac")
+            self.send_header("Content-Type", "audio/ogg" if kind == "opus" else "audio/x-wavpack" if floating else "audio/flac")
             self.send_header("Content-Length", str(size))
             self.end_headers()
             with target.open("rb") as handle:
