@@ -201,3 +201,12 @@ def test_original_ranges_are_accepted_while_an_export_runs(tmp_path):
     response = c.post('/montara/session/abcdefabcdef/originals', json={'song': 1, 'file': 'keys.wav', 'upload_id': 'b' * 32})
     assert response.status_code == 200 and response.json['originals'][0]['received']
     assert json.loads((work / 'session.json').read_text())['status'] == 'rendering'   # session.json untouched by the range
+
+
+def test_waveform_from_detection_envelopes(tmp_path):
+    from mixer_adapter.session import waveform_from_timelines
+    env = np.r_[np.zeros(20), np.ones(20) * .5, np.ones(20) * .1]   # 0.1 s frames: silence, loud, quiet
+    waveform_from_timelines(tmp_path, {'a.wav': env, 'b.wav': np.zeros(60)}, 6.0, 0.1)
+    wave = json.loads((tmp_path / 'waveform.json').read_text())
+    assert wave['step'] == .25 and len(wave['peaks']) == 24
+    assert max(wave['peaks'][:7]) == 0 and min(wave['peaks'][9:15]) == 255 and 0 < max(wave['peaks'][17:]) < 100
