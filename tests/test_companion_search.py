@@ -35,15 +35,15 @@ def search(tmp_path, monkeypatch):
 def test_the_link_to_the_system_disk_is_not_searched(search, tmp_path):
     (search / 'Macintosh HD').symlink_to(tmp_path)
     (search / '.timemachine').mkdir()
-    (search / 'RAWVideos').mkdir()
+    (search / 'ExternalDisk').mkdir()
     roots = companion.search_roots()
-    assert search / 'RAWVideos' in roots and search / 'Macintosh HD' not in roots and search / '.timemachine' not in roots
+    assert search / 'ExternalDisk' in roots and search / 'Macintosh HD' not in roots and search / '.timemachine' not in roots
 
 
 def test_a_slow_disk_does_not_hold_up_the_others(search, monkeypatch):
-    slow, fast = search / 'AAA slow', search / 'RAWVideos'
+    slow, fast = search / 'AAA slow', search / 'ExternalDisk'
     slow.mkdir(); (fast / 'deep' / 'er').mkdir(parents=True)
-    clip = fast / 'deep' / 'er' / 'C0193.MP4'; clip.write_bytes(b'video' * 100)
+    clip = fast / 'deep' / 'er' / 'clip.MP4'; clip.write_bytes(b'video' * 100)
     release = threading.Event()
     real_walk = os.walk
 
@@ -62,7 +62,7 @@ def test_a_slow_disk_does_not_hold_up_the_others(search, monkeypatch):
 
 
 def test_the_folder_of_a_found_file_survives_a_restart(search, monkeypatch):
-    folder = search / 'RAWVideos' / 'session'; folder.mkdir(parents=True)
+    folder = search / 'ExternalDisk' / 'session'; folder.mkdir(parents=True)
     first, second = folder / 'one.mov', folder / 'two.mov'
     first.write_bytes(b'one'); second.write_bytes(b'two')
     assert companion.locate(*described(first)) == first
@@ -72,7 +72,7 @@ def test_the_folder_of_a_found_file_survives_a_restart(search, monkeypatch):
 
 
 def test_a_file_that_is_nowhere_is_reported_when_the_walks_end(search):
-    (search / 'RAWVideos').mkdir()
+    (search / 'ExternalDisk').mkdir()
     started = time.monotonic()
     assert companion.locate('missing.mov', 10, 'f' * 64) is None
     assert time.monotonic() - started < 5
