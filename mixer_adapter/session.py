@@ -142,6 +142,44 @@ def window_song(data, window, song_id=None, name=''):
     return dict(id=song_id, name=str(name)[:80], start=float(start), end=float(end))
 
 
+def local_plan(data, song):
+    """What the companion needs to mix this song window on the person's computer.
+
+    One entry per used track: the original to find on that computer (name, size, fingerprint),
+    and the cut in that file's own seconds (the same numbers prepare_tracks uses). None when a
+    track has no original there (it was uploaded whole): that song is mixed on the server."""
+    previews = data.get('previews') or {}
+    duration = song['end'] - song['start']
+    tracks = []
+    for track in used_tracks(data):
+        original = previews.get(track['file'])
+        if not original:
+            return None
+        source_start, overlap = track_window(track, song)
+        tracks.append(dict(file=track['file'], original=original, source_start=round(source_start, 6), overlap=round(overlap, 6),
+                           delay_ms=round(max(0, float(track['offset']) - song['start']) * 1000),
+                           samplerate=int(track['samplerate']), channels=int(track['channels'])))
+    return dict(window=[round(song['start'], 6), round(song['end'], 6)], duration=round(duration, 6), tracks=tracks,
+                track_types=data.get('track_types') or {})
+
+
+def window_key(window):
+    return f"{float(window[0]):.3f}-{float(window[1]):.3f}"
+
+
+def local_results(work):
+    """Songs mixed on the person's computer, by window: {window key: {path, window}}."""
+    result = {}
+    for path in (Path(work) / 'local_results').glob('*.json'):
+        try:
+            item = json.loads(path.read_text())
+        except (OSError, ValueError):
+            continue
+        if Path(item.get('path', '')).is_file():
+            result[window_key(item['window'])] = item
+    return result
+
+
 def original_windows(data, work=None, only_song=None):
     """Ranges of the originals a preview-based session needs before it can export:
     every selected song (or just `only_song`, a song id)."""
@@ -363,16 +401,9 @@ def prepare_tracks(work, song, preview=False):
         elif not preview and track['file'] in (data.get('previews') or {}) and overlap > 0:
             raise ValueError(f"The original of {track['file']} for {song['name']} has not arrived. Keep the companion open and export again.")
         temporary = target.with_suffix('.partial.wav')
-        if overlap <= 0:
-            command = ['ffmpeg', '-v', 'error', '-nostdin', '-y', '-f', 'lavfi', '-i',
-                       f'anullsrc=r={track["samplerate"]}:cl={"mono" if track["channels"] == 1 else "stereo"}']
-            filters = 'anull'
-        else:
-            command = ['ffmpeg', '-v', 'error', '-nostdin', '-y', '-ss', str(source_start),
-                       '-t', str(overlap), '-i', source]
-            filters = f'adelay={delay_ms}:all=1,apad'
-        subprocess.run(command + ['-vn', '-af', filters, '-t', str(duration), '-ac', str(min(track['channels'], 2)),
-                                  '-ar', str(track['samplerate']), '-c:a', 'pcm_f32le', str(temporary)], check=True)
+        from mixer_adapter.extract import window_command  # the companion's local mixer uses the same command
+        subprocess.run(window_command('ffmpeg', source, source_start, overlap, delay_ms, duration,
+                                      track['channels'], track['samplerate'], str(temporary)), check=True)
         temporary.replace(target)
     return destination
 
@@ -524,9 +555,16 @@ def execute(work, action):
         results = work / 'results'
         shutil.rmtree(results, ignore_errors=True)
         results.mkdir()
+        # Songs already mixed on the person's computer (companion) are taken as they are.
+        local = local_results(work)
+        for song in selected:
+            done = local.get(window_key([song['start'], song['end']]))
+            if done:
+                data['results'].append(dict(id=song['id'], name=song['name'], start=song['start'], end=song['end'], path=done['path'], local=True))
+        local_ids = {r['id'] for r in data['results']}
         save(work / 'session.json', data)
-        pending, running, finished = list(selected), {}, 0
-        slots = min(len(selected), parallel_songs())
+        pending, running, finished = [s for s in selected if s['id'] not in local_ids], {}, len(local_ids)
+        slots = max(1, min(len(pending), parallel_songs()))
         root = Path(__file__).resolve().parents[1]
         # With previews, a song starts as soon as its original ranges have arrived from the
         # person's computer: mixing song 1 overlaps with uploading song 2.

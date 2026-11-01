@@ -149,10 +149,37 @@ def run(output):
                 page.screenshot(path=str(output / '03-song-mix.png'), full_page=True)
                 page.locator('#useMix').click()
                 page.wait_for_function("!document.querySelector('#sessionReview').hidden && document.querySelector('.song-tag')")
+                companion = None
+                companion_home = os.environ.get('MONTARA_E2E_COMPANION_HOME')   # a companion installed with --mixer
+                if companion_home:
+                    # The tracks are on "this computer": the session treats them as previews of these originals,
+                    # and the companion mixes every song locally (only the MP3 is uploaded).
+                    import hashlib
+                    sid = page.evaluate('fullSession.id'); manifest = output / 'data' / 'Sessions' / sid / 'session.json'
+                    sdata = json.loads(manifest.read_text())
+                    def described(path):
+                        raw = Path(path).resolve().read_bytes()
+                        return dict(name=Path(path).name, size=len(raw), fingerprint=hashlib.sha256(raw[:65536] + raw[max(0, len(raw) - 65536):]).hexdigest())
+                    sdata['previews'] = {t['file']: described(t['path']) for t in sdata['tracks']}
+                    manifest.write_text(json.dumps(sdata))
+                    import atexit
+                    companion = subprocess.Popen([sys.executable, str(Path(companion_home) / 'companion.py')], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                                 env=dict(os.environ, MONTARA_COMPANION_HOME=companion_home, MONTARA_COMPANION_ROOTS=str(media)))
+                    atexit.register(companion.terminate)   # never leave it on port 47820 for the next run
+                    for _ in range(60):
+                        if page.evaluate("montaraCompanion.detect().then(info => Boolean(info && info.local_mix))"):
+                            break
+                        time.sleep(.5)
+                    else:
+                        raise RuntimeError('companion with local mixer did not start')
+                    page.evaluate("fullSession.data.uses_previews = true")
                 page.locator('#sessionMix').click()
                 page.wait_for_function("document.querySelectorAll('#sessionResults audio').length===2", timeout=240_000)
                 data = page.evaluate('fullSession.data')
                 assert data['status'] == 'done'
+                if companion:
+                    companion.terminate()
+                    assert all(r.get('local') for r in data['results']), data['results']   # both songs mixed on this computer
                 saved = json.loads((output / 'data' / 'Sessions' / data['id'] / 'session.json').read_text())
                 assert list(saved['settings']['per_song']) == ['1'] and saved['settings']['per_song']['1']['faders']
                 assert saved['track_types']['bass'] == {'type': 'synth', 'side': '', 'chosen': True}

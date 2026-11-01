@@ -15,6 +15,7 @@ Actualizado: 2026-11-01 tarde · lo mantiene el equipo de Chema · 40 líneas co
 | Solo, EQ (con high cut), tiras rediseñadas, sin pausa por inactividad mientras trabaja | #46–#47 |
 | Confirm por canción; subida y mezcla en paralelo; onda y copia de escucha durante la detección | #48–#50 |
 | Tipos de pista (menú por pista, rellenado por el nombre) + Stereo L/R | #51 |
+| Motor: la puntuación de planos usa la copia ligera, no el original 4K de iPhone/Sony (hallazgo de Fer, #56; zucker_videos #49) | #59 |
 | Rangos por ventana (un split ya no vacía la cola), estados de Confirm, mixer y Save al instante, círculo de carga, Opus "Rápido", pistas vacías fuera, "aplicar a todas", L/R enlazadas, mixer ancho, **diccionario de instrumentos** | #52 |
 
 ## Diccionario de instrumentos (ZuckerMixer `instrument_dictionary.py`)
@@ -23,7 +24,8 @@ Actualizado: 2026-11-01 tarde · lo mantiene el equipo de Chema · 40 líneas co
 - Pendiente: detección por audio (hoy por nombre o por la elección de la persona); fichas para más instrumentos; afinarlas de oído con jams reales.
 
 ## Pendiente
-- **Que no se suba nada**: mezclar en el companion del Mac (encargado a Fer, issue #34; primero un informe).
+- **Mezcla en el Mac (companion 0.5.0, opcional, #59)**: `install.sh --mixer` instala el mezclador del servidor en el Mac (unos 240 MB en Linux; falta medirlo en Mac); cada canción se mezcla allí y solo sube el MP3. Salida idéntica bit a bit a la del servidor en el test. Falta: medir tiempos en un Mac real. Informe de Fer: `JUPITER_COMPANION_MAC_LOCAL_MIX_FEASIBILITY_2026-11-01.md`.
+- Licencias: Matchering (GPLv3, de terceros) solo se usa en el servidor; el mezclador del Mac no lo instala.
 - Mergear ZuckerMixer PR #8 en master.
 - El fallo de canciones cortadas o vacías del #48: arreglado el fallo de la cola (#52); falta confirmarlo con `deploy/vm/audio_check.py` en una sesión real.
 - Cola de render para unos 10 testers (VM más grande y luego workers bajo demanda): sin empezar.
