@@ -246,3 +246,29 @@ def test_a_range_belongs_to_its_window_not_to_a_song_number(tmp_path):
     response = c.post('/montara/session/abcdefabcdef/originals', json={'song': 2, 'window': [12, 20], 'file': 'keys.wav', 'upload_id': 'c' * 32})
     assert response.status_code == 200 and response.json['originals'][0]['received']
     assert [w['received'] for w in c.get('/montara/session/abcdefabcdef/originals?song=3').json['originals']] == [True]
+
+
+def test_empty_tracks_are_not_sent_or_mixed_and_can_be_brought_back(tmp_path):
+    from types import SimpleNamespace
+    from mixer_adapter.session import empty_tracks, song_windows, prepare_tracks
+    stems = [SimpleNamespace(path=Path(f'/x/{n}.wav')) for n in ('Kick', 'Bass')]
+    loud, hiss = np.r_[np.zeros(100), np.ones(100) * .3], np.ones(200) * 10 ** (-60 / 20)
+    assert empty_tracks(stems, {'Kick.wav': loud, 'Bass.wav': hiss}, 0.1) == ['Bass.wav']
+    assert empty_tracks(stems, {'Kick.wav': hiss, 'Bass.wav': hiss}, 0.1) == []   # never all of them
+    c = client(tmp_path)
+    work = tmp_path / 'data' / 'Sessions' / 'abcdefabcdef'; work.mkdir(parents=True)
+    rate = 8000
+    tracks = []
+    for name in ('Kick', 'Bass'):
+        path = tmp_path / f'{name}.wav'; sf.write(path, np.ones(rate * 20) * .1, rate, subtype='FLOAT')
+        tracks.append(dict(file=f'{name}.wav', path=str(path), samplerate=rate, channels=1, offset=0, duration=20))
+    data = {'id': 'abcdefabcdef', 'status': 'review', 'duration': 20.0, 'tracks': tracks, 'empty_tracks': ['Bass.wav'],
+            'songs': [dict(id=1, name='A', start=2.0, end=8.0, selected=True)],
+            'previews': {t['file']: {'name': t['file'], 'size': 1, 'fingerprint': 'a' * 64} for t in tracks}}
+    save(work / 'session.json', data)
+    assert [w['file'] for w in song_windows(data, data['songs'][0])] == ['Kick.wav']
+    data.pop('previews'); save(work / 'session.json', data)
+    assert sorted(p.name for p in prepare_tracks(work, data['songs'][0]).glob('*.wav')) == ['Kick.wav']
+    assert c.post('/montara/session/abcdefabcdef/include', json={'file': 'Bass.wav'}).json['empty_tracks'] == []
+    assert not (work / 'songs').exists()
+    assert c.post('/montara/session/abcdefabcdef/include', json={'file': 'Bass.wav'}).status_code == 400

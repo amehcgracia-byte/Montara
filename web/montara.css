@@ -371,7 +371,12 @@ body[data-show-kind=podcast] #showLiveEdit,body[data-show-kind=podcast] #showUnd
 .cut-dialog,.show-effect-dialog{color-scheme:dark;scrollbar-width:thin;scrollbar-color:#606065 #1b1b1e}
 
 /* Fixed mixer effects: only enable and amount, per track. */
-.strip{flex-basis:110px}
+.strip{flex-basis:100px}
+/* The mixer uses the whole window: twelve strips across on a laptop screen at full size. */
+body:has(#mix:not([hidden])) main{max-width:min(1640px,100%)}
+.strip.pair-l{border-top-right-radius:4px;border-bottom-right-radius:4px;margin-right:-7px;border-right-color:transparent}
+.strip.pair-r{border-top-left-radius:4px;border-bottom-left-radius:4px}
+.strip.pair-l small::after{content:' · L'}.strip.pair-r small::after{content:' · R'}
 /* Two buttons above the name (ON, SOLO), two below (EQ, FX): same size; the name is the largest text. */
 .strip-buttons{display:grid;grid-template-columns:1fr 1fr;gap:6px;width:100%}
 .strip-buttons .wide{grid-column:1/-1}

@@ -155,11 +155,15 @@
 
   <section class="screen" id="sessionReview" hidden>
     <h2>Your session, song by song.</h2>
+    <p class="hint tiny" id="sessionEmpty" hidden></p>
     <p class="hint" id="sessionHint">Review the suggested boundaries and choose the songs. Each song gets its own automatic mix; your fader moves apply on top.</p>
     <div class="mixstatus" id="sessionWorking" hidden><svg class="loading-mark" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 100"><rect x="4" y="4" width="18" height="92" rx="9" fill="#F5F3EF"/><rect x="27" y="4" width="18" height="62" rx="9" fill="#F5F3EF"/><rect x="51" y="4" width="18" height="40" rx="9" fill="#FF4F2E"/><rect x="75" y="4" width="18" height="62" rx="9" fill="#F5F3EF"/><rect x="98" y="4" width="18" height="92" rx="9" fill="#F5F3EF"/></svg><span id="sessionStatus" role="status" aria-live="polite"></span></div>
     <progress id="sessionProgress" max="100" value="0" aria-label="Session progress"></progress>
     <p class="hint tiny" id="sessionEta"></p>
     <p class="hint tiny" id="sessionUpload" role="status" aria-live="polite"></p>
+    <label class="hint tiny session-quality" id="sessionQualityRow" hidden>Original audio for the export
+      <select id="sessionQuality"><option value="fast">Fast · high-quality Opus (several times lighter)</option><option value="lossless">Lossless · every sample (slow on a home connection)</option></select>
+      <span id="sessionQualityNote"></span></label>
     <div id="sessionBars" class="render-bars session-bars" hidden aria-hidden="true"></div>
     <div id="sessionSongs"></div>
     <div id="sessionResults"></div>
@@ -214,6 +218,7 @@
     </div>
     <div class="actions">
       <button class="btn ghost" id="mixBack">Back</button>
+      <button class="btn ghost" id="mixAll" type="button" hidden title="The same changes (faders, ON/OFF, EQ, effects) on top of every song's own automatic mix">Apply this mix to all songs</button>
       <button class="btn primary" id="useMix" disabled>Use this mix</button>
     </div>
   </section>

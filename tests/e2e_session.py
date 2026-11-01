@@ -128,6 +128,8 @@ def run(output):
                 page.wait_for_function('sessionPlayer.audio.currentTime > 9 && sessionPlayer.audio.currentTime < 20')
                 rows.nth(0).locator('[data-song-play]').click()
                 assert page.evaluate('sessionPlayer.index') == -1
+                # A stereo pair (marked L and R of one type) sits together and moves together in the mixer.
+                page.evaluate("TrackTypes.set('Kick.wav', {type: 'keys', side: 'L'}); TrackTypes.set('Bass.wav', {type: 'keys', side: 'R'})")
                 rows.nth(0).locator('[data-song-mixer]').click()
                 page.wait_for_function("!document.querySelector('#mix').hidden", timeout=3_000)  # the mixer screen opens at once
                 page.wait_for_function("!document.querySelector('#mix').hidden && !document.querySelector('#useMix').disabled", timeout=180_000)
@@ -138,7 +140,12 @@ def run(output):
                 strip.locator('input[type=checkbox][data-effect="reverb"]').check()
                 page.wait_for_function("Object.values(mix.nodes).some(n => n.fx.reverb)", timeout=60_000)
                 page.locator('#playMix').click()
+                assert page.locator('#mixAll').is_visible()
+                assert page.locator('#strips .strip.pair-l').count() == 1 and page.locator('#strips .strip.pair-r').count() == 1
+                before = page.evaluate("mix.plan.tracks.map(t => t.fader_db)")
                 page.evaluate("(() => { const input = document.querySelector('#strips input[type=range]'); input.value = Number(input.value) - 3; input.dispatchEvent(new Event('input', {bubbles: true})); })()")
+                after = page.evaluate("mix.plan.tracks.map(t => t.fader_db)")
+                assert all(abs((b - a) + 3) < .02 for a, b in zip(before, after)), (before, after)
                 page.screenshot(path=str(output / '03-song-mix.png'), full_page=True)
                 page.locator('#useMix').click()
                 page.wait_for_function("!document.querySelector('#sessionReview').hidden && document.querySelector('.song-tag')")

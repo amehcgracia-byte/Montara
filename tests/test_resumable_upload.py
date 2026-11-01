@@ -149,3 +149,22 @@ def test_float_wav_travels_as_wavpack_and_comes_back_bit_identical(tmp_path):
     restored = Path(c.post(url + '/finish', json={}).json['videos'][0]['path'])
     assert restored.name == 'Keys.wav' and sf.info(restored).subtype == 'FLOAT'
     assert np.array_equal(sf.read(restored, dtype='float32')[0], sf.read(wav, dtype='float32')[0])
+
+
+def test_fast_song_range_opus_comes_back_as_wav_at_the_original_rate(tmp_path):
+    """Fast export: the companion's high-bitrate Opus range is decoded to a WAV at 44.1 kHz, same length."""
+    import subprocess
+    import numpy as np
+    import soundfile as sf
+    wav, opus = tmp_path / 'src.wav', tmp_path / 'Bass.wav.hq.opus'
+    sf.write(wav, (np.sin(np.arange(44100 * 3) / 9) * .5).astype('float32'), 44100, subtype='FLOAT')
+    subprocess.run(['ffmpeg', '-v', 'error', '-i', str(wav), '-c:a', 'libopus', '-b:a', '192k', '-metadata', 'montara_sample_rate=44100',
+                    '-f', 'ogg', str(opus)], check=True)
+    payload = opus.read_bytes()
+    c = make_client(tmp_path / 'data')
+    job = c.post('/montara/uploads', json=dict(name=opus.name, size=len(payload), fingerprint=fingerprint(payload))).json
+    url = '/montara/uploads/' + job['id']
+    assert c.put(url, data=payload, headers={'Upload-Offset': '0'}).status_code == 200
+    restored = Path(c.post(url + '/finish', json={}).json['videos'][0]['path'])
+    info = sf.info(restored)
+    assert restored.name == 'Bass.wav' and info.samplerate == 44100 and abs(info.frames - 44100 * 3) < 50

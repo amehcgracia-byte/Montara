@@ -912,9 +912,10 @@ function applyEq(track) {
 }
 
 function renderStrips() {
+  orderStereoPairs();
   $("#strips").innerHTML = mix.plan.tracks.map((t, i) => `
     <div class="strip ${t.mute || t.active === false ? "off" : ""}" data-track="${i}" title="${escapeHtml(t.active === false ? `${t.file}: almost no signal, so the mix leaves it out` : t.file)}">
-      <small>${escapeHtml(t.role)}</small>
+      <small title="Mixer role: ${escapeHtml(t.role)}">${escapeHtml(TrackTypes.label(t.file))}</small>
       <span class="db">${(t.fader_db >= 0 ? "+" : "") + Number(t.fader_db).toFixed(1)} dB</span>
       <input type="range" min="${Math.min(-60, Math.floor(t.fader_db))}" max="${Math.max(12, Math.ceil(t.fader_db))}" step="0.01" value="${t.fader_db}" aria-label="${escapeHtml(t.name)} fader">
       <div class="strip-buttons">${t.active === false ? `<button class="mute wide" disabled>NO SIGNAL</button>` : `<button class="mute ${t.mute ? "on" : ""}">${t.mute ? "OFF" : "ON"}</button><button class="solo ${t.solo ? "on" : ""}" aria-pressed="${t.solo ? "true" : "false"}" title="Listen to this track alone (does not change the export)">SOLO</button>`}</div>
@@ -987,6 +988,58 @@ function renderStrips() {
       applyAllGains();
     });
   });
+  linkStereoPairs();
+}
+
+// Stereo pairs (two tracks marked L and R of the same type) sit side by side and move together:
+// fader (same change), ON, SOLO and EQ. Each strip keeps its own controls, so either side works.
+function stereoPairs(tracks) {
+  const pairs = [], used = new Set();
+  tracks.forEach((t, i) => {
+    const me = TrackTypes.of(t.file);
+    if (me.side !== 'L' || used.has(i)) return;
+    const j = tracks.findIndex((u, k) => !used.has(k) && k !== i && TrackTypes.of(u.file).side === 'R' && TrackTypes.of(u.file).type === me.type);
+    if (j >= 0) { used.add(i); used.add(j); pairs.push([i, j]); }
+  });
+  return pairs;
+}
+function orderStereoPairs() {  // the R strip right after its L strip
+  const tracks = mix.plan.tracks, pairs = stereoPairs(tracks);
+  if (!pairs.length) return;
+  const right = new Set(pairs.map(([, j]) => j)), partner = Object.fromEntries(pairs);
+  mix.plan.tracks = tracks.flatMap((t, i) => right.has(i) ? [] : partner[i] !== undefined ? [t, tracks[partner[i]]] : [t]);
+}
+let linkingPair = false;
+function linkStereoPairs() {
+  const strips = $$('#strips .strip');
+  for (const [a, b] of stereoPairs(mix.plan.tracks)) {
+    strips[a]?.classList.add('pair-l'); strips[b]?.classList.add('pair-r');
+    for (const [from, to] of [[a, b], [b, a]]) {
+      const src = strips[from], dst = strips[to];
+      if (!src || !dst) continue;
+      const fader = src.querySelector('input[type="range"]'), other = dst.querySelector('input[type="range"]');
+      fader.dataset.prev = fader.value;
+      fader.addEventListener('input', () => {
+        const delta = Number(fader.value) - Number(fader.dataset.prev); fader.dataset.prev = fader.value;
+        if (linkingPair) return;
+        linkingPair = true;
+        other.value = String(Number(other.value) + delta); other.dataset.prev = other.value;
+        other.dispatchEvent(new Event('input', { bubbles: true }));
+        linkingPair = false;
+      });
+      for (const name of ['mute', 'solo']) src.querySelector(`.${name}`)?.addEventListener('click', () => {
+        if (linkingPair) return;
+        const track = mix.plan.tracks[from], twin = mix.plan.tracks[to];
+        if (Boolean(track[name]) !== Boolean(twin[name])) { linkingPair = true; dst.querySelector(`.${name}`)?.click(); linkingPair = false; }
+      });
+      src.querySelectorAll('.track-eq input').forEach(input => input.addEventListener('input', () => {
+        if (linkingPair) return;
+        const twin = dst.querySelector(`.track-eq input[data-eq="${input.dataset.eq}"]`);
+        if (!twin) return;
+        linkingPair = true; twin.value = input.value; twin.dispatchEvent(new Event('input', { bubbles: true })); linkingPair = false;
+      }));
+    }
+  }
 }
 
 function applyGain(track) {
@@ -1157,7 +1210,7 @@ $("#referenceLinkForm").addEventListener("submit", async (event) => {
   } catch (error) { status.textContent = error.message; }
   finally { if (mix.job === jobId) { button.disabled = false; $("#pickReference").disabled = false; $("#useMix").disabled = false; } }
 });
-$("#mixBack").addEventListener("click", () => { stopMix(); $("#useMix").textContent = "Use this mix"; show(fullSession.active ? 'sessionReview' : videos().length > 1 || videos().some(isSphere) ? "cameras" : "footage"); });
+$("#mixBack").addEventListener("click", () => { stopMix(); $("#mixAll").hidden = true; $("#useMix").textContent = "Use this mix"; show(fullSession.active ? 'sessionReview' : videos().length > 1 || videos().some(isSphere) ? "cameras" : "footage"); });
 
 $("#useMix").addEventListener("click", async () => {
   try {

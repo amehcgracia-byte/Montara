@@ -33,6 +33,7 @@ def public(data):
     result['results'] = [{k: v for k, v in r.items() if k != 'path'} for r in data.get('results', [])]
     result['uses_previews'] = bool(data.get('previews'))
     result['track_files'] = [t['file'] for t in data.get('tracks') or []]
+    result['empty_tracks'] = list(data.get('empty_tracks') or [])
     return result
 
 
@@ -150,6 +151,15 @@ def register_full_session(app, data_root, fixtures):
                 if data['status'] in BUSY:
                     return error('Wait for this session to finish or cancel it.', 409)
                 body = request.get_json(silent=True) or {}
+                if action == 'include':  # the person brings back a track detection found empty
+                    if body.get('file') not in (data.get('empty_tracks') or []):
+                        raise ValueError('This track is already used.')
+                    data['empty_tracks'] = [f for f in data['empty_tracks'] if f != body['file']]
+                    shutil.rmtree(work / 'songs', ignore_errors=True)
+                    shutil.rmtree(work / 'preview', ignore_errors=True)
+                    data.pop('preview_tracks', None)
+                    save(work / 'session.json', data)
+                    return jsonify(public(data))
                 if action in ('prepare', 'render', 'songs') and body.get('songs') is not None:
                     songs = validate_songs(body.get('songs'), data['duration'])
                     key = lambda items: [(s.get('id'), s.get('start'), s.get('end'), s.get('selected', True)) for s in items]

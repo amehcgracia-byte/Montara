@@ -173,6 +173,11 @@ function drawSessionSongs(songs) {
     ${song.review_note ? `<p class="hint">${song.needs_review ? 'Review · ' : ''}${escapeHtml(song.review_note)}</p>` : ''}
   </div>`).join('');
   list.forEach((_, i) => paintSong(i));
+  $('#sessionQualityRow').hidden = !fullSession.data.uses_previews;
+  const empty = fullSession.data.empty_tracks || [];
+  $('#sessionEmpty').hidden = !empty.length;
+  $('#sessionEmpty').innerHTML = empty.length ? `Left out, no sound in the whole session (not sent, not mixed): ${empty.map(f => `${escapeHtml(f.replace(/\.wav$/i, ''))} <button class="link" type="button" data-include-track="${escapeHtml(f)}">use it anyway</button>`).join(' · ')}` : '';
+  $('#sessionQualityNote').textContent = montaraCompanion.info && !montaraCompanion.canFastSegments() ? 'Update the companion for Fast (this one sends lossless).' : '';
   paintUploadState();
   loadSessionWave().then(() => list.forEach((_, i) => paintSong(i)));
   $('#sessionMix').hidden = false;
@@ -366,6 +371,7 @@ async function openSongMixer(i) {
       fullSession.mixCache[song.id] = { key: songKey(song), job: mix.job, plan: mix.plan, buffers: mix.buffers, fxBuffers: mix.fxBuffers };
     }
     $('#useMix').textContent = 'Save mix for this song';
+    $('#mixAll').hidden = false; $('#mixAll').disabled = false;
     $('#mixStatusText').textContent = `${song.name}: ${Math.ceil(mix.plan.duration)} s from the busiest part. Changes apply to this song only; the others keep their automatic mix.`;
   } catch (error) { toast(error.message, true); show('sessionReview'); }
 }
@@ -394,6 +400,18 @@ $('#sessionSongs').onclick = event => {
 
 $('#sessionMix').onclick = () => renderFullSession();
 
+// A track detection found empty can be brought back (the excerpts are cut again).
+$('#sessionEmpty').addEventListener('click', async event => {
+  const button = event.target.closest('[data-include-track]');
+  if (!button) return;
+  button.disabled = true;
+  try {
+    const data = await api(`/montara/session/${fullSession.id}/include`, { file: button.dataset.includeTrack });
+    fullSession.data.empty_tracks = data.empty_tracks; fullSession.mixCache = {};
+    drawSessionSongs();
+  } catch (error) { button.disabled = false; toast(error.message, true); }
+});
+
 // The changes made in the mixer, relative to its automatic mix: nothing else travels.
 function mixChanges() {
   const changes = {
@@ -409,7 +427,21 @@ function mixChanges() {
 }
 
 // "Save mix for this song" in the mixer: keep the changes, back to the list.
+// The same changes on every song (each keeps its own automatic mix underneath).
+$('#mixAll').addEventListener('click', () => {
+  stopMix();
+  const changes = mixChanges(), songs = songList();
+  for (const song of songs) fullSession.mixes[song.id] = JSON.parse(JSON.stringify(changes));
+  $('#mixAll').hidden = true; $('#useMix').textContent = 'Use this mix';
+  show('sessionReview');
+  drawSessionSongs();
+  toast(`Mix applied to all ${songs.length} songs.`);
+  const job = mix.job;
+  api(`/montara/mix/${job}`).then(state => { if (state.reference) for (const song of songs) if (fullSession.mixes[song.id]) fullSession.mixes[song.id].reference = state.reference; }).catch(() => {});
+});
+
 async function saveSongMix() {
+  $('#mixAll').hidden = true;
   stopMix();
   const songId = fullSession.mixSong, job = mix.job;
   fullSession.mixes[songId] = mixChanges();   // kept at once; the page goes straight back to the list
@@ -447,6 +479,9 @@ async function renderFullSession() {
 // Tracks sent as light previews: the export uses the originals, but only the song ranges.
 // A confirmed song starts sending at once, while the person keeps editing the others.
 const uploader = { queue: [], seen: new Set(), running: false, done: 0, total: 0, bytes: 0, started: 0, byWindow: {} };
+// Fast (Opus) or lossless originals: remembered on this computer; Fast unless the person chose otherwise.
+try { const kept = localStorage.getItem('montara.originals'); if (kept) $('#sessionQuality').value = kept; } catch { /* storage off */ }
+$('#sessionQuality').addEventListener('change', event => { try { localStorage.setItem('montara.originals', event.target.value); } catch { /* storage off */ } });
 const windowKey = song => `${Number(song.start).toFixed(3)}-${Number(song.end).toFixed(3)}`;
 
 // Queue the original ranges of one song window. Ranges belong to their window, never to a song
@@ -477,9 +512,11 @@ async function runUploader() {
       const w = uploader.queue.shift();
       paintUploadState(w);
       try {
-        const blob = await montaraCompanion.segment(w.original, w.start, w.duration);
+        const fast = $('#sessionQuality').value === 'fast' && montaraCompanion.canFastSegments();
+        const blob = await montaraCompanion.segment(w.original, w.start, w.duration, fast ? 'opus' : 'lossless');
         uploader.bytes += blob.size;
-        const ext = blob.type === 'audio/x-wavpack' ? '.wav.wv' : '.wav.flac';  // float originals: WavPack (FLAC has no float)
+        // Fast: Opus; lossless: FLAC, or WavPack for float originals (FLAC has no float).
+        const ext = blob.type === 'audio/ogg' ? '.wav.hq.opus' : blob.type === 'audio/x-wavpack' ? '.wav.wv' : '.wav.flac';
         const name = `${w.file.replace(/\.wav$/i, '')}${ext}`;
         let uploadId = null;
         await sendResumableUpload(new File([blob], name, { type: blob.type || 'audio/flac' }), () => {}, id => { uploadId = id; });

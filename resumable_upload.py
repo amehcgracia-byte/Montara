@@ -22,6 +22,7 @@ CHUNK = 4 * 1024**2
 RESERVE = 128 * 1024**2
 LOSSLESS = ('.wav.flac', '.aif.flac', '.aiff.flac', '.wav.wv', '.aif.wv', '.aiff.wv')  # the companion's lossless copy of a WAV/AIFF original
 PREVIEW = ('.wav.opus', '.aif.opus', '.aiff.opus')  # the companion's light preview of a full-session track
+RANGE = ('.wav.hq.opus', '.aif.hq.opus', '.aiff.hq.opus')  # Fast export: one song range of an original, high-bitrate Opus
 PCM = {'8': 'pcm_u8', '16': 'pcm_s16le', '24': 'pcm_s24le', '32': 'pcm_s32le'}
 MEDIA = {'.mp4', '.mov', '.mkv', '.webm', '.mts', '.m2ts', '.wav', '.mp3', '.flac', '.aif', '.aiff', '.m4a', '.ogg', '.opus', '.wv'}
 
@@ -71,6 +72,26 @@ def restore_preview(path: Path) -> Path:
     if done.returncode != 0:
         pending.unlink(missing_ok=True)
         raise ValueError('Could not read the audio preview: ' + (done.stderr.strip().splitlines() or ['FFmpeg failed'])[-1])
+    pending.replace(target)
+    path.unlink()
+    return target
+
+
+def restore_range(path: Path) -> Path:
+    """Decode a Fast song range (high-bitrate Opus) to a WAV at the original rate for the mixer."""
+    target = path.with_name(path.name[:-len('.hq.opus')].rsplit('.', 1)[0] + '.wav')
+    if target.is_file():
+        return target
+    tags = subprocess.run([ffmpeg_tool('ffprobe'), '-v', 'error', '-select_streams', 'a:0', '-show_entries',
+                           'stream_tags=montara_sample_rate:format_tags=montara_sample_rate', '-of', 'default=nw=1:nk=1', str(path)],
+                          capture_output=True, text=True, timeout=60).stdout.split()
+    rate = next((t for t in tags if t.isdigit() and 8000 <= int(t) <= 384000), '48000')
+    pending = target.with_name(target.stem + '.partial.wav')
+    done = subprocess.run([ffmpeg_tool('ffmpeg'), '-v', 'error', '-nostdin', '-y', '-i', str(path), '-map', '0:a:0',
+                           '-ar', rate, '-c:a', 'pcm_f32le', '-rf64', 'auto', str(pending)], capture_output=True, text=True, timeout=3600)
+    if done.returncode != 0:
+        pending.unlink(missing_ok=True)
+        raise ValueError('Could not read this song range: ' + (done.stderr.strip().splitlines() or ['FFmpeg failed'])[-1])
     pending.replace(target)
     path.unlink()
     return target
@@ -217,6 +238,8 @@ def register_resumable_upload(app, data_root, classify):
                     source.replace(work / data['name'])
                     if data['name'].lower().endswith(LOSSLESS):
                         data['restored'] = restore_lossless(work / data['name']).name
+                    elif data['name'].lower().endswith(RANGE):
+                        data['restored'] = restore_range(work / data['name']).name
                     elif data['name'].lower().endswith(PREVIEW):
                         data['restored'] = restore_preview(work / data['name']).name
                     data['complete'] = True

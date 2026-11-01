@@ -90,5 +90,6 @@ const TrackTypes = (() => {
     if (type || side) event.target.closest('.track-type')?.querySelector('small')?.remove();
   });
 
-  return { TYPES, guess, guessSide, of, set, forFiles, controls };
+  const labelOf = name => (TYPES.find(([v]) => v === of(name).type) || [, 'Other'])[1];
+  return { TYPES, guess, guessSide, of, set, forFiles, controls, label: labelOf };
 })();
