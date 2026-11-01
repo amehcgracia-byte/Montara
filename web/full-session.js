@@ -124,7 +124,17 @@ const songList = () => fullSession.data.songs;
 async function loadSessionWave() {
   if (sessionWave.id === fullSession.id && (sessionWave.data || sessionWave.loading)) return sessionWave.loading || sessionWave.data;
   sessionWave.id = fullSession.id; sessionWave.data = null;
-  sessionWave.loading = api(`/montara/session/${fullSession.id}/waveform`).then(data => (sessionWave.data = data)).catch(() => null).finally(() => { sessionWave.loading = null; });
+  // Drawn in the background after detection: ask again until it is there.
+  const id = fullSession.id;
+  sessionWave.loading = (async () => {
+    for (let attempt = 0; attempt < 200 && fullSession.id === id; attempt++) {
+      const data = await api(`/montara/session/${id}/waveform`).catch(() => null);
+      if (data?.peaks) return (sessionWave.data = data);
+      if (!data?.pending) return null;
+      await new Promise(resolve => setTimeout(resolve, 3000));
+    }
+    return null;
+  })().finally(() => { sessionWave.loading = null; });
   return sessionWave.loading;
 }
 
@@ -191,6 +201,7 @@ function paintSong(i) {
     g.globalAlpha = 1;
   } else {
     g.fillStyle = muted; g.globalAlpha = .25; g.fillRect(0, height / 2 - 1, width, 2); g.globalAlpha = 1;
+    g.font = '12px Inter, system-ui, sans-serif'; g.fillStyle = muted; g.fillText('Drawing the waveform…', 10, 16);
   }
   row.querySelector('.start').style.left = `${x(song.start)}px`;
   row.querySelector('.end').style.left = `${x(song.end)}px`;
@@ -241,7 +252,11 @@ function sessionAudio() {
     sessionPlayer.audio?.pause();
     const audio = new Audio(`/montara/session/${fullSession.id}/listen`);
     audio.preload = 'auto'; audio.dataset.session = fullSession.id;
-    audio.addEventListener('error', () => { if (sessionPlayer.audio === audio) { stopSongPreview(); toast('Could not play the session. Try again in a moment.', true); } });
+    audio.addEventListener('error', () => {
+      if (sessionPlayer.audio !== audio) return;
+      stopSongPreview(); sessionPlayer.audio = null;  // the next ▶ asks again
+      toast('The listening copy is still being prepared (a minute or two for a long jam). Try again shortly.', true);
+    });
     sessionPlayer.audio = audio;
   }
   return sessionPlayer.audio;
@@ -259,11 +274,26 @@ function stopSongPreview() {
 async function playSong(i, from = null) {
   if (sessionPlayer.index === i && from === null) return stopSongPreview();
   stopSongPreview();
-  const songs = songList(), song = songs[i], audio = sessionAudio();
+  const songs = songList(), song = songs[i];
   const button = document.querySelector(`[data-song-play="${i}"]`);
   sessionPlayer.index = i; button?.classList.add('on'); if (button) button.textContent = '■';
+  // The listening copy is made in the background after detection: wait for it here.
+  if (!sessionPlayer.audio || sessionPlayer.audio.dataset.session !== fullSession.id) {
+    for (let attempt = 0; attempt < 120; attempt++) {
+      const response = await fetch(`/montara/session/${fullSession.id}/listen`, { method: 'HEAD' }).catch(() => null);
+      if (sessionPlayer.index !== i) return;  // stopped meanwhile
+      if (response?.ok) break;
+      $('#sessionStatus').textContent = 'Preparing a listening copy of the session (a minute or two for a long jam)…';
+      await new Promise(resolve => setTimeout(resolve, 3000));
+    }
+    $('#sessionStatus').textContent = '';
+  }
+  const audio = sessionAudio();
   const start = from ?? song.start;
-  if (audio.readyState < 1) await new Promise(resolve => audio.addEventListener('loadedmetadata', resolve, { once: true }));
+  if (audio.readyState < 1) {
+    const ok = await new Promise(resolve => { audio.addEventListener('loadedmetadata', () => resolve(true), { once: true }); audio.addEventListener('error', () => resolve(false), { once: true }); });
+    if (!ok) return;
+  }
   audio.currentTime = start;
   const tick = () => {
     if (sessionPlayer.index !== i) return;

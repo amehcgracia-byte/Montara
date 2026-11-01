@@ -34,6 +34,11 @@ def public(data):
     return result
 
 
+def extras_running(work):
+    """The background waveform/listening-copy step started and has not finished."""
+    return (work / 'extras.log').is_file() and not (work / 'extras.done').is_file()
+
+
 def mix_settings(body, names):
     """Fader offsets, mutes and effects the person changed for one mix (validated)."""
     settings = {}
@@ -203,6 +208,8 @@ def register_full_session(app, data_root, fixtures):
             data = read(work)
             if data['status'] in BUSY or not data.get('tracks'):
                 return error('Not ready yet.', 409)
+            if not (work / 'waveform.json').is_file() and extras_running(work):
+                return jsonify(pending=True), 202  # being drawn in the background; the page asks again
             return jsonify(session_waveform(work))
         except ValueError as exc:
             return error(exc, 404)
@@ -214,9 +221,11 @@ def register_full_session(app, data_root, fixtures):
             if not read(work).get('tracks'):
                 return error('Not ready yet.', 409)
             if 'start' not in request.args:  # the whole session, seekable (HTTP ranges)
-                data = read(work)
-                if data['status'] in BUSY and not (work / 'listen-all.webm').is_file():
-                    return error('Not ready yet.', 409)
+                if not (work / 'listen-all.webm').is_file():
+                    if extras_running(work):
+                        return error('The listening copy is being prepared. Try again in a minute.', 409)
+                    if read(work)['status'] in BUSY:
+                        return error('Not ready yet.', 409)
                 return send_file(session_listen(work), mimetype='audio/webm', conditional=True, max_age=3600)
             start, end = float(request.args.get('start', 'nan')), float(request.args.get('end', 'nan'))
             if not (math.isfinite(start) and math.isfinite(end)):

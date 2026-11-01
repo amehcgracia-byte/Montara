@@ -551,6 +551,8 @@ function renderFiles() {
   if (state.platform === 'youtube' && $('#fullSessionOn').checked && !state.uploads && audioTracks().length) hint = 'Find and review the songs, then export their mixes. This session step exports audio.';
   const longest = Math.max(0, ...state.files.filter(isAudioEntry).map(f => f.duration || 0));
   if (state.platform === 'youtube' && !$('#fullSessionOn').checked && !state.uploads && longest > 20 * 60) hint = `Your audio is ${Math.round(longest / 60)} min long. If it is a whole session and you want one song, tick Full session to find the songs first, or trim the tracks to that song.`;
+  // Long sessions: everything scales with how much audio comes in.
+  if (state.platform === 'youtube' && longest > 30 * 60) hint = `${hint ? hint + ' ' : ''}Tip: only send what you need. If you want a few songs from a ${Math.round(longest / 60)} min session, export just that part of the tracks: uploading, finding songs and mixing all take much less time.`;
   if (!audioOnly() && state.branding === "mine" && !state.hasLogo) { hint = "Choose your logo, or pick another option."; ready = false; }
   $("#footageHint").textContent = hint;
   $("#continueFootage").disabled = !ready;

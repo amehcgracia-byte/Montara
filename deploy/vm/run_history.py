@@ -129,6 +129,23 @@ def record(folder: Path, base: dict) -> dict | None:
     }
 
 
+def session_record(path: Path, base: dict) -> dict | None:
+    """A full audio session (detect + per-song export), when it has timings."""
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return None
+    timings = data.get("timings") or {}
+    if not timings.get("render"):
+        return None
+    selected = [s for s in data.get("songs") or [] if s.get("selected")]
+    return {**base, "date": datetime.fromtimestamp(path.stat().st_mtime).isoformat(timespec="minutes"), "mode": "Session",
+            "project": path.parent.name, "stages_s": {k: timings.get(k) for k in ("detect", "render", "prepare")},
+            "songs": len(selected), "audio_min": round(sum(s["end"] - s["start"] for s in selected) / 60, 1),
+            "tracks": len(data.get("tracks") or []), "previews": bool(data.get("previews")),
+            "session_min": round(float(data.get("duration") or 0) / 60, 1)}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--data", type=Path, default=Path.home() / "montara-data")
@@ -138,6 +155,7 @@ def main() -> int:
     base = {"montara": short(git_rev(args.root, "rev-parse", "HEAD")), "engine": short(engine),
             "mixer": short(git_rev(args.root / "mixer", "rev-parse", "HEAD")), "machine": machine()}
     rows = [r for f in sorted((args.data / "Projects").glob("*.zuckervid")) if (r := record(f, base))]
+    rows += [r for f in sorted((args.data / "Sessions").glob("*/session.json")) if (r := session_record(f, base))]
     for row in sorted(rows, key=lambda r: str(r["date"])):
         print(json.dumps(row, ensure_ascii=False))
     return 0
