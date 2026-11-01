@@ -482,8 +482,10 @@ async function renderFullSession() {
 // ---------- songs mixed on this computer (companion local mixer) ----------
 // Returns the songs the server still has to mix.
 async function mixSongsLocally(songs, perSong) {
+  if (!fullSession.data.uses_previews) return songs;
+  await montaraCompanion.detect();   // the companion may have been started (or updated) since the page loaded
   const mixer = montaraCompanion.localMixer();
-  if (!mixer || !fullSession.data.uses_previews) return songs;
+  if (!mixer) return songs;
   const left = [], uploads = [];
   let done = 0, warned = false;
   for (const [index, song] of songs.entries()) {
