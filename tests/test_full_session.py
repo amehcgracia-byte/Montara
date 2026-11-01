@@ -1,6 +1,7 @@
 """Session boundaries, isolation and real bounded audio extraction."""
 import json
 import math
+import os
 import sys
 import subprocess
 import time
@@ -181,6 +182,51 @@ def test_whole_session_listening_copy_is_seekable_webm(tmp_path):
     assert copy.suffix == '.webm' and session_listen(work) == copy
     info = json.loads(subprocess.check_output(['ffprobe', '-v', 'error', '-show_format', '-show_streams', '-of', 'json', str(copy)]))
     assert info['streams'][0]['codec_name'] == 'opus' and abs(float(info['format']['duration']) - 5) < .2
+
+
+def test_listening_copy_places_each_track_at_its_offset(tmp_path):
+    from mixer_adapter.session import listen_percent, session_listen
+    rate = 8000
+    tone = np.sin(np.arange(rate) * 2 * np.pi * 440 / rate) * .3
+    a = tmp_path / 'a.wav'; sf.write(a, tone, rate, subtype='FLOAT')
+    b = tmp_path / 'b.wav'; sf.write(b, tone, rate, subtype='FLOAT')
+    work = tmp_path / 'job'; work.mkdir()
+    # The second track starts more than one mixing block after the first has ended.
+    save(work / 'session.json', {'duration': 13.0, 'tracks': [
+        dict(file='a.wav', path=str(a), samplerate=rate, channels=1, offset=0, duration=1),
+        dict(file='b.wav', path=str(b), samplerate=rate, channels=1, offset=12, duration=1)]})
+    assert listen_percent(work) == 0
+    copy = session_listen(work)
+    assert listen_percent(work) == 100
+    assert sorted(p.name for p in work.iterdir()) == ['listen-all.webm', 'session.json']
+    raw = subprocess.run(['ffmpeg', '-v', 'error', '-i', str(copy), '-f', 'f32le', '-ac', '1', '-ar', '8000', '-'], capture_output=True, check=True).stdout
+    sound = np.frombuffer(raw, 'float32')
+    level = lambda start, end: float(np.sqrt(np.mean(sound[int(start * 8000):int(end * 8000)] ** 2)))
+    assert abs(len(sound) / 8000 - 13) < .2
+    assert level(.2, .8) > .01 and level(12.2, 12.8) > .01 and level(4, 10) < .001
+
+
+def test_listening_copy_failure_leaves_no_copy(tmp_path):
+    from mixer_adapter.session import session_listen
+    work = tmp_path / 'job'; work.mkdir()
+    save(work / 'session.json', {'duration': 2.0, 'tracks': [
+        dict(file='a.wav', path=str(tmp_path / 'missing.wav'), samplerate=8000, channels=1, offset=0, duration=2)]})
+    with pytest.raises(subprocess.CalledProcessError):
+        session_listen(work)
+    assert sorted(p.name for p in work.iterdir()) == ['session.json']
+
+
+def test_montara_start_does_not_open_a_second_connection(tmp_path):
+    stubs = tmp_path / 'stubs'; stubs.mkdir()
+    calls = tmp_path / 'calls'
+    for name, code in {'gcloud': 'echo RUNNING', 'lsof': 'exit 0', 'open': 'exit 0'}.items():
+        (stubs / name).write_text(f'#!/bin/bash\necho "{name} $*" >> "{calls}"\n{code}\n'); (stubs / name).chmod(0o755)
+    home = tmp_path / 'home'; home.mkdir()
+    env = {**os.environ, 'HOME': str(home), 'PATH': f"{stubs}:{os.environ['PATH']}", 'SHELL': '/bin/bash'}
+    subprocess.run(['bash', str(Path(__file__).resolve().parents[1] / 'deploy' / 'vm' / 'mac-tools.sh')], env=env, check=True, capture_output=True)
+    done = subprocess.run([str(home / '.montara-tools' / 'bin' / 'montara-start')], env=env, capture_output=True, text=True, timeout=30)
+    assert done.returncode == 0 and 'already connected' in done.stdout
+    assert 'compute ssh' not in calls.read_text()
 
 
 def test_original_ranges_are_accepted_while_an_export_runs(tmp_path):

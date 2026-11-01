@@ -39,7 +39,7 @@ def public(data):
 
 
 def extras_running(work):
-    """The background waveform/listening-copy step started and has not finished."""
+    """The background listening-copy step started and has not finished."""
     return (work / 'extras.log').is_file() and not (work / 'extras.done').is_file()
 
 

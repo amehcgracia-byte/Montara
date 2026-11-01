@@ -258,29 +258,96 @@ def waveform_from_timelines(work, timelines, duration, frame_seconds):
                                              peaks=np.clip(peaks / max(top, 1e-9) * 255, 0, 255).astype(int).tolist()))
 
 
+LISTEN_RATE = 24000
+
+
+def listen_percent(work):
+    """How much of the listening copy is made, 0-100."""
+    work = Path(work)
+    if (work / 'listen-all.webm').is_file():
+        return 100
+    try:
+        return min(100, int((work / 'listen.progress').read_text()))
+    except (OSError, ValueError):
+        return 0
+
+
 def session_listen(work):
     """One light listening copy of the whole session (all tracks, offsets honoured).
 
     Made once; the page seeks inside it, so moving a cut or jumping to a point never
-    waits for the server. Rough equal-level mix for checking cuts, not the export."""
+    waits for the server. Rough equal-level mix for checking cuts, not the export.
+    One decoder per track, summed here and resampled once: a single ffmpeg with amix does it
+    all on one core (a 9-track jam of 1h56 took 7 minutes, against 79 s for finding its songs)."""
+    import threading
+    import numpy as np
+    from concurrent.futures import ThreadPoolExecutor
     work = Path(work)
     target = work / 'listen-all.webm'
     if target.is_file():
         return target
     data = read(work)
-    inputs, labels = [], []
-    for track in data['tracks']:
-        delay = round(float(track['offset']) * 1000)
-        inputs += ['-i', track['path']]
-        labels.append(f'[{len(labels)}:a]aformat=channel_layouts=mono,adelay={delay}:all=1[a{len(labels)}]')
-    mixed = ''.join(f'[a{i}]' for i in range(len(labels)))
-    graph = ';'.join(labels) + f';{mixed}amix=inputs={len(labels)}:normalize=0:duration=longest,dynaudnorm=f=500:g=31,alimiter=limit=0.9[out]'
-    pending = target.with_suffix('.part.webm')  # WebM keeps a seek index: jumps are instant in the browser
-    subprocess.run(['ffmpeg', '-v', 'error', '-nostdin', '-y', *inputs, '-filter_complex', graph, '-map', '[out]', '-ac', '1',
-                    '-ar', '24000', '-c:a', 'libopus', '-b:a', '40k', '-compression_level', '5', '-application', 'audio', '-f', 'webm', str(pending)],
-                   check=True, capture_output=True, timeout=3600)
-    pending.replace(target)
-    return target
+    duration = float(data.get('duration') or 0)
+    rate = max(int(track['samplerate']) for track in data['tracks'])
+    samples_at_once = rate * 10
+    # WebM keeps a seek index: jumps are instant in the browser. Own name: two requests never share a file.
+    pending = target.with_name(f'listen-all.{os.getpid()}-{threading.get_ident()}.part.webm')
+    decoders = [(round(float(track['offset']) * rate),
+                 subprocess.Popen(['ffmpeg', '-v', 'error', '-nostdin', '-i', track['path'], '-map', '0:a:0', '-ac', '1', '-ar', str(rate),
+                                   '-f', 'f32le', '-'], stdout=subprocess.PIPE)) for track in data['tracks']]
+    encoder = subprocess.Popen(['ffmpeg', '-v', 'error', '-nostdin', '-y', '-f', 'f32le', '-ar', str(rate), '-ac', '1', '-i', '-',
+                                '-af', f'aresample={LISTEN_RATE},dynaudnorm=f=500:g=31,alimiter=limit=0.9', '-c:a', 'libopus', '-b:a', '40k', '-compression_level', '5',
+                                '-application', 'audio', '-f', 'webm', str(pending)], stdin=subprocess.PIPE)
+    processes = [encoder, *(process for _, process in decoders)]
+
+    def stop():
+        for process in processes:
+            process.kill()
+
+    def track_block(decoder, start):
+        delay, process = decoder
+        silence = min(samples_at_once, max(0, delay - start))
+        raw = process.stdout.read((samples_at_once - silence) * 4) if silence < samples_at_once else b''
+        return silence, np.frombuffer(raw, 'float32', len(raw) // 4)
+
+    def mixed_block(pool, start):
+        mix = np.zeros(samples_at_once, 'float32')
+        used = 0
+        for silence, samples in pool.map(lambda decoder: track_block(decoder, start), decoders):
+            mix[silence:silence + len(samples)] += samples
+            used = max(used, silence + len(samples))
+        return mix[:used]
+
+    watchdog = threading.Timer(3600, stop)
+    watchdog.start()
+    try:
+        made = 0
+        with ThreadPoolExecutor(max_workers=len(decoders)) as pool, ThreadPoolExecutor(max_workers=1) as reader:
+            ahead = reader.submit(mixed_block, pool, 0)  # the next block is decoded while this one is encoded
+            while True:
+                block = ahead.result()
+                if not len(block):
+                    break
+                made += len(block)
+                ahead = reader.submit(mixed_block, pool, made)
+                encoder.stdin.write(block.tobytes())
+                if duration:
+                    (work / 'listen.progress').write_text(str(int(made / rate / duration * 100)))
+        encoder.stdin.close()
+        for process in processes:
+            if process.wait() != 0:
+                raise subprocess.CalledProcessError(process.returncode, process.args)
+        pending.replace(target)
+        return target
+    except BrokenPipeError as exc:  # the encoder stopped early
+        raise subprocess.CalledProcessError(encoder.wait(), encoder.args) from exc
+    finally:
+        watchdog.cancel()
+        stop()
+        for _, process in decoders:
+            process.stdout.close()
+        pending.unlink(missing_ok=True)
+        (work / 'listen.progress').unlink(missing_ok=True)
 
 
 def listen_range(work, start, end):
@@ -451,6 +518,8 @@ def execute(work, action):
         if (work / 'cancel').exists():
             raise InterruptedError('Session cancelled. Your originals are unchanged.')
         data['progress'] = {k: update[k] for k in ('current_stage', 'stage_detail', 'progress') if k in update}
+        if action == 'detect' and 'progress' in data['progress']:  # one bar for both: the songs and the listening copy
+            data['progress']['progress'] = min(data['progress']['progress'], listen_percent(work))
         save(work / 'session.json', data)
 
     pipeline.PROGRESS_HOOK = progress
@@ -475,11 +544,11 @@ def execute(work, action):
         data['tracks'] = [dict(file=s.path.stem + '.wav', path=str(s.path), samplerate=s.samplerate,
                                channels=s.channels, offset=s.offset_seconds, duration=s.duration) for s in stems]
         # The listening copy only needs the tracks and their offsets: make it in the
-        # background now, while the songs are being found, so it is ready by the review.
+        # background now, while the songs are being found; the review waits for it.
         save(work / 'session.json', data)
         with (work / 'extras.log').open('ab') as log:
-            subprocess.Popen([sys.executable, '-m', 'mixer_adapter.session', str(work), 'extras'], cwd=Path(__file__).resolve().parents[1],
-                             stdout=log, stderr=log, start_new_session=True)
+            extras = subprocess.Popen([sys.executable, '-m', 'mixer_adapter.session', str(work), 'extras'], cwd=Path(__file__).resolve().parents[1],
+                                      stdout=log, stderr=log, start_new_session=True)
         timelines = pipeline.ensure_detection_cache(stems)
         # Tracks with no sound in the whole session (a channel left open for another band):
         # never uploaded as originals, never mixed. The page shows them and can bring one back.
@@ -541,6 +610,10 @@ def execute(work, action):
             for cut in data['ai_review']['value']['cuts']:
                 data['songs'][cut['id']-1]['review_note'] = cut['reason']
                 data['songs'][cut['id']-1]['needs_review'] = cut['decision'] == 'review'
+        # The review opens with the play buttons ready: the same bar waits for the listening copy.
+        while extras.poll() is None:
+            progress(dict(current_stage='Preparing the listening copy', stage_detail='getting the songs ready to play', progress=100))
+            time.sleep(1)
         data['status'] = 'review'
     elif action == 'prepare':
         song = next((s for s in data['songs'] if s['id'] == data.get('preview_song')), None) or next(s for s in data['songs'] if s['selected'])
@@ -618,12 +691,11 @@ if __name__ == '__main__':
     if action == 'render-song':  # child of a render; the parent holds the locks and handles cancel
         render_song(work, int(sys.argv[3]))
         sys.exit(0)
-    if action == 'extras':  # during detection: the listening copy, then the waveform if still missing; no locks
-        for make in (session_listen, session_waveform):
-            try:
-                make(work)
-            except Exception as exc:
-                print(f'{make.__name__} failed:', exc, flush=True)
+    if action == 'extras':  # during detection: the listening copy; no locks
+        try:
+            session_listen(work)
+        except Exception as exc:
+            print('session_listen failed:', exc, flush=True)
         (work / 'extras.done').touch()
         sys.exit(0)
     import fcntl

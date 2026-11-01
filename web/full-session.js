@@ -180,6 +180,7 @@ function drawSessionSongs(songs) {
   $('#sessionQualityNote').textContent = montaraCompanion.info && !montaraCompanion.canFastSegments() ? 'Update the companion for Fast (this one sends lossless).' : '';
   paintUploadState();
   loadSessionWave().then(() => list.forEach((_, i) => paintSong(i)));
+  warmSessionAudio();
   $('#sessionMix').hidden = false;
   $('#sessionMix').textContent = 'Export selected songs';
 }
@@ -268,6 +269,13 @@ function sessionAudio() {
   return sessionPlayer.audio;
 }
 
+// The review opens with the copy made: open it now so the first ▶ answers like the others.
+function warmSessionAudio() {
+  const id = fullSession.id;
+  if (sessionPlayer.audio?.dataset.session === id) return;
+  fetch(`/montara/session/${id}/listen`, { method: 'HEAD' }).then(response => { if (response.ok && fullSession.id === id) sessionAudio(); }).catch(() => {});
+}
+
 function stopSongPreview() {
   sessionPlayer.audio?.pause();
   cancelAnimationFrame(sessionPlayer.raf);
@@ -283,7 +291,7 @@ async function playSong(i, from = null) {
   const songs = songList(), song = songs[i];
   const button = document.querySelector(`[data-song-play="${i}"]`);
   sessionPlayer.index = i; button?.classList.add('on', 'loading'); if (button) button.textContent = '■';  // ring turns until sound starts
-  // The listening copy is made in the background after detection: wait for it here.
+  // Sessions made before the review waited for the listening copy can still lack it: wait for it here.
   if (!sessionPlayer.audio || sessionPlayer.audio.dataset.session !== fullSession.id) {
     for (let attempt = 0; attempt < 120; attempt++) {
       const response = await fetch(`/montara/session/${fullSession.id}/listen`, { method: 'HEAD' }).catch(() => null);

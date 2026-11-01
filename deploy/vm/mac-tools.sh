@@ -76,12 +76,20 @@ if [ "\$state" != "RUNNING" ]; then
 fi
 # Public address only when asked (montara-start --public); otherwise this computer only.
 [ "\${1:-}" = "--public" ] && exec "$BIN/montara-tunnel"
+# Another window already holds the connection: a second one could only fail again and again.
+connected() { lsof -nP -iTCP:8101 -sTCP:LISTEN >/dev/null 2>&1; }
+if connected; then
+  echo "Montara is already connected in another window: http://127.0.0.1:8101"
+  open "http://127.0.0.1:8101" 2>/dev/null
+  exit 0
+fi
 echo "Montara: http://127.0.0.1:8101  (keep this window open; Ctrl+C closes the connection)"
 (sleep 4; open "http://127.0.0.1:8101" 2>/dev/null) &
 trap 'echo; echo "Connection closed."; exit 0' INT
 while true; do   # a dropped connection comes back by itself
   gcloud compute ssh $VM --zone $ZONE --project $PROJECT -- -N -L 8101:127.0.0.1:8101 \
     -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes
+  connected && { echo "Montara is already connected in another window; closing this one."; exit 0; }
   echo "Connection lost; reconnecting in 3 s (Ctrl+C to stop)…"; sleep 3
 done
 SCRIPT

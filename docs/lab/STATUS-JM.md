@@ -5,7 +5,7 @@ Actualizado: 2026-11-01 tarde · lo mantiene el equipo de Chema · 40 líneas co
 ## Referencias
 - `mixer`: rama `claude/winds-synth-bass-lowpass` (ZuckerMixer PR #8, **sin mergear en master**); Montara apunta a su último commit
 - VM: e2-standard-8, `jm` en `127.0.0.1:8101`, `fer` en `:8102`; apagado automático (60 min sin web, 120 min sin SSH)
-- Companion **0.4.0** (rangos en Opus "Rápido"): se actualiza volviendo a ejecutar `companion/install.sh`
+- Companion **0.5.0** (mezcla en el Mac, opcional): se actualiza volviendo a ejecutar `companion/install.sh --mixer`
 
 ## Sesión completa (jam entera) — cómo va
 | Pieza | PR |
@@ -16,6 +16,7 @@ Actualizado: 2026-11-01 tarde · lo mantiene el equipo de Chema · 40 líneas co
 | Confirm por canción; subida y mezcla en paralelo; onda y copia de escucha durante la detección | #48–#50 |
 | Tipos de pista (menú por pista, rellenado por el nombre) + Stereo L/R | #51 |
 | Motor: la puntuación de planos usa la copia ligera, no el original 4K de iPhone/Sony (hallazgo de Fer, #56; zucker_videos #49) | #59 |
+| Primer play sin espera: copia de escucha de 414 s a unos 100 s con la VM libre en una jam de 1h56 (un decodificador por pista, suma en numpy) y la barra de carga la incluye; `montara-start` no abre una segunda conexión | 0.55 |
 | Rangos por ventana (un split ya no vacía la cola), estados de Confirm, mixer y Save al instante, círculo de carga, Opus "Rápido", pistas vacías fuera, "aplicar a todas", L/R enlazadas, mixer ancho, **diccionario de instrumentos** | #52 |
 
 ## Diccionario de instrumentos (ZuckerMixer `instrument_dictionary.py`)
@@ -24,7 +25,7 @@ Actualizado: 2026-11-01 tarde · lo mantiene el equipo de Chema · 40 líneas co
 - Pendiente: detección por audio (hoy por nombre o por la elección de la persona); fichas para más instrumentos; afinarlas de oído con jams reales.
 
 ## Pendiente
-- **Mezcla en el Mac (companion 0.5.0, opcional, #59)**: `install.sh --mixer` instala el mezclador del servidor en el Mac (unos 240 MB en Linux; falta medirlo en Mac); cada canción se mezcla allí y solo sube el MP3. Salida idéntica bit a bit a la del servidor en el test. Falta: medir tiempos en un Mac real. Informe de Fer: `JUPITER_COMPANION_MAC_LOCAL_MIX_FEASIBILITY_2026-11-01.md`.
+- **Mezcla en el Mac (companion 0.5.0, opcional, #59)**: `install.sh --mixer` instala el mezclador del servidor en el Mac (171 MB en el Mac); cada canción se mezcla allí y solo sube el MP3. Salida idéntica bit a bit a la del servidor en el test. **Medido en el Mac de Chema (Intel, 8 hilos), jam de 1h56 con 9 pistas: 12 de 12 canciones con `local: true`, 47,5 min de música en 12,4 min (unos 16 s por minuto de canción).** Falta: confirmar por oído y comparar con el servidor. Informe de Fer: `JUPITER_COMPANION_MAC_LOCAL_MIX_FEASIBILITY_2026-11-01.md`.
 - Licencias: Matchering (GPLv3, de terceros) solo se usa en el servidor; el mezclador del Mac no lo instala.
 - Mergear ZuckerMixer PR #8 en master.
 - El fallo de canciones cortadas o vacías del #48: arreglado el fallo de la cola (#52); falta confirmarlo con `deploy/vm/audio_check.py` en una sesión real.

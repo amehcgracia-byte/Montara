@@ -97,6 +97,9 @@ def run(output):
                 page.wait_for_function("document.querySelectorAll('[data-session-song]').length===2", timeout=180_000)
                 detected = page.evaluate('fullSession.data.songs')
                 assert abs(detected[0]['end'] - 195) < 3
+                # The review opens with the listening copy made and already open in the page.
+                assert page.evaluate("fetch(`/montara/session/${fullSession.id}/listen`, {method: 'HEAD'}).then(r => r.ok)")
+                page.wait_for_function('sessionPlayer.audio && sessionPlayer.audio.readyState >= 1', timeout=15_000)
                 page.screenshot(path=str(output / '02-detected.png'), full_page=True)
                 rows = page.locator('[data-session-song]')
                 page.wait_for_function('sessionWave.data && sessionWave.data.peaks.length > 100', timeout=60_000)

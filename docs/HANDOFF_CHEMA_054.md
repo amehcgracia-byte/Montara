@@ -10,7 +10,7 @@ Este documento resume el estado actual para quien retome Montara en una sesión 
 
 ## Infraestructura
 - **VM** `montara-test` (GCP, proyecto `montara-pruebas-10292226`, zona `europe-west3-a`, e2-standard-8, disco de 96 GB). Usuario `jm` en `127.0.0.1:8101` (gunicorn 1 worker × 8 threads, servicio systemd de usuario) y `fer` en `:8102`, que no se toca. Se apaga sola: 60 min sin web o 120 min sin SSH.
-- **Desde este contenedor no se puede hacer SSH a la VM.** Chema ejecuta los comandos desde su Mac con las herramientas de `deploy/vm/mac-tools.sh`:
+- **Desde un contenedor no se puede hacer SSH a la VM** (desde una sesión en el Mac de Chema, sí). Chema ejecuta los comandos desde su Mac con las herramientas de `deploy/vm/mac-tools.sh`:
   - `montara-start`: enciende la VM y abre un túnel SSH a http://127.0.0.1:8101 que se reconecta solo. `--public` da una dirección de Cloudflare.
   - `montara-update`: pone la VM en `main`.
   - `montara-diagnose`: estado de la última sesión.
@@ -30,7 +30,7 @@ Este documento resume el estado actual para quien retome Montara en una sesión 
    - Las **pistas vacías** se detectan y quedan fuera. Desde la revisión se pueden recuperar con "use it anyway".
 2. **Detección**
    - Encuentra las canciones. La onda sale de las envolventes de la detección.
-   - La copia de escucha (`listen-all.webm`) se genera durante la detección.
+   - La copia de escucha (`listen-all.webm`) se genera durante la detección y la barra la espera (0.55): la revisión abre con el play listo. Antes tardaba 414 s frente a 79 s de la detección en una jam de 1h56 con 9 pistas; ahora, unos 100 s con la VM libre.
 3. **Revisión**
    - Cada canción tiene su onda con tiradores, play (con un círculo de carga), clic para saltar, y botones Mixer, Split, Remove y **Confirm**.
    - Confirm pasa por Confirming… → Confirmed · sending n/m → ready.
@@ -51,7 +51,7 @@ Este documento resume el estado actual para quien retome Montara en una sesión 
 - #60: `montara-start` en local.
 
 ## Pendiente, por prioridad
-1. **Primera prueba real del mezclador local en el Mac de Chema.** Ya está instalado (171 MB, mixer 2c0c07c). Hay que medir los tiempos (líneas `mixed a song here in … s` en la ventana del companion) y confirmar que todas las canciones salen con `local: true`.
+1. ~~Primera prueba real del mezclador local en el Mac de Chema.~~ Hecha el 2026-11-01 (sesión `6c332051e567`): 12 de 12 canciones con `local: true`, 47,5 min de música en 12,4 min, unos 16 s por minuto de canción. Los tiempos están en `local_results/*.json` de la sesión, en la VM.
 2. **Confirmar con una jam real** que no se repite el fallo de canciones cortadas o vacías de la 0.48: `deploy/vm/audio_check.py`, enviado a Chema como comando de gcloud en base64.
 3. **Retención automática del disco**: borrar sesiones viejas salvo la última y avisar cuando el disco se llene (issue #54). Hoy hay 39 GB libres, con un 60 % de uso.
 4. **Mergear ZuckerMixer PR #8** en master.
