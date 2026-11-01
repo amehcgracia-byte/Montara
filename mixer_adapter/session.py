@@ -157,6 +157,25 @@ def session_waveform(work):
     return result
 
 
+def waveform_from_timelines(work, timelines, duration, frame_seconds):
+    """waveform.json from the detection envelopes (one level per track and frame, already on the session clock)."""
+    import numpy as np
+    columns = int(math.ceil(float(duration) / WAVE_STEP))
+    peaks = np.zeros(columns, dtype='float32')
+    for env in timelines.values():
+        env = np.asarray(env, dtype='float32')
+        if not len(env):
+            continue
+        index = (np.arange(len(env)) * float(frame_seconds) / WAVE_STEP).astype(int)
+        keep = index < columns
+        np.maximum.at(peaks, index[keep], env[keep])
+    if not (peaks > 0).any():
+        raise ValueError('empty envelopes')
+    top = float(np.percentile(peaks[peaks > 0], 99.5))
+    save(Path(work) / 'waveform.json', dict(step=WAVE_STEP, duration=float(duration), source='detection',
+                                             peaks=np.clip(peaks / max(top, 1e-9) * 255, 0, 255).astype(int).tolist()))
+
+
 def session_listen(work):
     """One light listening copy of the whole session (all tracks, offsets honoured).
 
@@ -176,7 +195,7 @@ def session_listen(work):
     graph = ';'.join(labels) + f';{mixed}amix=inputs={len(labels)}:normalize=0:duration=longest,dynaudnorm=f=500:g=31,alimiter=limit=0.9[out]'
     pending = target.with_suffix('.part.webm')  # WebM keeps a seek index: jumps are instant in the browser
     subprocess.run(['ffmpeg', '-v', 'error', '-nostdin', '-y', *inputs, '-filter_complex', graph, '-map', '[out]', '-ac', '1',
-                    '-c:a', 'libopus', '-b:a', '48k', '-application', 'audio', '-f', 'webm', str(pending)],
+                    '-ar', '24000', '-c:a', 'libopus', '-b:a', '40k', '-compression_level', '5', '-application', 'audio', '-f', 'webm', str(pending)],
                    check=True, capture_output=True, timeout=3600)
     pending.replace(target)
     return target
@@ -373,7 +392,17 @@ def execute(work, action):
         data['duration'] = max(s.offset_seconds + s.duration for s in stems)
         data['tracks'] = [dict(file=s.path.stem + '.wav', path=str(s.path), samplerate=s.samplerate,
                                channels=s.channels, offset=s.offset_seconds, duration=s.duration) for s in stems]
+        # The listening copy only needs the tracks and their offsets: make it in the
+        # background now, while the songs are being found, so it is ready by the review.
+        save(work / 'session.json', data)
+        with (work / 'extras.log').open('ab') as log:
+            subprocess.Popen([sys.executable, '-m', 'mixer_adapter.session', str(work), 'extras'], cwd=Path(__file__).resolve().parents[1],
+                             stdout=log, stderr=log, start_new_session=True)
         timelines = pipeline.ensure_detection_cache(stems)
+        try:  # the waveform comes from the envelopes detection just computed: no second decode
+            waveform_from_timelines(work, timelines, data['duration'], pipeline.DETECTION_FRAME_SECONDS)
+        except Exception as exc:
+            print('waveform from envelopes failed:', exc, flush=True)
         segments, _ = pipeline.detect_segments(stems)
         proposals = [dict(start=max(0, s.start), end=min(data['duration'], s.end), name=f'Song {i:02d}')
                      for i, s in enumerate(segments, 1) if s.end - s.start >= .5]
@@ -427,12 +456,6 @@ def execute(work, action):
                 data['songs'][cut['id']-1]['review_note'] = cut['reason']
                 data['songs'][cut['id']-1]['needs_review'] = cut['decision'] == 'review'
         data['status'] = 'review'
-        # The song list opens now; the waveform and the listening copy are made in the
-        # background and appear on the page when ready (minutes for a long jam).
-        save(work / 'session.json', data)
-        with (work / 'extras.log').open('ab') as log:
-            subprocess.Popen([sys.executable, '-m', 'mixer_adapter.session', str(work), 'extras'], cwd=Path(__file__).resolve().parents[1],
-                             stdout=log, stderr=log, start_new_session=True)
     elif action == 'prepare':
         song = next((s for s in data['songs'] if s['id'] == data.get('preview_song')), None) or next(s for s in data['songs'] if s['selected'])
         folder = prepare_tracks(work, song, preview=True)
@@ -502,8 +525,8 @@ if __name__ == '__main__':
     if action == 'render-song':  # child of a render; the parent holds the locks and handles cancel
         render_song(work, int(sys.argv[3]))
         sys.exit(0)
-    if action == 'extras':  # after detection: waveform, then the listening copy; no locks, never blocks a job
-        for make in (session_waveform, session_listen):
+    if action == 'extras':  # during detection: the listening copy, then the waveform if still missing; no locks
+        for make in (session_listen, session_waveform):
             try:
                 make(work)
             except Exception as exc:
