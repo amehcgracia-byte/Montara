@@ -42,7 +42,7 @@ SAMPLE_SETS = {
 }
 DEFAULT_DATA = Path.home() / "MontaraData"
 # Shown at the bottom of every page, so it is obvious which build is running.
-MONTARA_VERSION = "0.52 · 2026-11-01 · Confirm by window (never lost after a split), instant mixer screen and Save, loading ring on play"
+MONTARA_VERSION = "0.53 · 2026-11-01 · Fast Opus originals, empty tracks left out, apply mix to all songs, linked L/R, instrument dictionary, Confirm states"
 
 
 def _build_label() -> str:

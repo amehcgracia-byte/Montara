@@ -155,9 +155,9 @@ class SingleSongMix:
                 "mute": bool(params.get("mute", False)),
                 # The mixer's EQ for this role: the page shows it and the person can change it.
                 "eq": {**{slot: {"type": kind, "hz": float(freq), "q": float(q), "db": float(gain)}
-                          for slot, kind, freq, q, gain in self.pipeline.role_eq_bands(stem.role) if slot != "fixed"},
+                          for slot, kind, freq, q, gain in self.pipeline.role_eq_bands(stem.role, name=stem.path.name) if slot != "fixed"},
                        # Every track can cut highs; 20 kHz means off (bass starts at 6 kHz in the mixer).
-                       "high": {"type": "lowpass", "hz": float(self.pipeline.role_eq_defaults(stem.role).get("eq_high_cut_hz", 20000.0)), "q": 0.707, "db": 0.0}},
+                       "high": {"type": "lowpass", "hz": float(self.pipeline.role_eq_defaults(stem.role, stem.path.name).get("eq_high_cut_hz", 20000.0)), "q": 0.707, "db": 0.0}},
             })
         order = ["kick", "snare", "hh", "drums", "overhead", "bass", "guitar", "keys", "keys_l", "synth", "horn", "sax", "vocal"]
         tracks.sort(key=lambda t: (order.index(t["role"]) if t["role"] in order else len(order), t["name"].lower()))
