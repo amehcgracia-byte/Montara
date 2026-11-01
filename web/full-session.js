@@ -466,13 +466,56 @@ async function renderFullSession() {
     const per_song = Object.fromEntries(Object.entries(fullSession.mixes).filter(([id]) => ids.has(String(id))));
     // Mixing starts at once: each song begins on the server as soon as its original ranges
     // arrive, while this computer keeps sending the next ones.
+    // With the companion's local mixer, songs are mixed on this computer and only the MP3
+    // travels; any song it cannot do (reference, no original here, error) goes to the server.
+    const selected = saved.songs.filter(s => s.selected);
+    const serverSongs = await mixSongsLocally(selected, per_song);
     const started = await api(`/montara/session/${fullSession.id}/render`, { songs: saved.songs, per_song });
-    for (const song of saved.songs.filter(s => s.selected)) await queueSongOriginals(song);
+    for (const song of serverSongs) await queueSongOriginals(song);
     const data = await waitSession(started);
     $('#sessionStatus').textContent = 'Your selected songs are ready.';
     drawSessionResults(data);
   } catch (error) { toast(error.message, true); }
   finally { $('#sessionMix').hidden = false; }
+}
+
+// ---------- songs mixed on this computer (companion local mixer) ----------
+// Returns the songs the server still has to mix.
+async function mixSongsLocally(songs, perSong) {
+  const mixer = montaraCompanion.localMixer();
+  if (!mixer || !fullSession.data.uses_previews) return songs;
+  const left = [], uploads = [];
+  let done = 0, warned = false;
+  for (const [index, song] of songs.entries()) {
+    const mix = perSong[song.id] || {};
+    if (mix.reference) { left.push(song); continue; }   // mastering references are mixed on the server
+    $('#sessionStatus').textContent = `Mixing on this computer: ${song.name} (${index + 1} of ${songs.length})…`;
+    $('#sessionWorking').hidden = false;
+    try {
+      const query = new URLSearchParams({ song: song.id, start: song.start, end: song.end, name: song.name || '' });
+      const plan = await api(`/montara/session/${fullSession.id}/local-plan?${query}`);
+      if (plan.mixer !== mixer) {
+        if (!warned) toast('The companion\'s mixer is a different version: the server mixes these songs. Update it with install.sh --mixer.', true);
+        warned = true; left.push(song); continue;
+      }
+      const { blob, seconds } = await montaraCompanion.mixSong(plan, mix);
+      const name = `${(song.name || 'Song').replace(/[^\w .-]/g, '_')}.mp3`;
+      // The next song is mixed while this MP3 uploads.
+      uploads.push((async () => {
+        let uploadId = null;
+        await sendResumableUpload(new File([blob], name, { type: 'audio/mpeg' }), () => {}, id => { uploadId = id; });
+        await api(`/montara/session/${fullSession.id}/local-result`, { song: song.id, window: plan.window, upload_id: uploadId, mixer: plan.mixer, seconds });
+        done++;
+      })().catch(error => { console.warn('local result upload failed', error); left.push(song); }));
+    } catch (error) {
+      console.warn('local mix failed', song.name, error);
+      if (!warned) toast(`Mixing on this computer failed (${error.message}); the server mixes the rest.`, true);
+      warned = true; left.push(song);
+    }
+  }
+  await Promise.all(uploads);
+  if (done) toast(`${done} song${done > 1 ? 's' : ''} mixed on this computer.`);
+  return songs.filter(song => left.includes(song));
 }
 
 // ---------- original ranges, sent in the background ----------

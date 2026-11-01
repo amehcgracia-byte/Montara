@@ -27,7 +27,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-VERSION = "0.4.0"
+VERSION = "0.5.0"
 PORT = int(os.environ.get("MONTARA_COMPANION_PORT", "47820"))
 HOME = Path(os.environ.get("MONTARA_COMPANION_HOME", Path.home() / ".montara-companion"))
 CACHE = HOME / "proxies"
@@ -37,6 +37,9 @@ AUDIO_SUFFIXES = {".wav", ".aif", ".aiff"}
 DEFAULT_ORIGINS = r"https://[a-z0-9-]+\.trycloudflare\.com|https?://(127\.0\.0\.1|localhost)(:\d+)?|https://[a-z0-9-]+\.vercel\.app"
 ORIGINS = re.compile("^(" + os.environ.get("MONTARA_COMPANION_ORIGINS", DEFAULT_ORIGINS) + ")$")
 SEARCH_BUDGET_SEC = 25
+
+MIXER_HOME = HOME / "mixer"   # optional: install.sh --mixer (same mixer as the server, songs mixed here)
+MIX_SLOTS = threading.Semaphore(max(1, int(os.environ.get("MONTARA_COMPANION_MIX_SLOTS", "1"))))
 
 sources: dict[str, Path] = {}
 projects: dict[str, Path] = {}
@@ -125,6 +128,31 @@ def candidates(name: str):
                     yield path
             if time.monotonic() > deadline:
                 return
+
+
+def local_mixer() -> dict | None:
+    """The optional local mixer: {"mixer": commit} when installed and usable."""
+    python = MIXER_HOME / "venv" / "bin" / "python"
+    commit = MIXER_HOME / "MIXER_COMMIT"
+    if not (python.is_file() and commit.is_file() and (MIXER_HOME / "local_mix.py").is_file()):
+        return None
+    return {"mixer": commit.read_text().strip()}
+
+
+def valid_original(original) -> bool:
+    return (isinstance(original, dict) and isinstance(original.get("name"), str) and "/" not in original["name"] and "\\" not in original["name"]
+            and isinstance(original.get("size"), int) and not isinstance(original.get("size"), bool)
+            and isinstance(original.get("fingerprint"), str) and re.fullmatch(r"[a-f0-9]{64}", original["fingerprint"]) is not None)
+
+
+def find_original(original: dict) -> Path | None:
+    source_id = hashlib.sha256(f"{original['name']}|{original['size']}|{original['fingerprint']}".encode()).hexdigest()[:24]
+    if source_id not in sources:
+        path = locate(original["name"], original["size"], original["fingerprint"])
+        if not path:
+            return None
+        sources[source_id] = path
+    return sources[source_id]
 
 
 def locate(name: str, size: int, print_: str) -> Path | None:
@@ -364,7 +392,8 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/health":
             return self.reply(200, {"app": "montara-companion", "version": VERSION, "ffmpeg": bool(FFMPEG and FFPROBE),
                                     "hardware_encoder": HW_H264, "tonemap": TONEMAP, "lossless_audio": True,
-                                    "audio_preview": OPUS, "segment_formats": ["lossless"] + (["opus"] if OPUS else [])})
+                                    "audio_preview": OPUS, "segment_formats": ["lossless"] + (["opus"] if OPUS else []),
+                                    "local_mix": local_mixer()})
         match = re.fullmatch(r"/proxies/([a-f0-9]{24}p?)(/file)?", self.path)
         if not match or match.group(1) not in jobs:
             return self.reply(404, {"error": "unknown"})
@@ -406,6 +435,8 @@ class Handler(BaseHTTPRequestHandler):
                 sources[source_id] = path
                 log(f"found {name}")
             return self.reply(200, {"id": source_id})
+        if self.path == "/mix-song":
+            return self.mix_song(body)
         if self.path == "/proxies":
             source_id = body.get("id")
             if source_id not in sources:
@@ -437,6 +468,55 @@ class Handler(BaseHTTPRequestHandler):
             log(f"project folder: {target}")
             return self.reply(200, {"id": project_id, "folder": str(target)})
         return self.reply(404, {"error": "unknown"})
+
+    def mix_song(self, body: dict):
+        """Mix one song here with the server's mixer and send back the MP3 (the page uploads it)."""
+        mixer = local_mixer()
+        if not mixer:
+            return self.reply(503, {"error": "the local mixer is not installed"})
+        plan = body.get("plan")
+        if not isinstance(plan, dict) or not isinstance(plan.get("tracks"), list) or not 0 < len(plan["tracks"]) <= 128:
+            return self.reply(400, {"error": "invalid song plan"})
+        if plan.get("mixer") != mixer["mixer"]:
+            return self.reply(409, {"error": "this companion has another mixer version", "mixer": mixer["mixer"]})
+        tracks = []
+        for track in plan["tracks"]:
+            if not isinstance(track, dict) or not valid_original(track.get("original")) or not isinstance(track.get("file"), str) \
+                    or "/" in track["file"] or "\\" in track["file"] or not track["file"].lower().endswith(".wav"):
+                return self.reply(400, {"error": "invalid track"})
+            path = find_original(track["original"])
+            if not path:
+                return self.reply(404, {"error": f"{track['original']['name']} was not found on this computer"})
+            tracks.append({**track, "path": str(path)})
+        mix = body.get("mix") if isinstance(body.get("mix"), dict) else {}
+        CACHE.mkdir(parents=True, exist_ok=True)
+        ident = f"{os.getpid()}-{threading.get_ident()}-{time.monotonic_ns()}"
+        plan_file, output = CACHE / f"mix-{ident}.json", CACHE / f"mix-{ident}.mp3"
+        plan_file.write_text(json.dumps({**plan, "tracks": tracks, **{k: mix.get(k) for k in ("faders", "mutes", "effects", "eq") if k in mix}}))
+        started = time.monotonic()
+        try:
+            with MIX_SLOTS:   # one song at a time by default: the mixer uses every core it gets
+                done = subprocess.run([str(MIXER_HOME / "venv" / "bin" / "python"), str(MIXER_HOME / "local_mix.py"), str(plan_file), str(output)],
+                                      cwd=MIXER_HOME, capture_output=True, text=True, timeout=3600,
+                                      env={**os.environ, "MONTARA_FFMPEG": FFMPEG or "ffmpeg"})
+            if done.returncode != 0 or not output.is_file():
+                log(f"local mix failed: {done.stderr.strip()[-400:]}")
+                return self.reply(500, {"error": "the local mix failed", "detail": done.stderr.strip()[-400:]})
+            log(f"mixed a song here in {time.monotonic() - started:.0f} s ({output.stat().st_size / 1e6:.1f} MB)")
+            self.send_response(200)
+            self.cors(self.origin_ok())
+            self.send_header("Content-Type", "audio/mpeg")
+            self.send_header("Content-Length", str(output.stat().st_size))
+            self.send_header("X-Mix-Seconds", f"{time.monotonic() - started:.1f}")
+            self.send_header("Access-Control-Expose-Headers", "X-Mix-Seconds")
+            self.end_headers()
+            with output.open("rb") as handle:
+                shutil.copyfileobj(handle, self.wfile, 1024 * 1024)
+        except subprocess.TimeoutExpired:
+            return self.reply(504, {"error": "the local mix took too long"})
+        finally:
+            plan_file.unlink(missing_ok=True)
+            output.unlink(missing_ok=True)
 
     def send_segment(self, body: dict):
         """Lossless FLAC of one time range of a located original (a song of a full session)."""

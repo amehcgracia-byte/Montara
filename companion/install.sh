@@ -48,6 +48,32 @@ for rc in "$HOME/.zshrc" "$HOME/.bashrc"; do
     grep -q 'montara-companion/bin' "$rc" 2>/dev/null || echo 'export PATH="$HOME/.montara-companion/bin:$PATH"' >> "$rc"
   fi
 done
+# Optional local mixer (about 150 MB): songs of a full session are mixed on this computer with
+# the same mixer as the server, and only the finished MP3 is uploaded.
+#   curl -fsSL https://raw.githubusercontent.com/amehcgracia-byte/Montara/main/companion/install.sh | bash -s -- --mixer
+if [ "${1:-}" = "--mixer" ] || [ "${MONTARA_MIXER:-}" = "1" ]; then
+  MIX="$DIR/mixer"; ROOT_RAW="https://raw.githubusercontent.com/amehcgracia-byte/Montara/$REF"
+  say "local mixer: preparing (one time, about 150 MB)…"
+  SHA="$(curl -fsSL "https://api.github.com/repos/amehcgracia-byte/Montara/contents/mixer?ref=$REF" | "$PY" -c 'import json,sys; print(json.load(sys.stdin)["sha"])')"
+  [ -n "$SHA" ] || { say "could not read the server's mixer version; try again later"; exit 1; }
+  mkdir -p "$MIX/mixer_adapter"
+  rm -rf "$MIX/mixer.new" && mkdir -p "$MIX/mixer.new"
+  curl -fsSL "https://codeload.github.com/amehcgracia-byte/ZuckerMixer/tar.gz/$SHA" | tar -xz -C "$MIX/mixer.new" --strip-components=1
+  rm -rf "$MIX/mixer" && mv "$MIX/mixer.new" "$MIX/mixer"
+  for f in mixer_adapter/single_song.py mixer_adapter/extract.py track_types.py; do
+    curl -fsSL "$ROOT_RAW/$f" -o "$MIX/$f"
+  done
+  curl -fsSL "$RAW/local_mix.py" -o "$MIX/local_mix.py"
+  [ -x "$MIX/venv/bin/python" ] || "$PY" -m venv "$MIX/venv"
+  "$MIX/venv/bin/python" -m pip install -q --upgrade pip
+  # Only what the render uses (no Matchering: songs with a mastering reference stay on the server).
+  "$MIX/venv/bin/python" -m pip install -q numpy scipy soundfile pyloudnorm flask
+  (cd "$MIX" && ZUCKER_MIXER_STATE_ROOT="$(mktemp -d)" "$MIX/venv/bin/python" -c 'import sys; sys.path[:0] = [".", "mixer"]; import jam_app, jam_mix_pipeline, track_types; from mixer_adapter.single_song import SingleSongMix') \
+    || { say "the local mixer could not start; the server keeps mixing your songs"; rm -f "$MIX/MIXER_COMMIT"; exit 1; }
+  echo "$SHA" > "$MIX/MIXER_COMMIT"
+  say "local mixer ready (mixer ${SHA:0:7}, $(du -sh "$MIX" | cut -f1))"
+fi
+
 say "installed in $DIR · next time just type:  montara-companion"
 echo
 exec "$PY" "$DIR/companion.py"

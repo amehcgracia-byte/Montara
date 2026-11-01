@@ -82,6 +82,19 @@ const montaraCompanion = (() => {
     /* One range of an original audio file; resolves to a Blob. 'opus' (Fast, high bitrate) when this
        companion can, otherwise lossless (FLAC, or WavPack for float). */
     canFastSegments() { return Boolean(info?.segment_formats?.includes('opus')); },
+    /* Local mixer (install.sh --mixer): the mixer commit it has, or null. */
+    localMixer() { return info?.local_mix?.mixer || null; },
+    /* Mix one song on this computer with the server's plan; resolves to {blob, seconds}. */
+    async mixSong(plan, mix) {
+      const response = await call('/mix-song', json({plan, mix}));
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        const error = new Error(data.error || 'The local mix failed');
+        error.status = response.status;
+        throw error;
+      }
+      return {blob: await response.blob(), seconds: Number(response.headers.get('X-Mix-Seconds')) || null};
+    },
     async segment(original, start, duration, format = 'lossless') {
       if (!info?.audio_preview) throw new Error('Open the companion on this computer to export with your original audio.');
       const located = await call('/locate', json({name: original.name, size: original.size, fingerprint: original.fingerprint}));

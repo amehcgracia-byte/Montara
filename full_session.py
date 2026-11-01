@@ -15,7 +15,8 @@ from pathlib import Path
 
 from flask import jsonify, request, send_file
 from mixer_adapter.session import (listen_range, original_windows, read, received_originals, register_original, save, session_listen,
-                                   session_waveform, song_windows, validate_songs, window_song, original_key)
+                                   session_waveform, song_windows, validate_songs, window_song, original_key,
+                                   local_plan, window_key)
 from resumable_upload import preview_original
 
 ROOT = Path(__file__).resolve().parent
@@ -263,6 +264,57 @@ def register_full_session(app, data_root, fixtures):
             return jsonify(originals=original_windows(data, work, song))
         except ValueError as exc:
             return error(exc, 404)
+
+    def mixer_commit():
+        """The mixer the server renders with; the companion mixes locally only with the same one."""
+        import subprocess as sp
+        out = sp.run(['git', '-C', str(ROOT / 'mixer'), 'rev-parse', 'HEAD'], capture_output=True, text=True)
+        return out.stdout.strip() if out.returncode == 0 else ''
+
+    @app.get('/montara/session/<job_id>/local-plan')
+    def session_local_plan(job_id):
+        """One song window, as the companion mixes it on the person's computer (same cuts, same mixer)."""
+        try:
+            work = folder(job_id)
+            data = read(work)
+            song = window_song(data, [request.args.get('start', type=float), request.args.get('end', type=float)],
+                               request.args.get('song', type=int), request.args.get('name', ''))
+            plan = local_plan(data, song)
+            if plan is None:
+                return error('These tracks were uploaded whole: this song is mixed on the server.', 409)
+            return jsonify({**plan, 'mixer': mixer_commit()})
+        except ValueError as exc:
+            return error(exc)
+
+    @app.post('/montara/session/<job_id>/local-result')
+    def session_local_result(job_id):
+        """The MP3 of a song the companion mixed: kept for that window; the export then skips it."""
+        try:
+            work = folder(job_id)
+            data = read(work)
+            body = request.get_json(silent=True) or {}
+            song = window_song(data, body.get('window'), body.get('song'))
+            uploads = (Path(data_root).resolve() / 'Uploads').resolve()
+            upload_id = str(body.get('upload_id') or '')
+            if not re.fullmatch('[a-f0-9]{32}', upload_id):
+                raise ValueError('Unknown upload.')
+            record = json.loads((uploads / upload_id / 'upload.json').read_text()) if (uploads / upload_id / 'upload.json').is_file() else {}
+            if not record.get('complete'):
+                raise ValueError('Finish this upload first.')
+            source = (uploads / upload_id / record.get('restored', record['name'])).resolve()
+            if not source.is_relative_to(uploads) or not source.is_file() or source.suffix.lower() != '.mp3':
+                raise ValueError('Send the song as MP3.')
+            key = window_key([song['start'], song['end']])
+            target = work / 'exports' / f'local-{key}.mp3'
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(source), target)
+            (work / 'local_results').mkdir(exist_ok=True)
+            save(work / 'local_results' / f'{key}.json', dict(window=[song['start'], song['end']], path=str(target),
+                                                               mixer=str(body.get('mixer') or '')[:40], seconds=body.get('seconds')))
+            shutil.rmtree(uploads / upload_id, ignore_errors=True)
+            return jsonify(ok=True, window=[song['start'], song['end']])
+        except ValueError as exc:
+            return error(exc)
 
     @app.post('/montara/session/<job_id>/originals')
     def session_original_received(job_id):
