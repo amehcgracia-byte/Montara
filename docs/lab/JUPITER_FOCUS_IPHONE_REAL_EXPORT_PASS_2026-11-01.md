@@ -13,3 +13,6 @@
 
 ## Criterio de cierre
 Mecánica de **exportación Stage 1080p desde original iPhone 4K** acreditada. Mantener `NEEDS_VISUAL_REVIEW` hasta ver orientación y encuadre. Tras recoger evidencia, borrar solo artefactos temporales del directorio de ensayo y conservar JSON/informe en GitHub. 
+
+## Revisión visual posterior
+El operador adjuntó el fotograma del segundo 12 de la salida final (2026-11-01): cantante y batería aparecen en orientación vertical correcta, sin inversión aparente. La duración del MP4 final medida con ffprobe es 24.2 s (4 s de plano + cabeceras/cierre Stage). Conclusión: **PASS de orientación visual para el fotograma inspeccionado**, no certificación integral de todos los fotogramas, de la sincronía o de export final 4K.
