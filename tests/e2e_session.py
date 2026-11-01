@@ -88,6 +88,10 @@ def run(output):
                 page.locator('#fullSessionOn').check()
                 page.locator('[data-drop="audio"] input').set_input_files([str(media / 'Kick.wav'), str(media / 'Bass.wav')])
                 page.wait_for_function("document.querySelectorAll('#audioFiles li').length===2 && !document.querySelector('#continueFootage').disabled")
+                # Each track says what it is: pre-filled from the name, changeable.
+                assert page.locator('[data-track-type="Kick.wav"]').input_value() == 'kick'
+                assert page.locator('[data-track-type="Bass.wav"]').input_value() == 'bass'
+                page.locator('[data-track-type="Bass.wav"]').select_option('synth')
                 page.screenshot(path=str(output / '01-input.png'), full_page=True)
                 page.locator('#continueFootage').click()
                 page.wait_for_function("document.querySelectorAll('[data-session-song]').length===2", timeout=180_000)
@@ -131,6 +135,8 @@ def run(output):
                 assert data['status'] == 'done'
                 saved = json.loads((output / 'data' / 'Sessions' / data['id'] / 'session.json').read_text())
                 assert list(saved['settings']['per_song']) == ['1'] and saved['settings']['per_song']['1']['faders']
+                assert saved['track_types']['bass'] == {'type': 'synth', 'side': '', 'chosen': True}
+                assert saved['track_types']['kick']['chosen'] is False
                 for song in data['results']:
                     response = page.request.get(f'{url}/montara/session/{data["id"]}/result/{song["id"]}')
                     assert response.ok and len(response.body()) > 1000

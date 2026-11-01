@@ -103,7 +103,8 @@ async function openFullSession() {
   $('#sessionSongs').replaceChildren(); $('#sessionResults').replaceChildren();
   $('#sessionMix').hidden = true;
   try {
-    const job = await api('/montara/session', { tracks: audioTracks().map(f => f.path) });
+    const tracks = audioTracks().map(f => f.path);
+    const job = await api('/montara/session', { tracks, track_types: TrackTypes.forFiles(tracks) });
     fullSession.id = job.id; fullSession.mixes = {};
     try { localStorage.setItem('montara-session', job.id); $('#sessionResume').hidden = false; } catch { /* optional */ }
     const data = await waitSession(job);

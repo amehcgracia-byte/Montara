@@ -506,13 +506,14 @@ function uploadEta(f) {
   const left = spent / done * (1 - f.progress);
   return left < 50 ? " · <1 min" : ` · ${Math.round(left / 60)} min`;
 }
-function fileRow(f) {
+function fileRow(f, typed = false) {
   return `
     <li>
       <span class="kind ${f.kind}">${fileLabel(f)}</span>
       <span class="name" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}</span>
       <span class="state">${f.kind === "uploading" ? (f.phase ? escapeHtml(f.phase) + " " : "") + Math.round(f.progress * 100) + "%" + uploadEta(f) : f.small && f.kind === "video" ? "Ready · small version" : f.preview ? "Ready · preview" : f.small ? "Ready · lossless" : f.kind === "error" ? escapeHtml(f.error) : f.kind === "ignored" ? escapeHtml(f.reason || "not used") : "Ready"}</span>
       <button class="remove" data-remove-file="${f.id}" type="button" aria-label="Remove ${escapeHtml(f.name)}" title="Remove">×</button>
+      ${typed && (f.kind === "master" || f.kind === "songs") ? TrackTypes.controls(f.name) : ""}
       ${f.kind === "uploading" ? `<span class="bar"><i style="width:${Math.round(f.progress * 100)}%"></i></span>` : ""}
     </li>`;
 }
@@ -536,7 +537,11 @@ document.addEventListener('click', event => {
 function renderFiles() {
   $('#stageSessionOptions').hidden = state.platform !== 'youtube';
   $('[data-drop="video"]').closest('.box').hidden = state.platform === 'youtube' && $('#stageAudioOnly').checked;
-  $("#audioFiles").innerHTML = state.files.filter(isAudioEntry).map(fileRow).join("");
+  // Several tracks of one recording: each one says what it is (pre-filled from its name).
+  const typed = state.platform === "youtube" && audioTracks().length >= 2;
+  // Do not rebuild the list under an open track-type menu (other uploads keep reporting progress).
+  if (!document.activeElement?.closest?.("#audioFiles .track-type"))
+    $("#audioFiles").innerHTML = state.files.filter(isAudioEntry).map(f => fileRow(f, typed)).join("");
   $("#audioFiles").classList.toggle("compact", state.files.filter(isAudioEntry).length > 4);
   $("#videoFiles").innerHTML = state.files.filter((f) => !isAudioEntry(f)).map(fileRow).join("");
   const master = state.files.find((f) => f.kind === "master");
@@ -840,7 +845,7 @@ async function openMixer(sessionTracks = null) {
   $("#strips").innerHTML = sources.map((path) => `<div class="strip loading"><small>&nbsp;</small><span class="db">&nbsp;</span><input type="range" min="-60" max="12" value="-20" disabled aria-hidden="true"><button class="mute" disabled>…</button><b>${escapeHtml(String(path).split("/").pop().replace(/\.[^.]+$/, ""))}</b></div>`).join("");
   const dance = startFaderDance();
   let job;
-  try { job = await api("/montara/mix", { tracks: sources }); } catch (error) { dance(); throw error; }
+  try { job = await api("/montara/mix", { tracks: sources, track_types: TrackTypes.forFiles(sources) }); } catch (error) { dance(); throw error; }
   mix.job = job.id;
   $("#referenceName").textContent = "Automatic (no reference)";
   $("#referenceStatus").hidden = true;
