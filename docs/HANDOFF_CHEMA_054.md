@@ -16,7 +16,7 @@ Este documento resume el estado actual para quien retome Montara en una sesión 
   - `montara-diagnose`: estado de la última sesión.
   - `montara-disk report` y `montara-disk clean … --apply`: espacio en disco y limpieza.
   - `montara-runs`, `montara-stop`, `montara-autostop`.
-- **Companion** (`companion/companion.py`, versión 0.5.0) en el Mac de Chema, puerto 47820. Se instala con `curl -fsSL https://raw.githubusercontent.com/amehcgracia-byte/Montara/main/companion/install.sh | bash -s -- --mixer`. No se actualiza solo.
+- **Companion** (`companion/companion.py`, versión 0.5.1) en el Mac de Chema, puerto 47820. Se instala con `curl -fsSL https://raw.githubusercontent.com/amehcgracia-byte/Montara/main/companion/install.sh | bash -s -- --mixer`. No se actualiza solo.
 - **Submódulos**, nunca se editan dentro de Montara:
   - `engine/`: zucker_videos, rama `claude/recover-montara-engine`, ahora en `ff9baf4`.
   - `mixer/`: ZuckerMixer, rama `claude/winds-synth-bass-lowpass`, ahora en `2c0c07c`; su **PR #8 no está mergeado en master**.
