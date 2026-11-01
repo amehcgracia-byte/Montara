@@ -5,6 +5,7 @@ the web server. Only a selected song is decoded for the browser's mixer.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import os
@@ -49,6 +50,7 @@ def validate_songs(songs, duration):
 
 
 MARGIN = 0.5  # seconds of original kept around each song range
+ORIGINALS_WAIT_SECONDS = 15 * 60  # an export waiting for ranges gives up after this long without one
 
 
 def track_window(track, song):
@@ -57,19 +59,46 @@ def track_window(track, song):
     return max(0, song['start'] - offset), min(song['end'], offset + track['duration']) - max(song['start'], offset)
 
 
-def original_windows(data):
+def original_key(file, window):
+    """Identity of one received range: the track and the song window it was cut for.
+
+    Not the song number (splits renumber songs) and not session.json (ranges arrive while
+    a render is writing it): one small file per range under originals/."""
+    return hashlib.sha1(f"{file}@{float(window[0]):.3f}-{float(window[1]):.3f}".encode()).hexdigest()[:20]
+
+
+def received_originals(work):
+    folder = Path(work) / 'originals'
+    result = {}
+    for path in folder.glob('*.json') if folder.is_dir() else []:
+        try:
+            result[path.stem] = json.loads(path.read_text())
+        except (OSError, ValueError):
+            continue
+    return result
+
+
+def register_original(work, window, path):
+    (Path(work) / 'originals').mkdir(exist_ok=True)
+    save(Path(work) / 'originals' / f"{original_key(window['file'], window['window'])}.json",
+         dict(file=window['file'], window=window['window'], start=window['start'], path=str(path)))
+
+
+def original_windows(data, work=None, only_song=None):
     """Ranges of the originals a preview-based session needs before it can export.
 
-    One entry per selected song and preview track that plays in that song. 'start' and
-    'duration' are in the original file's own seconds, with a small margin.
+    One entry per selected song (or just `only_song`) and preview track that plays in it.
+    'start' and 'duration' are in the original file's own seconds, with a small margin.
     """
     previews = data.get('previews') or {}
     if not previews or not data.get('tracks'):
         return []
-    received = data.get('originals') or {}
+    received = received_originals(work) if work else {}
     result = []
     for song in data.get('songs') or []:
-        if not song.get('selected'):
+        if only_song is not None and song['id'] != only_song:
+            continue
+        if only_song is None and not song.get('selected'):
             continue
         for track in data['tracks']:
             original = previews.get(track['file'])
@@ -78,10 +107,10 @@ def original_windows(data):
                 continue
             start = max(0.0, source_start - MARGIN)
             window = [round(song['start'], 6), round(song['end'], 6)]
-            got = received.get(f"{song['id']}/{track['file']}")
+            got = received.get(original_key(track['file'], window))
             result.append(dict(song=song['id'], song_name=song['name'], file=track['file'], original=original,
                                start=round(start, 6), duration=round(source_start - start + overlap + MARGIN, 6), window=window,
-                               received=bool(got and got.get('window') == window and Path(got['path']).is_file())))
+                               received=bool(got and Path(got['path']).is_file())))
     return result
 
 
@@ -259,8 +288,8 @@ def prepare_tracks(work, song, preview=False):
         delay_ms = round(max(0, offset - song['start']) * 1000)
         source = track['path']
         # Export of a preview-based session: read the received original range, never the preview.
-        original = None if preview else (data.get('originals') or {}).get(f"{song['id']}/{track['file']}")
-        if original and original.get('window') == [round(song['start'], 6), round(song['end'], 6)]:
+        original = None if preview else received_originals(work).get(original_key(track['file'], [round(song['start'], 6), round(song['end'], 6)]))
+        if original and Path(original['path']).is_file():
             source, source_start = original['path'], source_start - float(original['start'])
         elif not preview and track['file'] in (data.get('previews') or {}) and overlap > 0:
             raise ValueError(f"The original of {track['file']} for {song['name']} has not arrived. Keep the companion open and export again.")
@@ -420,13 +449,23 @@ def execute(work, action):
         pending, running, finished = list(selected), {}, 0
         slots = min(len(selected), parallel_songs())
         root = Path(__file__).resolve().parents[1]
+        # With previews, a song starts as soon as its original ranges have arrived from the
+        # person's computer: mixing song 1 overlaps with uploading song 2.
+        def ready(song):
+            return all(w['received'] for w in original_windows(data, work, song['id']))
+        last_arrival, last_count = time.time(), -1
         with (work / 'worker.log').open('ab') as log:
             try:
                 while pending or running:
-                    while pending and len(running) < slots:
-                        song = pending.pop(0)
+                    while len(running) < slots and (song := next((s for s in pending if ready(s)), None)):
+                        pending.remove(song)
                         running[song['id']] = (song, subprocess.Popen([sys.executable, '-m', 'mixer_adapter.session', str(work), 'render-song', str(song['id'])],
                                                                       cwd=root, stdout=log, stderr=log))
+                    count = len(received_originals(work))
+                    if count != last_count:
+                        last_arrival, last_count = time.time(), count
+                    if pending and not running and time.time() - last_arrival > ORIGINALS_WAIT_SECONDS:
+                        raise RuntimeError('The original audio stopped arriving from your computer. Keep Montara and the companion open, then export again: songs already mixed are kept.')
                     for song_id, (song, process) in list(running.items()):
                         code = process.poll()
                         if code is None:
@@ -439,7 +478,8 @@ def execute(work, action):
                         if song is not selected[0]:  # keep the first song's PCM for the browser; release the rest
                             shutil.rmtree(work / 'songs' / str(song_id), ignore_errors=True)
                     names = ', '.join(song['name'] for song, _ in running.values())
-                    progress(dict(current_stage='mixing songs', stage_detail=f'{finished} of {len(selected)} done' + (f' · now: {names}' if names else ''),
+                    waiting = '' if running or not pending else ' · waiting for the original audio of the next song'
+                    progress(dict(current_stage='mixing songs', stage_detail=f'{finished} of {len(selected)} done' + (f' · now: {names}' if names else '') + waiting,
                                   progress=100 * finished / len(selected)))
                     time.sleep(.5)
             finally:

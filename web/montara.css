@@ -512,6 +512,7 @@ body.is-intro .top,body.is-intro footer,body.is-intro #version{visibility:hidden
 .song-num{color:var(--muted);font-variant-numeric:tabular-nums;min-width:2ch}
 .song-play{width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--fg);font-size:12px;cursor:pointer;flex:none}
 .song-play.on,.song-play:hover{border-color:var(--accent);color:var(--accent)}
+.song-tag:empty{display:none}
 .song-tag{font-size:12px;color:var(--accent);border:1px solid var(--accent);border-radius:999px;padding:2px 8px}
 .song-wave{position:relative;height:64px;margin-top:10px;border-radius:10px;background:var(--surface);overflow:hidden;touch-action:none}
 .song-wave canvas{position:absolute;inset:0;width:100%;height:100%}
