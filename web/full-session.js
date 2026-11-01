@@ -550,7 +550,7 @@ function paintUploadState(current = null) {
     const eta = uploader.done ? ` · ${minutesLeft(spent / uploader.done * left)}` : '';
     line.textContent = `Sending original audio from this computer: ${uploader.done} / ${uploader.total}${current ? ` · ${current.song_name} · ${current.original.name}` : ''}${eta}`;
   }
-  songList().forEach((song, i) => paintConfirm(i));
+  (fullSession.data?.songs || []).forEach((song, i) => paintConfirm(i));
 }
 
 // The Confirm control of one song: Confirm → Confirming… → Confirmed · Sending n/m → Confirmed · Ready.
