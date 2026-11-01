@@ -352,7 +352,8 @@ def render_song(work, song_id):
     # A song mixed in the mixer keeps its own changes; the rest use the automatic mix.
     mine = (settings.get('per_song') or {}).get(str(song_id)) or {}
     folder = prepare_tracks(work, song)
-    mixer = SingleSongMix(folder, work / 'songs' / str(song_id) / 'mix', reference=mine.get('reference') or settings.get('reference'))
+    mixer = SingleSongMix(folder, work / 'songs' / str(song_id) / 'mix', reference=mine.get('reference') or settings.get('reference'),
+                          track_types=data.get('track_types'))
     out = mixer.render(mine.get('faders', settings.get('faders', {})), work / 'exports' / f'song-{song_id:03d}.mp3',
                        mine.get('mutes', settings.get('mutes', {})), mine.get('effects', settings.get('effects')),
                        eq=mine.get('eq'))  # per-song automatic mix; faders are offsets
@@ -386,6 +387,8 @@ def execute(work, action):
             raise ValueError('No readable audio tracks.')
         if len(stems) != len(list((work / 'tracks').iterdir())):
             raise ValueError('Some audio tracks could not be read. Convert those tracks to WAV or FLAC before continuing.')
+        import track_types  # the person's track types: detection weighs instruments and voices by role
+        stems = track_types.apply(pipeline, stems, track_types.for_files(data.get('track_types'), [s.path.name for s in stems]))
         origin = min(s.offset_seconds for s in stems)
         from dataclasses import replace
         stems = [replace(s, offset_seconds=s.offset_seconds - origin) for s in stems]

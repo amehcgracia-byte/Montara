@@ -210,3 +210,12 @@ def test_waveform_from_detection_envelopes(tmp_path):
     wave = json.loads((tmp_path / 'waveform.json').read_text())
     assert wave['step'] == .25 and len(wave['peaks']) == 24
     assert max(wave['peaks'][:7]) == 0 and min(wave['peaks'][9:15]) == 255 and 0 < max(wave['peaks'][17:]) < 100
+
+
+def test_session_keeps_the_track_types(tmp_path, monkeypatch):
+    monkeypatch.setattr(full_session, 'launch', lambda *_: None)
+    source = tmp_path / 'data' / 'Robi.wav'; source.parent.mkdir(); source.write_bytes(b'audio')
+    result = client(tmp_path).post('/montara/session', json={'tracks': [str(source)],
+                                                         'track_types': {'Robi.wav': {'type': 'narration', 'chosen': True}, 'Other.wav': {'type': 'nope'}}})
+    work = source.parent / 'Sessions' / result.json['id']
+    assert read(work)['track_types'] == {'robi': {'type': 'narration', 'side': '', 'chosen': True}}

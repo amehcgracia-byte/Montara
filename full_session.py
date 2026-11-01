@@ -104,6 +104,9 @@ def register_full_session(app, data_root, fixtures):
             previews = {p.stem + '.wav': o for p in files if (o := preview_original(p))}
             if previews:
                 data['previews'] = previews
+            import track_types
+            if types := track_types.validate(body.get('track_types')):
+                data['track_types'] = types
             save(work / 'session.json', data)
             launch(work, 'detect')
         except Exception:

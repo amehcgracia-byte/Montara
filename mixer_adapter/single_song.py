@@ -73,19 +73,28 @@ def _load_mixer(work_dir: Path):
 
 
 class SingleSongMix:
-    def __init__(self, tracks_dir: Path, work_dir: Path, reference: Path | None = None) -> None:
+    def __init__(self, tracks_dir: Path, work_dir: Path, reference: Path | None = None, track_types: dict | None = None) -> None:
         self.tracks_dir = Path(tracks_dir).resolve()
         self.work_dir = Path(work_dir).resolve()
         self.work_dir.mkdir(parents=True, exist_ok=True)
         self.reference = Path(reference).resolve() if reference else None
         self.app, self.pipeline = _load_mixer(self.work_dir)
         self.state: dict[str, Any] | None = None
+        # What the person said each track is (track_types.validate): roles, stereo sides, music.
+        self.track_types = track_types or {}
+
+    def _types(self, names) -> dict:
+        import track_types
+        return track_types.for_files(self.track_types, names)
 
     def _activate(self) -> None:
         # The vendor keeps its active folder in module globals. Every operation
         # must restore this job, even when another mix was analyzed meanwhile.
         self.app.configure_source_folder(self.tracks_dir)
         self.pipeline.configure_detection_cache(self.tracks_dir, self.work_dir / "cache")
+        if self.state:  # module globals again: another job may have set its own
+            import track_types
+            track_types.apply(self.pipeline, [], self._types([s.path.name for s in self.state["stems"]]))
 
     # -- one song, no detection --------------------------------------------
     def _register(self) -> dict[str, Any]:
@@ -95,6 +104,8 @@ class SingleSongMix:
         stems = pipeline.inspect_stems(self.tracks_dir)
         if not stems:
             raise RuntimeError("No usable audio tracks")
+        import track_types
+        stems = track_types.apply(pipeline, stems, self._types([s.path.name for s in stems]))
         duration = min(stem.duration for stem in stems)
         segment = pipeline.Segment(start=0.0, end=duration, nominal_end=duration, boundary_source="manual-selection")
         song = {

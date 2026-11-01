@@ -42,7 +42,7 @@ SAMPLE_SETS = {
 }
 DEFAULT_DATA = Path.home() / "MontaraData"
 # Shown at the bottom of every page, so it is obvious which build is running.
-MONTARA_VERSION = "0.50 · 2026-11-01 · Waveform at once from detection; listening copy made during detection"
+MONTARA_VERSION = "0.51 · 2026-11-01 · Track types: say what each audio track is (pre-filled from the name), stereo L/R"
 
 
 def _build_label() -> str:
@@ -306,7 +306,7 @@ def create_montara_app(data_root: Path = DEFAULT_DATA, samples: bool = True):
                 sys.path.insert(0, str(ROOT))
                 from mixer_adapter.single_song import SingleSongMix
 
-                mixer = job.get("mixer") or SingleSongMix(job["tracks_dir"], job["work_dir"])
+                mixer = job.get("mixer") or SingleSongMix(job["tracks_dir"], job["work_dir"], track_types=job.get("track_types"))
                 job["mixer"] = mixer
                 if action == "analyze":
                     job["plan"] = mixer.analyze()
@@ -353,7 +353,9 @@ def create_montara_app(data_root: Path = DEFAULT_DATA, samples: bool = True):
                 except OSError:
                     import shutil
                     shutil.copy2(path, target)
-        mix_jobs[job_id] = {"id": job_id, "status": "analyzing", "tracks_dir": tracks_dir, "work_dir": work}
+        import track_types
+        mix_jobs[job_id] = {"id": job_id, "status": "analyzing", "tracks_dir": tracks_dir, "work_dir": work,
+                            "track_types": track_types.validate((request.get_json(silent=True) or {}).get("track_types"))}
         threading.Thread(target=_mix_worker, args=(job_id, "analyze", {}), daemon=True).start()
         return jsonify(_mix_public(mix_jobs[job_id])), 202
 
