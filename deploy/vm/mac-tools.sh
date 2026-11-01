@@ -2,6 +2,7 @@
 # Two commands for the Mac that drives the lab VM, so nobody pastes long lines again:
 #   montara-update   update Montara on the VM to the latest main and restart it
 #   montara-tunnel   open a public https address to Montara (keep the window open)
+#   montara-disk     disk use on the VM; 'montara-disk clean ...' prints what it would remove (--apply removes)
 #   montara-runs     timing record of every finished job on the VM (~/montara-runs.jsonl)
 #   montara-start    switch the VM on if needed, wait for Montara, open the tunnel
 #   montara-stop     switch the VM off now
@@ -33,6 +34,15 @@ cat > "$BIN/montara-diagnose" <<SCRIPT
 gcloud compute ssh $VM --zone $ZONE --project $PROJECT --command 'sudo -u jm -H bash -c "cd ~/montara && python3 deploy/vm/diagnose.py"'
 SCRIPT
 chmod +x "$BIN/montara-diagnose"
+
+cat > "$BIN/montara-disk" <<SCRIPT
+#!/bin/bash
+# Disk use of Montara on the VM (montara-disk report), or a cleanup that only prints what it
+# would remove until you add --apply:  montara-disk clean --session ID --mixer-days 2
+ARGS="\${*:-report}"
+gcloud compute ssh $VM --zone $ZONE --project $PROJECT --command "sudo -u jm -H python3 /home/jm/montara/deploy/vm/disk.py \$ARGS"
+SCRIPT
+chmod +x "$BIN/montara-disk"
 
 cat > "$BIN/montara-runs" <<SCRIPT
 #!/bin/bash
