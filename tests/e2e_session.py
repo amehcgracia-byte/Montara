@@ -108,9 +108,15 @@ def run(output):
                 assert page.evaluate('fullSession.data.songs[0].end') < before - 1
                 # Exact short windows for a quick export (same as dragging, without pixel arithmetic).
                 page.evaluate("fullSession.data.songs[0].start=5;fullSession.data.songs[0].end=20;fullSession.data.songs[1].start=215;fullSession.data.songs[1].end=230;drawSessionSongs()")
+                # Confirm: Confirming… then Confirmed, button gone (this session has no previews: nothing to send).
+                page.evaluate("fullSession.data.uses_previews = true; drawSessionSongs()")
+                rows.nth(1).locator('[data-song-confirm]').click()
+                page.wait_for_function("document.querySelector('[data-confirm-state=\"1\"]').textContent.startsWith('Confirmed')")
+                assert page.locator('[data-song-confirm="1"]').is_hidden()
                 page.screenshot(path=str(output / '02b-waveforms.png'), full_page=True)
                 rows.nth(0).locator('[data-song-play]').click()
                 page.wait_for_function('sessionPlayer.audio && !sessionPlayer.audio.paused && sessionPlayer.audio.currentTime > 5.2', timeout=60_000)
+                page.wait_for_function("!document.querySelector('[data-song-play=\"0\"]').classList.contains('loading')")  # ring stops once it sounds
                 # Moving a handle of another song does not stop what is playing.
                 box = rows.nth(1).locator('.song-cut.start').bounding_box()
                 page.mouse.move(box['x'] + 7, box['y'] + 30); page.mouse.down(); page.mouse.move(box['x'] + 1, box['y'] + 30, steps=3); page.mouse.up()
@@ -123,8 +129,15 @@ def run(output):
                 rows.nth(0).locator('[data-song-play]').click()
                 assert page.evaluate('sessionPlayer.index') == -1
                 rows.nth(0).locator('[data-song-mixer]').click()
+                page.wait_for_function("!document.querySelector('#mix').hidden", timeout=3_000)  # the mixer screen opens at once
                 page.wait_for_function("!document.querySelector('#mix').hidden && !document.querySelector('#useMix').disabled", timeout=180_000)
-                page.locator('#playMix').click(); page.wait_for_timeout(400); page.locator('#playMix').click()
+                # Effects are heard in the preview: reverb on while playing adds its own source.
+                page.locator('#playMix').click(); page.wait_for_timeout(400)
+                strip = page.locator('#strips .strip').first
+                strip.locator('.fx-toggle').click()
+                strip.locator('input[type=checkbox][data-effect="reverb"]').check()
+                page.wait_for_function("Object.values(mix.nodes).some(n => n.fx.reverb)", timeout=60_000)
+                page.locator('#playMix').click()
                 page.evaluate("(() => { const input = document.querySelector('#strips input[type=range]'); input.value = Number(input.value) - 3; input.dispatchEvent(new Event('input', {bubbles: true})); })()")
                 page.screenshot(path=str(output / '03-song-mix.png'), full_page=True)
                 page.locator('#useMix').click()

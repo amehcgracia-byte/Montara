@@ -157,7 +157,7 @@ function drawSessionSongs(songs) {
       <span class="song-num">${String(i + 1).padStart(2, '0')}</span>
       <input aria-label="Song name" data-song-field="name" value="${escapeHtml(song.name)}" maxlength="80">
       ${fullSession.mixes[song.id] ? '<span class="song-tag">Own mix</span>' : ''}
-      ${fullSession.data.uses_previews ? `<span class="song-tag confirm-state" data-confirm-state="${song.id}"></span>
+      ${fullSession.data.uses_previews ? `<span class="song-tag confirm-state" data-confirm-state="${i}"></span>
       <button class="btn ghost small" data-song-confirm="${i}" type="button" ${song.confirmed ? 'hidden' : ''} title="These cuts are final: start sending this song's original audio now">Confirm</button>` : ''}
       <button class="btn ghost small" data-song-mixer="${i}" type="button">Mixer</button>
       <button class="btn ghost small" data-song-split="${i}" type="button">Split</button>
@@ -221,7 +221,7 @@ $('#sessionSongs').addEventListener('pointerdown', event => {
     if (handle.dataset.handle === 'start') song.start = Math.max(i ? songs[i - 1].end : 0, Math.min(t, song.end - 1));
     else song.end = Math.min(i < songs.length - 1 ? songs[i + 1].start : fullSession.data.duration, Math.max(t, song.start + 1));
     song.start = Math.round(song.start * 10) / 10; song.end = Math.round(song.end * 10) / 10;
-    if (song.confirmed) { song.confirmed = false; const button = document.querySelector(`[data-song-confirm="${i}"]`); if (button) button.hidden = false; paintUploadState(); }
+    if (song.confirmed) { song.confirmed = false; paintConfirm(i); }  // new cuts: confirm again
     handle.setAttribute('aria-valuetext', clock(song[handle.dataset.handle]));
     paintSong(i);
   };
@@ -266,7 +266,7 @@ function sessionAudio() {
 function stopSongPreview() {
   sessionPlayer.audio?.pause();
   cancelAnimationFrame(sessionPlayer.raf);
-  document.querySelectorAll('.song-play.on').forEach(b => { b.classList.remove('on'); b.textContent = '▶'; });
+  document.querySelectorAll('.song-play.on, .song-play.loading').forEach(b => { b.classList.remove('on', 'loading'); b.textContent = '▶'; });
   document.querySelectorAll('.song-playhead').forEach(p => { p.hidden = true; });
   sessionPlayer.index = -1;
 }
@@ -277,7 +277,7 @@ async function playSong(i, from = null) {
   stopSongPreview();
   const songs = songList(), song = songs[i];
   const button = document.querySelector(`[data-song-play="${i}"]`);
-  sessionPlayer.index = i; button?.classList.add('on'); if (button) button.textContent = '■';
+  sessionPlayer.index = i; button?.classList.add('on', 'loading'); if (button) button.textContent = '■';  // ring turns until sound starts
   // The listening copy is made in the background after detection: wait for it here.
   if (!sessionPlayer.audio || sessionPlayer.audio.dataset.session !== fullSession.id) {
     for (let attempt = 0; attempt < 120; attempt++) {
@@ -300,6 +300,7 @@ async function playSong(i, from = null) {
     if (sessionPlayer.index !== i) return;
     const t = audio.currentTime, row = document.querySelector(`[data-song-wave="${i}"]`);
     if (t >= songList()[i].end) return stopSongPreview();
+    if (t > start + .05) document.querySelector(`[data-song-play="${i}"]`)?.classList.remove('loading');
     if (row) {
       const view = songView(i), head = row.querySelector('.song-playhead');
       head.hidden = false; head.style.left = `${(t - view.from) / (view.to - view.from) * row.clientWidth}px`;
@@ -352,8 +353,12 @@ async function openSongMixer(i) {
       $('#mixStatus').classList.add('done'); $('#transport').hidden = false; $('#referenceRow').hidden = false;
       $('#useMix').disabled = false; $('#playMix').disabled = false; $('#resetMix').disabled = false; $('#mixBack').disabled = false;
     } else {
-      const prepared = await waitSession(await api(`/montara/session/${fullSession.id}/prepare`, { songs: songList(), song: song.id }));
-      drawSessionSongs(prepared.songs);
+      // The mixer screen opens now; the excerpt is cut while its faders move.
+      const stop = mixLoadingScreen(fullSession.data.track_files || [], `${song.name}: preparing the busiest part of the song…`);
+      let prepared;
+      try { prepared = await waitSession(await api(`/montara/session/${fullSession.id}/prepare`, { songs: songList(), song: song.id })); }
+      finally { stop(); }
+      fullSession.data.songs = prepared.songs.map((s, j) => ({ ...s, confirmed: songList()[j]?.confirmed }));
       await openMixer(prepared.preview_tracks);
       applySavedMix(fullSession.mixes[song.id]);
       renderStrips();
@@ -378,7 +383,7 @@ $('#sessionSongs').onclick = event => {
   if (split) {
     const song = songs[index], middle = Math.round((song.start + song.end) / 2 * 10) / 10;
     if (song.end - song.start < 2) return toast('This song is too short to split.');
-    songs.splice(index, 1, {...song, end: middle}, {...song, id: undefined, start: middle, name: `${song.name} · 2`});
+    songs.splice(index, 1, {...song, end: middle, confirmed: false}, {...song, id: undefined, start: middle, name: `${song.name} · 2`, confirmed: false});
   } else songs.splice(index, 1);
   // Songs are numbered by position on the server: keep each saved mix with its song.
   const mixes = {};
@@ -406,12 +411,14 @@ function mixChanges() {
 // "Save mix for this song" in the mixer: keep the changes, back to the list.
 async function saveSongMix() {
   stopMix();
-  const mixJob = await api(`/montara/mix/${mix.job}`);
-  fullSession.mixes[fullSession.mixSong] = { ...mixChanges(), ...(mixJob.reference ? { reference: mixJob.reference } : {}) };
+  const songId = fullSession.mixSong, job = mix.job;
+  fullSession.mixes[songId] = mixChanges();   // kept at once; the page goes straight back to the list
   $('#useMix').textContent = 'Use this mix';
   show('sessionReview');
   drawSessionSongs();
   toast('Mix saved for this song.');
+  // A mastering reference chosen in the mixer travels with the mix (looked up in the background).
+  api(`/montara/mix/${job}`).then(state => { if (state.reference && fullSession.mixes[songId]) fullSession.mixes[songId].reference = state.reference; }).catch(() => {});
 }
 
 async function renderFullSession() {
@@ -428,7 +435,7 @@ async function renderFullSession() {
     // Mixing starts at once: each song begins on the server as soon as its original ranges
     // arrive, while this computer keeps sending the next ones.
     const started = await api(`/montara/session/${fullSession.id}/render`, { songs: saved.songs, per_song });
-    for (const song of saved.songs.filter(s => s.selected)) await queueSongOriginals(song.id);
+    for (const song of saved.songs.filter(s => s.selected)) await queueSongOriginals(song);
     const data = await waitSession(started);
     $('#sessionStatus').textContent = 'Your selected songs are ready.';
     drawSessionResults(data);
@@ -439,11 +446,15 @@ async function renderFullSession() {
 // ---------- original ranges, sent in the background ----------
 // Tracks sent as light previews: the export uses the originals, but only the song ranges.
 // A confirmed song starts sending at once, while the person keeps editing the others.
-const uploader = { queue: [], seen: new Set(), running: false, done: 0, total: 0, bytes: 0, started: 0, bySong: {} };
+const uploader = { queue: [], seen: new Set(), running: false, done: 0, total: 0, bytes: 0, started: 0, byWindow: {} };
+const windowKey = song => `${Number(song.start).toFixed(3)}-${Number(song.end).toFixed(3)}`;
 
-async function queueSongOriginals(songId) {
-  const { originals } = await api(`/montara/session/${fullSession.id}/originals?song=${songId}`);
-  const tally = uploader.bySong[songId] ||= { done: 0, total: 0 };
+// Queue the original ranges of one song window. Ranges belong to their window, never to a song
+// number, so a split or a removed song never invalidates what is already queued or sent.
+async function queueSongOriginals(song) {
+  const query = new URLSearchParams({ song: song.id, start: song.start, end: song.end, name: song.name || '' });
+  const { originals } = await api(`/montara/session/${fullSession.id}/originals?${query}`);
+  const tally = uploader.byWindow[windowKey(song)] ||= { done: 0, total: 0 };
   for (const w of originals) {
     const key = `${w.file}@${w.window.join('-')}`;
     if (uploader.seen.has(key)) continue;
@@ -459,24 +470,32 @@ async function runUploader() {
   if (uploader.running) return;
   uploader.running = true; fullSession.sending = true;
   uploader.started ||= performance.now();
+  const failed = [];
+  let inARow = 0;
   try {
     while (uploader.queue.length) {
       const w = uploader.queue.shift();
       paintUploadState(w);
-      const blob = await montaraCompanion.segment(w.original, w.start, w.duration);
-      uploader.bytes += blob.size;
-      const ext = blob.type === 'audio/x-wavpack' ? '.wav.wv' : '.wav.flac';  // float originals: WavPack (FLAC has no float)
-      const name = `${w.file.replace(/\.wav$/i, '')}${ext}`;
-      let uploadId = null;
-      await sendResumableUpload(new File([blob], name, { type: blob.type || 'audio/flac' }), () => {}, id => { uploadId = id; });
-      await api(`/montara/session/${fullSession.id}/originals`, { song: w.song, file: w.file, upload_id: uploadId });
-      uploader.done++; (uploader.bySong[w.song] ||= { done: 0, total: 1 }).done++;
-      paintUploadState();
+      try {
+        const blob = await montaraCompanion.segment(w.original, w.start, w.duration);
+        uploader.bytes += blob.size;
+        const ext = blob.type === 'audio/x-wavpack' ? '.wav.wv' : '.wav.flac';  // float originals: WavPack (FLAC has no float)
+        const name = `${w.file.replace(/\.wav$/i, '')}${ext}`;
+        let uploadId = null;
+        await sendResumableUpload(new File([blob], name, { type: blob.type || 'audio/flac' }), () => {}, id => { uploadId = id; });
+        await api(`/montara/session/${fullSession.id}/originals`, { song: w.song, window: w.window, file: w.file, upload_id: uploadId });
+        uploader.done++; inARow = 0;
+        const tally = uploader.byWindow[w.window.map(Number).map(v => v.toFixed(3)).join('-')];
+        if (tally) tally.done++;
+        paintUploadState();
+      } catch (error) {
+        // One range failing never drops the rest of the queue; it is retried on the next export.
+        failed.push(w); uploader.seen.delete(`${w.file}@${w.window.join('-')}`); uploader.total--;
+        console.warn('original range failed', w.file, w.window, error);
+        if (++inARow >= 3) { failed.push(...uploader.queue); for (const q of uploader.queue) uploader.seen.delete(`${q.file}@${q.window.join('-')}`); uploader.total -= uploader.queue.length; uploader.queue = []; toast(`Original audio stopped: ${error.message}. Keep Montara and the companion open, then export again.`, true); }
+      }
     }
-  } catch (error) {
-    toast(`Original audio: ${error.message}`, true);
-    for (const w of uploader.queue) uploader.seen.delete(`${w.file}@${w.window.join('-')}`);
-    uploader.queue = [];
+    if (failed.length && inARow < 3) toast(`${failed.length} original range${failed.length > 1 ? 's' : ''} could not be sent; they are retried when you export.`, true);
   } finally {
     uploader.running = false; fullSession.sending = false;
     paintUploadState();
@@ -494,22 +513,32 @@ function paintUploadState(current = null) {
     const eta = uploader.done ? ` · ${minutesLeft(spent / uploader.done * left)}` : '';
     line.textContent = `Sending original audio from this computer: ${uploader.done} / ${uploader.total}${current ? ` · ${current.song_name} · ${current.original.name}` : ''}${eta}`;
   }
-  for (const song of fullSession.data?.songs || []) {
-    const tag = document.querySelector(`[data-confirm-state="${song.id}"]`), tally = uploader.bySong[song.id];
-    if (!tag) continue;
-    tag.textContent = !song.confirmed ? '' : !tally || !tally.total ? 'Confirmed' : tally.done >= tally.total ? 'Ready' : `Sending ${tally.done}/${tally.total}`;
-  }
+  songList().forEach((song, i) => paintConfirm(i));
 }
 
-// Confirm: these cuts are final, start sending this song's original ranges now.
+// The Confirm control of one song: Confirm → Confirming… → Confirmed · Sending n/m → Confirmed · Ready.
+function paintConfirm(i) {
+  const song = songList()[i], tag = document.querySelector(`[data-confirm-state="${i}"]`), button = document.querySelector(`[data-song-confirm="${i}"]`);
+  if (!song || !tag || !button) return;
+  const tally = uploader.byWindow[windowKey(song)];
+  button.hidden = Boolean(song.confirmed || song.confirming);
+  tag.classList.toggle('done', Boolean(song.confirmed));
+  tag.textContent = song.confirming ? 'Confirming…' : !song.confirmed ? ''
+    : !tally || !tally.total || tally.done >= tally.total ? (tally?.total ? 'Confirmed · ready' : 'Confirmed')
+    : `Confirmed · sending ${tally.done}/${tally.total}`;
+}
+
+// Confirm: these cuts are final, start sending this song's original ranges now. Nothing is
+// saved on the server and nothing else stops (playback, other uploads): the window is enough.
 async function confirmSong(i) {
-  const list = songList();
+  const song = songList()[i];
+  if (!song || song.confirming || song.confirmed) return;
+  song.confirming = true; paintConfirm(i);
   try {
-    const saved = await api(`/montara/session/${fullSession.id}/songs`, { songs: list });
-    fullSession.data.songs = saved.songs.map((s, j) => ({ ...s, confirmed: j === i || list[j]?.confirmed }));
-    drawSessionSongs();
-    await queueSongOriginals(saved.songs[i].id);
+    await queueSongOriginals(song);
+    song.confirmed = true;
   } catch (error) { toast(error.message, true); }
+  finally { song.confirming = false; paintConfirm(i); }
 }
 
 function drawSessionResults(data) {

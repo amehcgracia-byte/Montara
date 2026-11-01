@@ -14,7 +14,8 @@ import uuid
 from pathlib import Path
 
 from flask import jsonify, request, send_file
-from mixer_adapter.session import listen_range, original_windows, read, register_original, save, session_listen, session_waveform, validate_songs
+from mixer_adapter.session import (listen_range, original_windows, read, received_originals, register_original, save, session_listen,
+                                   session_waveform, song_windows, validate_songs, window_song, original_key)
 from resumable_upload import preview_original
 
 ROOT = Path(__file__).resolve().parent
@@ -31,6 +32,7 @@ def public(data):
     result = {k: data[k] for k in ('id', 'status', 'duration', 'songs', 'progress', 'error', 'preview_tracks', 'detection', 'ai_review') if k in data}
     result['results'] = [{k: v for k, v in r.items() if k != 'path'} for r in data.get('results', [])]
     result['uses_previews'] = bool(data.get('previews'))
+    result['track_files'] = [t['file'] for t in data.get('tracks') or []]
     return result
 
 
@@ -243,7 +245,12 @@ def register_full_session(app, data_root, fixtures):
         try:
             work = folder(job_id)
             song = request.args.get('song', type=int)
-            return jsonify(originals=original_windows(read(work), work, song))
+            data = read(work)
+            if request.args.get('start') is not None:  # a window the page has not saved yet (Confirm)
+                target = window_song(data, [request.args.get('start', type=float), request.args.get('end', type=float)], song,
+                                     request.args.get('name', ''))
+                return jsonify(originals=song_windows(data, target, received_originals(work)))
+            return jsonify(originals=original_windows(data, work, song))
         except ValueError as exc:
             return error(exc, 404)
 
@@ -264,12 +271,19 @@ def register_full_session(app, data_root, fixtures):
                 raise ValueError('Send the original as lossless audio.')
             # Accepted while an export runs: ranges are separate files, not session.json.
             data = read(work)
-            window = next((w for w in original_windows(data, work, body.get('song')) if w['file'] == body.get('file')), None)
+            # The range belongs to the window it was cut for, not to a song number: songs may
+            # have been split, removed or renumbered since it was queued.
+            if body.get('window') is not None:
+                needed = song_windows(data, window_song(data, body['window'], body.get('song')))
+            else:
+                needed = original_windows(data, work, body.get('song'))
+            window = next((w for w in needed if w['file'] == body.get('file')), None)
             if not window:
                 raise ValueError('This song range is not needed.')
             # Server-side window (never the browser's numbers) decides where the range starts.
             register_original(work, window, path)
-            return jsonify(originals=original_windows(data, work, body.get('song')))
+            received = received_originals(work)
+            return jsonify(originals=[dict(w, received=bool(received.get(original_key(w['file'], w['window'])))) for w in needed])
         except ValueError as exc:
             return error(exc)
 

@@ -84,14 +84,44 @@ def register_original(work, window, path):
          dict(file=window['file'], window=window['window'], start=window['start'], path=str(path)))
 
 
-def original_windows(data, work=None, only_song=None):
-    """Ranges of the originals a preview-based session needs before it can export.
+def song_windows(data, song, received=None):
+    """Original ranges one song window needs: one per preview track that plays in it.
 
-    One entry per selected song (or just `only_song`) and preview track that plays in it.
     'start' and 'duration' are in the original file's own seconds, with a small margin.
-    """
+    The key is the track and the window, so a range stays valid however songs are renumbered."""
     previews = data.get('previews') or {}
-    if not previews or not data.get('tracks'):
+    received = received or {}
+    result = []
+    for track in data.get('tracks') or []:
+        original = previews.get(track['file'])
+        source_start, overlap = track_window(track, song)
+        if not original or overlap <= 0:
+            continue
+        start = max(0.0, source_start - MARGIN)
+        window = [round(song['start'], 6), round(song['end'], 6)]
+        got = received.get(original_key(track['file'], window))
+        result.append(dict(song=song.get('id'), song_name=song.get('name') or '', file=track['file'], original=original,
+                           start=round(start, 6), duration=round(source_start - start + overlap + MARGIN, 6), window=window,
+                           received=bool(got and Path(got['path']).is_file())))
+    return result
+
+
+def window_song(data, window, song_id=None, name=''):
+    """A song made from a [start, end] window the page sends (validated against the session)."""
+    if not isinstance(window, (list, tuple)) or len(window) != 2:
+        raise ValueError('Invalid song window.')
+    start, end = window
+    if any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) for v in (start, end)):
+        raise ValueError('Invalid song window.')
+    if start < 0 or end > float(data.get('duration') or 0) + .001 or end - start < .5:
+        raise ValueError('Invalid song window.')
+    return dict(id=song_id, name=str(name)[:80], start=float(start), end=float(end))
+
+
+def original_windows(data, work=None, only_song=None):
+    """Ranges of the originals a preview-based session needs before it can export:
+    every selected song (or just `only_song`, a song id)."""
+    if not data.get('previews') or not data.get('tracks'):
         return []
     received = received_originals(work) if work else {}
     result = []
@@ -100,17 +130,7 @@ def original_windows(data, work=None, only_song=None):
             continue
         if only_song is None and not song.get('selected'):
             continue
-        for track in data['tracks']:
-            original = previews.get(track['file'])
-            source_start, overlap = track_window(track, song)
-            if not original or overlap <= 0:
-                continue
-            start = max(0.0, source_start - MARGIN)
-            window = [round(song['start'], 6), round(song['end'], 6)]
-            got = received.get(original_key(track['file'], window))
-            result.append(dict(song=song['id'], song_name=song['name'], file=track['file'], original=original,
-                               start=round(start, 6), duration=round(source_start - start + overlap + MARGIN, 6), window=window,
-                               received=bool(got and Path(got['path']).is_file())))
+        result += song_windows(data, song, received)
     return result
 
 

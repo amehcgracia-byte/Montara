@@ -219,3 +219,30 @@ def test_session_keeps_the_track_types(tmp_path, monkeypatch):
                                                          'track_types': {'Robi.wav': {'type': 'narration', 'chosen': True}, 'Other.wav': {'type': 'nope'}}})
     work = source.parent / 'Sessions' / result.json['id']
     assert read(work)['track_types'] == {'robi': {'type': 'narration', 'side': '', 'chosen': True}}
+
+
+def test_a_range_belongs_to_its_window_not_to_a_song_number(tmp_path):
+    """Confirm queues ranges by window; a later split renumbers songs and the upload still lands."""
+    c = client(tmp_path)
+    data_root = tmp_path / 'data'
+    work = data_root / 'Sessions' / 'abcdefabcdef'; work.mkdir(parents=True)
+    rate = 8000
+    preview = tmp_path / 'keys.wav'; sf.write(preview, np.zeros(rate * 30), rate, subtype='FLOAT')
+    songs = [dict(id=1, name='A', start=0.0, end=10.0, selected=True), dict(id=2, name='B', start=12.0, end=20.0, selected=True)]
+    save(work / 'session.json', {'id': 'abcdefabcdef', 'status': 'review', 'duration': 30.0, 'songs': songs,
+                                 'tracks': [dict(file='keys.wav', path=str(preview), samplerate=rate, channels=1, offset=0, duration=30)],
+                                 'previews': {'keys.wav': {'name': 'keys.wav', 'size': 1, 'fingerprint': 'a' * 64}}})
+    # The page confirms song 2 at 12-20 (unsaved edits are fine: no session write needed).
+    windows = c.get('/montara/session/abcdefabcdef/originals?song=2&start=12&end=20').json['originals']
+    assert windows[0]['window'] == [12.0, 20.0] and windows[0]['start'] == 11.5
+    assert c.get('/montara/session/abcdefabcdef/originals?song=2&start=12&end=99').status_code >= 400
+    # Song 1 is split meanwhile: 12-20 is now song 3.
+    data = read(work); data['songs'] = [dict(id=1, name='A', start=0.0, end=5.0, selected=True), dict(id=2, name='A2', start=5.0, end=10.0, selected=True),
+                                         dict(id=3, name='B', start=12.0, end=20.0, selected=True)]
+    save(work / 'session.json', data)
+    upload = data_root / 'Uploads' / ('c' * 32); upload.mkdir(parents=True)
+    sf.write(upload / 'keys.wav', np.ones(rate * 9) * .1, rate, subtype='FLOAT')
+    (upload / 'upload.json').write_text(json.dumps({'name': 'keys.wav.flac', 'restored': 'keys.wav', 'complete': True}))
+    response = c.post('/montara/session/abcdefabcdef/originals', json={'song': 2, 'window': [12, 20], 'file': 'keys.wav', 'upload_id': 'c' * 32})
+    assert response.status_code == 200 and response.json['originals'][0]['received']
+    assert [w['received'] for w in c.get('/montara/session/abcdefabcdef/originals?song=3').json['originals']] == [True]

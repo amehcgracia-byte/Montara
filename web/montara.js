@@ -831,19 +831,24 @@ function afterCameras() {
 // ---------- mixer ----------
 const mix = { job: null, plan: null, ctx: null, nodes: {}, buffers: {}, playing: false, startedAt: 0, offset: 0, master: null, timer: null };
 
-async function openMixer(sessionTracks = null) {
-  if (!sessionTracks) fullSession.active = false;
+// The mixer screen with placeholder strips whose faders keep moving: shown the moment a
+// mixer is asked for, so every wait happens on this screen. Returns the stop function.
+function mixLoadingScreen(sources, text) {
   show("mix");
   stopMix();
   $("#mixStatus").classList.remove("done");
-  $("#mixStatusText").textContent = "Mixing your tracks automatically…";
+  $("#mixStatusText").textContent = text;
   $("#transport").hidden = true;
   $("#referenceRow").hidden = true;
   $("#useMix").disabled = true;
-  const sources = sessionTracks || audioTracks().map((f) => f.path);
-  // Placeholder strips whose faders keep moving while the mix is worked out.
   $("#strips").innerHTML = sources.map((path) => `<div class="strip loading"><small>&nbsp;</small><span class="db">&nbsp;</span><input type="range" min="-60" max="12" value="-20" disabled aria-hidden="true"><button class="mute" disabled>…</button><b>${escapeHtml(String(path).split("/").pop().replace(/\.[^.]+$/, ""))}</b></div>`).join("");
-  const dance = startFaderDance();
+  return startFaderDance();
+}
+
+async function openMixer(sessionTracks = null) {
+  if (!sessionTracks) fullSession.active = false;
+  const sources = sessionTracks || audioTracks().map((f) => f.path);
+  const dance = mixLoadingScreen(sources, "Mixing your tracks automatically…");
   let job;
   try { job = await api("/montara/mix", { tracks: sources, track_types: TrackTypes.forFiles(sources) }); } catch (error) { dance(); throw error; }
   mix.job = job.id;
@@ -949,10 +954,14 @@ function renderStrips() {
       else setting.amount = Number(input.value);
       strip.querySelector(`output[data-effect="${effect}"]`).textContent = `${setting.amount}%`;
       strip.querySelector(".fx-toggle").classList.toggle("active", Object.values(track.fx).some((s) => s.enabled));
+      const out = strip.querySelector(`output[data-effect="${effect}"]`);
       try {
+        if (setting.enabled && !mix.fxBuffers[`${track.file}:${effect}`]) out.textContent = "preparing…";  // the server renders the effect once
         if (setting.enabled) await loadFxBuffer(track, effect);
+        out.textContent = `${setting.amount}%`;
         await syncTrackFx(track);
       } catch (error) {
+        out.textContent = `${setting.amount}%`;
         setting.enabled = false;
         strip.querySelector(`input[type=checkbox][data-effect="${effect}"]`).checked = false;
         toast(error.message || "Could not prepare the effect", true);
