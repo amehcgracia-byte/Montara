@@ -4,7 +4,7 @@
 #   montara-tunnel   open a public https address to Montara (keep the window open)
 #   montara-disk     disk use on the VM; 'montara-disk clean ...' prints what it would remove (--apply removes)
 #   montara-runs     timing record of every finished job on the VM (~/montara-runs.jsonl)
-#   montara-start    switch the VM on if needed, wait for Montara, open the tunnel
+#   montara-start    switch the VM on if needed, wait for Montara, connect and open http://127.0.0.1:8101 (--public: Cloudflare address)
 #   montara-stop     switch the VM off now
 #   montara-autostop once: the VM switches itself off after 1 h without web use and 2 h without SSH typing
 # Install: curl -fsSL https://raw.githubusercontent.com/amehcgracia-byte/Montara/main/deploy/vm/mac-tools.sh | bash
@@ -63,7 +63,7 @@ SCRIPT
 
 cat > "$BIN/montara-start" <<SCRIPT
 #!/bin/bash
-# Switches the lab VM on (if it is off), waits for Montara and opens the public address.
+# Switches the lab VM on (if it is off), waits for Montara, connects this computer and opens it in the browser.
 state=\$(gcloud compute instances describe $VM --zone $ZONE --project $PROJECT --format="value(status)")
 if [ "\$state" != "RUNNING" ]; then
   echo "Switching the lab machine on…"
@@ -74,7 +74,16 @@ if [ "\$state" != "RUNNING" ]; then
     sleep 5
   done
 fi
-exec "$BIN/montara-tunnel"
+# Public address only when asked (montara-start --public); otherwise this computer only.
+[ "\${1:-}" = "--public" ] && exec "$BIN/montara-tunnel"
+echo "Montara: http://127.0.0.1:8101  (keep this window open; Ctrl+C closes the connection)"
+(sleep 4; open "http://127.0.0.1:8101" 2>/dev/null) &
+trap 'echo; echo "Connection closed."; exit 0' INT
+while true; do   # a dropped connection comes back by itself
+  gcloud compute ssh $VM --zone $ZONE --project $PROJECT -- -N -L 8101:127.0.0.1:8101 \
+    -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes
+  echo "Connection lost; reconnecting in 3 s (Ctrl+C to stop)…"; sleep 3
+done
 SCRIPT
 
 cat > "$BIN/montara-stop" <<SCRIPT
