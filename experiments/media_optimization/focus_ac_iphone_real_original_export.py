@@ -49,7 +49,7 @@ def main():
     if not (abs(float(seg.get("duration_sec") or 0) - 4) < .02 and abs(float(seg.get("clip_start_sec") or 0) - 10) < .02):
         raise ValueError("reference source must be a 4 s segment from original t=10")
     seg.update({"source_path": str(IPHONE), "clip_path": str(PROXY), "filename": IPHONE.name,
-                "camera_id": "iphone-real", "available_camera_ids": ["iphone-real"],
+                "camera_id": "originales", "available_camera_ids": ["originales"],
                 "camera_alternative_available": False, "projection": None})
     seg.pop("director_quality", None) # heavy old analysis is not needed for ExportStage
     settings = data.setdefault("settings", {}).setdefault("export", {})
