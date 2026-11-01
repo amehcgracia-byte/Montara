@@ -147,13 +147,20 @@ def clean(args):
                 targets.append((DATA / 'Uploads' / u, f'upload of {work.name}'))
     if args.uploads_days is not None:
         for u in (DATA / 'Uploads').glob('*') if (DATA / 'Uploads').is_dir() else []:
-            if u.name not in still_used and age_days(u) > args.uploads_days and all(t[0] != u for t in targets):
+            if u.is_dir() and u.name not in still_used and age_days(u) > args.uploads_days and all(t[0] != u for t in targets):
                 targets.append((u, f'upload no session uses, {age_days(u):.0f} d old'))
     for flag, folder in ((args.mixer_days, 'Mixer'), (args.projects_days, 'Projects')):
         if flag is not None and (DATA / folder).is_dir():
             for p in (DATA / folder).iterdir():
                 if p.is_dir() and p.name != 'state' and age_days(p) > flag and p.name not in keep:   # 'state': the mixer's own settings
                     targets.append((p, f'{folder} item {age_days(p):.0f} d old'))
+    # The same upload can belong to several named sessions: list and count it once.
+    # Only folders go (never lock files such as Uploads/allocation.lock).
+    seen, unique = set(), []
+    for path, why in targets:
+        if path not in seen and path.is_dir():
+            seen.add(path); unique.append((path, why))
+    targets = unique
     total = 0
     for path, why in targets:
         assert path.resolve().is_relative_to(DATA.resolve()), path   # never outside montara-data
