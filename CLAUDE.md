@@ -17,7 +17,7 @@
 - Done means: `python tests/e2e_journey.py --output <dir>` passes on Linux and the
   screenshots it saves have been looked at.
 
-- Read docs/HANDOFF_FERNANDO_038.md for current context. Older docs with Pulse/Story as top-level modes are historical.
+- Read docs/HANDOFF_CHEMA_054.md for current context (full session, local mixer, VM tools), then docs/HANDOFF_FERNANDO_038.md. Older docs with Pulse/Story as top-level modes are historical.
 - Keep tools/asset-selector separate from Montara; its candidates and decisions are not automatic production-library approvals.
 - Report exactly which checks ran; do not claim full E2E or production readiness from targeted tests.
 - Two labs share this repo: read docs/COLLABORATION.md, then docs/lab/STATUS-JM.md and docs/lab/STATUS-FER.md.
