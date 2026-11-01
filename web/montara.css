@@ -372,6 +372,7 @@ body[data-show-kind=podcast] #showLiveEdit,body[data-show-kind=podcast] #showUnd
 
 /* Fixed mixer effects: only enable and amount, per track. */
 .strip{flex-basis:100px}
+.strip small{max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 /* The mixer uses the whole window: twelve strips across on a laptop screen at full size. */
 body:has(#mix:not([hidden])) main{max-width:min(1640px,100%)}
 .strip.pair-l{border-top-right-radius:4px;border-bottom-right-radius:4px;margin-right:-7px;border-right-color:transparent}
