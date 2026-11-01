@@ -27,6 +27,13 @@ echo "Opening the tunnel… look below for a line with https://….trycloudflare
 gcloud compute ssh $VM --zone $ZONE --project $PROJECT -- "[ -x /tmp/cloudflared ] || curl -fsSL -o /tmp/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 && chmod +x /tmp/cloudflared; /tmp/cloudflared tunnel --url http://127.0.0.1:\$PORT 2>&1 | grep --line-buffered -E 'trycloudflare.com|ERR'"
 SCRIPT
 
+cat > "$BIN/montara-diagnose" <<SCRIPT
+#!/bin/bash
+# What the server is doing right now (latest session, processes, last log lines). Paste it to Claude.
+gcloud compute ssh $VM --zone $ZONE --project $PROJECT --command 'sudo -u jm -H bash -c "cd ~/montara && python3 deploy/vm/diagnose.py"'
+SCRIPT
+chmod +x "$BIN/montara-diagnose"
+
 cat > "$BIN/montara-runs" <<SCRIPT
 #!/bin/bash
 # Timing record of every finished Montara job on the VM, saved in ~/montara-runs.jsonl.
@@ -36,6 +43,9 @@ python3 - "\$HOME/montara-runs.jsonl" <<'PY'
 import json, sys
 for line in open(sys.argv[1]):
     r = json.loads(line); s = r.get("stages_s", {})
+    if r.get('mode') == 'Session':
+        print(f"{(r.get('date') or '')[:16]}  Session  {r.get('songs')} songs ({r.get('audio_min')} min of music, {r.get('tracks')} tracks): detect {s.get('detect')} s · export {s.get('render')} s")
+        continue
     print(f"{(r.get('date') or '')[:16]}  {r.get('mode')}  {r.get('project')}: ingest {s.get('ingest')} s · sync {s.get('sync')} s · edit {s.get('edit')} s · export {s.get('export')} s · total {r.get('engine_total_s')} s")
 PY
 echo; echo "Saved in ~/montara-runs.jsonl. Attach it to Claude to add it to docs/lab/RUNS.md."

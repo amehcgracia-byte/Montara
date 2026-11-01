@@ -132,14 +132,20 @@ def session_waveform(work):
     columns = int(math.ceil(float(data['duration']) / WAVE_STEP))
     peaks = np.zeros(columns, dtype='float32')
     per = int(WAVE_RATE * WAVE_STEP)
-    for track in data['tracks']:
+
+    def track_peaks(track):  # decoding is the slow part: all tracks at once, one per core
         raw = subprocess.run(['ffmpeg', '-v', 'error', '-nostdin', '-i', track['path'], '-vn', '-ac', '1', '-ar', str(WAVE_RATE),
                               '-f', 'f32le', '-'], capture_output=True, check=True, timeout=900).stdout
         audio = np.abs(np.frombuffer(raw, dtype='<f4'))
         usable = len(audio) // per * per
-        if not usable:
+        return audio[:usable].reshape(-1, per).max(axis=1) if usable else None
+
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=max(1, min(len(data['tracks']), os.cpu_count() or 2))) as pool:
+        columns_by_track = list(pool.map(track_peaks, data['tracks']))
+    for track, column in zip(data['tracks'], columns_by_track):
+        if column is None:
             continue
-        column = audio[:usable].reshape(-1, per).max(axis=1)
         first = int(round(float(track['offset']) / WAVE_STEP))
         end = min(columns, first + len(column))
         if end > first:
@@ -420,18 +426,13 @@ def execute(work, action):
             for cut in data['ai_review']['value']['cuts']:
                 data['songs'][cut['id']-1]['review_note'] = cut['reason']
                 data['songs'][cut['id']-1]['needs_review'] = cut['decision'] == 'review'
-        progress(dict(current_stage='Drawing the waveform', progress=97))
-        save(work / 'session.json', data)  # tracks and duration are needed by the drawing
-        try:
-            session_waveform(work)
-        except Exception as exc:  # the review still works without the drawing
-            print('waveform failed:', exc, flush=True)
-        progress(dict(current_stage='Preparing a listening copy', progress=98))
-        try:
-            session_listen(work)
-        except Exception as exc:  # listening falls back to short ranges
-            print('listening copy failed:', exc, flush=True)
         data['status'] = 'review'
+        # The song list opens now; the waveform and the listening copy are made in the
+        # background and appear on the page when ready (minutes for a long jam).
+        save(work / 'session.json', data)
+        with (work / 'extras.log').open('ab') as log:
+            subprocess.Popen([sys.executable, '-m', 'mixer_adapter.session', str(work), 'extras'], cwd=Path(__file__).resolve().parents[1],
+                             stdout=log, stderr=log, start_new_session=True)
     elif action == 'prepare':
         song = next((s for s in data['songs'] if s['id'] == data.get('preview_song')), None) or next(s for s in data['songs'] if s['selected'])
         folder = prepare_tracks(work, song, preview=True)
@@ -491,6 +492,8 @@ def execute(work, action):
         raise ValueError('Unknown session action.')
     data['progress'] = dict(progress=100, current_stage=data['status'])
     data.pop('error', None)
+    # Durations for docs/lab/RUNS.md (deploy/vm/run_history.py reads them).
+    data.setdefault('timings', {})[action] = round(time.time() - float(data.get('started_at') or time.time()), 1)
     save(work / 'session.json', data)
 
 
@@ -498,6 +501,14 @@ if __name__ == '__main__':
     work, action = Path(sys.argv[1]), sys.argv[2]
     if action == 'render-song':  # child of a render; the parent holds the locks and handles cancel
         render_song(work, int(sys.argv[3]))
+        sys.exit(0)
+    if action == 'extras':  # after detection: waveform, then the listening copy; no locks, never blocks a job
+        for make in (session_waveform, session_listen):
+            try:
+                make(work)
+            except Exception as exc:
+                print(f'{make.__name__} failed:', exc, flush=True)
+        (work / 'extras.done').touch()
         sys.exit(0)
     import fcntl
     import signal
