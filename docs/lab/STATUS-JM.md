@@ -24,7 +24,7 @@ Actualizado: 2026-11-01 tarde · lo mantiene el equipo de Chema · 40 líneas co
 - Pendiente: detección por audio (hoy por nombre o por la elección de la persona); fichas para más instrumentos; afinarlas de oído con jams reales.
 
 ## Pendiente
-- **Mezcla en el Mac (companion 0.5.0, opcional, #59)**: `install.sh --mixer` instala el mezclador del servidor en el Mac (unos 240 MB en Linux; falta medirlo en Mac); cada canción se mezcla allí y solo sube el MP3. Salida idéntica bit a bit a la del servidor en el test. Falta: medir tiempos en un Mac real. Informe de Fer: `JUPITER_COMPANION_MAC_LOCAL_MIX_FEASIBILITY_2026-11-01.md`.
+- **Mezcla en el Mac (companion 0.5.0, opcional, #59)**: `install.sh --mixer` instala el mezclador del servidor en el Mac (unos 240 MB en Linux; falta medirlo en Mac); cada canción se mezcla allí y solo sube el MP3. Salida idéntica bit a bit a la del servidor en el test. **Primera medida real (01-11, MacBook Air de Chema, 171 MB instalado): 8 canciones mezcladas en local, entre 32 y 79 s por canción (MP3 de 5,8 a 11,2 MB); unos 9 min en total, frente a la estimación de 140 min con 12 canciones cuando se subían los originales al servidor.** Una canción a la vez (`MONTARA_COMPANION_MIX_SLOTS=1`); falta probar con 2. Informe de Fer: `JUPITER_COMPANION_MAC_LOCAL_MIX_FEASIBILITY_2026-11-01.md`.
 - Licencias: Matchering (GPLv3, de terceros) solo se usa en el servidor; el mezclador del Mac no lo instala.
 - Mergear ZuckerMixer PR #8 en master.
 - El fallo de canciones cortadas o vacías del #48: arreglado el fallo de la cola (#52); falta confirmarlo con `deploy/vm/audio_check.py` en una sesión real.
