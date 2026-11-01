@@ -14,10 +14,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import logging
 import os
+import subprocess
 import sys
 import threading
+import time
 import uuid
 from pathlib import Path
 
@@ -39,7 +42,22 @@ SAMPLE_SETS = {
 }
 DEFAULT_DATA = Path.home() / "MontaraData"
 # Shown at the bottom of every page, so it is obvious which build is running.
-MONTARA_VERSION = "0.39 · 2026-10-27 · Session mixes and resumable uploads"
+MONTARA_VERSION = "0.54 · 2026-11-01 · Songs mixed on your computer (companion local mixer, optional); iPhone/Sony scoring on the light copy"
+
+
+def _build_label() -> str:
+    """Version plus the exact commit, so every update shows a different footer."""
+    sha = os.environ.get("MONTARA_BUILD_SHA", "")[:7]
+    if not sha:
+        try:
+            sha = subprocess.run(["git", "-C", str(Path(__file__).resolve().parent), "rev-parse", "--short", "HEAD"],
+                                 capture_output=True, text=True, timeout=5).stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            sha = ""
+    return f"{MONTARA_VERSION} · {sha}" if sha else MONTARA_VERSION
+
+
+BUILD_LABEL = _build_label()
 BRANDING_MODES = {"montara", "mine", "none"}
 
 
@@ -131,6 +149,25 @@ def create_montara_app(data_root: Path = DEFAULT_DATA, samples: bool = True):
     app.config["MONTARA"] = True
     app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
 
+    # Someone is really using Montara: the VM idle watchdog (deploy/vm/idle_shutdown.sh)
+    # powers the machine off when this file is old and no engine work is running.
+    # Background polls of status do not count, so an open but unused page lets it sleep.
+    activity_file = data_root / ".last-activity"
+    polls = re.compile(r"^/(api/v1/wizard/(status|review)|montara/(mix|session)/[a-f0-9]+|montara/version|montara/uploads)$")
+    last_touch = [0.0]
+
+    @app.before_request
+    def montara_mark_activity():
+        now = time.time()
+        if now - last_touch[0] < 30 or (request.method == "GET" and polls.match(request.path)):
+            return None
+        last_touch[0] = now
+        try:
+            activity_file.write_text(str(int(now)))
+        except OSError:
+            pass
+        return None
+
     @app.before_request
     def montara_raw_camera_guard():
         if request.method != "POST" or request.path not in {"/api/v1/wizard/upload", "/api/v1/inputs/upload"}:
@@ -174,7 +211,37 @@ def create_montara_app(data_root: Path = DEFAULT_DATA, samples: bool = True):
 
     @app.get("/montara/version")
     def montara_version():
-        return jsonify({"version": MONTARA_VERSION})
+        return jsonify({"version": BUILD_LABEL})
+
+    @app.get("/montara/audio")
+    def montara_audio():
+        """Stream an uploaded or bundled audio file so the page can choose the song range."""
+        from flask import abort, send_file
+        try:
+            path = Path(request.args.get("path", "")).resolve()
+        except (OSError, ValueError):
+            abort(404)
+        allowed = path.is_relative_to(data_root) or path.is_relative_to(FIXTURES.resolve())
+        if not allowed or not path.is_file() or path.suffix.lower() not in {".wav", ".mp3", ".m4a", ".aif", ".aiff", ".flac", ".ogg"}:
+            abort(404)
+        return send_file(path, conditional=True)
+
+    @app.get("/montara/companion/download")
+    def montara_companion_download():
+        """Zip for macOS: double-click 'Install Montara Companion.command' (executable bit kept)."""
+        import io
+        import zipfile
+        from flask import send_file
+        folder = ROOT / "companion"
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+            for name, mode in (("Install Montara Companion.command", 0o755), ("companion.py", 0o644), ("README.md", 0o644)):
+                info = zipfile.ZipInfo(f"Montara Companion/{name}")
+                info.external_attr = (0o100000 | mode) << 16
+                info.compress_type = zipfile.ZIP_DEFLATED
+                archive.writestr(info, (folder / name).read_bytes())
+        buffer.seek(0)
+        return send_file(buffer, mimetype="application/zip", as_attachment=True, download_name="Montara Companion.zip")
     _apply_branding(str(load_global_config().get("montara_branding_mode") or "montara"), data_root)
 
     @app.get("/montara/samples")
@@ -243,14 +310,14 @@ def create_montara_app(data_root: Path = DEFAULT_DATA, samples: bool = True):
                 sys.path.insert(0, str(ROOT))
                 from mixer_adapter.single_song import SingleSongMix
 
-                mixer = job.get("mixer") or SingleSongMix(job["tracks_dir"], job["work_dir"])
+                mixer = job.get("mixer") or SingleSongMix(job["tracks_dir"], job["work_dir"], track_types=job.get("track_types"))
                 job["mixer"] = mixer
                 if action == "analyze":
                     job["plan"] = mixer.analyze()
                 else:
                     reference = payload.get("reference")
                     mixer.reference = Path(reference) if reference else None
-                    out = mixer.render(payload.get("faders") or {}, job["work_dir"] / "mix.wav", payload.get("mutes") or {}, payload.get("effects"))
+                    out = mixer.render(payload.get("faders") or {}, job["work_dir"] / "mix.wav", payload.get("mutes") or {}, payload.get("effects"), eq=payload.get("eq"))
                     job["master"] = classify_paths([str(out)])
                     job["master_path"] = str(out)
                 job["status"] = "ready" if action == "analyze" else "done"
@@ -274,6 +341,10 @@ def create_montara_app(data_root: Path = DEFAULT_DATA, samples: bool = True):
             )
         except ValueError as exc:
             return jsonify({"error": {"message": str(exc)}}), 400
+        from resumable_upload import preview_original
+        if any(preview_original(path) for path in files):
+            return jsonify({"error": {"message": "These tracks were sent as light previews for Full session. "
+                                                 "Tick Full session, or remove them and add them again."}}), 400
         job_id = uuid.uuid4().hex[:12]
         work = data_root / "Mixer" / job_id
         tracks_dir = work / "tracks"
@@ -286,7 +357,9 @@ def create_montara_app(data_root: Path = DEFAULT_DATA, samples: bool = True):
                 except OSError:
                     import shutil
                     shutil.copy2(path, target)
-        mix_jobs[job_id] = {"id": job_id, "status": "analyzing", "tracks_dir": tracks_dir, "work_dir": work}
+        import track_types
+        mix_jobs[job_id] = {"id": job_id, "status": "analyzing", "tracks_dir": tracks_dir, "work_dir": work,
+                            "track_types": track_types.validate((request.get_json(silent=True) or {}).get("track_types"))}
         threading.Thread(target=_mix_worker, args=(job_id, "analyze", {}), daemon=True).start()
         return jsonify(_mix_public(mix_jobs[job_id])), 202
 
@@ -301,7 +374,21 @@ def create_montara_app(data_root: Path = DEFAULT_DATA, samples: bool = True):
         job = mix_jobs.get(job_id)
         if not job:
             return jsonify({"error": {"message": "unknown mix"}}), 404
-        return send_from_directory(job["tracks_dir"], Path(name).name)
+        source = job["tracks_dir"] / Path(name).name
+        if request.args.get("format") == "wav" or not source.is_file():
+            return send_from_directory(job["tracks_dir"], Path(name).name)
+        from flask import send_file
+        # A compressed copy for the browser preview: a 60 s float WAV is ~10 MB, this ~1 MB.
+        light = job["work_dir"] / "preview-light" / (Path(name).stem + ".webm")
+        if not light.is_file():
+            light.parent.mkdir(parents=True, exist_ok=True)
+            pending = light.with_suffix(".part.webm")
+            done = subprocess.run(["ffmpeg", "-v", "error", "-nostdin", "-y", "-i", str(source), "-vn", "-c:a", "libopus", "-b:a", "160k",
+                                   "-f", "webm", str(pending)], capture_output=True, timeout=300)
+            if done.returncode != 0:
+                return send_from_directory(job["tracks_dir"], Path(name).name)
+            pending.replace(light)
+        return send_file(light, mimetype="audio/webm", conditional=True)
 
     @app.get("/montara/mix/<job_id>/result")
     def montara_mix_result(job_id: str):
@@ -378,12 +465,14 @@ def create_montara_app(data_root: Path = DEFAULT_DATA, samples: bool = True):
             return jsonify({"error": {"message": "The reference audio is still being prepared."}}), 409
         body = request.get_json(silent=True) or {}
         payload = {"faders": body.get("faders") or {}, "mutes": body.get("mutes") or {}, "reference": job.get("reference")}
-        if "effects" in body:
-            from mixer_adapter.single_song import validate_effects
-            try:
+        from mixer_adapter.single_song import validate_effects, validate_eq
+        try:
+            if "effects" in body:
                 payload["effects"] = validate_effects(body["effects"], [t["file"] for t in job["plan"]["tracks"]])
-            except ValueError as exc:
-                return jsonify({"error": {"message": str(exc)}}), 400
+            if body.get("eq"):
+                payload["eq"] = validate_eq(body["eq"], [t["file"] for t in job["plan"]["tracks"]])
+        except ValueError as exc:
+            return jsonify({"error": {"message": str(exc)}}), 400
         job["status"] = "rendering"
         job.pop("error", None)
         threading.Thread(target=_mix_worker, args=(job_id, "render", payload), daemon=True).start()

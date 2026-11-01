@@ -64,13 +64,18 @@ em{font-style:normal;color:var(--accent)}
 .drop strong{font-size:20px;font-weight:600}
 .drop span{color:var(--muted);font-size:14px}
 .files{list-style:none;display:flex;flex-direction:column;gap:8px;margin:18px 0}
-.files li{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:14px;padding:12px 16px;border-radius:14px;background:var(--surface);border:1px solid var(--line)}
+.files li{display:grid;grid-template-columns:auto 1fr auto auto;align-items:center;gap:14px;padding:12px 16px;border-radius:14px;background:var(--surface);border:1px solid var(--line)}
 .files .kind{font-size:11px;font-weight:700;letter-spacing:1.5px;padding:4px 8px;border-radius:6px;background:var(--panel);color:var(--muted)}
 .files .kind.video{color:var(--fg)}
 .files .kind.master{background:var(--accent-soft);color:var(--accent)}
 .files .kind.ignored{opacity:.5}
 .files .name{font-size:15px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .files .state{font-size:13px;color:var(--muted)}
+.files .remove{width:28px;height:28px;border-radius:50%;border:0;background:transparent;color:var(--muted);font-size:18px;line-height:1;cursor:pointer}
+.files .remove:hover,.files .remove:focus-visible{background:var(--panel);color:var(--accent)}
+.files .track-type{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.files .track-type select{background:var(--panel);color:inherit;border:1px solid var(--line);border-radius:8px;padding:5px 8px;font:inherit;font-size:12px}
+.files .track-type small{color:var(--muted,#8a8a8a);font-size:11px}
 .files .bar{grid-column:1/-1;height:4px;border-radius:2px;background:var(--panel);overflow:hidden}
 .files .bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}
 .form{display:flex;flex-wrap:wrap;gap:24px;margin:8px 0 12px}
@@ -87,7 +92,7 @@ output{color:var(--fg);font-weight:600;min-width:42px}
 
 /* making */
 .making{display:flex;flex-direction:column;align-items:center;text-align:center;padding:40px 0;gap:12px}
-.ring{position:relative;width:180px;height:180px;margin-bottom:20px}
+.ring{position:relative;width:min(240px,62vw);height:min(240px,62vw);margin-bottom:20px}
 .ring svg{width:100%;height:100%;transform:rotate(-90deg)}
 .ring circle{fill:none;stroke-width:8}
 .ring .track{stroke:var(--panel)}
@@ -97,7 +102,8 @@ output{color:var(--fg);font-weight:600;min-width:42px}
 .making .btn{margin-top:24px}
 
 /* result */
-.player{border-radius:var(--radius);overflow:hidden;background:#000;border:1px solid var(--line);display:flex;justify-content:center}
+.player{border-radius:var(--radius);overflow:hidden;background:#000;border:1px solid var(--line);display:flex;flex-direction:column;align-items:center}
+.player .compact-media{align-self:stretch;padding:10px 14px;background:var(--bg,#0B0B0D);border-top:1px solid var(--line)}
 .player video{display:block;width:100%;aspect-ratio:16/9;max-height:70vh;background:#000}
 .player video.vertical{width:auto;height:70vh;aspect-ratio:9/16}
 
@@ -365,14 +371,30 @@ body[data-show-kind=podcast] #showLiveEdit,body[data-show-kind=podcast] #showUnd
 .cut-dialog,.show-effect-dialog{color-scheme:dark;scrollbar-width:thin;scrollbar-color:#606065 #1b1b1e}
 
 /* Fixed mixer effects: only enable and amount, per track. */
-.strip{flex-basis:110px}
-.strip .fx-toggle{border:1px solid var(--line);border-radius:7px;width:100%;padding:5px;color:var(--muted);font-size:12px}
-.strip .fx-toggle.active{color:var(--accent);border-color:var(--accent)}
+.strip{flex-basis:100px}
+.strip small{max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* The mixer uses the whole window: twelve strips across on a laptop screen at full size. */
+body:has(#mix:not([hidden])) main{max-width:min(1640px,100%)}
+.strip.pair-l{border-top-right-radius:4px;border-bottom-right-radius:4px;margin-right:-7px;border-right-color:transparent}
+.strip.pair-r{border-top-left-radius:4px;border-bottom-left-radius:4px}
+.strip.pair-l small::after{content:' · L'}.strip.pair-r small::after{content:' · R'}
+/* Two buttons above the name (ON, SOLO), two below (EQ, FX): same size; the name is the largest text. */
+.strip-buttons{display:grid;grid-template-columns:1fr 1fr;gap:6px;width:100%}
+.strip-buttons .wide{grid-column:1/-1}
+.strip .mute,.strip .solo,.strip .eq-toggle,.strip .fx-toggle{width:100%;height:30px;padding:0;border-radius:8px;border:1px solid var(--line);background:none;font-size:11px;font-weight:700;letter-spacing:.3px;color:var(--muted);cursor:pointer}
+.strip .solo.on{background:var(--fg);border-color:var(--fg);color:var(--bg)}
+.strip .eq-toggle.active,.strip .fx-toggle.active{color:var(--accent);border-color:var(--accent)}
+.strip .strip-name{font-size:16px;font-weight:700;line-height:1.15;text-align:center;white-space:normal;overflow-wrap:anywhere;max-width:100%;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .track-fx{width:100%;border-top:1px solid var(--line);padding-top:8px}
 .track-fx[hidden]{display:none}
 .track-fx label{display:flex;align-items:center;gap:5px;font-size:11px;margin-top:6px}
 .strip .track-fx input[type=range]{writing-mode:horizontal-tb;direction:ltr;width:100%;height:20px}
 .track-fx output{display:block;text-align:right;font-size:10px;color:var(--muted)}
+.track-eq{width:100%;border-top:1px solid var(--line);padding-top:8px}
+.track-eq[hidden]{display:none}
+.track-eq label{display:flex;flex-direction:column;gap:2px;font-size:11px;margin-top:6px;color:var(--muted)}
+.strip .track-eq input[type=range]{writing-mode:horizontal-tb;direction:ltr;width:100%;height:20px}
+.track-eq output{display:block;text-align:right;font-size:10px;color:var(--fg)}
 
 /* A short wordmark introduction, then the three editing paths. */
 body.is-intro .top,body.is-intro footer,body.is-intro #version{visibility:hidden}
@@ -493,6 +515,25 @@ body.is-intro .top,body.is-intro footer,body.is-intro #version{visibility:hidden
 
 /* Full sessions share the existing Stage mixer; only the song review is new. */
 .session-song {display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:14px 0; border-bottom:1px solid var(--line, #303034)}
+#sessionSongs .session-song{display:block}
+.song-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.song-head input[data-song-field="name"]{flex:1;min-width:140px}
+.song-num{color:var(--muted);font-variant-numeric:tabular-nums;min-width:2ch}
+.song-play{width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--fg);font-size:12px;cursor:pointer;flex:none}
+.song-play.on,.song-play:hover{border-color:var(--accent);color:var(--accent)}
+.song-play{position:relative}.song-play.loading{border-color:var(--line)}
+.song-play.loading::after{content:'';position:absolute;inset:-3px;border-radius:50%;border:2px solid transparent;border-top-color:var(--accent);border-right-color:var(--accent);animation:spin .8s linear infinite;pointer-events:none}
+.confirm-state:not(.done){color:var(--muted);border-color:var(--line)}
+.song-tag:empty{display:none}
+.song-tag{font-size:12px;color:var(--accent);border:1px solid var(--accent);border-radius:999px;padding:2px 8px}
+.song-wave{position:relative;height:64px;margin-top:10px;border-radius:10px;background:var(--surface);overflow:hidden;touch-action:none}
+.song-wave canvas{position:absolute;inset:0;width:100%;height:100%}
+.song-cut{position:absolute;top:0;bottom:0;width:14px;margin-left:-7px;cursor:ew-resize;z-index:2}
+.song-cut::before{content:"";position:absolute;left:6px;top:0;bottom:0;width:2px;background:var(--fg)}
+.song-cut::after{content:"";position:absolute;left:1px;top:50%;width:12px;height:22px;margin-top:-11px;border-radius:4px;background:var(--fg)}
+.song-cut:focus-visible::after{outline:2px solid var(--accent);outline-offset:2px}
+.song-playhead{position:absolute;top:0;bottom:0;width:2px;background:var(--accent);z-index:1;pointer-events:none}
+.song-time{position:absolute;right:8px;bottom:4px;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums;pointer-events:none}
 .session-song input[data-song-field="name"] {flex:1; min-width:140px}
 .session-song input:not([type="checkbox"]) {background:var(--surface);color:var(--fg);border:1px solid var(--line);border-radius:10px;padding:9px;font:inherit}
 .session-song input[type="checkbox"], #stageSessionOptions input {accent-color:var(--accent)}
@@ -501,3 +542,22 @@ body.is-intro .top,body.is-intro footer,body.is-intro #version{visibility:hidden
 .session-song audio {max-width:100%; height:36px}
 #sessionProgress {width:100%; accent-color:#FF4F2E; margin:12px 0}
 @media(max-width:600px) {.session-song input[data-song-field="name"] {flex-basis:75%}.session-song audio {width:100%}}
+
+/* Song range on the Cameras screen */
+.song-range{margin:8px 0 28px;padding:18px 20px;border:1px solid var(--line);border-radius:14px;background:var(--surface)}
+.song-range h3{margin:0 0 4px}
+.range-player{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:10px 0}
+.range-player audio{flex:1;min-width:240px}
+.range-bar{position:relative;height:10px;border-radius:5px;background:var(--panel);overflow:hidden;cursor:pointer}
+.range-bar i{position:absolute;top:0;bottom:0;background:var(--accent);opacity:.55}
+.range-bar b{position:absolute;top:0;bottom:0;width:2px;background:var(--fg)}
+.range-actions{align-items:center;gap:10px;margin-top:12px}
+.range-actions output{font-variant-numeric:tabular-nums;color:var(--muted);min-width:52px}
+
+/* Per-shot render bars under the ring: small, orange at 0 % to green at 100 % */
+.render-bars{display:flex;flex-wrap:wrap;justify-content:center;align-items:flex-end;gap:3px;max-width:560px;margin:14px auto 0;min-height:22px}
+.render-bars i{display:block;width:6px;height:22px;border-radius:3px;background:var(--panel);position:relative;overflow:hidden}
+.render-bars i::after{content:"";position:absolute;left:0;right:0;bottom:0;height:calc(var(--p,0) * 100%);
+  background:color-mix(in srgb,#2EBD6B calc(var(--p,0) * 100%),#FF4F2E);transition:height .4s ease}
+.render-bars.many i{width:3px;height:16px}
+.session-bars{justify-content:flex-start;margin:6px 0 14px}.session-bars i{width:28px;height:10px}

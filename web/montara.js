@@ -68,7 +68,17 @@ const $$ = (sel) => [...document.querySelectorAll(sel)];
 
 async function api(path, body) {
   const options = body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
-  const response = await fetch(path.startsWith("/montara") ? path : `/api/v1${path}`, options);
+  const url = path.startsWith("/montara") ? path : `/api/v1${path}`;
+  let response;
+  for (let attempt = 0; ; attempt++) {
+    try { response = await fetch(url, options); break; }
+    catch (error) {
+      // A dropped connection (tunnel, Wi-Fi) is retried for reads; never resend a POST blindly.
+      if (body === undefined && attempt < 2) { await new Promise((resolve) => setTimeout(resolve, 1500 * (attempt + 1))); continue; }
+      console.warn('Montara request failed', url, error);
+      throw new Error(`Lost the connection to Montara (${url.split('?')[0]}). Check that the server window is still open, then retry.`);
+    }
+  }
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     if(response.status===410 || location.hostname.endsWith('.vercel.run') && (response.status===401 || [502,503,504].includes(response.status) && !data.error)){
@@ -181,10 +191,15 @@ $$(".mode[data-platform]").forEach((card) => card.addEventListener("click", () =
   renderFiles();
   show("footage");
   loadSamples().catch((error) => console.warn("Samples unavailable", error));
+  offerRestore().catch((error) => console.warn("Footage memory", error));
+  watchCompanion();
 }));
 
 function resetFlow() {
   stopPolling();
+  state.localProject = null;
+  state.savedLocally = false;
+  range.start = 0; range.end = null;
   state.platform = null;
   state.files = [];
   state.projectId = null;
@@ -247,26 +262,182 @@ $("#clearSamples").addEventListener("click", () => {
 $$("[data-drop]").forEach((drop) => {
   ["dragenter", "dragover"].forEach((name) => drop.addEventListener(name, (e) => { e.preventDefault(); drop.classList.add("over"); }));
   ["dragleave", "drop"].forEach((name) => drop.addEventListener(name, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
-  drop.addEventListener("drop", (e) => addFiles([...e.dataTransfer.files]));
+  drop.addEventListener("drop", (e) => {
+    const files = [...e.dataTransfer.files];
+    footageMemory.handlesFromDrop(e.dataTransfer).then((handles) => addFiles(files, handles), () => addFiles(files));
+  });
   drop.querySelector("input").addEventListener("change", (e) => { addFiles([...e.target.files]); e.target.value = ""; });
+  // Chrome/Edge: the system picker returns handles, so an interrupted upload can resume later.
+  if (footageMemory.pickerAvailable) drop.querySelector(".drop-prompt")?.addEventListener("click", async (e) => {
+    e.preventDefault();
+    try { const {files, handles} = await footageMemory.pick(drop.dataset.drop); addFiles(files, handles); }
+    catch (error) { if (error.name !== "AbortError") toast(error.message, true); }
+  });
 });
 $("#reelDuration").addEventListener("input", (e) => { $("#reelDurationOut").textContent = `${e.target.value} s`; });
 
-function addFiles(list) {
+function addFiles(list, handles = []) {
   if (rejectRaw360(list)) return;
   if (state.files.some((f) => f.sample)) { state.files = state.files.filter((f) => !f.sample); $("#sampleNote").hidden = true; }
+  $("#restoreNote").hidden = true;
+  const unused = [...handles];
   for (const file of list) {
-    const entry = { id: crypto.randomUUID(), name: file.name, kind: "uploading", progress: 0 };
+    const handle = unused.splice(unused.findIndex((h) => h.name === file.name) >>> 0, 1)[0];
+    const entry = { id: crypto.randomUUID(), name: file.name, kind: "uploading", progress: 0, localFile: file,
+      memory: { platform: state.platform, size: file.size, lastModified: file.lastModified, handle: handle?.name === file.name ? handle : undefined } };
     state.files.push(entry);
+    remember(entry);
     upload(file, entry);
   }
   renderFiles();
 }
 
+// ---------- idle page: after 30 min without use, pause it ----------
+// The lab server switches itself off when nobody uses it (deploy/vm/idle_shutdown.sh);
+// background polls do not keep it awake, and an idle page says so instead of failing.
+const IDLE_PAGE_MS = 30 * 60 * 1000;
+let lastInput = Date.now();
+["pointerdown", "keydown", "wheel", "touchstart"].forEach((name) => addEventListener(name, () => { lastInput = Date.now(); }, { passive: true }));
+setInterval(() => {
+  // Never pause while work is running (a long export, original ranges being sent, a mix being prepared).
+  const working = state.polling || state.uploads || (typeof fullSession !== "undefined" && (fullSession.busy || fullSession.sending)) || mix.job && $("#mixStatus") && !$("#mixStatus").classList.contains("done");
+  if (Date.now() - lastInput < IDLE_PAGE_MS || working || document.querySelector("#idlePause")) return;
+  clearTimeout(companionWatch);
+  const dialog = document.createElement("dialog");
+  dialog.id = "idlePause"; dialog.className = "cut-dialog";
+  dialog.innerHTML = '<h3>Montara paused</h3><p>Nobody used this page for 30 minutes. Your files and projects are kept; the server may switch itself off to save resources.</p><button class="btn primary" type="button">Continue</button>';
+  dialog.querySelector("button").onclick = () => location.reload();
+  document.body.append(dialog); dialog.showModal();
+}, 60 * 1000);
+
+// ---------- song range: choose the part of the song the video covers ----------
+const range = { start: 0, end: null, duration: 0 };
+let rangeSourcesList = [];
+const clock = (t) => { t = Math.max(0, Math.floor(t || 0)); const h = Math.floor(t / 3600), m = Math.floor(t / 60) % 60, s = String(t % 60).padStart(2, "0"); return h ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`; };
+function audioUrl(f) {
+  if (f.localFile) return (f.objectUrl ||= URL.createObjectURL(f.localFile));
+  return f.path ? `/montara/audio?path=${encodeURIComponent(f.path)}` : "";
+}
+function openSongRange() {
+  rangeSourcesList = state.platform === "youtube" ? audioTracks().filter((f) => audioUrl(f)) : [];
+  $("#songRange").hidden = !rangeSourcesList.length;
+  if (!rangeSourcesList.length) return;
+  const select = $("#rangeTrack");
+  const preferred = rangeSourcesList.findIndex((f) => /\b(ov|room|mix|master|ambi|stereo|lr)\b/i.test(f.name.replace(/[_.-]/g, " ")));
+  select.innerHTML = rangeSourcesList.map((f, i) => `<option value="${i}">${escapeHtml(f.name)}</option>`).join("");
+  select.value = String(preferred >= 0 ? preferred : 0);
+  select.hidden = rangeSourcesList.length < 2;
+  const url = audioUrl(rangeSourcesList[Number(select.value)]);
+  if ($("#rangeAudio").dataset.url !== url) { $("#rangeAudio").src = url; $("#rangeAudio").dataset.url = url; }
+  drawRange();
+}
+function drawRange() {
+  const audio = $("#rangeAudio"), d = range.duration || audio.duration || 0;
+  const end = range.end ?? d;
+  $("#rangeFill").style.left = d ? `${(range.start / d) * 100}%` : "0";
+  $("#rangeFill").style.width = d ? `${Math.max(0, (end - range.start) / d) * 100}%` : "100%";
+  $("#rangeHead").style.left = d ? `${(audio.currentTime / d) * 100}%` : "0";
+  $("#rangeStartOut").textContent = clock(range.start);
+  $("#rangeEndOut").textContent = range.end === null ? (d ? clock(d) : "end") : clock(range.end);
+}
+$("#rangeTrack").addEventListener("change", () => {
+  const audio = $("#rangeAudio"), t = audio.currentTime, url = audioUrl(rangeSourcesList[Number($("#rangeTrack").value)]);
+  audio.src = url; audio.dataset.url = url;
+  audio.addEventListener("loadedmetadata", () => { audio.currentTime = t; }, { once: true });
+});
+$("#rangeAudio").addEventListener("loadedmetadata", () => { range.duration = $("#rangeAudio").duration || 0; drawRange(); });
+$("#rangeAudio").addEventListener("timeupdate", drawRange);
+$("#rangeStart").addEventListener("click", () => {
+  range.start = $("#rangeAudio").currentTime || 0;
+  if (range.end !== null && range.end <= range.start + 1) range.end = null;
+  drawRange();
+});
+$("#rangeEnd").addEventListener("click", () => {
+  const t = $("#rangeAudio").currentTime || 0;
+  if (t <= range.start + 1) return toast("Mark the end after the start.", true);
+  range.end = t; drawRange();
+});
+$("#rangeReset").addEventListener("click", () => { range.start = 0; range.end = null; drawRange(); });
+$("#rangeBar").addEventListener("click", (e) => {
+  const audio = $("#rangeAudio"), d = range.duration || audio.duration || 0, box = $("#rangeBar").getBoundingClientRect();
+  if (d) audio.currentTime = Math.max(0, Math.min(d, ((e.clientX - box.left) / box.width) * d));
+});
+
+// ---------- companion: offer it on a Mac, notice when it starts ----------
+const isDesktopMac = /Macintosh|Mac OS X/.test(navigator.userAgent) && !/iPhone|iPad/.test(navigator.userAgent) && navigator.maxTouchPoints < 2;
+let companionWatch = null;
+async function watchCompanion() {
+  clearTimeout(companionWatch);
+  const info = await montaraCompanion.detect();
+  $("#companionNote").hidden = !info;
+  $("#companionOffer").hidden = Boolean(info) || !isDesktopMac || state.platform === "show";
+  if (!info && !$("#footage").hidden) companionWatch = setTimeout(watchCompanion, 4000);  // starts while the person installs it
+  else if (info && renderFiles.companionSeen === false) toast("Companion connected: videos stay on your computer.");
+  renderFiles.companionSeen = Boolean(info);
+}
+
+// ---------- footage memory: survive a reload ----------
+function remember(entry) {
+  if (!entry.memory) return;
+  const { id, name, kind, path, reason, projection, duration, uploadId, small, preview, original } = entry;
+  footageMemory.save({ id, name, kind: kind === "error" ? "uploading" : kind, path, reason, projection, duration, uploadId, small, preview, original, ...entry.memory });
+}
+async function offerRestore() {
+  const records = (await footageMemory.list(state.platform)).filter((r) => !state.files.some((f) => f.id === r.id));
+  state.restorable = records;
+  const done = records.filter((r) => r.path).length;
+  $("#restoreText").textContent = `${records.length} file${records.length === 1 ? "" : "s"} from your last visit` + (done < records.length ? ` (${records.length - done} still to upload).` : ".");
+  $("#restoreNote").hidden = !records.length || state.files.some((f) => !f.sample);
+}
+$("#restoreForget").addEventListener("click", async () => { await footageMemory.clear(state.platform); state.restorable = []; $("#restoreNote").hidden = true; });
+$("#restoreFiles").addEventListener("click", async () => {
+  const records = state.restorable || [];
+  $("#restoreNote").hidden = true;
+  state.files = state.files.filter((f) => !f.sample);
+  $("#sampleNote").hidden = true;
+  for (const record of records) {
+    const entry = { id: record.id, name: record.name, kind: record.kind, path: record.path, reason: record.reason, projection: record.projection,
+      duration: record.duration, uploadId: record.uploadId, small: record.small, preview: record.preview, original: record.original, progress: 0,
+      memory: { platform: record.platform, size: record.size, lastModified: record.lastModified, handle: record.handle } };
+    state.files.push(entry);
+    if (record.path) continue;
+    let file = null;
+    try { file = await footageMemory.reopen(record); } catch (error) { console.warn(error); }
+    if (file) { entry.kind = "uploading"; upload(file, entry); }  // resumable uploads continue where they stopped
+    else { entry.kind = "error"; entry.error = "Add this file again to continue its upload"; }
+  }
+  renderFiles();
+});
+
+// With the companion running, a video becomes a small version on the person's
+// computer and only that is uploaded; the original stays where it is.
+async function uploadSmall(file, entry) {
+  entry.viaCompanion = true;
+  state.uploads += 1;
+  let small = null;
+  try {
+    // A full session only needs light previews; the export asks for the original song ranges.
+    // Big audio files in Stage are whole sessions in practice (20 min of 24-bit mono ≈ 170 MB).
+    const preview = state.platform === 'youtube' && ($('#fullSessionOn').checked || (montaraCompanion.isAudio(file) && file.size > LONG_AUDIO_BYTES && !videos().length));
+    small = await montaraCompanion.smallVersion(file, (phase, progress) => { entry.phase = phase; entry.progress = progress; renderFiles(); }, () => entry.removed, {preview});
+  } catch (error) { console.warn(error); }
+  if (!entry.removed) {
+    entry.phase = small ? (small.preview ? "Uploading preview" : montaraCompanion.isAudio(file) ? "Uploading lossless copy" : "Uploading small version") : "";
+    entry.progress = 0;
+    if (small) { entry.small = true; entry.preview = small.preview; entry.original = small.original; remember(entry); }
+    upload(small ? small.file : file, entry);
+  }
+  state.uploads -= 1;
+  renderFiles();
+}
+
 function upload(file, entry) {
-  if (file.size > 8 * 1024 * 1024) return uploadInParts(file, entry);
+  if (montaraCompanion.info && !entry.viaCompanion && montaraCompanion.helps(file)) return uploadSmall(file, entry);
+  // A lossless copy must reach the server through the resumable path, which restores the WAV.
+  if (file.size > 8 * 1024 * 1024 || /\.(wav|aiff?)\.(flac|opus|wv)$/i.test(file.name)) return uploadInParts(file, entry);
   state.uploads += 1;
   const xhr = new XMLHttpRequest();
+  entry.xhr = xhr;
   xhr.open("POST", "/api/v1/wizard/upload");
   xhr.setRequestHeader("Content-Type", "application/octet-stream");
   xhr.setRequestHeader("X-Zucker-Filename", encodeURIComponent(file.name));
@@ -285,6 +456,8 @@ function upload(file, entry) {
         entry.path = found[1].path;
         entry.reason = found[1].reason || found[1].note;
         entry.projection = found[1].projection;
+        entry.duration = Number(found[1].duration) || 0;
+        remember(entry);
       } else {
         entry.kind = "error";
         entry.error = "Not a usable media file";
@@ -293,18 +466,26 @@ function upload(file, entry) {
     renderFiles();
   };
   xhr.onerror = () => { state.uploads -= 1; entry.kind = "error"; entry.error = "Connection interrupted"; renderFiles(); };
+  xhr.onabort = () => { state.uploads -= 1; renderFiles(); };
   xhr.send(file);
 }
 
 async function uploadInParts(file, entry) {
   state.uploads += 1;
   try {
-    const data = await sendResumableUpload(file, progress => { entry.progress = progress; renderFiles(); }, id => {entry.uploadId = id;});
+    const extra = /\.opus$/i.test(file.name) && entry.original ? {original: {name: entry.original.name, size: entry.original.size, fingerprint: entry.original.fingerprint}} : {};
+    const data = await sendResumableUpload(file, progress => { entry.progress = progress; renderFiles(); }, id => {entry.uploadId = id; remember(entry);}, () => entry.removed, extra);
     const found = ['videos', 'master', 'songs', 'ignored'].map(kind => [kind, (data[kind] || [])[0]]).find(([, item]) => item);
     if (!found) throw new Error('Not a usable media file');
     entry.kind = found[0] === 'videos' ? 'video' : found[0];
     entry.path = found[1].path; entry.reason = found[1].reason || found[1].note; entry.projection = found[1].projection;
+    entry.duration = Number(found[1].duration) || 0;
+    remember(entry);
   } catch (error) {
+    if (entry.removed) {
+      if (entry.uploadId) fetch(`/montara/uploads/${entry.uploadId}`, {method: 'DELETE'}).catch(() => {});
+      return;
+    }
     entry.kind = 'error'; entry.error = error.message;
   } finally { state.uploads -= 1; renderFiles(); }
 }
@@ -316,33 +497,51 @@ function fileLabel(f) {
   if (f.kind === "master" || f.kind === "songs") return mixerMode() ? "TRACK" : "MASTER";
   return KIND_LABEL[f.kind] || f.kind.toUpperCase();
 }
-function fileRow(f) {
+// Minutes left for one file, from its own pace (restarts when its phase changes).
+function uploadEta(f) {
+  const now = performance.now() / 1000;
+  if (f.etaPhase !== f.phase || f.progress < (f.etaFrom ?? 0)) Object.assign(f, { etaPhase: f.phase, etaFrom: f.progress, etaStart: now });
+  const done = f.progress - f.etaFrom, spent = now - f.etaStart;
+  if (done < .03 || spent < 3) return "";
+  const left = spent / done * (1 - f.progress);
+  return left < 50 ? " · <1 min" : ` · ${Math.round(left / 60)} min`;
+}
+function fileRow(f, typed = false) {
   return `
     <li>
       <span class="kind ${f.kind}">${fileLabel(f)}</span>
       <span class="name" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}</span>
-      <span class="state">${f.kind === "uploading" ? Math.round(f.progress * 100) + "%" : f.kind === "error" ? escapeHtml(f.error) : f.kind === "ignored" ? escapeHtml(f.reason || "not used") : "Ready"}</span>
+      <span class="state">${f.kind === "uploading" ? (f.phase ? escapeHtml(f.phase) + " " : "") + Math.round(f.progress * 100) + "%" + uploadEta(f) : f.small && f.kind === "video" ? "Ready · small version" : f.preview ? "Ready · preview" : f.small ? "Ready · lossless" : f.kind === "error" ? escapeHtml(f.error) : f.kind === "ignored" ? escapeHtml(f.reason || "not used") : "Ready"}</span>
+      <button class="remove" data-remove-file="${f.id}" type="button" aria-label="Remove ${escapeHtml(f.name)}" title="Remove">×</button>
+      ${typed && (f.kind === "master" || f.kind === "songs") ? TrackTypes.controls(f.name) : ""}
       ${f.kind === "uploading" ? `<span class="bar"><i style="width:${Math.round(f.progress * 100)}%"></i></span>` : ""}
-      ${f.kind === 'error' && f.uploadId ? `<button class="link" data-discard-upload="${f.id}" type="button">Discard unfinished upload</button>` : ''}
     </li>`;
 }
-document.addEventListener('click', async event => {
-  const button = event.target.closest('[data-discard-upload]');
+// Every file row can be removed, also while it uploads: the upload stops and
+// an unfinished server copy is discarded. Finished files simply leave this project.
+document.addEventListener('click', event => {
+  const button = event.target.closest('[data-remove-file]');
   if (!button) return;
-  const entry = state.files.find(f => f.id === button.dataset.discardUpload);
-  if (!entry?.uploadId) return;
-  button.disabled = true;
-  try {
-    const response = await fetch(`/montara/uploads/${entry.uploadId}`, {method: 'DELETE'});
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error?.message || 'Could not discard this upload.');
-    state.files = state.files.filter(f => f !== entry); renderFiles();
-  } catch (error) { toast(error.message, true); button.disabled = false; }
+  const entry = state.files.find(f => f.id === button.dataset.removeFile);
+  if (!entry) return;
+  entry.removed = true;
+  footageMemory.forget(entry.id);
+  if (entry.xhr && entry.kind === 'uploading') entry.xhr.abort();
+  if (entry.uploadId && entry.kind !== 'video' && entry.kind !== 'master' && entry.kind !== 'songs') {
+    fetch(`/montara/uploads/${entry.uploadId}`, {method: 'DELETE'}).catch(() => {});
+  }
+  state.files = state.files.filter(f => f !== entry);
+  if (!state.files.some(f => f.sample)) $('#sampleNote').hidden = true;
+  renderFiles();
 });
 function renderFiles() {
   $('#stageSessionOptions').hidden = state.platform !== 'youtube';
   $('[data-drop="video"]').closest('.box').hidden = state.platform === 'youtube' && $('#stageAudioOnly').checked;
-  $("#audioFiles").innerHTML = state.files.filter(isAudioEntry).map(fileRow).join("");
+  // Several tracks of one recording: each one says what it is (pre-filled from its name).
+  const typed = state.platform === "youtube" && audioTracks().length >= 2;
+  // Do not rebuild the list under an open track-type menu (other uploads keep reporting progress).
+  if (!document.activeElement?.closest?.("#audioFiles .track-type"))
+    $("#audioFiles").innerHTML = state.files.filter(isAudioEntry).map(f => fileRow(f, typed)).join("");
   $("#audioFiles").classList.toggle("compact", state.files.filter(isAudioEntry).length > 4);
   $("#videoFiles").innerHTML = state.files.filter((f) => !isAudioEntry(f)).map(fileRow).join("");
   const master = state.files.find((f) => f.kind === "master");
@@ -355,6 +554,10 @@ function renderFiles() {
   if (state.platform === "reel" && state.files.some(f=>f.sample) && !master) { hint = "The example song master is missing. Reopen the example."; ready = false; }
   if (state.uploads) hint = "Uploading…";
   if (state.platform === 'youtube' && $('#fullSessionOn').checked && !state.uploads && audioTracks().length) hint = 'Find and review the songs, then export their mixes. This session step exports audio.';
+  const longest = Math.max(0, ...state.files.filter(isAudioEntry).map(f => f.duration || 0));
+  if (state.platform === 'youtube' && !$('#fullSessionOn').checked && !state.uploads && longest > 20 * 60) hint = `Your audio is ${Math.round(longest / 60)} min long. If it is a whole session and you want one song, tick Full session to find the songs first, or trim the tracks to that song.`;
+  // Long sessions: everything scales with how much audio comes in.
+  if (state.platform === 'youtube' && longest > 30 * 60) hint = `${hint ? hint + ' ' : ''}Tip: only send what you need. If you want a few songs from a ${Math.round(longest / 60)} min session, export just that part of the tracks: uploading, finding songs and mixing all take much less time.`;
   if (!audioOnly() && state.branding === "mine" && !state.hasLogo) { hint = "Choose your logo, or pick another option."; ready = false; }
   $("#footageHint").textContent = hint;
   $("#continueFootage").disabled = !ready;
@@ -419,7 +622,20 @@ function inputs() {
   };
 }
 
+const LONG_AUDIO_BYTES = 150 * 1024 * 1024, LONG_AUDIO_SECONDS = 20 * 60;
+// A whole jam goes to song detection, never to the one-song mixer: that mixer would
+// analyse and download every full-length track (and previews can only be exported per song).
+function isWholeSession() {
+  const audio = state.files.filter(isAudioEntry);
+  return audio.some(f => f.preview) || Math.max(0, ...audio.map(f => f.duration || 0)) > LONG_AUDIO_SECONDS;
+}
+
 async function registerProject() {
+  if (videos().length && state.files.some(f => f.preview)) return toast('Some audio was sent as a light session preview. Remove it and add it again to use it in a video.', true);
+  if (state.platform === 'youtube' && !videos().length && !$('#fullSessionOn').checked && isWholeSession()) {
+    $('#fullSessionOn').checked = true;
+    toast('This is a whole session: Montara finds the songs first, then mixes each one.');
+  }
   if (state.platform === 'youtube' && $('#fullSessionOn').checked) return openFullSession();
   $("#continueFootage").disabled = true;
   try {
@@ -427,6 +643,11 @@ async function registerProject() {
     await api("/montara/branding", { mode: state.branding });
     const name = $("#videoName").value.trim() || todayName();
     const data = inputs();
+    if (montaraCompanion.info && !state.localProject) {
+      toast("Choose on your Mac where Montara keeps this project (a window opened).");
+      state.localProject = await montaraCompanion.projectFolder(name, state.files.filter((f) => f.original).map((f) => f.original));
+      if (state.localProject) toast(`Project folder: ${state.localProject.folder}`);
+    }
     await api("/wizard/projects/new", {});
     const draft = await api("/wizard/draft", { name, project_id: null, platform: state.platform, audio_paths: data.master ? [data.master] : [], ...data });
     state.mixMaster = null;
@@ -438,6 +659,7 @@ async function registerProject() {
   const needsCameras = videos().length > 0;
   if (!needsCameras) return afterCameras();
   renderCameras();
+  openSongRange();
   show("cameras");
 }
 
@@ -504,7 +726,7 @@ function setupSphere(file, root) {
   const anchor = views.full_stage || Object.values(views).find((v) => v.enabled);
   let offset = anchor ? wrap(0.5 - (anchor.yaw + 180) / 360) : 0;
   const frame = new Image();
-  frame.onload = () => { pano.querySelector(".loading").hidden = true; panoImg.style.backgroundImage = `url("${frame.src}")`; place(); };
+  frame.onload = () => { pano.querySelector(".loading").hidden = true; panoImg.style.backgroundImage = `url("${frame.src}")`; place(); preview(); };
   frame.onerror = () => { pano.querySelector(".loading").textContent = "Could not load the 360 frame."; };
   frame.src = `/api/v1/wizard/spherical-source-frame?source=${encodeURIComponent(file.path)}`;
 
@@ -562,20 +784,29 @@ function setupSphere(file, root) {
     }
   }
 
-  let previewTimer = null;
-  function preview(immediate = true) {
+  // The view is drawn in the browser from the panorama already on screen (WebGL), so
+  // aiming and zooming are instant. The engine's exact view (wide presets are not
+  // rectilinear) replaces it once the person stops moving, if it is still current.
+  let previewTimer = null, previewToken = 0;
+  function preview() {
     const view = views[active];
     const img = root.querySelector(".preview img");
     if (!view) { img.hidden = true; return; }
-    const load = () => {
+    const token = ++previewToken;
+    let local = "";
+    // Wide and Ultra wide are stereographic in the engine (fisheye look), not stretched rectilinear.
+    const stereographic = ["megaview", "ultrawide", "tiny_planet", "crystal_ball"].includes(view.projection_preset || zoomOf(view)[3]);
+    try { local = webSphericalStill(frame, { yaw: view.yaw, pitch: view.pitch, fov: view.fov, projection: stereographic ? "sg" : "flat" }); } catch (error) { console.warn(error); }
+    if (local) { img.src = local; img.hidden = false; }
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(() => {
       const zoom = zoomOf(view);
       const params = new URLSearchParams({ source: file.path, shot: active, yaw: view.yaw, pitch: view.pitch, fov: view.fov,
         projection_preset: view.projection_preset || zoom[3], time_sec: 20 });
-      img.src = `/api/v1/wizard/spherical-preview?${params}`;
-      img.hidden = false;
-    };
-    clearTimeout(previewTimer);
-    if (immediate) load(); else previewTimer = setTimeout(load, 180);
+      const exact = new Image();
+      exact.onload = () => { if (token === previewToken) { img.src = exact.src; img.hidden = false; } };
+      exact.src = `/api/v1/wizard/spherical-preview?${params}`;
+    }, local ? 1500 : 0);
   }
 
   // Panorama: drag turns it, a click (no drag) places the selected point of view.
@@ -618,7 +849,7 @@ function setupSphere(file, root) {
     const degPerPx = Math.min(view.fov, 110) / width;
     view.yaw = Math.round(((((aim.yaw - (e.clientX - aim.x) * degPerPx) + 180) % 360 + 360) % 360 - 180) * 10) / 10;
     view.pitch = Math.round(Math.max(-89, Math.min(89, aim.pitch + (e.clientY - aim.y) * degPerPx)) * 10) / 10;
-    drawMarkers(); preview(false);
+    drawMarkers(); preview();
   });
   pv.addEventListener("pointerup", () => { if (aim) { aim = null; preview(); } });
   pv.addEventListener("wheel", (e) => {
@@ -628,7 +859,7 @@ function setupSphere(file, root) {
     const index = ZOOMS.indexOf(zoomOf(view));
     const next = ZOOMS[Math.max(0, Math.min(ZOOMS.length - 1, index + (e.deltaY > 0 ? 1 : -1)))];
     setZoom(active, next);
-    renderSlots(); preview(false);
+    renderSlots(); preview();
   }, { passive: false });
 
   renderSlots();
@@ -644,17 +875,26 @@ function afterCameras() {
 // ---------- mixer ----------
 const mix = { job: null, plan: null, ctx: null, nodes: {}, buffers: {}, playing: false, startedAt: 0, offset: 0, master: null, timer: null };
 
-async function openMixer(sessionTracks = null) {
-  if (!sessionTracks) fullSession.active = false;
+// The mixer screen with placeholder strips whose faders keep moving: shown the moment a
+// mixer is asked for, so every wait happens on this screen. Returns the stop function.
+function mixLoadingScreen(sources, text) {
   show("mix");
   stopMix();
   $("#mixStatus").classList.remove("done");
-  $("#mixStatusText").textContent = "Mixing your tracks automatically…";
+  $("#mixStatusText").textContent = text;
   $("#transport").hidden = true;
   $("#referenceRow").hidden = true;
   $("#useMix").disabled = true;
-  $("#strips").innerHTML = "";
-  const job = await api("/montara/mix", { tracks: sessionTracks || audioTracks().map((f) => f.path) });
+  $("#strips").innerHTML = sources.map((path) => `<div class="strip loading"><small>&nbsp;</small><span class="db">&nbsp;</span><input type="range" min="-60" max="12" value="-20" disabled aria-hidden="true"><button class="mute" disabled>…</button><b>${escapeHtml(String(path).split("/").pop().replace(/\.[^.]+$/, ""))}</b></div>`).join("");
+  return startFaderDance();
+}
+
+async function openMixer(sessionTracks = null) {
+  if (!sessionTracks) fullSession.active = false;
+  const sources = sessionTracks || audioTracks().map((f) => f.path);
+  const dance = mixLoadingScreen(sources, "Mixing your tracks automatically…");
+  let job;
+  try { job = await api("/montara/mix", { tracks: sources, track_types: TrackTypes.forFiles(sources) }); } catch (error) { dance(); throw error; }
   mix.job = job.id;
   $("#referenceName").textContent = "Automatic (no reference)";
   $("#referenceStatus").hidden = true;
@@ -666,9 +906,11 @@ async function openMixer(sessionTracks = null) {
   const ready = await pollMix((j) => j.status !== "analyzing");
   if (ready.status === "failed") throw new Error(ready.error || "The automatic mix failed");
   mix.plan = { ...ready.plan, tracks: ready.plan.tracks.map(track => MixLevels.prepare(sessionTracks ? {...track, active: true} : track)) };
+  dance();
   renderStrips();
   $("#mixStatusText").textContent = "Loading the tracks for the preview…";
-  await loadBuffers();
+  const dance2 = startFaderDance();
+  try { await loadBuffers(); } finally { dance2(); }
   await animateMixFaders();
   $("#mixStatus").classList.add("done");
   $("#mixStatusText").textContent = "Auto-mix ready. Faders start where Montara put them.";
@@ -688,18 +930,42 @@ async function pollMix(done) {
 
 const dbToGain = (db) => Math.pow(10, db / 20);
 function trackGain(track) {
-  return MixLevels.gain(track);
+  return MixLevels.gain(track, mix.plan?.tracks.some((t) => t.solo));
+}
+// Only the EQ bands the person moved, in the mixer's own terms.
+function eqChanges() {
+  const keys = { low: ["eq_low_cut_hz", "hz"], mid: ["eq_mid_gain_db", "db"], air: ["eq_air_gain_db", "db"], high: ["eq_high_cut_hz", "hz"] };
+  return Object.fromEntries(mix.plan.tracks.map((t) => [t.file, Object.fromEntries(Object.entries(keys)
+    .filter(([slot, [, field]]) => t.eq?.[slot] && t.auto_eq?.[slot] && Math.abs(t.eq[slot][field] - t.auto_eq[slot][field]) > 0.05)
+    .map(([slot, [key, field]]) => [key, t.eq[slot][field]]))]).filter(([, bands]) => Object.keys(bands).length));
+}
+// Solo is for listening only (as on a desk): it never changes the export.
+function applyAllGains() { for (const t of mix.plan?.tracks || []) applyGain(t); }
+const EQ_SLOTS = [["low", "Low cut", "eq_low_cut_hz"], ["mid", "Mid", "eq_mid_gain_db"], ["air", "Air", "eq_air_gain_db"], ["high", "High cut", "eq_high_cut_hz"]];
+const isCut = (slot) => slot === "low" || slot === "high";
+function eqLabel(slot, band) { return slot === "high" && band.hz >= 19999 ? "off" : isCut(slot) ? `${band.hz >= 1000 ? (band.hz / 1000).toFixed(1) + " kHz" : Math.round(band.hz) + " Hz"}` : `${band.db >= 0 ? "+" : ""}${band.db.toFixed(1)} dB`; }
+function applyEq(track) {
+  const node = mix.nodes[track.file];
+  if (!node?.eq || !mix.ctx) return;
+  for (const [slot] of EQ_SLOTS) {
+    const band = track.eq?.[slot], filter = node.eq[slot];
+    if (!band || !filter) continue;
+    filter.frequency.setTargetAtTime(band.hz, mix.ctx.currentTime, 0.03);
+    if (!isCut(slot)) filter.gain.setTargetAtTime(band.db, mix.ctx.currentTime, 0.03);
+  }
 }
 
 function renderStrips() {
+  orderStereoPairs();
   $("#strips").innerHTML = mix.plan.tracks.map((t, i) => `
     <div class="strip ${t.mute || t.active === false ? "off" : ""}" data-track="${i}" title="${escapeHtml(t.active === false ? `${t.file}: almost no signal, so the mix leaves it out` : t.file)}">
-      <small>${escapeHtml(t.role)}</small>
+      <small title="Mixer role: ${escapeHtml(t.role)}">${escapeHtml(TrackTypes.label(t.file))}</small>
       <span class="db">${(t.fader_db >= 0 ? "+" : "") + Number(t.fader_db).toFixed(1)} dB</span>
       <input type="range" min="${Math.min(-60, Math.floor(t.fader_db))}" max="${Math.max(12, Math.ceil(t.fader_db))}" step="0.01" value="${t.fader_db}" aria-label="${escapeHtml(t.name)} fader">
-      ${t.active === false ? `<button class="mute" disabled>NO SIGNAL</button>` : `<button class="mute ${t.mute ? "on" : ""}">${t.mute ? "OFF" : "ON"}</button>`}
-      <b>${escapeHtml(t.name)}</b>
-      <button class="fx-toggle" aria-expanded="false">FX</button>
+      <div class="strip-buttons">${t.active === false ? `<button class="mute wide" disabled>NO SIGNAL</button>` : `<button class="mute ${t.mute ? "on" : ""}">${t.mute ? "OFF" : "ON"}</button><button class="solo ${t.solo ? "on" : ""}" aria-pressed="${t.solo ? "true" : "false"}" title="Listen to this track alone (does not change the export)">SOLO</button>`}</div>
+      <b class="strip-name" title="${escapeHtml(t.name)}">${escapeHtml(t.name)}</b>
+      <div class="strip-buttons">${t.eq ? `<button class="eq-toggle" aria-expanded="false">EQ</button>` : ""}<button class="fx-toggle" aria-expanded="false">FX</button></div>
+      ${t.eq ? `<div class="track-eq" hidden>${EQ_SLOTS.filter(([slot]) => t.eq[slot]).map(([slot, label]) => `<label>${label}${slot === "mid" ? ` · ${Math.round(t.eq.mid.hz)} Hz` : slot === "air" ? ` · ${Math.round(t.eq.air.hz / 1000)} kHz` : ""}<input type="range" data-eq="${slot}" ${slot === "low" ? `min="20" max="1000" step="1"` : slot === "high" ? `min="1000" max="20000" step="100"` : `min="-15" max="15" step="0.5"`} value="${isCut(slot) ? t.eq[slot].hz : t.eq[slot].db}" aria-label="${escapeHtml(t.name)} ${label}"><output data-eq="${slot}">${eqLabel(slot, t.eq[slot])}</output></label>`).join("")}</div>` : ""}
       <div class="track-fx" hidden>
         ${["reverb", "delay"].map((effect) => `<label><input type="checkbox" data-effect="${effect}" ${t.fx?.[effect]?.enabled ? "checked" : ""}>${effect === "reverb" ? "Reverb" : "Delay"}</label><input class="fx-amount" data-effect="${effect}" type="range" min="0" max="100" value="${t.fx?.[effect]?.amount ?? 35}" aria-label="${escapeHtml(t.name)} ${effect} intensity"><output data-effect="${effect}">${t.fx?.[effect]?.amount ?? 35}%</output>`).join("")}
       </div>
@@ -707,6 +973,19 @@ function renderStrips() {
   $$(".strip").forEach((strip) => {
     const track = mix.plan.tracks[Number(strip.dataset.track)];
     track.auto_mute = track.auto_mute ?? track.mute;
+    if (track.eq && !track.auto_eq) track.auto_eq = JSON.parse(JSON.stringify(track.eq));
+    strip.querySelector(".eq-toggle")?.addEventListener("click", (e) => {
+      const panel = strip.querySelector(".track-eq");
+      panel.hidden = !panel.hidden;
+      e.target.setAttribute("aria-expanded", String(!panel.hidden));
+    });
+    strip.querySelectorAll(".track-eq input").forEach((input) => input.addEventListener("input", () => {
+      const slot = input.dataset.eq, band = track.eq[slot];
+      if (isCut(slot)) band.hz = Number(input.value); else band.db = Number(input.value);
+      strip.querySelector(`.track-eq output[data-eq="${slot}"]`).textContent = eqLabel(slot, band);
+      strip.querySelector(".eq-toggle").classList.toggle("active", JSON.stringify(track.eq) !== JSON.stringify(track.auto_eq));
+      applyEq(track);
+    }));
     track.fx ||= { reverb: { enabled: false, amount: 35 }, delay: { enabled: false, amount: 35 } };
     strip.querySelector(".fx-toggle").addEventListener("click", (e) => {
       const panel = strip.querySelector(".track-fx");
@@ -720,16 +999,20 @@ function renderStrips() {
       else setting.amount = Number(input.value);
       strip.querySelector(`output[data-effect="${effect}"]`).textContent = `${setting.amount}%`;
       strip.querySelector(".fx-toggle").classList.toggle("active", Object.values(track.fx).some((s) => s.enabled));
+      const out = strip.querySelector(`output[data-effect="${effect}"]`);
       try {
+        if (setting.enabled && !mix.fxBuffers[`${track.file}:${effect}`]) out.textContent = "preparing…";  // the server renders the effect once
         if (setting.enabled) await loadFxBuffer(track, effect);
+        out.textContent = `${setting.amount}%`;
         await syncTrackFx(track);
       } catch (error) {
+        out.textContent = `${setting.amount}%`;
         setting.enabled = false;
         strip.querySelector(`input[type=checkbox][data-effect="${effect}"]`).checked = false;
         toast(error.message || "Could not prepare the effect", true);
       }
     }));
-    strip.querySelector("input").addEventListener("input", (e) => {
+    strip.querySelector('input[type="range"]').addEventListener("input", (e) => {
       track.fader_db = Number(e.target.value);
       strip.querySelector(".db").textContent = `${track.fader_db >= 0 ? "+" : ""}${track.fader_db.toFixed(1)} dB`;
       applyGain(track);
@@ -742,7 +1025,65 @@ function renderStrips() {
       strip.classList.toggle("off", track.mute);
       applyGain(track);
     });
+    strip.querySelector(".solo").addEventListener("click", (e) => {
+      track.solo = !track.solo;
+      e.target.classList.toggle("on", track.solo);
+      e.target.setAttribute("aria-pressed", String(track.solo));
+      applyAllGains();
+    });
   });
+  linkStereoPairs();
+}
+
+// Stereo pairs (two tracks marked L and R of the same type) sit side by side and move together:
+// fader (same change), ON, SOLO and EQ. Each strip keeps its own controls, so either side works.
+function stereoPairs(tracks) {
+  const pairs = [], used = new Set();
+  tracks.forEach((t, i) => {
+    const me = TrackTypes.of(t.file);
+    if (me.side !== 'L' || used.has(i)) return;
+    const j = tracks.findIndex((u, k) => !used.has(k) && k !== i && TrackTypes.of(u.file).side === 'R' && TrackTypes.of(u.file).type === me.type);
+    if (j >= 0) { used.add(i); used.add(j); pairs.push([i, j]); }
+  });
+  return pairs;
+}
+function orderStereoPairs() {  // the R strip right after its L strip
+  const tracks = mix.plan.tracks, pairs = stereoPairs(tracks);
+  if (!pairs.length) return;
+  const right = new Set(pairs.map(([, j]) => j)), partner = Object.fromEntries(pairs);
+  mix.plan.tracks = tracks.flatMap((t, i) => right.has(i) ? [] : partner[i] !== undefined ? [t, tracks[partner[i]]] : [t]);
+}
+let linkingPair = false;
+function linkStereoPairs() {
+  const strips = $$('#strips .strip');
+  for (const [a, b] of stereoPairs(mix.plan.tracks)) {
+    strips[a]?.classList.add('pair-l'); strips[b]?.classList.add('pair-r');
+    for (const [from, to] of [[a, b], [b, a]]) {
+      const src = strips[from], dst = strips[to];
+      if (!src || !dst) continue;
+      const fader = src.querySelector('input[type="range"]'), other = dst.querySelector('input[type="range"]');
+      fader.dataset.prev = fader.value;
+      fader.addEventListener('input', () => {
+        const delta = Number(fader.value) - Number(fader.dataset.prev); fader.dataset.prev = fader.value;
+        if (linkingPair) return;
+        linkingPair = true;
+        other.value = String(Number(other.value) + delta); other.dataset.prev = other.value;
+        other.dispatchEvent(new Event('input', { bubbles: true }));
+        linkingPair = false;
+      });
+      for (const name of ['mute', 'solo']) src.querySelector(`.${name}`)?.addEventListener('click', () => {
+        if (linkingPair) return;
+        const track = mix.plan.tracks[from], twin = mix.plan.tracks[to];
+        if (Boolean(track[name]) !== Boolean(twin[name])) { linkingPair = true; dst.querySelector(`.${name}`)?.click(); linkingPair = false; }
+      });
+      src.querySelectorAll('.track-eq input').forEach(input => input.addEventListener('input', () => {
+        if (linkingPair) return;
+        const twin = dst.querySelector(`.track-eq input[data-eq="${input.dataset.eq}"]`);
+        if (!twin) return;
+        linkingPair = true; twin.value = input.value; twin.dispatchEvent(new Event('input', { bubbles: true })); linkingPair = false;
+      }));
+    }
+  }
 }
 
 function applyGain(track) {
@@ -789,8 +1130,18 @@ async function loadBuffers() {
   mix.ctx = mix.ctx || new (window.AudioContext || window.webkitAudioContext)();
   await Promise.all(mix.plan.tracks.map(async (t) => {
     if (mix.buffers[t.file]) return;
-    const response = await fetch(`/montara/mix/${mix.job}/track/${encodeURIComponent(t.file)}`);
-    mix.buffers[t.file] = await mix.ctx.decodeAudioData(await response.arrayBuffer());
+    const url = `/montara/mix/${mix.job}/track/${encodeURIComponent(t.file)}`;
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const response = await fetch(attempt ? `${url}?format=wav` : url);  // compressed first; WAV if this browser can not decode it
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        mix.buffers[t.file] = await mix.ctx.decodeAudioData(await response.arrayBuffer());
+        return;
+      } catch (error) {
+        if (attempt >= 2) { console.warn('Montara track failed', url, error); throw new Error(`Could not load ${t.file} for the preview (${error.message}). Retry.`); }
+        await new Promise((resolve) => setTimeout(resolve, 1500 * (attempt + 1)));
+      }
+    }
   }));
   $("#mixSeek").max = String(mix.plan.duration || 60);
 }
@@ -806,10 +1157,21 @@ function startMix(offset) {
     gain.gain.value = trackGain(t);
     const pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
     if (pan) pan.pan.value = Math.max(-1, Math.min(1, Number(t.pan || 0)));
-    source.connect(gain);
+    // The same three bands the mixer applies (its low cut, mid and air), so the preview matches the export.
+    const eq = {};
+    let head = source;
+    for (const [slot] of EQ_SLOTS) {
+      const band = t.eq?.[slot];
+      if (!band) continue;
+      const filter = ctx.createBiquadFilter();
+      filter.type = band.type; filter.frequency.value = Math.min(band.hz, ctx.sampleRate / 2 - 100); filter.Q.value = band.q || 0.707;
+      if (!isCut(slot)) filter.gain.value = band.db;
+      head.connect(filter); head = filter; eq[slot] = filter;
+    }
+    head.connect(gain);
     (pan ? gain.connect(pan) && pan : gain).connect(mix.master);
     source.start(0, offset);
-    mix.nodes[t.file] = { source, gain, fx: {} };
+    mix.nodes[t.file] = { source, gain, fx: {}, eq };
   }
   mix.startedAt = ctx.currentTime - offset;
   mix.playing = true;
@@ -855,7 +1217,7 @@ $("#mixSeek").addEventListener("input", (e) => {
 $("#resetMix").addEventListener("click", async () => {
   stopMix();
   for (const t of mix.plan.tracks) {
-    t.fader_db = t.auto_fader_db; t.mute = t.auto_mute;
+    t.fader_db = t.auto_fader_db; t.mute = t.auto_mute; t.solo = false; if (t.auto_eq) t.eq = JSON.parse(JSON.stringify(t.auto_eq));
     t.fx = { reverb: { enabled: false, amount: 35 }, delay: { enabled: false, amount: 35 } };
     applyGain(t); syncTrackFx(t).catch((error) => toast(error.message, true));
   }
@@ -892,11 +1254,11 @@ $("#referenceLinkForm").addEventListener("submit", async (event) => {
   } catch (error) { status.textContent = error.message; }
   finally { if (mix.job === jobId) { button.disabled = false; $("#pickReference").disabled = false; $("#useMix").disabled = false; } }
 });
-$("#mixBack").addEventListener("click", () => { stopMix(); show(fullSession.active ? 'sessionReview' : videos().length > 1 || videos().some(isSphere) ? "cameras" : "footage"); });
+$("#mixBack").addEventListener("click", () => { stopMix(); $("#mixAll").hidden = true; $("#useMix").textContent = "Use this mix"; show(fullSession.active ? 'sessionReview' : videos().length > 1 || videos().some(isSphere) ? "cameras" : "footage"); });
 
 $("#useMix").addEventListener("click", async () => {
   try {
-    if (fullSession.active) return await renderFullSession();
+    if (fullSession.active) return await saveSongMix();
     stopMix();
     $("#useMix").disabled = true;
     $("#mixStatus").classList.remove("done");
@@ -904,8 +1266,9 @@ $("#useMix").addEventListener("click", async () => {
     const faders = Object.fromEntries(mix.plan.tracks.map((t) => [t.file, MixLevels.offset(t)]));
     const mutes = Object.fromEntries(mix.plan.tracks.map((t) => [t.file, Boolean(t.mute)]));
     const effects = Object.fromEntries(mix.plan.tracks.map((t) => [t.file, Object.fromEntries(["reverb", "delay"].map((key) => [key, t.fx?.[key]?.enabled ? t.fx[key].amount / 100 : 0]))]));
+    const eq = eqChanges();
     const animation = animateMixFaders(true);
-    await api(`/montara/mix/${mix.job}/render`, { faders, mutes, effects });
+    await api(`/montara/mix/${mix.job}/render`, { faders, mutes, effects, ...(Object.keys(eq).length ? { eq } : {}) });
     const job = await pollMix((j) => j.status === "done");
     await animation;
     if (job.status === "failed") throw new Error(job.error || "The final mix failed");
@@ -957,6 +1320,8 @@ async function make() {
   await api("/wizard/start", {
     project_id: state.projectId, name, platform, ...data,
     reel_duration_sec: platform === "reel" ? Number($("#reelDuration").value) : undefined,
+    trim_start_sec: platform === "youtube" && range.start > 0 ? range.start : undefined,
+    trim_end_sec: platform === "youtube" && range.end !== null ? range.end : undefined,
     reel_aspect: platform === "reel" ? engineReelFormat() : undefined,
     reel_mix_vertical_ratio: platform === "reel" ? (reelFormat() === "mix" ? $("#mixShare").value : "auto") : undefined,
   });
@@ -969,15 +1334,27 @@ async function status() {
   return api(`/wizard/status${query}`);
 }
 
+// Long footage (a whole jam, 4K phone video) can prepare for hours. Wait while the
+// engine reports progress; give up only if nothing changes for 45 minutes.
+const STALL_LIMIT_MS = 45 * 60 * 1000;
 async function waitFor(predicate) {
-  for (let i = 0; i < 1200; i += 1) {
-    const s = await status();
+  let signature = "", changedAt = Date.now();
+  for (;;) {
+    let s;
+    try { s = await status(); }
+    catch (error) {  // a dropped connection must not end a job the server is still doing
+      if (Date.now() - changedAt > STALL_LIMIT_MS) throw error;
+      await new Promise((r) => setTimeout(r, 5000));
+      continue;
+    }
     renderStatus(s);
     if (s.status === "failed") throw new Error(s.error || s.message || "Preparation failed");
     if (predicate(s)) return s;
-    await new Promise((r) => setTimeout(r, 1000));
+    const now = JSON.stringify([s.status, s.stage, s.progress, s.message, s.detail, (s.tasks || []).map((t) => [t.label, t.progress])]);
+    if (now !== signature) { signature = now; changedAt = Date.now(); }
+    if (Date.now() - changedAt > STALL_LIMIT_MS) throw new Error("The preparation stopped making progress.");
+    await new Promise((r) => setTimeout(r, 2000));
   }
-  throw new Error("The preparation is taking too long.");
 }
 
 function startPolling() {
@@ -1020,9 +1397,27 @@ function renderStatus(s) {
     setProgress(exporting && s.status !== "done" ? Math.min(99, p) : p, exporting ? "Finishing your video…" : p < 40 ? "Listening and finding the cuts…" : "Shaping your edit…", exporting && p >= 99 ? "Joining, checking playback and saving the final file. This can take a little longer." : exporting ? "Keeping the choices from your preview." : "Preparing the framing and the rhythm you chose.");
     return;
   }
-  const task = (s.tasks || [])[0] || {};
+  renderShotBars(s);
+  const rendering = (s.tasks || []).some((t) => /^segment-/.test(t.id || ""));
+  const task = rendering ? { label: "Rendering your video" } : (s.tasks || [])[0] || {};
   const finalizing = s.status !== "done" && Number(s.progress || 0) >= 99;
   setProgress(finalizing ? 99 : Number(s.progress || 0), finalizing ? "Finishing your video…" : task.label || s.message || "Working…", finalizing ? "Joining, checking playback and saving the final file. This can take a little longer." : s.detail || "");
+}
+
+// One small bar per shot while the engine renders (tasks "segment-N", label "Shot N/T").
+function renderShotBars(s) {
+  const box = $("#renderBars");
+  const shots = (s.tasks || []).filter((t) => /^segment-\d+$/.test(t.id || ""));
+  const total = Math.max(0, ...shots.map((t) => Number((/\/(\d+)/.exec(t.label || "") || [])[1] || 0)));
+  if (!total || s.status === "done") { box.hidden = true; box.innerHTML = ""; return; }
+  if (box.children.length !== total) box.innerHTML = Array.from({ length: total }, () => "<i></i>").join("");
+  box.classList.toggle("many", total > 60);
+  for (const t of shots) {
+    const index = Number(t.id.split("-")[1]) - 1;
+    const bar = box.children[index];
+    if (bar) bar.style.setProperty("--p", Math.max(0, Math.min(1, Number(t.percent || 0) / 100)).toFixed(3));
+  }
+  box.hidden = false;
 }
 
 function setProgress(percent, message, detail) {
@@ -1065,13 +1460,34 @@ function viewpointName(item) {
 }
 const swapping = new Set();
 let frameHover = null;
+// Shot previews stay loaded once played, and are made in the background one by one
+// after the shots appear, so hovering shows the movement at once.
 function stopFrameHover() {
   if (!frameHover) return;
   clearTimeout(frameHover.timer);
   const { video, thumb } = frameHover;
-  video.pause(); video.removeAttribute("src"); video.load(); video.hidden = true;
+  video.pause(); video.hidden = true;
+  if (video.readyState >= 2) { try { video.currentTime = 0; } catch { /* not seekable yet */ } }
   thumb.querySelector(".hover-status").hidden = true;
   frameHover = null;
+}
+function resetFrameVideo(thumb) {
+  const video = thumb.querySelector("video");
+  video.pause(); video.removeAttribute("src"); video.load(); video.hidden = true;
+  delete thumb.dataset.warm;
+}
+let previewWarmer = 0;
+async function warmFramePreviews() {
+  const run = ++previewWarmer;
+  for (const thumb of $$("#frameGrid .thumb")) {
+    if (run !== previewWarmer || $("#frames").hidden) return;
+    if (thumb.dataset.warm || thumb.closest(".frame").classList.contains("busy") || !thumb.dataset.preview) continue;
+    try {
+      const response = await fetch(thumb.dataset.preview, { headers: { Range: "bytes=0-1" } });
+      if (response.ok) thumb.dataset.warm = "1";
+      else if (response.status === 409) return;  // the engine is busy again; try on the next refresh
+    } catch { return; }
+  }
 }
 function startFrameHover(thumb) {
   if (frameHover?.thumb === thumb) return;
@@ -1079,6 +1495,11 @@ function startFrameHover(thumb) {
   if (thumb.closest(".frame").classList.contains("busy")) return;
   const video = thumb.querySelector("video"), label = thumb.querySelector(".hover-status");
   const entry = { thumb, video, timer: null }; frameHover = entry;
+  if (video.getAttribute("src") === thumb.dataset.preview && video.readyState >= 2) {
+    video.hidden = false; label.hidden = true;
+    video.play().catch(() => {});
+    return;
+  }
   entry.timer = setTimeout(() => {
     if (frameHover !== entry || $("#frames").hidden) return;
     label.textContent = "Preparing preview…"; label.hidden = false;
@@ -1091,7 +1512,7 @@ function startFrameHover(thumb) {
     video.preload = "auto";
     video.src = thumb.dataset.preview;
     video.load();
-  }, 250);
+  }, thumb.dataset.warm ? 0 : 120);
 }
 async function openFrames() {
   show("frames");
@@ -1134,8 +1555,10 @@ async function refreshFrames(first) {
     const fig = grid.querySelector(`[data-index="${item.index}"]`);
     const img = fig.querySelector("img");
     const thumb = fig.querySelector(".thumb");
-    if (thumb.dataset.preview !== item.preview && frameHover?.thumb === thumb) stopFrameHover();
-    thumb.dataset.preview = item.preview || `/api/v1/wizard/review/preview/${item.index}`;
+    // The thumbnail changes when a shot is swapped: use it to version the preview URL.
+    const preview = item.preview || `/api/v1/wizard/review/preview/${item.index}?v=${encodeURIComponent(item.thumbnail || "")}`;
+    if (thumb.dataset.preview && thumb.dataset.preview !== preview) { if (frameHover?.thumb === thumb) stopFrameHover(); resetFrameVideo(thumb); }
+    thumb.dataset.preview = preview;
     const landmark = viewpointName(item);
     const type=item.camera_type || (item.pose && Object.keys(item.pose).length?"360":"moving");
     const label = `${{fixed:"Fixed",moving:"Moving","360":"360"}[type]}${type==="360" && landmark?" · "+landmark:""}`;
@@ -1153,7 +1576,7 @@ async function refreshFrames(first) {
     fig.querySelector(".dur").textContent = `${Number(item.duration_sec).toFixed(1)} s`;
     fig.querySelector(".swap").disabled = item.candidate_count !== undefined && item.candidate_count < 2;
   }
-  if (!pending) { clearInterval(state.framesPoll); state.framesPoll = null; }
+  if (!pending) { clearInterval(state.framesPoll); state.framesPoll = null; warmFramePreviews(); }
 }
 
 async function swap(index) {
@@ -1769,6 +2192,14 @@ $("#showExport").addEventListener("click", async () => {
 // ---------- result ----------
 function showResult(s) {
   const result = s.result || {};
+  footageMemory.clear(state.platform);  // the video is made; next visit starts clean
+  if (state.localProject && !state.savedLocally) {
+    state.savedLocally = true;
+    const resultUrl = result.url || `/api/v1/wizard/result?t=${Date.now()}`;
+    const fileName = `${(result.filename || $("#videoName").value.trim() || todayName()).replace(/\.[a-z0-9]+$/i, "").replace(/[\/\\]/g, "-")}${result.audio ? ".mp3" : ".mp4"}`;
+    fetch(resultUrl).then((r) => r.blob()).then((blob) => montaraCompanion.saveInProject(state.localProject.id, fileName, blob))
+      .then((saved) => toast(`Saved on your computer: ${saved}`)).catch((error) => toast(error.message, true));
+  }
   const url = result.url || `/api/v1/wizard/result?t=${Date.now()}`;
   $("#resultVideo").hidden = Boolean(result.audio);
   $("#resultAudio").hidden = !result.audio;
@@ -1850,6 +2281,26 @@ function rejectRaw360(files) {
   toast("Export a stitched 360 MP4 (equirectangular) from your camera app first. Camera-original INSV/MSV files cannot be edited here.", true);
   return true;
 }
+// Faders move up and down as if someone were working on them, until stop() is called.
+function startFaderDance() {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return () => {};
+  let running = true;
+  const seeds = [];
+  const frame = (now) => {
+    if (!running) return;
+    $$("#strips input[type=range]").forEach((input, i) => {
+      seeds[i] ??= { speed: .6 + Math.random() * .9, phase: Math.random() * 6.28, centre: -24 + Math.random() * 16 };
+      const s = seeds[i], value = s.centre + Math.sin(now / 1000 * s.speed + s.phase) * 9 + Math.sin(now / 1000 * s.speed * 2.7 + s.phase) * 3;
+      input.value = value;
+      const db = input.closest(".strip")?.querySelector(".db");
+      if (db && !input.closest(".strip").classList.contains("loading")) db.textContent = `${value >= 0 ? "+" : ""}${value.toFixed(1)} dB`;
+    });
+    requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+  return () => { running = false; };
+}
+
 async function animateMixFaders(keepLocked = false) {
   const strips = Array.from($("#strips").children), duration = matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 1050;
   const job = mix.job;

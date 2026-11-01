@@ -75,3 +75,96 @@ def test_reservations_prevent_overcommitting_disk_and_partial_upload_can_be_remo
     assert create(c, b'b' * 1000).status_code == 507
     assert c.delete('/montara/uploads/' + first.json['id']).status_code == 200
     assert create(c, b'b' * 1000).status_code == 201
+
+
+def _pcm(path):
+    data = Path(path).read_bytes(); i = data.find(b'data')
+    return data[i + 8:i + 8 + int.from_bytes(data[i + 4:i + 8], 'little')]
+
+
+def _bext_samples(path):
+    data = Path(path).read_bytes(); i = data.find(b'bext')
+    return int.from_bytes(data[i + 8 + 338:i + 8 + 346], 'little') if i >= 0 else None
+
+
+@pytest.mark.skipif(not __import__('shutil').which('ffmpeg'), reason='needs ffmpeg')
+def test_companion_flac_becomes_the_identical_wav_with_its_time_reference(tmp_path):
+    import subprocess
+    wav, flac = tmp_path / 'src.wav', tmp_path / 'Kick.wav.flac'
+    subprocess.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'sine=f=220:d=2', '-af', 'apad=pad_dur=3', '-ar', '48000', '-c:a', 'pcm_s24le',
+                    '-write_bext', '1', '-metadata', 'time_reference=172800000', str(wav)], check=True)
+    subprocess.run(['ffmpeg', '-v', 'error', '-i', str(wav), '-c:a', 'flac', str(flac)], check=True)
+    payload = flac.read_bytes()
+    c = make_client(tmp_path / 'data')
+    job = c.post('/montara/uploads', json=dict(name=flac.name, size=len(payload), fingerprint=fingerprint(payload))).json
+    url = '/montara/uploads/' + job['id']
+    for offset in range(0, len(payload), 4 * 1024**2):
+        assert c.put(url, data=payload[offset:offset + 4 * 1024**2], headers={'Upload-Offset': str(offset)}).status_code == 200
+    restored = Path(c.post(url + '/finish', json={}).json['videos'][0]['path'])
+    assert restored.name == 'Kick.wav' and not (restored.parent / flac.name).exists()
+    assert _pcm(restored) == _pcm(wav)
+    assert _bext_samples(restored) == 172800000
+    assert c.post(url + '/finish', json={}).json['videos'][0]['path'] == str(restored)
+
+
+@pytest.mark.skipif(not __import__('shutil').which('ffmpeg'), reason='needs ffmpeg')
+def test_opus_preview_decodes_at_original_rate_with_time_reference_and_names_its_original(tmp_path):
+    import subprocess
+    from resumable_upload import preview_original
+    wav, opus = tmp_path / 'src.wav', tmp_path / 'Keys.wav.opus'
+    subprocess.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'sine=f=220:d=3', '-ar', '44100', '-c:a', 'pcm_s24le',
+                    '-write_bext', '1', '-metadata', 'time_reference=88200', str(wav)], check=True)
+    subprocess.run(['ffmpeg', '-v', 'error', '-i', str(wav), '-c:a', 'libopus', '-b:a', '96k', '-metadata', 'montara_sample_rate=44100',
+                    '-metadata', 'montara_bits=24', '-f', 'ogg', str(opus)], check=True)
+    payload = opus.read_bytes()
+    c = make_client(tmp_path / 'data')
+    body = dict(name=opus.name, size=len(payload), fingerprint=fingerprint(payload))
+    assert c.post('/montara/uploads', json=body).status_code == 400          # a preview must name its original
+    original = {'name': 'Keys.wav', 'size': wav.stat().st_size, 'fingerprint': 'b' * 64}
+    job = c.post('/montara/uploads', json={**body, 'original': original}).json
+    url = '/montara/uploads/' + job['id']
+    assert c.put(url, data=payload, headers={'Upload-Offset': '0'}).status_code == 200
+    decoded = Path(c.post(url + '/finish', json={}).json['videos'][0]['path'])
+    assert decoded.name == 'Keys.wav' and preview_original(decoded) == original
+    out = subprocess.run(['ffprobe', '-v', 'error', '-show_entries', 'stream=sample_rate:format_tags=time_reference', '-of', 'default=nw=1:nk=1',
+                          str(decoded)], capture_output=True, text=True).stdout.split()
+    assert out == ['44100', '88200']
+    assert _bext_samples(decoded) == 88200
+    assert preview_original(wav) is None
+
+
+@pytest.mark.skipif(not __import__('shutil').which('ffmpeg'), reason='needs ffmpeg')
+def test_float_wav_travels_as_wavpack_and_comes_back_bit_identical(tmp_path):
+    import subprocess
+    import numpy as np
+    import soundfile as sf
+    wav, wv = tmp_path / 'src.wav', tmp_path / 'Keys.wav.wv'
+    sf.write(wav, (np.sin(np.arange(44100 * 2) / 7) * 1.4).astype('float32'), 44100, subtype='FLOAT')  # peaks above 0 dBFS
+    subprocess.run(['ffmpeg', '-v', 'error', '-i', str(wav), '-c:a', 'wavpack', str(wv)], check=True)
+    payload = wv.read_bytes()
+    c = make_client(tmp_path / 'data')
+    job = c.post('/montara/uploads', json=dict(name=wv.name, size=len(payload), fingerprint=fingerprint(payload))).json
+    url = '/montara/uploads/' + job['id']
+    assert c.put(url, data=payload, headers={'Upload-Offset': '0'}).status_code == 200
+    restored = Path(c.post(url + '/finish', json={}).json['videos'][0]['path'])
+    assert restored.name == 'Keys.wav' and sf.info(restored).subtype == 'FLOAT'
+    assert np.array_equal(sf.read(restored, dtype='float32')[0], sf.read(wav, dtype='float32')[0])
+
+
+def test_fast_song_range_opus_comes_back_as_wav_at_the_original_rate(tmp_path):
+    """Fast export: the companion's high-bitrate Opus range is decoded to a WAV at 44.1 kHz, same length."""
+    import subprocess
+    import numpy as np
+    import soundfile as sf
+    wav, opus = tmp_path / 'src.wav', tmp_path / 'Bass.wav.hq.opus'
+    sf.write(wav, (np.sin(np.arange(44100 * 3) / 9) * .5).astype('float32'), 44100, subtype='FLOAT')
+    subprocess.run(['ffmpeg', '-v', 'error', '-i', str(wav), '-c:a', 'libopus', '-b:a', '192k', '-metadata', 'montara_sample_rate=44100',
+                    '-f', 'ogg', str(opus)], check=True)
+    payload = opus.read_bytes()
+    c = make_client(tmp_path / 'data')
+    job = c.post('/montara/uploads', json=dict(name=opus.name, size=len(payload), fingerprint=fingerprint(payload))).json
+    url = '/montara/uploads/' + job['id']
+    assert c.put(url, data=payload, headers={'Upload-Offset': '0'}).status_code == 200
+    restored = Path(c.post(url + '/finish', json={}).json['videos'][0]['path'])
+    info = sf.info(restored)
+    assert restored.name == 'Bass.wav' and info.samplerate == 44100 and abs(info.frames - 44100 * 3) < 50

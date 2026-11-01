@@ -41,6 +41,26 @@ def validate_effects(effects, names):
     return result
 
 
+EQ_KEYS = {"eq_low_cut_hz": (20.0, 1000.0), "eq_mid_gain_db": (-15.0, 15.0), "eq_air_gain_db": (-15.0, 15.0), "eq_high_cut_hz": (1000.0, 20000.0)}
+
+
+def validate_eq(eq, names):
+    """Per-track EQ the person set: the mixer's own low cut, mid and air bands."""
+    if not isinstance(eq, dict) or set(eq) - set(names):
+        raise ValueError("Unknown track or invalid EQ settings")
+    result = {}
+    for name, settings in eq.items():
+        if not isinstance(settings, dict) or set(settings) - set(EQ_KEYS):
+            raise ValueError("Only low cut, mid and air can be set")
+        result[name] = {}
+        for key, value in settings.items():
+            low, high = EQ_KEYS[key]
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or not low <= value <= high:
+                raise ValueError("EQ value out of range")
+            result[name][key] = float(value)
+    return result
+
+
 def _load_mixer(work_dir: Path):
     # The mixer reads its state root once, at import: one root per Montara server.
     os.environ.setdefault("ZUCKER_MIXER_STATE_ROOT", str(work_dir / "state"))
@@ -53,19 +73,28 @@ def _load_mixer(work_dir: Path):
 
 
 class SingleSongMix:
-    def __init__(self, tracks_dir: Path, work_dir: Path, reference: Path | None = None) -> None:
+    def __init__(self, tracks_dir: Path, work_dir: Path, reference: Path | None = None, track_types: dict | None = None) -> None:
         self.tracks_dir = Path(tracks_dir).resolve()
         self.work_dir = Path(work_dir).resolve()
         self.work_dir.mkdir(parents=True, exist_ok=True)
         self.reference = Path(reference).resolve() if reference else None
         self.app, self.pipeline = _load_mixer(self.work_dir)
         self.state: dict[str, Any] | None = None
+        # What the person said each track is (track_types.validate): roles, stereo sides, music.
+        self.track_types = track_types or {}
+
+    def _types(self, names) -> dict:
+        import track_types
+        return track_types.for_files(self.track_types, names)
 
     def _activate(self) -> None:
         # The vendor keeps its active folder in module globals. Every operation
         # must restore this job, even when another mix was analyzed meanwhile.
         self.app.configure_source_folder(self.tracks_dir)
         self.pipeline.configure_detection_cache(self.tracks_dir, self.work_dir / "cache")
+        if self.state:  # module globals again: another job may have set its own
+            import track_types
+            track_types.apply(self.pipeline, [], self._types([s.path.name for s in self.state["stems"]]))
 
     # -- one song, no detection --------------------------------------------
     def _register(self) -> dict[str, Any]:
@@ -75,6 +104,8 @@ class SingleSongMix:
         stems = pipeline.inspect_stems(self.tracks_dir)
         if not stems:
             raise RuntimeError("No usable audio tracks")
+        import track_types
+        stems = track_types.apply(pipeline, stems, self._types([s.path.name for s in stems]))
         duration = min(stem.duration for stem in stems)
         segment = pipeline.Segment(start=0.0, end=duration, nominal_end=duration, boundary_source="manual-selection")
         song = {
@@ -122,6 +153,11 @@ class SingleSongMix:
                 "fader_db": round(float(params.get("level_gain_db", 0.0) or 0.0), 2),
                 "pan": float(params.get("pan", 0.0) or 0.0),
                 "mute": bool(params.get("mute", False)),
+                # The mixer's EQ for this role: the page shows it and the person can change it.
+                "eq": {**{slot: {"type": kind, "hz": float(freq), "q": float(q), "db": float(gain)}
+                          for slot, kind, freq, q, gain in self.pipeline.role_eq_bands(stem.role, name=stem.path.name) if slot != "fixed"},
+                       # Every track can cut highs; 20 kHz means off (bass starts at 6 kHz in the mixer).
+                       "high": {"type": "lowpass", "hz": float(self.pipeline.role_eq_defaults(stem.role, stem.path.name).get("eq_high_cut_hz", 20000.0)), "q": 0.707, "db": 0.0}},
             })
         order = ["kick", "snare", "hh", "drums", "overhead", "bass", "guitar", "keys", "keys_l", "synth", "horn", "sax", "vocal"]
         tracks.sort(key=lambda t: (order.index(t["role"]) if t["role"] in order else len(order), t["name"].lower()))
@@ -190,7 +226,7 @@ class SingleSongMix:
             result.append(replace(stem, path=target, channels=min(stem.channels, 2)))
         return result
 
-    def render(self, faders_db: dict[str, float], output: Path, mutes: dict[str, bool] | None = None, effects: dict | None = None, *, base_gains: dict[str, float] | None = None) -> Path:
+    def render(self, faders_db: dict[str, float], output: Path, mutes: dict[str, bool] | None = None, effects: dict | None = None, *, base_gains: dict[str, float] | None = None, eq: dict | None = None) -> Path:
         """Render the song with the person's faders (dB on top of the auto-mix)."""
         app, pipeline = self.app, self.pipeline
         state = self.state or self._register()
@@ -212,6 +248,8 @@ class SingleSongMix:
             entry["user_fader_confirmed"] = True
         for name, muted in (mutes or {}).items():
             stems.setdefault(name, {})["mute"] = bool(muted)
+        for name, values in validate_eq(eq or {}, [s.path.name for s in state["stems"]]).items():
+            stems.setdefault(name, {}).update(values)
         if effects is not None:
             for stem in state["stems"]:
                 # Explicit controls replace automatic sends; never apply the effects twice.

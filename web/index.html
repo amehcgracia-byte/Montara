@@ -98,6 +98,9 @@
     <h2><span id="modeLabel">Stage</span> · Add your footage</h2>
     <div id="stageSessionOptions" class="actions" hidden><label><input id="stageAudioOnly" type="checkbox"> Audio only</label><label><input id="fullSessionOn" type="checkbox"> Full session · audio</label><button id="sessionResume" class="btn ghost small" type="button" hidden>Resume session</button></div>
     <p class="hint" id="sampleNote" hidden>Sample material from a real jam is loaded so you can try Montara right away. <button class="link" id="clearSamples">Use my own files instead</button><span id="variantRow"> · <button class="link" id="switchSample"></button></span></p>
+    <p class="hint" id="companionNote" hidden>Companion connected: your videos stay on your computer and only small versions are uploaded. In this test the final video is made from those small versions.</p>
+    <p class="hint" id="companionOffer" hidden>Montara is much faster with its companion: your videos stay on your computer and only small versions travel. <a class="link" id="companionDownload" href="/montara/companion/download" download>Download the companion for Mac</a>, open the zip and double-click «Install Montara Companion» (the first time macOS may ask: right-click → Open). Already installed? Open «Montara Companion» with Spotlight.</p>
+    <p class="hint" id="restoreNote" hidden><span id="restoreText"></span> <button class="link" id="restoreFiles" type="button">Restore them</button> · <button class="link" id="restoreForget" type="button">Start fresh</button></p>
     <div class="boxes">
       <div class="box">
         <div class="drop" data-drop="video">
@@ -152,9 +155,16 @@
 
   <section class="screen" id="sessionReview" hidden>
     <h2>Your session, song by song.</h2>
-    <p class="hint">Review the suggested boundaries. Choose the songs, then adjust one mix for the session.</p>
-    <p id="sessionStatus" class="hint" role="status" aria-live="polite"></p>
+    <p class="hint tiny" id="sessionEmpty" hidden></p>
+    <p class="hint" id="sessionHint">Review the suggested boundaries and choose the songs. Each song gets its own automatic mix; your fader moves apply on top.</p>
+    <div class="mixstatus" id="sessionWorking" hidden><svg class="loading-mark" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 100"><rect x="4" y="4" width="18" height="92" rx="9" fill="#F5F3EF"/><rect x="27" y="4" width="18" height="62" rx="9" fill="#F5F3EF"/><rect x="51" y="4" width="18" height="40" rx="9" fill="#FF4F2E"/><rect x="75" y="4" width="18" height="62" rx="9" fill="#F5F3EF"/><rect x="98" y="4" width="18" height="92" rx="9" fill="#F5F3EF"/></svg><span id="sessionStatus" role="status" aria-live="polite"></span></div>
     <progress id="sessionProgress" max="100" value="0" aria-label="Session progress"></progress>
+    <p class="hint tiny" id="sessionEta"></p>
+    <p class="hint tiny" id="sessionUpload" role="status" aria-live="polite"></p>
+    <label class="hint tiny session-quality" id="sessionQualityRow" hidden>Original audio for the export
+      <select id="sessionQuality"><option value="fast">Fast · high-quality Opus (several times lighter)</option><option value="lossless">Lossless · every sample (slow on a home connection)</option></select>
+      <span id="sessionQualityNote"></span></label>
+    <div id="sessionBars" class="render-bars session-bars" hidden aria-hidden="true"></div>
     <div id="sessionSongs"></div>
     <div id="sessionResults"></div>
     <div class="actions"><button id="sessionBack" class="btn ghost" type="button">Back to footage</button><button id="sessionCancel" class="btn ghost" type="button" hidden>Cancel</button><button id="sessionMix" class="btn primary" type="button" hidden>Mix selected songs</button></div>
@@ -164,6 +174,13 @@
   <section class="screen" id="cameras" hidden>
     <h2>Your cameras</h2>
     <p class="lead small">Choose each camera’s type: 360, fixed or moving. For 360 cameras, name the places or people each viewpoint shows.</p>
+    <section id="songRange" class="song-range" hidden>
+      <h3>Song</h3>
+      <p class="hint">Play the song and mark where the video starts and ends. Montara edits only that part.</p>
+      <div class="range-player"><select id="rangeTrack" aria-label="Track to listen to" hidden></select><audio id="rangeAudio" controls preload="metadata"></audio></div>
+      <div class="range-bar" id="rangeBar" aria-hidden="true"><i id="rangeFill"></i><b id="rangeHead"></b></div>
+      <div class="actions range-actions"><button class="btn ghost small" id="rangeStart" type="button">Start here</button><output id="rangeStartOut">0:00</output><button class="btn ghost small" id="rangeEnd" type="button">End here</button><output id="rangeEndOut">end</output><button class="link" id="rangeReset" type="button">Whole song</button></div>
+    </section>
     <div id="cameraList" class="cameras"></div>
     <div id="sphereList"></div>
     <div class="actions">
@@ -201,6 +218,7 @@
     </div>
     <div class="actions">
       <button class="btn ghost" id="mixBack">Back</button>
+      <button class="btn ghost" id="mixAll" type="button" hidden title="The same changes (faders, ON/OFF, EQ, effects) on top of every song's own automatic mix">Apply this mix to all songs</button>
       <button class="btn primary" id="useMix" disabled>Use this mix</button>
     </div>
   </section>
@@ -219,6 +237,7 @@
 </svg><b id="pct">0%</b></div></div>
       <h2 id="stageMsg">Starting…</h2>
       <p class="hint" id="stageDetail"></p>
+      <div class="render-bars" id="renderBars" hidden aria-hidden="true" title="Shots being rendered"></div>
       <button class="btn ghost" id="cancel">Cancel</button>
     </div>
   </section>
@@ -344,6 +363,9 @@
 <div class="toast" id="toast" hidden></div>
 <script src="mix-levels.js"></script>
 <script src="resumable-upload.js"></script>
+<script src="footage-memory.js"></script>
+<script src="companion.js"></script>
+<script src="track-types.js"></script>
 <script src="montara.js"></script>
 <script src="full-session.js"></script>
 <script src="show-media.js"></script>

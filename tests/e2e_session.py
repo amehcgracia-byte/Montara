@@ -88,6 +88,10 @@ def run(output):
                 page.locator('#fullSessionOn').check()
                 page.locator('[data-drop="audio"] input').set_input_files([str(media / 'Kick.wav'), str(media / 'Bass.wav')])
                 page.wait_for_function("document.querySelectorAll('#audioFiles li').length===2 && !document.querySelector('#continueFootage').disabled")
+                # Each track says what it is: pre-filled from the name, changeable.
+                assert page.locator('[data-track-type="Kick.wav"]').input_value() == 'kick'
+                assert page.locator('[data-track-type="Bass.wav"]').input_value() == 'bass'
+                page.locator('[data-track-type="Bass.wav"]').select_option('synth')
                 page.screenshot(path=str(output / '01-input.png'), full_page=True)
                 page.locator('#continueFootage').click()
                 page.wait_for_function("document.querySelectorAll('[data-session-song]').length===2", timeout=180_000)
@@ -95,23 +99,100 @@ def run(output):
                 assert abs(detected[0]['end'] - 195) < 3
                 page.screenshot(path=str(output / '02-detected.png'), full_page=True)
                 rows = page.locator('[data-session-song]')
-                for index, start in enumerate([5, 215]):
-                    rows.nth(index).locator('[data-song-field="start"]').fill(str(start))
-                    rows.nth(index).locator('[data-song-field="end"]').fill(str(start + 15))
-                page.locator('#sessionMix').click()
+                page.wait_for_function('sessionWave.data && sessionWave.data.peaks.length > 100', timeout=60_000)
+                # A real drag on a handle moves that song's end.
+                handle = rows.nth(0).locator('.song-cut.end')
+                box = handle.bounding_box(); before = page.evaluate('fullSession.data.songs[0].end')
+                page.mouse.move(box['x'] + box['width'] / 2, box['y'] + box['height'] / 2); page.mouse.down()
+                page.mouse.move(box['x'] - 60, box['y'] + box['height'] / 2, steps=6); page.mouse.up()
+                assert page.evaluate('fullSession.data.songs[0].end') < before - 1
+                # Exact short windows for a quick export (same as dragging, without pixel arithmetic).
+                page.evaluate("fullSession.data.songs[0].start=5;fullSession.data.songs[0].end=20;fullSession.data.songs[1].start=215;fullSession.data.songs[1].end=230;drawSessionSongs()")
+                # Confirm: Confirming… then Confirmed, button gone (this session has no previews: nothing to send).
+                page.evaluate("fullSession.data.uses_previews = true; drawSessionSongs()")
+                rows.nth(1).locator('[data-song-confirm]').click()
+                page.wait_for_function("document.querySelector('[data-confirm-state=\"1\"]').textContent.startsWith('Confirmed')")
+                assert page.locator('[data-song-confirm="1"]').is_hidden()
+                page.screenshot(path=str(output / '02b-waveforms.png'), full_page=True)
+                rows.nth(0).locator('[data-song-play]').click()
+                page.wait_for_function('sessionPlayer.audio && !sessionPlayer.audio.paused && sessionPlayer.audio.currentTime > 5.2', timeout=60_000)
+                page.wait_for_function("!document.querySelector('[data-song-play=\"0\"]').classList.contains('loading')")  # ring stops once it sounds
+                # Moving a handle of another song does not stop what is playing.
+                box = rows.nth(1).locator('.song-cut.start').bounding_box()
+                page.mouse.move(box['x'] + 7, box['y'] + 30); page.mouse.down(); page.mouse.move(box['x'] + 1, box['y'] + 30, steps=3); page.mouse.up()
+                assert page.evaluate('!sessionPlayer.audio.paused && sessionPlayer.index === 0')
+                page.evaluate("fullSession.data.songs[1].start=215;paintSong(1)")
+                # Clicking the waveform jumps there.
+                wave = rows.nth(0).locator('[data-song-wave]').bounding_box()
+                page.mouse.click(wave['x'] + wave['width'] * .5, wave['y'] + 10)
+                page.wait_for_function('sessionPlayer.audio.currentTime > 9 && sessionPlayer.audio.currentTime < 20')
+                rows.nth(0).locator('[data-song-play]').click()
+                assert page.evaluate('sessionPlayer.index') == -1
+                # A stereo pair (marked L and R of one type) sits together and moves together in the mixer.
+                page.evaluate("TrackTypes.set('Kick.wav', {type: 'keys', side: 'L'}); TrackTypes.set('Bass.wav', {type: 'keys', side: 'R'})")
+                rows.nth(0).locator('[data-song-mixer]').click()
+                page.wait_for_function("!document.querySelector('#mix').hidden", timeout=3_000)  # the mixer screen opens at once
                 page.wait_for_function("!document.querySelector('#mix').hidden && !document.querySelector('#useMix').disabled", timeout=180_000)
-                page.locator('#playMix').click(); page.wait_for_timeout(400); page.locator('#playMix').click()
-                page.screenshot(path=str(output / '03-common-mix.png'), full_page=True)
+                # Effects are heard in the preview: reverb on while playing adds its own source.
+                page.locator('#playMix').click(); page.wait_for_timeout(400)
+                strip = page.locator('#strips .strip').first
+                strip.locator('.fx-toggle').click()
+                strip.locator('input[type=checkbox][data-effect="reverb"]').check()
+                page.wait_for_function("Object.values(mix.nodes).some(n => n.fx.reverb)", timeout=60_000)
+                page.locator('#playMix').click()
+                assert page.locator('#mixAll').is_visible()
+                assert page.locator('#strips .strip.pair-l').count() == 1 and page.locator('#strips .strip.pair-r').count() == 1
+                before = page.evaluate("mix.plan.tracks.map(t => t.fader_db)")
+                page.evaluate("(() => { const input = document.querySelector('#strips input[type=range]'); input.value = Number(input.value) - 3; input.dispatchEvent(new Event('input', {bubbles: true})); })()")
+                after = page.evaluate("mix.plan.tracks.map(t => t.fader_db)")
+                assert all(abs((b - a) + 3) < .02 for a, b in zip(before, after)), (before, after)
+                page.screenshot(path=str(output / '03-song-mix.png'), full_page=True)
                 page.locator('#useMix').click()
+                page.wait_for_function("!document.querySelector('#sessionReview').hidden && document.querySelector('.song-tag')")
+                companion = None
+                companion_home = os.environ.get('MONTARA_E2E_COMPANION_HOME')   # a companion installed with --mixer
+                if companion_home:
+                    # The tracks are on "this computer": the session treats them as previews of these originals,
+                    # and the companion mixes every song locally (only the MP3 is uploaded).
+                    import hashlib
+                    sid = page.evaluate('fullSession.id'); manifest = output / 'data' / 'Sessions' / sid / 'session.json'
+                    sdata = json.loads(manifest.read_text())
+                    def described(path):
+                        raw = Path(path).resolve().read_bytes()
+                        return dict(name=Path(path).name, size=len(raw), fingerprint=hashlib.sha256(raw[:65536] + raw[max(0, len(raw) - 65536):]).hexdigest())
+                    sdata['previews'] = {t['file']: described(t['path']) for t in sdata['tracks']}
+                    manifest.write_text(json.dumps(sdata))
+                    import atexit
+                    companion = subprocess.Popen([sys.executable, str(Path(companion_home) / 'companion.py')], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                                 env=dict(os.environ, MONTARA_COMPANION_HOME=companion_home, MONTARA_COMPANION_ROOTS=str(media)))
+                    atexit.register(companion.terminate)   # never leave it on port 47820 for the next run
+                    for _ in range(60):
+                        if page.evaluate("montaraCompanion.detect().then(info => Boolean(info && info.local_mix))"):
+                            break
+                        time.sleep(.5)
+                    else:
+                        raise RuntimeError('companion with local mixer did not start')
+                    page.evaluate("fullSession.data.uses_previews = true")
+                page.locator('#sessionMix').click()
                 page.wait_for_function("document.querySelectorAll('#sessionResults audio').length===2", timeout=240_000)
                 data = page.evaluate('fullSession.data')
                 assert data['status'] == 'done'
+                if companion:
+                    companion.terminate()
+                    assert all(r.get('local') for r in data['results']), data['results']   # both songs mixed on this computer
+                saved = json.loads((output / 'data' / 'Sessions' / data['id'] / 'session.json').read_text())
+                assert list(saved['settings']['per_song']) == ['1'] and saved['settings']['per_song']['1']['faders']
+                assert saved['track_types']['bass'] == {'type': 'synth', 'side': '', 'chosen': True}
+                assert saved['track_types']['kick']['chosen'] is False
                 for song in data['results']:
                     response = page.request.get(f'{url}/montara/session/{data["id"]}/result/{song["id"]}')
                     assert response.ok and len(response.body()) > 1000
                     target = output / f'song-{song["id"]}.mp3'; target.write_bytes(response.body())
                     info = json.loads(subprocess.check_output(['ffprobe', '-v', 'error', '-show_format', '-of', 'json', str(target)]))
                     assert abs(float(info['format']['duration']) - 15) < 1
+                import zipfile, io
+                bundle = page.request.get(f'{url}/montara/session/{data["id"]}/results.zip')
+                assert bundle.ok and len(zipfile.ZipFile(io.BytesIO(bundle.body())).namelist()) == 2
                 page.screenshot(path=str(output / '04-exported.png'), full_page=True)
                 page.reload(); page.locator('#mode').wait_for(state='visible'); page.locator('[data-platform="youtube"]').click()
                 page.locator('#sessionResume').click()
