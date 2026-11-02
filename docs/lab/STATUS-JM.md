@@ -24,18 +24,17 @@ Actualizado: 2026-11-02 · lo mantiene el equipo de Chema · 40 líneas como má
 - Fallo: `/Volumes/Macintosh HD` enlaza a `/`; la búsqueda se gastaba los 25 s ahí y no llegaba a los discos siguientes, y la página subía el original sin avisar.
 - Ahora: un recorrido por disco a la vez, 180 s de margen, carpetas recordadas en `places.json`, y un archivo de más de 200 MB no encontrado pregunta antes de subirse entero.
 - Versión pequeña por el chip gráfico (`scale_vt`, `transpose_vt`), con software de reserva. En el Mac de Chema: 5 veces menos CPU; 4K de 1,0x a entre 1,3x y 1,9x; 1080p, parecido (2,2x-3,1x). El techo es el decodificador del chip.
-
 ## Diccionario de instrumentos (ZuckerMixer `instrument_dictionary.py`)
 - Cada tipo de Montara tiene una ficha: EQ, compresor, panorama, nivel y envíos, encima del rol. Valores de partida con fuentes (`SOURCES`): Samson (voz de podcast), iZotope (acústica), Music Guy Mixing (cuerdas, coros), Mixing a Band y Owsinski (metales, viento).
 - Con ficha propia: percusión, guitarra acústica, trompeta, trombón, flauta, violín, cuerdas, coros, voz de podcast y narración. El resto usa el rol tal cual.
 - Pendiente: detección por audio (hoy por nombre o por la elección de la persona); fichas para más instrumentos; afinarlas de oído con jams reales.
-
 ## Pendiente
+- Vídeos por lote para canciones ya mezcladas y dos cámaras iguales con zoom según encuadre: revisión y aceptación pendientes en `docs/PENDIENTES_CAMARAS_Y_LOTES.md`.
 - **Mezcla en el Mac (companion 0.5.1, opcional, #59)**: `install.sh --mixer` instala el mezclador del servidor en el Mac (171 MB); cada canción se mezcla allí y solo sube el MP3. Salida idéntica bit a bit a la del servidor en el test. **Medido el 01-11 en el Mac de Chema (MacBook Pro 13" Intel i7, 4 núcleos), jam de 1h56 con 9 pistas: 12 de 12 canciones con `local: true`, 47,5 min de música en 12,4 min (entre 32 y 91 s por canción, unos 16 s por minuto), frente a la estimación de 140 min subiendo los originales al servidor.** Una canción a la vez (`MONTARA_COMPANION_MIX_SLOTS=1`); falta probar con 2 y confirmar por oído. Informe de Fer: `JUPITER_COMPANION_MAC_LOCAL_MIX_FEASIBILITY_2026-11-01.md`.
 - Licencias: Matchering (GPLv3, de terceros) solo se usa en el servidor; el mezclador del Mac no lo instala.
 - Mergear ZuckerMixer PR #8 en master.
 - El fallo de canciones cortadas o vacías del #48: arreglado el fallo de la cola (#52); falta confirmarlo con `deploy/vm/audio_check.py` en una sesión real.
 - Cola de render para unos 10 testers (VM más grande y luego workers bajo demanda): sin empezar.
-- Caché del companion sin límite; para las barras locales hace falta actualizarlo a 0.5.2 (`install.sh --mixer`).
+- Caché del companion sin límite; para las barras locales hace falta actualizarlo a 0.5.3 (`install.sh --mixer`).
 - `run_history.py` no guarda qué cámara usa cada plano.
 - Cambiar las contraseñas web de la VM que pasaron por chat (sin confirmar).

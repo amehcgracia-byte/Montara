@@ -17,3 +17,7 @@ Una línea por acción de administrador (`sudo`). Sin contraseñas, tokens ni ll
 | 2026-11-02 | Codex | Chema | Rechecked JM inactivity and clean working tree immediately before the update. |
 | 2026-11-02 | Codex | Chema | Ran existing montara-update for jm only: main 9d4a560, user service on 127.0.0.1:8101; no FER service changes. |
 | 2026-11-02 | Codex | Chema | Read-only authenticated verification of JM version, served page/scripts and mixer policy after the update. |
+| 2026-11-02 | Codex | Chema | Read-only JM working-tree/media-process check and nonblocking session-lock probe before the metadata-only update; clean tree, no active jobs, FER untouched. |
+| 2026-11-02 | Codex | Chema | Rechecked JM clean tree, media processes and session locks immediately before installing 0.58; no active work, FER untouched. |
+| 2026-11-02 | Codex | Chema | Ran existing montara-update for JM only: main f902ccc (PR #66), private service 8101; no FER changes. |
+| 2026-11-02 | Codex | Chema | Authenticated JM version/page and previous-session MP3 download verification; removed old metadata through the download endpoint and verified compressed audio packets unchanged. |
