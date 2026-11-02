@@ -70,6 +70,9 @@ jobs:
       - name: Montara regression tests
         if: matrix.mode == 'session'
         run: python -m pytest tests -q
+      - name: Mixer waveform, stereo linking and peak safety
+        if: matrix.mode == 'session'
+        run: python -m pytest mixer/test_master_limiter.py -q
       - name: ${{ matrix.mode }} through the real interface
         if: matrix.mode != 'session'
         run: python tests/e2e_journey.py --mode ${{ matrix.mode }} --output e2e-output

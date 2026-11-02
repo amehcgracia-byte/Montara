@@ -2,7 +2,7 @@
 
 Actualizado: 2026-11-02 · lo mantiene el equipo de Chema · 40 líneas como máximo, se sobrescribe.
 
-- `mixer`: rama `claude/winds-synth-bass-lowpass` (ZuckerMixer PR #8, **sin mergear en master**); Montara apunta a su último commit
+- `mixer`: rama `claude/winds-synth-bass-lowpass` (ZuckerMixer PR #8, **sin mergear en master**); Montara fija `41f6852` (limitador suave, PR Mixer #9)
 - VM: e2-standard-8, `jm` en `127.0.0.1:8101`, `fer` en `:8102`; apagado automático (60 min sin web, 120 min sin SSH)
 - Companion **0.5.2** (mezcla en el Mac, opcional): se actualiza volviendo a ejecutar `companion/install.sh --mixer` y reabriéndolo
 
@@ -15,7 +15,7 @@ Actualizado: 2026-11-02 · lo mantiene el equipo de Chema · 40 líneas como má
 | Confirm por canción; subida y mezcla en paralelo; onda y copia de escucha durante la detección | #48–#50 |
 | Tipos de pista (menú por pista, rellenado por el nombre) + Stereo L/R | #51 |
 | Motor: la puntuación de planos usa la copia ligera, no el original 4K de iPhone/Sony (hallazgo de Fer, #56; zucker_videos #49) | #59 |
-| Progreso por canción y pista en mezcla local/servidor; MP3 completo antes de activar Play, resultados a medida que terminan; Fast fijo; etiquetas de MP3 con el nombre y número elegidos, sin Jam/artista heredados | 0.56 |
+| Progreso por canción y pista en mezcla local/servidor; MP3 completo antes de activar Play, resultados a medida que terminan; Fast fijo; etiquetas de MP3 con el nombre y número elegidos, sin Jam/artista heredados; limitador estéreo suave y objetivo automático −15 LUFS | 0.56–0.57 |
 | Primer play sin espera: copia de escucha de 414 s a unos 100 s con la VM libre en una jam de 1h56 (un decodificador por pista, suma en numpy) y la barra de carga la incluye; `montara-start` no abre una segunda conexión | 0.55 |
 | Rangos por ventana (un split ya no vacía la cola), estados de Confirm, mixer y Save al instante, círculo de carga, Opus "Rápido", pistas vacías fuera, "aplicar a todas", L/R enlazadas, mixer ancho, **diccionario de instrumentos** | #52 |
 

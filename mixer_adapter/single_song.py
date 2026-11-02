@@ -252,6 +252,9 @@ class SingleSongMix:
         settings_path = self.work_dir / "montara_mix_settings.json"
         overrides = app.load_json(settings_path, {"songs": {}})
         song = overrides.setdefault("songs", {}).setdefault("1", {})
+        # A slightly more conservative automatic master; explicit in the plan so
+        # both the server and the companion use the same loudness target.
+        song["target_lufs"] = -15.0
         stems = song.setdefault("stems", {})
         for name, value in (base_gains or {}).items():
             # A full session shares the audible baseline of its reviewed mix.

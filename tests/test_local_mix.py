@@ -72,6 +72,8 @@ def test_local_mix_equals_the_server_mix(tmp_path):
     server_data = read(work); server_data.pop('previews'); save(work / 'session.json', server_data)
     (work / 'results').mkdir(exist_ok=True)
     render_song(work, 1)
+    settings = json.loads((work / 'songs' / '1' / 'mix' / 'montara_mix_settings.json').read_text())
+    assert settings['songs']['1']['target_lufs'] == -15.0
     server_mp3 = Path(json.loads((work / 'results' / '1.json').read_text())['path'])
     decode = lambda p: subprocess.run(['ffmpeg', '-v', 'error', '-i', str(p), '-f', 'f32le', '-ac', '2', '-ar', '22050', '-'],
                                       capture_output=True, check=True).stdout
