@@ -5,7 +5,7 @@ proxying, HTTP, analysis, lighting and final rendering are real.
 """
 import argparse,json,os,shutil,subprocess,sys,time
 from pathlib import Path
-from urllib.request import urlopen
+from urllib.request import Request,urlopen
 from playwright.sync_api import sync_playwright
 from e2e_journey import ROOT,free_port,run
 from test_local_video import install_layout
@@ -59,8 +59,12 @@ def main():
             assert not page.locator('#failed').is_visible(),page.locator('#errorText').inner_text()
             page.screenshot(path=str(out/'native-result.png'),full_page=True)
             result_url=page.locator('#resultVideo').get_attribute('src');assert result_url.startswith(base+'/video-renders/')
-            result=page.request.get(result_url,headers={'Origin':url});assert result.ok
-            final=out/'render.mp4';final.write_bytes(result.body())
+            result=page.request.get(result_url,headers={'Origin':url,'Range':'bytes=0-1023'});assert result.status==206
+            final=out/'render.mp4'
+            # Stream the full file outside Playwright's base64 protocol: repeatedly
+            # concatenating its large message is quadratic in the Python client.
+            with urlopen(Request(result_url,headers={'Origin':url}),timeout=120) as response,final.open('wb') as target:
+                shutil.copyfileobj(response,target,1024*1024)
             # This branch bypasses the old server export rather than rendering twice.
             status=page.request.get(url+'/api/v1/wizard/status').json();assert not status.get('result')
             jobs=list((chosen/'.montara-renders').glob('*/render.json'));assert len(jobs)==1
