@@ -19,7 +19,6 @@ Actualizado: 2026-11-02 · lo mantiene el equipo de Chema · 40 líneas como má
 | MP3 sin etiquetas internas ni carátulas heredadas: el nombre es el del archivo; también se limpian descargas individuales y ZIP de sesiones anteriores, sin recodificar audio | 0.58 |
 | Primer play sin espera: copia de escucha de 414 s a unos 100 s con la VM libre en una jam de 1h56 (un decodificador por pista, suma en numpy) y la barra de carga la incluye; `montara-start` no abre una segunda conexión | 0.55 |
 | Rangos por ventana (un split ya no vacía la cola), estados de Confirm, mixer y Save al instante, círculo de carga, Opus "Rápido", pistas vacías fuera, "aplicar a todas", L/R enlazadas, mixer ancho, **diccionario de instrumentos** | #52 |
-
 ## Vídeos en discos externos (companion 0.5.1)
 - Fallo: `/Volumes/Macintosh HD` enlaza a `/`; la búsqueda se gastaba los 25 s ahí y no llegaba a los discos siguientes, y la página subía el original sin avisar.
 - Ahora: un recorrido por disco a la vez, 180 s de margen, carpetas recordadas en `places.json`, y un archivo de más de 200 MB no encontrado pregunta antes de subirse entero.
@@ -29,6 +28,7 @@ Actualizado: 2026-11-02 · lo mantiene el equipo de Chema · 40 líneas como má
 - Con ficha propia: percusión, guitarra acústica, trompeta, trombón, flauta, violín, cuerdas, coros, voz de podcast y narración. El resto usa el rol tal cual.
 - Pendiente: detección por audio (hoy por nombre o por la elección de la persona); fichas para más instrumentos; afinarlas de oído con jams reales.
 ## Pendiente
+- Iluminación: diagnóstico y muestras reales en `docs/AUDITORIA_ILUMINACION_2026-11-02.md`; recuperación de sombras y paridad preview/render aún sin implementar.
 - Vídeos por lote para canciones ya mezcladas y dos cámaras iguales con zoom según encuadre: revisión y aceptación pendientes en `docs/PENDIENTES_CAMARAS_Y_LOTES.md`.
 - **Mezcla en el Mac (companion 0.5.1, opcional, #59)**: `install.sh --mixer` instala el mezclador del servidor en el Mac (171 MB); cada canción se mezcla allí y solo sube el MP3. Salida idéntica bit a bit a la del servidor en el test. **Medido el 01-11 en el Mac de Chema (MacBook Pro 13" Intel i7, 4 núcleos), jam de 1h56 con 9 pistas: 12 de 12 canciones con `local: true`, 47,5 min de música en 12,4 min (entre 32 y 91 s por canción, unos 16 s por minuto), frente a la estimación de 140 min subiendo los originales al servidor.** Una canción a la vez (`MONTARA_COMPANION_MIX_SLOTS=1`); falta probar con 2 y confirmar por oído. Informe de Fer: `JUPITER_COMPANION_MAC_LOCAL_MIX_FEASIBILITY_2026-11-01.md`.
 - Licencias: Matchering (GPLv3, de terceros) solo se usa en el servidor; el mezclador del Mac no lo instala.

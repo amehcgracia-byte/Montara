@@ -22,3 +22,7 @@ Una línea por acción de administrador (`sudo`). Sin contraseñas, tokens ni ll
 | 2026-11-02 | Codex | Chema | Ran existing montara-update for JM only: main f902ccc (PR #66), private service 8101; no FER changes. |
 | 2026-11-02 | Codex | Chema | Authenticated JM version verification succeeded; a check incorrectly expected version text inside static HTML, so this attempt stopped before checking the download. |
 | 2026-11-02 | Codex | Chema | Repeated authenticated version/HTML and previous-session MP3 download verification with the corrected HTML check: 0.58 f902ccc, no tags/artwork, compressed audio packets unchanged. |
+| 2026-11-02 | Codex | Chema | Read-only recent JM video-project inspection for lighting audit; latest two-video project found, older-record scan stopped on missing-path permission error; no service/project edits. |
+| 2026-11-02 | Codex | Chema | Extracted six bounded before/after frame samples and read existing colour statistics from JM latest project; gamma 1.25 comparison only, no source changes or FER access. |
+| 2026-11-02 | Codex | Chema | Extracted two midpoint gamma 1.65 comparison frames for lighting audit; candidates only, originals and live settings untouched. |
+| 2026-11-02 | Codex | Chema | Extracted two midpoint tone-curve comparison frames; inspected locally, no project settings, engine or service changes. |
