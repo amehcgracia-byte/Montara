@@ -16,7 +16,7 @@ def install_layout(home: Path) -> Path:
     """The folder install.sh --mixer makes: local_mix.py, adapters, track_types and the mixer."""
     mix = home / 'mixer'
     (mix / 'mixer_adapter').mkdir(parents=True)
-    for f in ('mixer_adapter/single_song.py', 'mixer_adapter/extract.py', 'track_types.py'):
+    for f in ('mixer_adapter/single_song.py', 'mixer_adapter/extract.py', 'mixer_adapter/render_progress.py', 'track_types.py'):
         shutil.copy(ROOT / f, mix / f)
     shutil.copy(ROOT / 'companion' / 'local_mix.py', mix / 'local_mix.py')
     (mix / 'mixer').symlink_to(ROOT / 'mixer')
@@ -51,10 +51,23 @@ def test_local_mix_equals_the_server_mix(tmp_path):
     mix = install_layout(tmp_path / 'companion')
     plan_file = tmp_path / 'plan.json'
     plan_file.write_text(json.dumps({**plan, 'faders': {'Keys.wav': -3.0}}))
-    out = subprocess.run([sys.executable, str(mix / 'local_mix.py'), str(plan_file), str(tmp_path / 'local.mp3')], cwd=mix,
-                         capture_output=True, text=True, timeout=600)
-    assert out.returncode == 0, out.stderr[-2000:]
-    assert json.loads(out.stdout.strip().splitlines()[-1])['output'].endswith('local.mp3')
+    progress_file = tmp_path / 'progress.json'
+    snapshots = []
+    with (tmp_path / 'local.stdout').open('w') as stdout, (tmp_path / 'local.stderr').open('w') as stderr:
+        out = subprocess.Popen([sys.executable, str(mix / 'local_mix.py'), str(plan_file), str(tmp_path / 'local.mp3'), str(progress_file)],
+                               cwd=mix, stdout=stdout, stderr=stderr)
+        deadline = time.monotonic() + 600
+        while out.poll() is None and time.monotonic() < deadline:
+            if progress_file.exists():
+                snapshots.append(json.loads(progress_file.read_text()))
+            time.sleep(.03)
+        if out.poll() is None:
+            out.kill(); out.wait(); raise AssertionError('local render timed out')
+    assert out.returncode == 0, (tmp_path / 'local.stderr').read_text()[-2000:]
+    assert json.loads((tmp_path / 'local.stdout').read_text().strip().splitlines()[-1])['output'].endswith('local.mp3')
+    assert any(0 < state['progress'] < 1 and any(t['active'] for t in state['tracks']) for state in snapshots)
+    finished = json.loads(progress_file.read_text())
+    assert finished['status'] == 'ready' and all(t['progress'] == 1 for t in finished['tracks'])
     # The server mixes the same song from the same originals (no previews on the server side here).
     server_data = read(work); server_data.pop('previews'); save(work / 'session.json', server_data)
     (work / 'results').mkdir(exist_ok=True)
@@ -82,7 +95,66 @@ def test_local_plan_and_result_endpoints_and_render_skips_local_songs(tmp_path, 
     (upload / 'upload.json').write_text(json.dumps({'name': 'Song 01.mp3', 'complete': True}))
     response = client.post('/montara/session/abcdefabcdef/local-result', json={'song': 1, 'window': [2, 11], 'upload_id': 'd' * 32})
     assert response.status_code == 200 and (work / 'exports' / 'local-2.000-11.000.mp3').is_file()
+    assert client.get('/montara/session/abcdefabcdef/result/1').status_code == 200  # published before the batch ends
+    tagged = json.loads(subprocess.check_output(['ffprobe', '-v', 'error', '-show_format', '-of', 'json',
+                                                str(work / 'exports' / 'local-2.000-11.000.mp3')]))['format']['tags']
+    assert tagged['title'] == song['name'] and tagged['track'] == '1'
     # The export takes the local song as it is and mixes nothing on the server.
     subprocess.run([sys.executable, '-m', 'mixer_adapter.session', str(work), 'render'], cwd=ROOT, check=True, capture_output=True, timeout=300)
     result = read(work)
     assert result['status'] == 'done' and result['results'][0]['local'] is True and result['results'][0]['path'].endswith('local-2.000-11.000.mp3')
+
+
+def test_companion_reports_real_track_progress_over_http(tmp_path, monkeypatch):
+    import concurrent.futures
+    import threading
+    import urllib.request
+    import urllib.error
+    sys.path.insert(0, str(ROOT / 'companion'))
+    import companion
+    _, _, data, song = session(tmp_path)
+    plan = {**local_plan(data, song), 'mixer': 'b' * 40}
+    layout = install_layout(tmp_path / 'companion')
+    (layout / 'venv').symlink_to(Path(sys.prefix))
+    (layout / 'MIXER_COMMIT').write_text(plan['mixer'])
+    monkeypatch.setattr(companion, 'MIXER_HOME', layout)
+    monkeypatch.setattr(companion, 'CACHE', tmp_path / 'cache')
+    monkeypatch.setattr(companion, 'find_original', lambda original: Path(next(t['path'] for t in data['tracks'] if t['file'] == original['name'])))
+    companion.mix_jobs.clear()
+    server = companion.ThreadingHTTPServer(('127.0.0.1', 0), companion.Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True); thread.start()
+    url = f'http://127.0.0.1:{server.server_port}'
+    def get(path, origin='http://127.0.0.1:8090'):
+        with urllib.request.urlopen(urllib.request.Request(url + path, headers={'Origin': origin}), timeout=10) as response:
+            return json.load(response)
+    ident = 'c' * 32
+    def render():
+        body = json.dumps(dict(plan=plan, mix={}, progress_id=ident)).encode()
+        request = urllib.request.Request(url + '/mix-song', data=body, headers={'Content-Type': 'application/json', 'Origin': 'http://127.0.0.1:8090'})
+        with urllib.request.urlopen(request, timeout=120) as response:
+            return response.read()
+    try:
+        assert get('/health')['mix_progress'] is True
+        with concurrent.futures.ThreadPoolExecutor() as pool:
+            result = pool.submit(render)
+            snapshots = []
+            deadline = time.monotonic() + 120
+            while not result.done() and time.monotonic() < deadline:
+                try:
+                    snapshots.append(get('/mix-progress/' + ident))
+                except urllib.error.HTTPError as error:
+                    assert error.code == 404  # request may still be locating the tracks
+                time.sleep(.05)
+            assert len(result.result(timeout=1)) > 1000
+        assert any(0 < s['progress'] < 1 and len(s['tracks']) == 3 for s in snapshots)
+        final = get('/mix-progress/' + ident)
+        assert final['status'] == 'ready' and final['progress'] == 1
+        assert all('path' not in track for track in final['tracks'])
+        try:
+            get('/mix-progress/' + ident, 'https://untrusted.example')
+            raise AssertionError('untrusted origin accepted')
+        except urllib.error.HTTPError as error:
+            assert error.code == 403
+        assert not list((tmp_path / 'cache').glob('mix-*'))  # snapshots survive without disk debris
+    finally:
+        server.shutdown(); server.server_close(); thread.join(5)

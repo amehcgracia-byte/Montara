@@ -76,6 +76,22 @@ jobs:
       - name: Session detection, common mix, exports and resumable upload
         if: matrix.mode == 'session'
         run: python tests/e2e_session.py --output e2e-output/session --stdout-screenshots
+      - name: Companion mixing, live track progress and buffered playback
+        if: matrix.mode == 'session'
+        run: |
+          python - <<'PY'
+          import os, shutil, sys
+          from pathlib import Path
+          sys.path.insert(0, 'tests')
+          from test_local_mix import install_layout
+          home = Path(os.environ['RUNNER_TEMP']) / 'montara-test-companion'
+          layout = install_layout(home)
+          shutil.copy('companion/companion.py', home / 'companion.py')
+          (layout / 'venv').symlink_to(Path(sys.prefix))
+          import subprocess
+          (layout / 'MIXER_COMMIT').write_text(subprocess.check_output(['git', '-C', 'mixer', 'rev-parse', 'HEAD'], text=True).strip())
+          PY
+          MONTARA_E2E_COMPANION_HOME="$RUNNER_TEMP/montara-test-companion" python tests/e2e_session.py --output e2e-output/session-local --stdout-screenshots
       - uses: actions/upload-artifact@v4
         if: always()
         # Diagnostic storage is optional; test and export failures remain fatal.

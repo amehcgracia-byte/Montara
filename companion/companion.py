@@ -27,7 +27,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-VERSION = "0.5.1"
+VERSION = "0.5.2"
 PORT = int(os.environ.get("MONTARA_COMPANION_PORT", "47820"))
 HOME = Path(os.environ.get("MONTARA_COMPANION_HOME", Path.home() / ".montara-companion"))
 CACHE = HOME / "proxies"
@@ -47,6 +47,8 @@ MIX_SLOTS = threading.Semaphore(max(1, int(os.environ.get("MONTARA_COMPANION_MIX
 sources: dict[str, Path] = {}
 projects: dict[str, Path] = {}
 jobs: dict[str, dict] = {}
+mix_jobs: dict[str, dict] = {}
+mix_jobs_lock = threading.Lock()
 walked_files: dict[str, set[Path]] = {}   # media files the disk walks have seen, by name
 walkers: set[Path] = set()
 walking = threading.Condition()
@@ -476,7 +478,19 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply(200, {"app": "montara-companion", "version": VERSION, "ffmpeg": bool(FFMPEG and FFPROBE),
                                     "hardware_encoder": HW_H264, "tonemap": TONEMAP, "lossless_audio": True,
                                     "audio_preview": OPUS, "segment_formats": ["lossless"] + (["opus"] if OPUS else []),
-                                    "local_mix": local_mixer()})
+                                    "local_mix": local_mixer(), "mix_progress": True})
+        match = re.fullmatch(r"/mix-progress/([a-f0-9]{32})", self.path)
+        if match:
+            with mix_jobs_lock:
+                job = mix_jobs.get(match.group(1))
+                if not job:
+                    return self.reply(404, {"error": "unknown mix"})
+                try:
+                    snapshot = json.loads(job['path'].read_text())
+                    job['snapshot'] = snapshot
+                except (OSError, ValueError):
+                    snapshot = job['snapshot']
+            return self.reply(200, snapshot)
         match = re.fullmatch(r"/proxies/([a-f0-9]{24}p?)(/file)?", self.path)
         if not match or match.group(1) not in jobs:
             return self.reply(404, {"error": "unknown"})
@@ -575,11 +589,25 @@ class Handler(BaseHTTPRequestHandler):
         CACHE.mkdir(parents=True, exist_ok=True)
         ident = f"{os.getpid()}-{threading.get_ident()}-{time.monotonic_ns()}"
         plan_file, output = CACHE / f"mix-{ident}.json", CACHE / f"mix-{ident}.mp3"
+        progress_file = CACHE / f"mix-{ident}.progress.json"
+        progress_id = body.get('progress_id')
+        if progress_id is not None and (not isinstance(progress_id, str) or not re.fullmatch('[a-f0-9]{32}', progress_id)):
+            return self.reply(400, {"error": "invalid progress id"})
+        if progress_id:
+            with mix_jobs_lock:
+                if progress_id in mix_jobs:
+                    return self.reply(409, {"error": "mix id already used"})
+                # Retain a bounded number of terminal snapshots; never evict an active mix.
+                terminal = [key for key, job in mix_jobs.items() if job['snapshot']['status'] in {'ready', 'failed'}]
+                for key in terminal[:max(0, len(mix_jobs) - 63)]:
+                    del mix_jobs[key]
+                mix_jobs[progress_id] = dict(path=progress_file, snapshot=dict(status='queued', progress=0,
+                    tracks=[dict(file=t['file'], progress=0, active=False) for t in tracks]))
         plan_file.write_text(json.dumps({**plan, "tracks": tracks, **{k: mix.get(k) for k in ("faders", "mutes", "effects", "eq") if k in mix}}))
         started = time.monotonic()
         try:
             with MIX_SLOTS:   # one song at a time by default: the mixer uses every core it gets
-                done = subprocess.run([str(MIXER_HOME / "venv" / "bin" / "python"), str(MIXER_HOME / "local_mix.py"), str(plan_file), str(output)],
+                done = subprocess.run([str(MIXER_HOME / "venv" / "bin" / "python"), str(MIXER_HOME / "local_mix.py"), str(plan_file), str(output), str(progress_file)],
                                       cwd=MIXER_HOME, capture_output=True, text=True, timeout=3600,
                                       env={**os.environ, "MONTARA_FFMPEG": FFMPEG or "ffmpeg"})
             if done.returncode != 0 or not output.is_file():
@@ -598,6 +626,16 @@ class Handler(BaseHTTPRequestHandler):
         except subprocess.TimeoutExpired:
             return self.reply(504, {"error": "the local mix took too long"})
         finally:
+            if progress_id:
+                with mix_jobs_lock:
+                    job = mix_jobs[progress_id]
+                    try:
+                        job['snapshot'] = json.loads(progress_file.read_text())
+                    except (OSError, ValueError):
+                        pass
+                    if job['snapshot']['status'] != 'ready':
+                        job['snapshot']['status'] = 'failed'
+            progress_file.unlink(missing_ok=True)
             plan_file.unlink(missing_ok=True)
             output.unlink(missing_ok=True)
 

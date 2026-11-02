@@ -18,11 +18,27 @@ import math
 import os
 import subprocess
 import sys
+import tempfile
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 MIXER = Path(__file__).resolve().parents[1] / "mixer"
+
+
+def tag_song_export(path: Path, title: str, number: int) -> None:
+    """Replace the vendor's session tags, preserving the encoded audio byte for byte."""
+    path = Path(path)
+    handle, temporary = tempfile.mkstemp(prefix='.tags-', suffix='.mp3', dir=path.parent)
+    os.close(handle)
+    try:
+        subprocess.run([os.environ.get('MONTARA_FFMPEG') or 'ffmpeg', '-v', 'error', '-nostdin', '-y',
+                        '-i', str(path), '-map', '0:a:0', '-c:a', 'copy', '-map_metadata', '-1',
+                        '-id3v2_version', '3', '-metadata', f'title={title}', '-metadata', f'track={number}',
+                        temporary], check=True, capture_output=True)
+        Path(temporary).replace(path)
+    finally:
+        Path(temporary).unlink(missing_ok=True)
 
 
 def validate_effects(effects, names):

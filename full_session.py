@@ -134,7 +134,15 @@ def register_full_session(app, data_root, fixtures):
                         else:
                             data.update(status='failed', error='The session worker stopped. Your originals and reviewed cuts are preserved.')
                             save(work / 'session.json', data)
-                return jsonify(public(data))
+                result = public(data)
+                result['render_progress'] = {}
+                if data['status'] in {'rendering', 'done'}:
+                    for path in (work / 'render_progress').glob('*.json'):
+                        try:
+                            result['render_progress'][path.stem] = json.loads(path.read_text())
+                        except (OSError, ValueError):
+                            pass
+                return jsonify(result)
         except ValueError as exc:
             return error(exc, 404)
 
@@ -294,6 +302,13 @@ def register_full_session(app, data_root, fixtures):
             data = read(work)
             body = request.get_json(silent=True) or {}
             song = window_song(data, body.get('window'), body.get('song'))
+            # The accepted window must belong to a saved song; take its chosen name
+            # from the session, not from the anonymous window used during Confirm.
+            saved_song = next((s for s in data.get('songs', []) if s['id'] == song['id']
+                               and abs(s['start'] - song['start']) < .001 and abs(s['end'] - song['end']) < .001), None)
+            if not saved_song:
+                raise ValueError('Save these song boundaries before exporting.')
+            song['name'] = saved_song['name']
             uploads = (Path(data_root).resolve() / 'Uploads').resolve()
             upload_id = str(body.get('upload_id') or '')
             if not re.fullmatch('[a-f0-9]{32}', upload_id):
@@ -308,9 +323,20 @@ def register_full_session(app, data_root, fixtures):
             target = work / 'exports' / f'local-{key}.mp3'
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.move(str(source), target)
+            # Older companions also sent the vendor's fixed Jam/artist/song-1 tags.
+            from mixer_adapter.single_song import tag_song_export
+            tag_song_export(target, song['name'], song['id'])
             (work / 'local_results').mkdir(exist_ok=True)
             save(work / 'local_results' / f'{key}.json', dict(window=[song['start'], song['end']], path=str(target),
                                                                mixer=str(body.get('mixer') or '')[:40], seconds=body.get('seconds')))
+            # Publish each finished song while the companion is already mixing the next.
+            with (work / 'request.lock').open('a') as lock:
+                fcntl.flock(lock, fcntl.LOCK_EX)
+                latest = read(work)
+                latest['results'] = [r for r in latest.get('results', []) if r['id'] != song['id']]
+                latest['results'].append(dict(id=song['id'], name=song['name'], start=song['start'], end=song['end'],
+                                              path=str(target), local=True))
+                save(work / 'session.json', latest)
             shutil.rmtree(uploads / upload_id, ignore_errors=True)
             return jsonify(ok=True, window=[song['start'], song['end']])
         except ValueError as exc:

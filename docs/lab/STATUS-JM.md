@@ -1,11 +1,10 @@
 # STATUS — laboratorio de Chema (main · claude/* · codex/*)
 
-Actualizado: 2026-11-01 tarde · lo mantiene el equipo de Chema · 40 líneas como máximo, se sobrescribe.
+Actualizado: 2026-11-02 · lo mantiene el equipo de Chema · 40 líneas como máximo, se sobrescribe.
 
-## Referencias
 - `mixer`: rama `claude/winds-synth-bass-lowpass` (ZuckerMixer PR #8, **sin mergear en master**); Montara apunta a su último commit
 - VM: e2-standard-8, `jm` en `127.0.0.1:8101`, `fer` en `:8102`; apagado automático (60 min sin web, 120 min sin SSH)
-- Companion **0.5.1** (mezcla en el Mac, opcional): se actualiza volviendo a ejecutar `companion/install.sh --mixer` y reabriéndolo
+- Companion **0.5.2** (mezcla en el Mac, opcional): se actualiza volviendo a ejecutar `companion/install.sh --mixer` y reabriéndolo
 
 ## Sesión completa (jam entera) — cómo va
 | Pieza | PR |
@@ -16,6 +15,7 @@ Actualizado: 2026-11-01 tarde · lo mantiene el equipo de Chema · 40 líneas co
 | Confirm por canción; subida y mezcla en paralelo; onda y copia de escucha durante la detección | #48–#50 |
 | Tipos de pista (menú por pista, rellenado por el nombre) + Stereo L/R | #51 |
 | Motor: la puntuación de planos usa la copia ligera, no el original 4K de iPhone/Sony (hallazgo de Fer, #56; zucker_videos #49) | #59 |
+| Progreso por canción y pista en mezcla local/servidor; MP3 completo antes de activar Play, resultados a medida que terminan; Fast fijo; etiquetas de MP3 con el nombre y número elegidos, sin Jam/artista heredados | 0.56 |
 | Primer play sin espera: copia de escucha de 414 s a unos 100 s con la VM libre en una jam de 1h56 (un decodificador por pista, suma en numpy) y la barra de carga la incluye; `montara-start` no abre una segunda conexión | 0.55 |
 | Rangos por ventana (un split ya no vacía la cola), estados de Confirm, mixer y Save al instante, círculo de carga, Opus "Rápido", pistas vacías fuera, "aplicar a todas", L/R enlazadas, mixer ancho, **diccionario de instrumentos** | #52 |
 
@@ -35,6 +35,6 @@ Actualizado: 2026-11-01 tarde · lo mantiene el equipo de Chema · 40 líneas co
 - Mergear ZuckerMixer PR #8 en master.
 - El fallo de canciones cortadas o vacías del #48: arreglado el fallo de la cola (#52); falta confirmarlo con `deploy/vm/audio_check.py` en una sesión real.
 - Cola de render para unos 10 testers (VM más grande y luego workers bajo demanda): sin empezar.
-- La caché del companion crece sin límite.
+- Caché del companion sin límite; para las barras locales hace falta actualizarlo a 0.5.2 (`install.sh --mixer`).
 - `run_history.py` no guarda qué cámara usa cada plano.
 - Cambiar las contraseñas web de la VM que pasaron por chat (sin confirmar).

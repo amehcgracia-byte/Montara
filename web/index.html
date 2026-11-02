@@ -161,10 +161,10 @@
     <progress id="sessionProgress" max="100" value="0" aria-label="Session progress"></progress>
     <p class="hint tiny" id="sessionEta"></p>
     <p class="hint tiny" id="sessionUpload" role="status" aria-live="polite"></p>
-    <label class="hint tiny session-quality" id="sessionQualityRow" hidden>Original audio for the export
-      <select id="sessionQuality"><option value="fast">Fast · high-quality Opus (several times lighter)</option><option value="lossless">Lossless · every sample (slow on a home connection)</option></select>
-      <span id="sessionQualityNote"></span></label>
-    <div id="sessionBars" class="render-bars session-bars" hidden aria-hidden="true"></div>
+    <div id="sessionRender" hidden aria-label="Export progress">
+      <div id="sessionBars" class="render-bars session-bars" aria-label="Songs"></div>
+      <div id="sessionTrackBars" class="session-track-bars" aria-label="Tracks"></div>
+    </div>
     <div id="sessionSongs"></div>
     <div id="sessionResults"></div>
     <div class="actions"><button id="sessionBack" class="btn ghost" type="button">Back to footage</button><button id="sessionCancel" class="btn ghost" type="button" hidden>Cancel</button><button id="sessionMix" class="btn primary" type="button" hidden>Mix selected songs</button></div>
