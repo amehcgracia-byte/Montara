@@ -109,6 +109,20 @@ def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
     if page.locator("#frames").is_visible():
         page.wait_for_function("!document.querySelector('#framesHint').textContent.includes('Preparing')", timeout=300_000)
         page.screenshot(path=str(shots / "05-frames.png"), full_page=True)
+        if mode in {"stage", "mix"}:
+            page.locator(".frame .shot-edit").first.click()
+            dialog = page.locator("dialog.cut-dialog")
+            dialog.wait_for(state="visible")
+            assert dialog.locator('[name="lightAuto"]').is_checked()
+            dialog.locator('.light-original').click()
+            assert dialog.locator('.light-original').get_attribute('aria-pressed') == 'true'
+            dialog.locator('.light-original').click()
+            dialog.locator('[name="light"]').fill('0.05')
+            page.screenshot(path=str(shots / "05b-light-controls.png"), full_page=True)
+            dialog.get_by_role('button', name='Save shot', exact=True).click()
+            dialog.wait_for(state='detached', timeout=120_000)
+            response = page.request.get(url + '/api/v1/edit/shot?index=0')
+            assert response.ok and response.json()['light']['light'] == .05
         first = page.locator(".frame .swap:not([disabled])").first
         if first.count():
             before = page.locator(".frame .thumb img").first.get_attribute("src")
@@ -250,7 +264,7 @@ def main() -> int:
         from io import BytesIO
         from PIL import Image
         for mode in ([args.mode] if args.mode else list(MODES)):
-            for name in ('03-cameras.png', '05-frames.png', '07-result.png'):
+            for name in ('03-cameras.png', '05-frames.png', '05b-light-controls.png', '07-result.png'):
                 source = out / mode / name
                 if source.is_file():
                     buffer = BytesIO()

@@ -572,3 +572,5 @@ body.is-intro .top,body.is-intro footer,body.is-intro #version{visibility:hidden
 @keyframes session-active{to{opacity:.5}}
 @media(prefers-reduced-motion:reduce){#sessionRender i.active{animation:none}}
 .session-result progress{width:min(220px,50vw);height:5px;accent-color:var(--accent)}
+
+.music-light{border:1px solid var(--line,#333);border-radius:12px;padding:12px;margin:12px 0}.music-light label{display:block;margin:8px 0}.music-light input[type=range]{width:100%}.music-light output{float:right;opacity:.65}.music-light input[type=checkbox]{display:inline-block;width:auto;vertical-align:middle;margin:0 6px 0 0}

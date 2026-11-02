@@ -35,7 +35,16 @@ if ! command -v ffmpeg >/dev/null 2>&1 && [ ! -x /opt/homebrew/bin/ffmpeg ] && [
 fi
 say "ffmpeg: ok"
 
+# Do not replace code underneath a local mix, proxy or video render.
+if command -v lsof >/dev/null 2>&1; then
+  for listener in $(lsof -t -iTCP:47820 -sTCP:LISTEN 2>/dev/null || true); do
+    if pgrep -P "$listener" >/dev/null 2>&1; then say "Wait for the current Montara work to finish, then run this installer again.";exit 1;fi
+  done
+fi
 mkdir -p "$DIR/bin"
+for f in video_recipe.py video_jobs.py; do
+  curl -fsSL "$RAW/$f" -o "$DIR/$f.new" && mv "$DIR/$f.new" "$DIR/$f"
+done
 curl -fsSL "$RAW/companion.py" -o "$DIR/companion.py.new" && mv "$DIR/companion.py.new" "$DIR/companion.py"
 cat > "$DIR/bin/montara-companion" <<EOF
 #!/bin/bash
@@ -72,6 +81,35 @@ if [ "${1:-}" = "--mixer" ] || [ "${MONTARA_MIXER:-}" = "1" ]; then
     || { say "the local mixer could not start; the server keeps mixing your songs"; rm -f "$MIX/MIXER_COMMIT"; exit 1; }
   echo "$SHA" > "$MIX/MIXER_COMMIT"
   say "local mixer ready (mixer ${SHA:0:7}, $(du -sh "$MIX" | cut -f1))"
+fi
+
+# Optional native video renderer: reuse the pinned Editor's export, not a
+# second simplified renderer. It needs no speech model, LLM or torch download.
+if [ "${1:-}" = "--video" ] || [ "${MONTARA_VIDEO:-}" = "1" ]; then
+  VIDEO="$DIR/video"; ROOT_RAW="https://raw.githubusercontent.com/amehcgracia-byte/Montara/$REF"
+  VPY=""
+  for candidate in python3.11 python3.12 python3.10 "$DIR/mixer/venv/bin/python" "$PY"; do
+    if command -v "$candidate" >/dev/null 2>&1 && "$candidate" -c 'import sys;sys.exit(0 if (3,10)<=sys.version_info[:2]<=(3,12) else 1)' 2>/dev/null; then VPY="$(command -v "$candidate")";break;fi
+  done
+  if [ -z "$VPY" ] && command -v brew >/dev/null 2>&1; then
+    brew install python@3.11
+    VPY="$(brew --prefix python@3.11)/bin/python3.11"
+  fi
+  [ -n "$VPY" ] || { say "The video renderer needs Python 3.10–3.12. Install Python 3.11, then run this installer with --video."; exit 1; }
+  SHA="$(curl -fsSL "https://api.github.com/repos/amehcgracia-byte/Montara/contents/engine?ref=$REF" | "$VPY" -c 'import json,sys; print(json.load(sys.stdin)["sha"])')"
+  mkdir -p "$VIDEO/brand"
+  touch "$VIDEO/INSTALLING"
+  rm -rf "$VIDEO/engine.new" && mkdir -p "$VIDEO/engine.new"
+  curl -fsSL "https://codeload.github.com/amehcgracia-byte/zucker_videos/tar.gz/$SHA" | tar -xz -C "$VIDEO/engine.new" --strip-components=1
+  rm -rf "$VIDEO/engine" && mv "$VIDEO/engine.new" "$VIDEO/engine"
+  for f in local_video.py video_recipe.py; do curl -fsSL "$RAW/$f" -o "$VIDEO/$f"; done
+  for f in montara-logo.png montara-watermark.png; do curl -fsSL "$ROOT_RAW/web/brand/$f" -o "$VIDEO/brand/$f"; done
+  [ -x "$VIDEO/venv/bin/python" ] || "$VPY" -m venv "$VIDEO/venv"
+  "$VIDEO/venv/bin/python" -m pip install -q 'numpy>=1.26,<2' 'scipy>=1.11,<1.15' 'opencv-python-headless>=4.9,<4.12' 'pillow>=10' 'flask>=3'
+  (cd "$VIDEO/engine" && ZUCKER_DATA_ROOT="$VIDEO/state" "$VIDEO/venv/bin/python" -c 'from core.stages.export import ExportStage')
+  echo "$SHA" > "$VIDEO/ENGINE_COMMIT"
+  rm -f "$VIDEO/INSTALLING"
+  say "Original-quality video renderer ready (editor ${SHA:0:7})"
 fi
 
 say "installed in $DIR · next time just type:  montara-companion"

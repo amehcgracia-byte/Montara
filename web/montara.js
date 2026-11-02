@@ -1262,6 +1262,7 @@ $("#useMix").addEventListener("click", async () => {
 });
 
 async function saveCameras() {
+  if(state.platform==='youtube')await api("/settings/video-light",{project_id:state.projectId,enabled:true});
   await api("/settings/camera-types",{project_id:state.projectId,camera_types:Object.fromEntries(videos().map(f=>[f.path,cameraTypeOf(f)]))});
   const flat = videos().filter((f) => !isSphere(f));
   const subjects = Object.fromEntries(flat.map((f) => [f.path, state.subjects[f.path] || "general"]));
@@ -1406,6 +1407,7 @@ function setProgress(percent, message, detail) {
 }
 
 $("#cancel").addEventListener("click", async () => {
+  if(state.nativeExport){state.nativeExport.cancelled=true;await montaraCompanion.cancelVideo(state.nativeExport.id);state.nativeExport=null;stopPolling();show('frames');return;}
   try { await api("/wizard/cancel", {}); } catch (error) { toast(error.message, true); }
   stopPolling();
   show(state.platform === "show" ? "showSetup" : "footage");
@@ -1576,6 +1578,7 @@ async function swap(index) {
 $("#renderFrames").addEventListener("click", async () => {
   try {
     clearInterval(state.framesPoll);
+    if(state.platform==='youtube' && state.files.some(f=>f.kind==='video' && f.small))return await finishOriginalVideo({result:{}});
     await api("/wizard/review/render", {});
     setProgress(0, "Rendering your video…", "");
     show("making");
@@ -2166,9 +2169,58 @@ $("#showExport").addEventListener("click", async () => {
   } catch (error) { toast(error.message, true); } finally { button.disabled = false; }
 });
 
+async function finishOriginalVideo(s) {
+  if(state.nativeExport)return;
+  const job={cancelled:false,id:null};state.nativeExport=job;stopPolling();show('making');setProgress(0,'Preparing original-quality video…','');
+  try {
+    await montaraCompanion.detect();
+    if(!montaraCompanion.info?.local_video)throw new Error('Update the Montara companion with the video renderer to export from your originals.');
+    const recipe=await api('/edit/native-recipe?project_id='+encodeURIComponent(state.projectId));
+    if(recipe.engine!==montaraCompanion.info.local_video.engine)throw new Error('The companion needs the same editor version as this page. Update it before exporting.');
+    if(!state.localProject)state.localProject=await montaraCompanion.projectFolder($('#videoName').value.trim()||todayName(),state.files.filter(f=>f.original).map(f=>f.original));
+    if(!state.localProject)throw new Error('Choose a project folder to save the original-quality video.');
+    const sources=[];
+    for(const source of recipe.sources){
+      const file=state.files.find(f=>f.path===source.path);
+      if(file?.original)sources.push({source:source.key,original:file.original});
+      else {
+        if(file?.small || /\.small\.mp4$/i.test(source.path))throw new Error('Reconnect the original videos on this computer before exporting.');
+        const response=await fetch('/api/v1/edit/native-source/'+source.key+'?'+new URLSearchParams({revision:recipe.revision,project_id:state.projectId}));
+        if(!response.ok)throw new Error('The original camera video is unavailable.');
+        const name='montara-render-source-'+crypto.randomUUID().replaceAll('-','')+'.mp4';
+        await montaraCompanion.saveInProject(state.localProject.id,name,await response.blob());sources.push({source:source.key,asset:name});
+      }
+      if(job.cancelled)return;
+    }
+    setProgress(1,'Preparing your master…','');
+    const response=await fetch('/api/v1/edit/native-master?'+new URLSearchParams({revision:recipe.revision,project_id:state.projectId}));
+    if(!response.ok)throw new Error('The master is not available for this edit.');
+    const master='montara-render-audio-'+crypto.randomUUID().replaceAll('-','')+'.audio';
+    await montaraCompanion.saveInProject(state.localProject.id,master,await response.blob());
+    if(job.cancelled)return;
+    job.id=await montaraCompanion.startVideo({project:state.localProject.id,recipe,master,originals:sources,branding:state.branding||'none',name:$('#videoName').value.trim()||todayName()});
+    for(;;){
+      if(job.cancelled){await montaraCompanion.cancelVideo(job.id);return;}
+      const status=await montaraCompanion.videoStatus(job.id);
+      if(status.status==='failed')throw new Error(status.error || 'The original-quality export failed.');
+      if(status.status==='cancelled')return;
+      setProgress(Math.min(99,Math.round((status.progress||0)*100)),'Rendering original-quality video…','');
+      if(status.status==='ready')break;
+      await new Promise(resolve=>setTimeout(resolve,700));
+    }
+    if(job.cancelled)return;
+    state.nativeExport=null;
+    showResult({...s,result:{...s.result,native:true,url:montaraCompanion.videoUrl(job.id)}});
+    $('#download').href=montaraCompanion.videoUrl(job.id,true);
+  } catch(error){if(!job.cancelled){state.nativeExport=null;fail(error);}}
+}
+
 // ---------- result ----------
 function showResult(s) {
   const result = s.result || {};
+  if(state.platform==='youtube' && !result.audio && !result.native && state.files.some(f=>f.kind==='video' && f.small))return finishOriginalVideo(s);
+  if(result.native){state.savedLocally=true;$('#resultVideo').crossOrigin='anonymous';}
+  else $('#resultVideo').removeAttribute('crossorigin');
   footageMemory.clear(state.platform);  // the video is made; next visit starts clean
   if (state.localProject && !state.savedLocally) {
     state.savedLocally = true;

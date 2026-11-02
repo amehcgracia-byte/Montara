@@ -20,6 +20,8 @@ def install_layout(home: Path) -> Path:
         shutil.copy(ROOT / f, mix / f)
     shutil.copy(ROOT / 'companion' / 'local_mix.py', mix / 'local_mix.py')
     (mix / 'mixer').symlink_to(ROOT / 'mixer')
+    for name in ('video_jobs.py','video_recipe.py'):
+        shutil.copy(ROOT / 'companion' / name, home / name)
     return mix
 
 

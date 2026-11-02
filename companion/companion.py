@@ -27,7 +27,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-VERSION = "0.5.3"
+VERSION = "0.6.0"
 PORT = int(os.environ.get("MONTARA_COMPANION_PORT", "47820"))
 HOME = Path(os.environ.get("MONTARA_COMPANION_HOME", Path.home() / ".montara-companion"))
 CACHE = HOME / "proxies"
@@ -43,6 +43,9 @@ PLACES = HOME / "places.json"   # folders where originals were found: they survi
 
 MIXER_HOME = HOME / "mixer"   # optional: install.sh --mixer (same mixer as the server, songs mixed here)
 MIX_SLOTS = threading.Semaphore(max(1, int(os.environ.get("MONTARA_COMPANION_MIX_SLOTS", "1"))))
+
+from video_jobs import VideoJobs
+video_jobs = VideoJobs(HOME)
 
 sources: dict[str, Path] = {}
 projects: dict[str, Path] = {}
@@ -447,8 +450,9 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Access-Control-Allow-Origin", origin)
             self.send_header("Vary", "Origin")
             self.send_header("Access-Control-Allow-Private-Network", "true")
-            self.send_header("Access-Control-Allow-Headers", "Content-Type")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type, Range")
             self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+            self.send_header("Access-Control-Expose-Headers", "Content-Range, Content-Length, Content-Disposition, X-Mix-Seconds")
 
     def reply(self, code: int, body: dict) -> None:
         data = json.dumps(body).encode()
@@ -465,20 +469,32 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", "0")
         self.end_headers()
 
-    def body(self) -> dict:
+    def body(self, limit=65536) -> dict:
         length = int(self.headers.get("Content-Length") or 0)
-        if length > 65536:
+        if length > limit:
             raise ValueError("request too large")
-        return json.loads(self.rfile.read(length) or b"{}")
+        value = json.loads(self.rfile.read(length) or b"{}")
+        if not isinstance(value, dict):
+            raise ValueError("request must be an object")
+        return value
 
     def do_GET(self):
-        if not self.origin_ok() and self.path != "/health":
+        if not self.origin_ok() and self.path != "/health" and not re.fullmatch(r"/video-renders/[a-f0-9]{32}/file\?download=1", self.path):
             return self.reply(403, {"error": "origin not allowed"})
         if self.path == "/health":
             return self.reply(200, {"app": "montara-companion", "version": VERSION, "ffmpeg": bool(FFMPEG and FFPROBE),
                                     "hardware_encoder": HW_H264, "tonemap": TONEMAP, "lossless_audio": True,
                                     "audio_preview": OPUS, "segment_formats": ["lossless"] + (["opus"] if OPUS else []),
-                                    "local_mix": local_mixer(), "mix_progress": True})
+                                    "local_mix": local_mixer(), "mix_progress": True, "local_video": video_jobs.runtime()})
+        native = re.fullmatch(r'/video-renders/([a-f0-9]{32})(/file)?(?:\?download=1)?',self.path)
+        if native:
+            token=native.group(1)
+            if native.group(2):
+                target=video_jobs.output(token)
+                if not target:return self.reply(404,{'error':'The final video is not ready'})
+                return self.send_video(target,download=self.path.endswith('?download=1'))
+            status=video_jobs.status(token)
+            return self.reply(200,status) if status else self.reply(404,{'error':'Unknown video render'})
         match = re.fullmatch(r"/mix-progress/([a-f0-9]{32})", self.path)
         if match:
             with mix_jobs_lock:
@@ -515,9 +531,17 @@ class Handler(BaseHTTPRequestHandler):
         if save:
             return self.save_file(save.group(1), save.group(2))
         try:
-            body = self.body()
+            body = self.body(limit=2*1024*1024 if self.path=="/video-renders" else 65536)
         except ValueError:
             return self.reply(400, {"error": "invalid request"})
+        cancel_video=re.fullmatch(r'/video-renders/([a-f0-9]{32})/cancel',self.path)
+        if cancel_video:
+            return self.reply(200,{'cancelled':True}) if video_jobs.cancel(cancel_video.group(1)) else self.reply(404,{'error':'Unknown video render'})
+        if self.path == '/video-renders':
+            try:
+                token=video_jobs.start(body,projects,find_original)
+                return self.reply(202,{'id':token})
+            except (ValueError,OSError) as exc:return self.reply(400,{'error':str(exc)})
         if self.path == "/locate":
             name, size, print_ = body.get("name"), body.get("size"), body.get("fingerprint")
             if (not isinstance(name, str) or "/" in name or "\\" in name or Path(name).suffix.lower() not in VIDEO_SUFFIXES | AUDIO_SUFFIXES
@@ -679,6 +703,32 @@ class Handler(BaseHTTPRequestHandler):
                 shutil.copyfileobj(handle, self.wfile, 1024 * 1024)
         finally:
             target.unlink(missing_ok=True)
+
+    def send_video(self,target,download=False):
+        size=target.stat().st_size;start=0;end=size-1;header=self.headers.get('Range')
+        if header:
+            match=re.fullmatch(r'bytes=(\d*)-(\d*)',header)
+            if not match or not any(match.groups()):return self.reply(416,{'error':'Invalid range'})
+            a,b=match.groups()
+            if a:start=int(a);end=min(size-1,int(b)) if b else size-1
+            else:start=max(0,size-int(b))
+            if start>end or start>=size:return self.reply(416,{'error':'Range outside video'})
+        self.send_response(206 if header else 200);self.cors(self.origin_ok())
+        self.send_header('Content-Type','video/mp4');self.send_header('Accept-Ranges','bytes')
+        self.send_header('Content-Length',str(end-start+1))
+        if header:self.send_header('Content-Range',f'bytes {start}-{end}/{size}')
+        if download:
+            from urllib.parse import quote
+            self.send_header('Content-Disposition',"attachment; filename*=UTF-8''"+quote(target.name))
+        self.end_headers()
+        try:
+            with target.open('rb') as handle:
+                handle.seek(start);remaining=end-start+1
+                while remaining:
+                    chunk=handle.read(min(1024*1024,remaining))
+                    if not chunk:break
+                    self.wfile.write(chunk);remaining-=len(chunk)
+        except (BrokenPipeError,ConnectionResetError):pass
 
     def save_file(self, project_id: str, raw_name: str):
         from urllib.parse import unquote

@@ -70,6 +70,9 @@ jobs:
       - name: Montara regression tests
         if: matrix.mode == 'session'
         run: python -m pytest tests -q
+      - name: Engine lighting, framing and preview parity
+        if: matrix.mode == 'session'
+        run: cd engine && python -m pytest tests/test_video_light.py tests/test_flat_framing.py tests/test_review_previews.py -q
       - name: Mixer waveform, stereo linking and peak safety
         if: matrix.mode == 'session'
         run: python -m pytest mixer/test_master_limiter.py -q

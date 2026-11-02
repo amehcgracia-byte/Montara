@@ -47,6 +47,15 @@ const montaraCompanion = (() => {
       if (!response.ok) throw new Error('The companion could not save the video.');
       return (await response.json()).saved;
     },
+    async startVideo(body) {
+      const response=await call('/video-renders',json(body));const data=await response.json();
+      if(!response.ok)throw new Error(data.error || 'Could not start original-quality export');return data.id;
+    },
+    async videoStatus(id) {
+      const response=await call(`/video-renders/${id}`);if(!response.ok)throw new Error('The companion video export is unavailable');return response.json();
+    },
+    async cancelVideo(id) {if(id)await call(`/video-renders/${id}/cancel`,json({}));},
+    videoUrl(id,download=false){return BASE+`/video-renders/${id}/file`+(download?'?download=1':'');},
     /* Resolves to {file, original} with the small version, {missing: true} if it is not on this
        computer, or null when the companion cannot help with this file. */
     async smallVersion(file, onProgress, cancelled = () => false, {preview = false} = {}) {

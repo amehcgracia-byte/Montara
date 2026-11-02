@@ -23,15 +23,16 @@ starts it. Next time, open Terminal and type `montara-companion`. Ctrl+C stops i
   on the server.
 - 360 videos are still uploaded as they are (their projection metadata must survive).
 
-## Not yet
+## Audio and final export
 - WAV/AIFF tracks (16/24/32-bit integer) are sent as lossless FLAC (`name.wav.flac`), usually
   30–60 % of the size. The server turns each back into the identical WAV, BWF time reference
   included, before the mixer reads it. 32-bit float WAVs go as WavPack (FLAC has no float), also lossless.
 - With *Full session · audio* ticked, tracks go as light Opus previews instead; at export only the
   song ranges of the originals are sent (FLAC or WavPack).
-- The final video is made on the server from the small versions (720p source).
-- Rendering the originals on this computer is the next step. It needs the engine to relink
-  a project from small versions to originals (`docs/lab/INVENTORY-FER.md`, F8 FOCUS_A_C).
+- Stage can now export on this computer from the fingerprint-verified original videos. Only the edit recipe and master audio travel back; original camera files stay on the disk. The same pinned Editor renders the light correction, reframing, camera changes and audio timing.
+- Install/update the video runtime once: `curl -fsSL https://raw.githubusercontent.com/amehcgracia-byte/Montara/main/companion/install.sh | bash -s -- --video`. It uses Python 3.10–3.12, NumPy/SciPy/OpenCV/Pillow and FFmpeg; no LLM or speech-model installation. The installer also works with the existing optional local mixer.
+- Final Stage output is 1080p; a 720p editing copy is never silently offered as the original-quality final file when the companion created that copy. The result is saved in the chosen project folder and can be watched/downloaded while the companion is running. Disconnecting the original drive stops export with an error.
+- Current native-export scope: Stage, Montara/no branding. Personal logos and native Push/Show export are not wired into this route yet. Projects uploaded directly as originals retain their server export path.
 
 ## Requirements
 - Python 3.9 or newer. On a Mac: `xcode-select --install`.
