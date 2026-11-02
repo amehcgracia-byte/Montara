@@ -50,18 +50,18 @@ class VideoJobs:
             source_files[key]=str(Path(path).resolve())
         branding=body.get('branding','none')
         if branding not in ('none','montara'):raise ValueError('Native export with a personal logo is not available yet')
-        token=uuid.uuid4().hex;work=folder/'.montara-renders'/token;work.mkdir(parents=True)
-        # Never overwrite a user file, including a camera original in the project folder.
-        name=re.sub(r'[^\w .()-]','-',str(body.get('name') or 'Montara video'))[:70].strip(' .') or 'Montara video'
-        output=folder/(name+'.mp4');suffix=2
-        while output.exists():
-            output=folder/(name+f' ({suffix}).mp4');suffix+=1
-        progress=work/'progress.json'
-        manifest={'recipe':recipe,'source_files':source_files,'master':str(master),'branding':branding,'work':str(work),'output':str(output),'progress':str(progress)}
-        (work/'render.json').write_text(json.dumps(manifest))
         with self.lock:
             if sum(j['status'] in ('queued','rendering') for j in self.jobs.values())>=2:raise ValueError('Wait for the current video export')
-            # Retain a bounded number of completed jobs; files remain in the chosen folder.
+            token=uuid.uuid4().hex;work=folder/'.montara-renders'/token;work.mkdir(parents=True)
+            # Reserve queued outputs too: two exports may request the same name.
+            name=re.sub(r'[^\w .()-]','-',str(body.get('name') or 'Montara video'))[:70].strip(' .') or 'Montara video'
+            output=folder/(name+'.mp4');suffix=2
+            reserved={j['path'] for j in self.jobs.values()}
+            while output.exists() or output in reserved:
+                output=folder/(name+f' ({suffix}).mp4');suffix+=1
+            progress=work/'progress.json'
+            manifest={'recipe':recipe,'source_files':source_files,'master':str(master),'branding':branding,'work':str(work),'output':str(output),'progress':str(progress)}
+            (work/'render.json').write_text(json.dumps(manifest))
             for key in [k for k,j in self.jobs.items() if j['status'] in ('ready','failed','cancelled')][:-30]:self.jobs.pop(key)
             self.jobs[token]={'status':'queued','progress':0,'path':output,'work':work,'snapshot':progress}
         threading.Thread(target=self._run,args=(token,),daemon=True).start()
@@ -83,9 +83,10 @@ class VideoJobs:
                     except subprocess.TimeoutExpired:
                         self.cancel(token);raise RuntimeError('The video render exceeded its time limit')
                 job.pop('process',None)
-                if job['status']=='cancelled':return
-                if code or not job['path'].is_file():raise RuntimeError('The original-quality render failed. The diagnostic is saved in the project folder.')
-                job.update(status='ready',progress=1.)
+                with self.lock:
+                    if job['status']=='cancelled':return
+                    if code or not job['path'].is_file():raise RuntimeError('The original-quality render failed. The diagnostic is saved in the project folder.')
+                    job.update(status='ready',progress=1.)
             except Exception as exc:
                 if job['status']!='cancelled':job.update(status='failed',error=str(exc)[:250])
 

@@ -26,7 +26,7 @@ def run(manifest):
     p.data['inputs']['videos']=records
     p.data['inputs']['master']=file_record(body['master'])
     p.data['settings']['wizard']={'platform':'youtube'}
-    p.data['settings']['edit']['video_light']={'enabled':any('video_light' in s for s in recipe['segments'])}
+    p.data['settings']['edit']['video_light']={'enabled':False}
     p.data['settings']['export'].update(segment_workers=2)
     brand=Path(__file__).parent/'brand'
     state=root/'state';state.mkdir(exist_ok=True)

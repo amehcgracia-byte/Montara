@@ -26,6 +26,7 @@ def geometry(value,depth=0):
 
 def controls(name,value):
     value=geometry(value)
+    if value is None:return None
     if name in ('motion','flat_framing','spherical_shot','video_light','reel_framing') and value is not None and not isinstance(value,dict):
         raise ValueError('Invalid camera controls')
     if name=='flat_framing' and value:
