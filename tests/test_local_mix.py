@@ -95,12 +95,24 @@ def test_local_plan_and_result_endpoints_and_render_skips_local_songs(tmp_path, 
     upload = data_root / 'Uploads' / ('d' * 32); upload.mkdir(parents=True)
     subprocess.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'sine=d=2', str(upload / 'Song 01.mp3')], check=True)
     (upload / 'upload.json').write_text(json.dumps({'name': 'Song 01.mp3', 'complete': True}))
-    response = client.post('/montara/session/abcdefabcdef/local-result', json={'song': 1, 'window': [2, 11], 'upload_id': 'd' * 32})
+    response = client.post('/montara/session/abcdefabcdef/local-result', json={'song': 1, 'window': [2, 11], 'upload_id': 'd' * 32,
+                           'mixer': plan['mixer'], 'mix': data['settings']['per_song']['1']})
     assert response.status_code == 200 and (work / 'exports' / 'local-2.000-11.000.mp3').is_file()
     assert client.get('/montara/session/abcdefabcdef/result/1').status_code == 200  # published before the batch ends
     tagged = json.loads(subprocess.check_output(['ffprobe', '-v', 'error', '-show_format', '-of', 'json',
                                                 str(work / 'exports' / 'local-2.000-11.000.mp3')]))['format']['tags']
     assert tagged['title'] == song['name'] and tagged['track'] == '1'
+    from mixer_adapter.session import local_results
+    current = read(work)
+    assert local_results(work, current)
+    changed = json.loads(json.dumps(current))
+    changed['settings']['per_song']['1']['faders']['Keys.wav'] = -9
+    assert not local_results(work, changed)  # changing the mix must never replay an old master
+    receipt = next((work / 'local_results').glob('*.json'))
+    valid = receipt.read_text()
+    stale = json.loads(valid); stale['mixer'] = '0' * 40; receipt.write_text(json.dumps(stale))
+    assert not local_results(work, current)  # nor after a mixer upgrade
+    receipt.write_text(valid)
     # The export takes the local song as it is and mixes nothing on the server.
     subprocess.run([sys.executable, '-m', 'mixer_adapter.session', str(work), 'render'], cwd=ROOT, check=True, capture_output=True, timeout=300)
     result = read(work)

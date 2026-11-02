@@ -2,7 +2,7 @@
 
 Actualizado: 2026-11-02 · lo mantiene el equipo de Chema · 40 líneas como máximo, se sobrescribe.
 
-- `mixer`: rama `claude/winds-synth-bass-lowpass` (ZuckerMixer PR #8, **sin mergear en master**); Montara fija `41f6852` (limitador suave, PR Mixer #9)
+- `mixer`: rama `claude/winds-synth-bass-lowpass` (ZuckerMixer PR #8, **sin mergear en master**); Montara fija `f15ff91` (limitador suave, PR Mixer #9)
 - VM: e2-standard-8, `jm` en `127.0.0.1:8101`, `fer` en `:8102`; apagado automático (60 min sin web, 120 min sin SSH)
 - Companion **0.5.2** (mezcla en el Mac, opcional): se actualiza volviendo a ejecutar `companion/install.sh --mixer` y reabriéndolo
 

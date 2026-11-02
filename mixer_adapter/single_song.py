@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any
 
 MIXER = Path(__file__).resolve().parents[1] / "mixer"
+AUTO_MASTER_TARGET_LUFS = -15.0
 
 
 def tag_song_export(path: Path, title: str, number: int) -> None:
@@ -254,7 +255,7 @@ class SingleSongMix:
         song = overrides.setdefault("songs", {}).setdefault("1", {})
         # A slightly more conservative automatic master; explicit in the plan so
         # both the server and the companion use the same loudness target.
-        song["target_lufs"] = -15.0
+        song["target_lufs"] = AUTO_MASTER_TARGET_LUFS
         stems = song.setdefault("stems", {})
         for name, value in (base_gains or {}).items():
             # A full session shares the audible baseline of its reviewed mix.
