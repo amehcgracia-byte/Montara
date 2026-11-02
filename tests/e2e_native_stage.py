@@ -3,7 +3,7 @@
 Uses a preselected test folder in place of the OS folder picker. All media,
 proxying, HTTP, analysis, lighting and final rendering are real.
 """
-import argparse,json,os,shutil,subprocess,sys,time
+import argparse,hashlib,json,os,shutil,subprocess,sys,time
 from pathlib import Path
 from urllib.request import Request,urlopen
 from playwright.sync_api import sync_playwright
@@ -69,7 +69,10 @@ def main():
             status=page.request.get(url+'/api/v1/wizard/status').json();assert not status.get('result')
             jobs=list((chosen/'.montara-renders').glob('*/render.json'));assert len(jobs)==1
             recipe=json.loads(jobs[0].read_text())
-            assert all(Path(p).parent==media for p in recipe['source_files'].values())
+            for value in recipe['source_files'].values():
+                original=Path(value);expected=media/original.name
+                assert expected.is_file() and '.small.' not in original.name
+                assert hashlib.sha256(original.read_bytes()).digest()==hashlib.sha256(expected.read_bytes()).digest()
             assert any(s.get('video_light',{}).get('light')==.05 for s in recipe['recipe']['segments'])
             info=json.loads(run(['ffprobe','-v','error','-show_streams','-of','json',str(final)]))
             video=next(s for s in info['streams'] if s['codec_type']=='video');assert (video['width'],video['height'])==(1920,1080)
