@@ -42,7 +42,7 @@ SAMPLE_SETS = {
 }
 DEFAULT_DATA = Path.home() / "MontaraData"
 # Shown at the bottom of every page, so it is obvious which build is running.
-MONTARA_VERSION = "0.57 · 2026-11-02 · Smooth master limiting, extra headroom, live track progress and ready-to-play songs"
+MONTARA_VERSION = "0.58 · 2026-11-02 · Audio exports without embedded names or unrelated artwork"
 
 
 def _build_label() -> str:
@@ -392,6 +392,8 @@ def create_montara_app(data_root: Path = DEFAULT_DATA, samples: bool = True):
         if not job or job.get("status") != "done":
             return jsonify({"error": {"message": "The master is not ready"}}), 404
         master = Path(job["master_path"])
+        from mixer_adapter.single_song import clean_song_export
+        clean_song_export(master)
         return send_from_directory(master.parent, master.name, mimetype="audio/mpeg")
 
     @app.get("/montara/mix/<job_id>/fx/<effect>/<path:name>")

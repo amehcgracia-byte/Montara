@@ -199,8 +199,8 @@ def run(output):
                     target = output / f'song-{song["id"]}.mp3'; target.write_bytes(response.body())
                     info = json.loads(subprocess.check_output(['ffprobe', '-v', 'error', '-show_format', '-of', 'json', str(target)]))
                     assert abs(float(info['format']['duration']) - 15) < 1
-                    tags = info['format']['tags']
-                    assert tags['title'] == song['name'] and tags['track'] == str(song['id'])
+                    tags = info['format'].get('tags', {})
+                    assert tags == {}
                     assert 'album' not in tags and 'artist' not in tags
                 import zipfile, io
                 bundle = page.request.get(f'{url}/montara/session/{data["id"]}/results.zip')

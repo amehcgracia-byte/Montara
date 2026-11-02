@@ -516,7 +516,7 @@ def render_song(work, song_id):
     work = Path(work).resolve()
     data = read(work)
     os.environ['ZUCKER_MIXER_STATE_ROOT'] = str(work / 'vendor-state' / f'song-{song_id}')
-    from mixer_adapter.single_song import SingleSongMix, tag_song_export
+    from mixer_adapter.single_song import SingleSongMix
     from mixer_adapter.render_progress import SongProgress
     song = next(s for s in data['songs'] if s['id'] == song_id)
     settings = data['settings']
@@ -534,7 +534,6 @@ def render_song(work, song_id):
     out = mixer.render(mine.get('faders', settings.get('faders', {})), work / 'exports' / f'song-{song_id:03d}.mp3',
                        mine.get('mutes', settings.get('mutes', {})), mine.get('effects', settings.get('effects')),
                        eq=mine.get('eq'))  # per-song automatic mix; faders are offsets
-    tag_song_export(out, song['name'], song_id)
     progress.finish()
     save(work / 'results' / f'{song_id}.json', dict(id=song_id, name=song['name'], start=song['start'], end=song['end'], path=str(out)))
 
@@ -544,7 +543,7 @@ def execute(work, action):
     data = read(work)
     # Set before importing the vendor; one independent state root per process/job.
     os.environ['ZUCKER_MIXER_STATE_ROOT'] = str(work / 'vendor-state')
-    from mixer_adapter.single_song import SingleSongMix, _load_mixer, tag_song_export
+    from mixer_adapter.single_song import SingleSongMix, _load_mixer, clean_song_export
     _, pipeline = _load_mixer(work)
 
     def progress(update):
@@ -667,7 +666,7 @@ def execute(work, action):
         for song in selected:
             done = local.get(window_key([song['start'], song['end']]))
             if done:
-                tag_song_export(Path(done['path']), song['name'], song['id'])
+                clean_song_export(Path(done['path']))
                 data['results'].append(dict(id=song['id'], name=song['name'], start=song['start'], end=song['end'], path=done['path'], local=True))
         local_ids = {r['id'] for r in data['results']}
         save(work / 'session.json', data)

@@ -45,7 +45,7 @@ def main(plan_path: str, output: str, progress_path: str | None = None) -> None:
             progress.prepare(track['file'], done=True)
         os.environ["ZUCKER_MIXER_STATE_ROOT"] = str(work / "state")
         import track_types
-        from mixer_adapter.single_song import SingleSongMix, tag_song_export
+        from mixer_adapter.single_song import SingleSongMix
         present = {t["file"] for t in plan["tracks"]}
         only = lambda values: None if values is None else {k: v for k, v in values.items() if k in present}
         mixer = SingleSongMix(folder, work / "mix", track_types=track_types.validate(plan.get("track_types")))
@@ -54,7 +54,6 @@ def main(plan_path: str, output: str, progress_path: str | None = None) -> None:
                                 eq=only(plan.get("eq")))
         if Path(produced).resolve() != Path(output).resolve():
             shutil.move(str(produced), output)
-        tag_song_export(Path(output), plan.get('name') or 'Song', int(plan.get('song') or 1))
         progress.finish()
         print(json.dumps({"output": output, "seconds": round(time.monotonic() - started, 1)}), flush=True)
     finally:

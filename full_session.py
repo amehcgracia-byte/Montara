@@ -325,8 +325,8 @@ def register_full_session(app, data_root, fixtures):
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.move(str(source), target)
             # Older companions also sent the vendor's fixed Jam/artist/song-1 tags.
-            from mixer_adapter.single_song import tag_song_export
-            tag_song_export(target, song['name'], song['id'])
+            from mixer_adapter.single_song import clean_song_export
+            clean_song_export(target)
             (work / 'local_results').mkdir(exist_ok=True)
             save(work / 'local_results' / f'{key}.json', dict(window=[song['start'], song['end']], path=str(target),
                                                                mixer=str(body.get('mixer') or '')[:40], seconds=body.get('seconds'),
@@ -397,6 +397,8 @@ def register_full_session(app, data_root, fixtures):
                     while name in used:
                         name = name[:-4] + ' (2).mp3'
                     used.add(name)
+                    from mixer_adapter.single_song import clean_song_export
+                    clean_song_export(Path(result['path']))
                     archive.write(result['path'], name)
             pending.replace(target)
             return send_file(target, mimetype='application/zip', as_attachment=True, download_name='Montara session.zip')
@@ -414,6 +416,8 @@ def register_full_session(app, data_root, fixtures):
             path = Path(result['path']).resolve()
             if not path.is_relative_to(work.resolve()) or not path.is_file():
                 return error('This export is unavailable.', 404)
+            from mixer_adapter.single_song import clean_song_export
+            clean_song_export(path)  # Includes exports made before the metadata policy changed.
             return send_file(path, mimetype='audio/mpeg', as_attachment=request.args.get('download') == '1',
                              download_name=re.sub(r'[^\w .-]', '_', result['name']) + '.mp3')
         except ValueError as exc:

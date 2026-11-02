@@ -100,8 +100,28 @@ def test_local_plan_and_result_endpoints_and_render_skips_local_songs(tmp_path, 
     assert response.status_code == 200 and (work / 'exports' / 'local-2.000-11.000.mp3').is_file()
     assert client.get('/montara/session/abcdefabcdef/result/1').status_code == 200  # published before the batch ends
     tagged = json.loads(subprocess.check_output(['ffprobe', '-v', 'error', '-show_format', '-of', 'json',
-                                                str(work / 'exports' / 'local-2.000-11.000.mp3')]))['format']['tags']
-    assert tagged['title'] == song['name'] and tagged['track'] == '1'
+                                                str(work / 'exports' / 'local-2.000-11.000.mp3')]))['format'].get('tags', {})
+    assert tagged == {}
+    # Existing completed sessions must also be cleaned on individual/ZIP download.
+    exported = work / 'exports' / 'local-2.000-11.000.mp3'
+    for url in ('/montara/session/abcdefabcdef/result/1?download=1',
+                '/montara/session/abcdefabcdef/results.zip'):
+        stale = exported.with_name('stale.mp3')
+        subprocess.run(['ffmpeg', '-v', 'error', '-i', str(exported), '-c:a', 'copy',
+                        '-metadata', 'title=Old name', '-metadata', 'artist=Old artist', str(stale)], check=True)
+        stale.replace(exported)
+        response = client.get(url)
+        assert response.status_code == 200
+        import io, zipfile
+        if url.endswith('.zip'):
+            with zipfile.ZipFile(io.BytesIO(response.data)) as archive:
+                downloaded = archive.read(archive.namelist()[0])
+        else:
+            downloaded = response.data
+        check = tmp_path / 'download.mp3'
+        check.write_bytes(downloaded)
+        info = json.loads(subprocess.check_output(['ffprobe', '-v', 'error', '-show_format', '-of', 'json', str(check)]))
+        assert info['format'].get('tags', {}) == {}
     from mixer_adapter.session import local_results
     current = read(work)
     assert local_results(work, current)
