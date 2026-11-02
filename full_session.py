@@ -302,6 +302,13 @@ def register_full_session(app, data_root, fixtures):
             data = read(work)
             body = request.get_json(silent=True) or {}
             song = window_song(data, body.get('window'), body.get('song'))
+            # The accepted window must belong to a saved song; take its chosen name
+            # from the session, not from the anonymous window used during Confirm.
+            saved_song = next((s for s in data.get('songs', []) if s['id'] == song['id']
+                               and abs(s['start'] - song['start']) < .001 and abs(s['end'] - song['end']) < .001), None)
+            if not saved_song:
+                raise ValueError('Save these song boundaries before exporting.')
+            song['name'] = saved_song['name']
             uploads = (Path(data_root).resolve() / 'Uploads').resolve()
             upload_id = str(body.get('upload_id') or '')
             if not re.fullmatch('[a-f0-9]{32}', upload_id):

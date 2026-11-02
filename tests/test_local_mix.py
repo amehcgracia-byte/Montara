@@ -96,6 +96,9 @@ def test_local_plan_and_result_endpoints_and_render_skips_local_songs(tmp_path, 
     response = client.post('/montara/session/abcdefabcdef/local-result', json={'song': 1, 'window': [2, 11], 'upload_id': 'd' * 32})
     assert response.status_code == 200 and (work / 'exports' / 'local-2.000-11.000.mp3').is_file()
     assert client.get('/montara/session/abcdefabcdef/result/1').status_code == 200  # published before the batch ends
+    tagged = json.loads(subprocess.check_output(['ffprobe', '-v', 'error', '-show_format', '-of', 'json',
+                                                str(work / 'exports' / 'local-2.000-11.000.mp3')]))['format']['tags']
+    assert tagged['title'] == song['name'] and tagged['track'] == '1'
     # The export takes the local song as it is and mixes nothing on the server.
     subprocess.run([sys.executable, '-m', 'mixer_adapter.session', str(work), 'render'], cwd=ROOT, check=True, capture_output=True, timeout=300)
     result = read(work)
