@@ -27,15 +27,27 @@ MIXER = Path(__file__).resolve().parents[1] / "mixer"
 AUTO_MASTER_TARGET_LUFS = -15.0
 
 
-def tag_song_export(path: Path, title: str, number: int) -> None:
-    """Replace the vendor's session tags, preserving the encoded audio byte for byte."""
+def clean_song_export(path: Path) -> None:
+    """Remove embedded names and artwork without re-encoding the audio.
+
+    The download filename is the only name. Skip already-clean files so serving
+    a previous export does not repeatedly copy the entire MP3.
+    """
     path = Path(path)
+    info = json.loads(subprocess.check_output([
+        os.environ.get('MONTARA_FFPROBE') or 'ffprobe', '-v', 'error',
+        '-show_format', '-show_streams', '-of', 'json', str(path),
+    ]))
+    streams = info.get('streams', [])
+    if (not info.get('format', {}).get('tags') and len(streams) == 1
+            and streams[0].get('codec_type') == 'audio' and not streams[0].get('tags')):
+        return
     handle, temporary = tempfile.mkstemp(prefix='.tags-', suffix='.mp3', dir=path.parent)
     os.close(handle)
     try:
         subprocess.run([os.environ.get('MONTARA_FFMPEG') or 'ffmpeg', '-v', 'error', '-nostdin', '-y',
                         '-i', str(path), '-map', '0:a:0', '-c:a', 'copy', '-map_metadata', '-1',
-                        '-id3v2_version', '3', '-metadata', f'title={title}', '-metadata', f'track={number}',
+                        '-map_chapters', '-1', '-id3v2_version', '0', '-write_id3v1', '0',
                         temporary], check=True, capture_output=True)
         Path(temporary).replace(path)
     finally:
@@ -291,6 +303,7 @@ class SingleSongMix:
             mp3 = output.with_suffix(".mp3")
             subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(produced), "-b:a", "256k", str(mp3)], check=True)
             produced = mp3
+        clean_song_export(produced)
         return produced
 
 
