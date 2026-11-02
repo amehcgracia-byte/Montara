@@ -19,7 +19,7 @@ El renderizador opcional se instala con `companion/install.sh --video`. Solo añ
 
 ## Evidencia y aceptación
 
-- Motor candidato: `3527a005c363ad10866fad695fd696a33de1e29a` (Editor PR #50), descendiente de `ff9baf45`; mixer sin cambios (`f15ff91`).
+- Motor candidato: `6300142de3e65a7f7f7594d51c3324ff6e7c6452` (Editor PR #50), descendiente de `ff9baf45`; mixer sin cambios (`f15ff91`).
 - macOS: 28 pruebas de luz/encuadre/preview aprobadas. Incluyen dos fuentes oscuras controladas, negros y altas luces, paridad preview/export y guardas de proyecto/revisión.
 - Se inspeccionaron muestras antes/después de dos originales SDR reales, uno full-range y otro limited-range. Es una revisión visual de muestras, no una certificación de toda la sesión.
 - Exportación local real controlada: original 1920×1080 de cuatro segundos, montaje del motor y salida 1920×1080; el error frente al original es menor que el de reducir a 720p y ampliar. No representa el tiempo de una canción real ni una promesa de velocidad.
