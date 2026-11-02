@@ -159,7 +159,7 @@ def local_plan(data, song):
         tracks.append(dict(file=track['file'], original=original, source_start=round(source_start, 6), overlap=round(overlap, 6),
                            delay_ms=round(max(0, float(track['offset']) - song['start']) * 1000),
                            samplerate=int(track['samplerate']), channels=int(track['channels'])))
-    return dict(window=[round(song['start'], 6), round(song['end'], 6)], duration=round(duration, 6), tracks=tracks,
+    return dict(song=song['id'], name=song['name'], window=[round(song['start'], 6), round(song['end'], 6)], duration=round(duration, 6), tracks=tracks,
                 track_types=data.get('track_types') or {})
 
 
@@ -435,7 +435,7 @@ def busiest_window(work, start, end, seconds):
     return best, best + seconds
 
 
-def prepare_tracks(work, song, preview=False):
+def prepare_tracks(work, song, preview=False, progress=None):
     """Extract just this window; honor recorder offsets and pad missing regions."""
     work = Path(work)
     data = read(work)
@@ -455,7 +455,11 @@ def prepare_tracks(work, song, preview=False):
         if (work / 'cancel').exists():
             raise InterruptedError('Session cancelled. Your originals are unchanged.')
         target = destination / track['file']
+        if progress:
+            progress.prepare(track['file'])
         if target.is_file():
+            if progress:
+                progress.prepare(track['file'], done=True)
             continue
         offset = float(track['offset'])
         source_start, overlap = track_window(track, song)
@@ -472,6 +476,8 @@ def prepare_tracks(work, song, preview=False):
         subprocess.run(window_command('ffmpeg', source, source_start, overlap, delay_ms, duration,
                                       track['channels'], track['samplerate'], str(temporary)), check=True)
         temporary.replace(target)
+        if progress:
+            progress.prepare(track['file'], done=True)
     return destination
 
 
@@ -488,21 +494,26 @@ def render_song(work, song_id):
     work = Path(work).resolve()
     data = read(work)
     os.environ['ZUCKER_MIXER_STATE_ROOT'] = str(work / 'vendor-state' / f'song-{song_id}')
-    from mixer_adapter.single_song import SingleSongMix
+    from mixer_adapter.single_song import SingleSongMix, tag_song_export
+    from mixer_adapter.render_progress import SongProgress
     song = next(s for s in data['songs'] if s['id'] == song_id)
     settings = data['settings']
     # A song mixed in the mixer keeps its own changes; the rest use the automatic mix.
     mine = (settings.get('per_song') or {}).get(str(song_id)) or {}
-    folder = prepare_tracks(work, song)
+    progress = SongProgress(work / 'render_progress' / f'{song_id}.json', [t['file'] for t in used_tracks(data)])
+    folder = prepare_tracks(work, song, progress=progress)
     present = {p.name for p in folder.glob('*.wav')}
     only = lambda values: None if values is None else {k: v for k, v in values.items() if k in present}  # empty tracks are not mixed
     mine = {k: only(v) if k in ('faders', 'mutes', 'effects', 'eq') and isinstance(v, dict) else v for k, v in mine.items()}
     settings = {k: only(v) if k in ('faders', 'mutes', 'effects') and isinstance(v, dict) else v for k, v in settings.items()}
     mixer = SingleSongMix(folder, work / 'songs' / str(song_id) / 'mix', reference=mine.get('reference') or settings.get('reference'),
                           track_types=data.get('track_types'))
+    mixer.pipeline.PROGRESS_HOOK = progress.callback
     out = mixer.render(mine.get('faders', settings.get('faders', {})), work / 'exports' / f'song-{song_id:03d}.mp3',
                        mine.get('mutes', settings.get('mutes', {})), mine.get('effects', settings.get('effects')),
                        eq=mine.get('eq'))  # per-song automatic mix; faders are offsets
+    tag_song_export(out, song['name'], song_id)
+    progress.finish()
     save(work / 'results' / f'{song_id}.json', dict(id=song_id, name=song['name'], start=song['start'], end=song['end'], path=str(out)))
 
 
@@ -628,6 +639,7 @@ def execute(work, action):
         results = work / 'results'
         shutil.rmtree(results, ignore_errors=True)
         results.mkdir()
+        shutil.rmtree(work / 'render_progress', ignore_errors=True)
         # Songs already mixed on the person's computer (companion) are taken as they are.
         local = local_results(work)
         for song in selected:

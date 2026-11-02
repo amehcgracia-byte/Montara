@@ -80,6 +80,9 @@ def run(output):
                 browser = playwright.chromium.launch(headless=True)
                 page = browser.new_page(viewport={'width': 1280, 'height': 900})
                 page.on('pageerror', lambda error: errors.append(str(error)))
+                # A user's installed companion must not compress the deliberately large
+                # upload fixture, nor receive test work from this isolated journey.
+                page.route('http://127.0.0.1:47820/**', lambda route: route.abort())
                 upload_recovery(page, url, media, output)
                 page.goto(url)
                 page.locator('#mode').wait_for(state='visible')
@@ -155,6 +158,7 @@ def run(output):
                 companion = None
                 companion_home = os.environ.get('MONTARA_E2E_COMPANION_HOME')   # a companion installed with --mixer
                 if companion_home:
+                    page.unroute('http://127.0.0.1:47820/**')
                     # The tracks are on "this computer": the session treats them as previews of these originals,
                     # and the companion mixes every song locally (only the MP3 is uploaded).
                     import hashlib
@@ -177,7 +181,9 @@ def run(output):
                         raise RuntimeError('companion with local mixer did not start')
                     page.evaluate("fullSession.data.uses_previews = true")
                 page.locator('#sessionMix').click()
-                page.wait_for_function("document.querySelectorAll('#sessionResults audio').length===2", timeout=240_000)
+                page.wait_for_function("fullSession.data.status === 'done' && document.querySelectorAll('#sessionResults audio:not([hidden])').length===2", timeout=240_000)
+                assert page.evaluate("[...document.querySelectorAll('#sessionResults audio')].every(a => a.src.startsWith('blob:'))")
+                assert page.locator('#sessionQuality').count() == 0
                 data = page.evaluate('fullSession.data')
                 assert data['status'] == 'done'
                 if companion:
@@ -193,6 +199,9 @@ def run(output):
                     target = output / f'song-{song["id"]}.mp3'; target.write_bytes(response.body())
                     info = json.loads(subprocess.check_output(['ffprobe', '-v', 'error', '-show_format', '-of', 'json', str(target)]))
                     assert abs(float(info['format']['duration']) - 15) < 1
+                    tags = info['format']['tags']
+                    assert tags['title'] == song['name'] and tags['track'] == str(song['id'])
+                    assert 'album' not in tags and 'artist' not in tags
                 import zipfile, io
                 bundle = page.request.get(f'{url}/montara/session/{data["id"]}/results.zip')
                 assert bundle.ok and len(zipfile.ZipFile(io.BytesIO(bundle.body())).namelist()) == 2

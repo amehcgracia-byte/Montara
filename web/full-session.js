@@ -4,8 +4,9 @@ try { $('#sessionResume').hidden = !localStorage.getItem('montara-session'); } c
 $('#sessionResume').onclick = async () => {
   try {
     fullSession.id = localStorage.getItem('montara-session');
+    fullSession.localProgress = {}; fullSession.localResults = [];
     fullSession.active = true;
-    show('sessionReview'); $('#sessionSongs').hidden = false; $('#sessionResults').replaceChildren();
+    show('sessionReview'); $('#sessionSongs').hidden = false; clearSessionResults();
     const data = await waitSession(await api(`/montara/session/${fullSession.id}`));
     if (data.songs) drawSessionSongs(data.songs);
     if (data.results?.length) drawSessionResults(data);
@@ -23,6 +24,7 @@ $('#sessionBack').onclick = () => {
   show('footage');
 };
 $('#sessionCancel').onclick = async () => {
+  fullSession.cancelRequested = true;
   try { await api(`/montara/session/${fullSession.id}/cancel`, {}); $('#sessionStatus').textContent = 'Cancelling…'; }
   catch (error) { toast(error.message, true); }
 };
@@ -30,9 +32,9 @@ $('#sessionCancel').onclick = async () => {
 const SESSION_STAGE = {
   detecting: ['Finding the songs in your session', 'Listening to every track to find where each song starts and ends.'],
   preparing: ['Preparing the mixer preview', 'Cutting a short excerpt of the first selected song for the mixer.'],
-  rendering: ['Mixing and mastering each song', 'Every selected song gets its own automatic mix and master.'],
+  rendering: ['Mixing songs', ''],
 };
-const sessionClock = { status: null, started: 0, songStarted: 0, songIndex: -1, perSong: [] };
+const sessionClock = { status: null, started: 0 };
 
 const minutesLeft = seconds => seconds < 50 ? 'less than a minute left' : `about ${Math.round(seconds / 60)} min left`;
 
@@ -40,8 +42,9 @@ function showSessionProgress(data) {
   fullSession.data = data;
   fullSession.busy = ['detecting', 'preparing', 'rendering'].includes(data.status);
   const now = performance.now() / 1000;
-  if (sessionClock.status !== data.status) Object.assign(sessionClock, { status: data.status, started: now, songStarted: now, songIndex: -1, perSong: [] });
+  if (sessionClock.status !== data.status) Object.assign(sessionClock, { status: data.status, started: now });
   const [title, hint] = SESSION_STAGE[data.status] || [];
+  $('#sessionHint').hidden = ['rendering', 'done'].includes(data.status);
   $('#sessionHint').textContent = hint || 'Review the suggested boundaries and choose the songs. Each song gets its own automatic mix; your fader moves apply on top.';
   $('#sessionCancel').hidden = !fullSession.busy;
   $('#sessionBack').disabled = fullSession.busy;
@@ -52,33 +55,15 @@ function showSessionProgress(data) {
   $('#sessionProgress').value = percent;
   const detail = data.progress?.stage_detail || '';
   $('#sessionStatus').textContent = data.error || (fullSession.busy ? `${title}${detail && detail !== data.status ? ' · ' + detail : ''}…` : '');
-  // Remaining time from the pace so far; songs are timed one by one while rendering.
+  // Detection estimate; song progress comes from the workers below.
   let eta = '';
-  const selected = (data.songs || []).filter(s => s.selected);
-  if (data.status === 'rendering' && selected.length) {
-    const done = (data.results || []).length;
-    if (done !== sessionClock.songIndex) { if (sessionClock.songIndex >= 0) sessionClock.perSong.push(now - sessionClock.songStarted); sessionClock.songIndex = done; sessionClock.songStarted = now; }
-    const seconds = song => Math.max(1, song.end - song.start);
-    const pace = sessionClock.perSong.length ? sessionClock.perSong.reduce((a, b) => a + b, 0) / selected.slice(0, sessionClock.perSong.length).reduce((a, s) => a + seconds(s), 0) : null;
-    const current = selected[done];
-    const currentShare = pace && current ? Math.min(.97, (now - sessionClock.songStarted) / (pace * seconds(current))) : 0;
-    if (pace) eta = minutesLeft(Math.max(0, pace * selected.slice(done).reduce((a, s) => a + seconds(s), 0) - (now - sessionClock.songStarted)));
-    else eta = current ? `Song ${done + 1} of ${selected.length} · timing the first song…` : '';
-    const bars = $('#sessionBars');
-    if (bars.children.length !== selected.length) bars.innerHTML = selected.map(() => '<i></i>').join('');
-    [...bars.children].forEach((bar, i) => bar.style.setProperty('--p', i < done ? '1' : i === done ? (currentShare || .06).toFixed(3) : '0'));
-    bars.hidden = false;
-  } else {
-    const bars = $('#sessionBars');
-    bars.hidden = data.status !== 'done' || !bars.children.length;
-    // Finished: every exported song is green (the last poll may arrive after the final song).
-    if (data.status === 'done') [...bars.children].forEach((bar, i) => bar.style.setProperty('--p', i < (data.results || []).length ? '1' : '0'));
-    if (fullSession.busy && percent > 2) {
-      const elapsed = now - sessionClock.started;
-      eta = minutesLeft(elapsed * (100 - percent) / percent);
-    }
+  if (fullSession.busy && data.status !== 'rendering' && percent > 2) {
+    const elapsed = now - sessionClock.started;
+    eta = minutesLeft(elapsed * (100 - percent) / percent);
   }
   $('#sessionEta').textContent = fullSession.busy ? eta : '';
+  paintSessionRender(data);
+  if (data.results?.length) drawSessionResults(data);
 }
 
 async function waitSession(initial) {
@@ -100,12 +85,13 @@ async function openFullSession() {
   fullSession.active = true;
   show('sessionReview');
   $('#sessionSongs').hidden = false;
-  $('#sessionSongs').replaceChildren(); $('#sessionResults').replaceChildren();
+  $('#sessionSongs').replaceChildren(); clearSessionResults();
   $('#sessionMix').hidden = true;
   try {
     const tracks = audioTracks().map(f => f.path);
     const job = await api('/montara/session', { tracks, track_types: TrackTypes.forFiles(tracks) });
     fullSession.id = job.id; fullSession.mixes = {};
+    fullSession.localProgress = {}; fullSession.localResults = [];
     try { localStorage.setItem('montara-session', job.id); $('#sessionResume').hidden = false; } catch { /* optional */ }
     const data = await waitSession(job);
     drawSessionSongs(data.songs);
@@ -173,11 +159,9 @@ function drawSessionSongs(songs) {
     ${song.review_note ? `<p class="hint">${song.needs_review ? 'Review · ' : ''}${escapeHtml(song.review_note)}</p>` : ''}
   </div>`).join('');
   list.forEach((_, i) => paintSong(i));
-  $('#sessionQualityRow').hidden = !fullSession.data.uses_previews;
   const empty = fullSession.data.empty_tracks || [];
   $('#sessionEmpty').hidden = !empty.length;
   $('#sessionEmpty').innerHTML = empty.length ? `Left out, no sound in the whole session (not sent, not mixed): ${empty.map(f => `${escapeHtml(f.replace(/\.wav$/i, ''))} <button class="link" type="button" data-include-track="${escapeHtml(f)}">use it anyway</button>`).join(' · ')}` : '';
-  $('#sessionQualityNote').textContent = montaraCompanion.info && !montaraCompanion.canFastSegments() ? 'Update the companion for Fast (this one sends lossless).' : '';
   paintUploadState();
   loadSessionWave().then(() => list.forEach((_, i) => paintSong(i)));
   warmSessionAudio();
@@ -466,6 +450,13 @@ async function renderFullSession() {
   const songs = songList();
   if (!songs.some(s => s.selected)) return toast('Select at least one song.', true);
   $('#sessionMix').hidden = true;
+  fullSession.cancelRequested = false;
+  fullSession.exportRun = (fullSession.exportRun || 0) + 1;
+  fullSession.localProgress = {};
+  fullSession.localResults = [];
+  clearSessionResults();
+  fullSession.data.results = [];
+  showSessionProgress({...fullSession.data, status: 'rendering', results: [], render_progress: {}});
   try {
     // Save the boundaries first: the original ranges and the per-song mixes follow them.
     const saved = await api(`/montara/session/${fullSession.id}/songs`, { songs });
@@ -478,13 +469,14 @@ async function renderFullSession() {
     // travels; any song it cannot do (reference, no original here, error) goes to the server.
     const selected = saved.songs.filter(s => s.selected);
     const serverSongs = await mixSongsLocally(selected, per_song);
+    if (fullSession.cancelRequested) { showSessionProgress({...fullSession.data, status: 'cancelled'}); return; }
     const started = await api(`/montara/session/${fullSession.id}/render`, { songs: saved.songs, per_song });
     for (const song of serverSongs) await queueSongOriginals(song);
     const data = await waitSession(started);
     $('#sessionStatus').textContent = 'Your selected songs are ready.';
     drawSessionResults(data);
   } catch (error) { toast(error.message, true); }
-  finally { $('#sessionMix').hidden = false; }
+  finally { fullSession.busy = false; $('#sessionBack').disabled = false; $('#sessionCancel').hidden = true; $('#sessionMix').hidden = false; }
 }
 
 // ---------- songs mixed on this computer (companion local mixer) ----------
@@ -495,36 +487,48 @@ async function mixSongsLocally(songs, perSong) {
   const mixer = montaraCompanion.localMixer();
   if (!mixer) return songs;
   const left = [], uploads = [];
-  let done = 0, warned = false;
-  for (const [index, song] of songs.entries()) {
+  let warned = false;
+  for (const song of songs) {
+    if (fullSession.cancelRequested) break;
     const mix = perSong[song.id] || {};
     if (mix.reference) { left.push(song); continue; }   // mastering references are mixed on the server
-    $('#sessionStatus').textContent = `Mixing on this computer: ${song.name} (${index + 1} of ${songs.length})…`;
+    $('#sessionStatus').textContent = 'Mixing songs…';
+    fullSession.localProgress[song.id] = {status: 'working', progress: 0, tracks: []};
+    paintSessionRender(fullSession.data);
     $('#sessionWorking').hidden = false;
     try {
       const query = new URLSearchParams({ song: song.id, start: song.start, end: song.end, name: song.name || '' });
       const plan = await api(`/montara/session/${fullSession.id}/local-plan?${query}`);
       if (plan.mixer !== mixer) {
-        if (!warned) toast('The companion\'s mixer is a different version: the server mixes these songs. Update it with install.sh --mixer.', true);
-        warned = true; left.push(song); continue;
+        if (!warned) console.info('Companion mixer version differs; using the server.');
+        warned = true; left.push(song);
+        delete fullSession.localProgress[song.id]; continue;
       }
-      const { blob, seconds } = await montaraCompanion.mixSong(plan, mix);
+      fullSession.localProgress[song.id].tracks = plan.tracks.map(t => ({file: t.file, progress: 0, active: true}));
+      paintSessionRender(fullSession.data);
+      const { blob, seconds } = await montaraCompanion.mixSong(plan, mix, progress => {
+        fullSession.localProgress[song.id] = progress;
+        paintSessionRender(fullSession.data);
+      });
       const name = `${(song.name || 'Song').replace(/[^\w .-]/g, '_')}.mp3`;
       // The next song is mixed while this MP3 uploads.
       uploads.push((async () => {
         let uploadId = null;
         await sendResumableUpload(new File([blob], name, { type: 'audio/mpeg' }), () => {}, id => { uploadId = id; });
         await api(`/montara/session/${fullSession.id}/local-result`, { song: song.id, window: plan.window, upload_id: uploadId, mixer: plan.mixer, seconds });
-        done++;
+        fullSession.localProgress[song.id] = {status: 'ready', progress: 1, tracks: plan.tracks.map(t => ({file: t.file, progress: 1}))};
+        fullSession.localResults.push(song);
+        drawSessionResults({results: fullSession.localResults}, {[song.id]: blob});
+        paintSessionRender(fullSession.data);
       })().catch(error => { console.warn('local result upload failed', error); left.push(song); }));
     } catch (error) {
       console.warn('local mix failed', song.name, error);
-      if (!warned) toast(`Mixing on this computer failed (${error.message}); the server mixes the rest.`, true);
+      if (!warned) toast('Retrying the mix…');
       warned = true; left.push(song);
+      delete fullSession.localProgress[song.id];
     }
   }
   await Promise.all(uploads);
-  if (done) toast(`${done} song${done > 1 ? 's' : ''} mixed on this computer.`);
   return songs.filter(song => left.includes(song));
 }
 
@@ -532,9 +536,6 @@ async function mixSongsLocally(songs, perSong) {
 // Tracks sent as light previews: the export uses the originals, but only the song ranges.
 // A confirmed song starts sending at once, while the person keeps editing the others.
 const uploader = { queue: [], seen: new Set(), running: false, done: 0, total: 0, bytes: 0, started: 0, byWindow: {} };
-// Fast (Opus) or lossless originals: remembered on this computer; Fast unless the person chose otherwise.
-try { const kept = localStorage.getItem('montara.originals'); if (kept) $('#sessionQuality').value = kept; } catch { /* storage off */ }
-$('#sessionQuality').addEventListener('change', event => { try { localStorage.setItem('montara.originals', event.target.value); } catch { /* storage off */ } });
 const windowKey = song => `${Number(song.start).toFixed(3)}-${Number(song.end).toFixed(3)}`;
 
 // Queue the original ranges of one song window. Ranges belong to their window, never to a song
@@ -565,7 +566,7 @@ async function runUploader() {
       const w = uploader.queue.shift();
       paintUploadState(w);
       try {
-        const fast = $('#sessionQuality').value === 'fast' && montaraCompanion.canFastSegments();
+        const fast = montaraCompanion.canFastSegments();
         const blob = await montaraCompanion.segment(w.original, w.start, w.duration, fast ? 'opus' : 'lossless');
         uploader.bytes += blob.size;
         // Fast: Opus; lossless: FLAC, or WavPack for float originals (FLAC has no float).
@@ -595,14 +596,7 @@ async function runUploader() {
 function paintUploadState(current = null) {
   const line = $('#sessionUpload');
   if (!line) return;
-  const left = uploader.total - uploader.done;
-  if (!uploader.total) line.textContent = '';
-  else if (!left && !uploader.running) line.textContent = `Original audio sent from this computer (${(uploader.bytes / 1e6).toFixed(0)} MB).`;
-  else {
-    const spent = (performance.now() - uploader.started) / 1000;
-    const eta = uploader.done ? ` · ${minutesLeft(spent / uploader.done * left)}` : '';
-    line.textContent = `Sending original audio from this computer: ${uploader.done} / ${uploader.total}${current ? ` · ${current.song_name} · ${current.original.name}` : ''}${eta}`;
-  }
+  line.textContent = '';
   (fullSession.data?.songs || []).forEach((song, i) => paintConfirm(i));
 }
 
@@ -631,10 +625,123 @@ async function confirmSong(i) {
   finally { song.confirming = false; paintConfirm(i); }
 }
 
-function drawSessionResults(data) {
-  const songs = data.results.map(song => `<div class="session-song"><b>${escapeHtml(song.name)}</b>
-      <audio controls preload="none" src="/montara/session/${fullSession.id}/result/${song.id}"></audio>
-      <a class="btn ghost small" href="/montara/session/${fullSession.id}/result/${song.id}?download=1" download>Download</a></div>`).join('');
-  const all = data.results.length > 1 ? `<div class="session-song"><a class="btn primary small" href="/montara/session/${fullSession.id}/results.zip" download>Download all (${data.results.length} songs)</a></div>` : '';
-  $('#sessionResults').innerHTML = songs + all;
+// One thick bar per song, then a fine row of stems for each song. Progress comes
+// from completed extraction steps and the mixer's processed audio chunks.
+function paintSessionRender(data) {
+  const songs = (data.songs || []).filter(s => s.selected);
+  const visible = songs.length && ['rendering', 'done'].includes(data.status);
+  $('#sessionRender').hidden = !visible;
+  if (!visible) return;
+  $('#sessionHint').hidden = true;
+  $('#sessionProgress').hidden = true;
+  $('#sessionEta').textContent = '';
+  const completed = new Set([...(data.results || []), ...(fullSession.localResults || [])].map(s => String(s.id)));
+  const states = {...fullSession.localProgress, ...data.render_progress};
+  const signature = JSON.stringify(songs.map(s => [s.id, s.name, (states[s.id]?.tracks || data.track_files || []).map(t => t.file || t)]));
+  if ($('#sessionRender').dataset.signature !== signature) {
+    $('#sessionRender').dataset.signature = signature;
+    $('#sessionBars').innerHTML = songs.map(s => `<i data-render-song="${s.id}" role="progressbar" aria-label="${escapeHtml(s.name)}" aria-valuemin="0" aria-valuemax="100"></i>`).join('');
+    $('#sessionTrackBars').innerHTML = songs.map(s => `<div data-track-song="${s.id}">${(states[s.id]?.tracks || data.track_files || []).map(t => `<i role="progressbar" aria-label="${escapeHtml(s.name)} · ${escapeHtml(t.file || t)}" aria-valuemin="0" aria-valuemax="100"></i>`).join('')}</div>`).join('');
+  }
+  function paint(bar, value, active, label) {
+    value = Math.max(0, Math.min(1, Number(value) || 0));
+    bar.style.setProperty('--p', value);
+    bar.classList.toggle('active', Boolean(active && value < 1));
+    bar.classList.toggle('complete', value >= 1);
+    bar.setAttribute('aria-valuenow', Math.round(value * 100));
+    bar.title = `${label} · ${Math.round(value * 100)}%`;
+  }
+  for (const song of songs) {
+    const state = states[song.id] || {}, mixed = completed.has(String(song.id));
+    const entry = sessionResultCache.get(`${fullSession.id}:${fullSession.exportRun || 0}:${song.id}:${song.start}:${song.end}`);
+    const ready = mixed && entry?.loaded;
+    // 100% means the MP3 is available, not merely that its DSP has ended.
+    const fraction = ready ? 1 : mixed ? .95 + .049 * (entry?.progress || 0) : Math.min(.94, state.progress || 0);
+    const active = !mixed && state.status === 'working';
+    const eta = state.elapsed && fraction > .25 && fraction < .9 ? ` · ≈${clock(state.elapsed * (1 - fraction) / fraction)}` : '';
+    paint($(`[data-render-song="${song.id}"]`), fraction, active || (mixed && !ready), song.name + eta);
+    const bars = document.querySelector(`[data-track-song="${song.id}"]`).children;
+    [...bars].forEach((bar, i) => {
+      const track = state.tracks?.[i];
+      paint(bar, mixed ? 1 : Math.min(.99, track?.progress || 0), active && track?.active, bar.getAttribute('aria-label'));
+    });
+  }
+}
+
+const sessionResultCache = new Map();
+function clearSessionResults() {
+  for (const entry of sessionResultCache.values()) {
+    entry.controller.abort();
+    entry.audio.pause();
+    if (entry.url) URL.revokeObjectURL(entry.url);
+  }
+  sessionResultCache.clear();
+  $('#sessionResults').replaceChildren();
+}
+
+function drawSessionResults(data, blobs = {}) {
+  const container = $('#sessionResults'), session = fullSession.id;
+  const songs = [...(data.results || [])].sort((a, b) => a.start - b.start);
+  for (const song of songs) {
+    const key = `${session}:${fullSession.exportRun || 0}:${song.id}:${song.start}:${song.end}`;
+    if (sessionResultCache.has(key)) continue;  // never restart a playing/preloading song at a poll
+    const row = document.createElement('div'); row.className = 'session-song session-result';
+    row.dataset.result = String(song.id);
+    const name = document.createElement('b'); name.textContent = song.name;
+    const loading = document.createElement('button'); loading.className = 'song-play loading';
+    loading.type = 'button'; loading.disabled = true; loading.textContent = '▶';
+    loading.setAttribute('aria-label', `Loading ${song.name}`);
+    const fill = document.createElement('progress'); fill.max = 1; fill.value = 0;
+    fill.setAttribute('aria-label', `Loading ${song.name}`);
+    const audio = document.createElement('audio'); audio.controls = true; audio.preload = 'auto'; audio.hidden = true;
+    const link = document.createElement('a'); link.className = 'btn ghost small'; link.textContent = 'Download';
+    link.href = `/montara/session/${session}/result/${song.id}?download=1`; link.download = '';
+    row.append(name, loading, fill, audio, link);
+    const after = [...container.querySelectorAll('.session-result')].find(r => Number(r.dataset.start) > song.start);
+    row.dataset.start = song.start;
+    container.insertBefore(row, after || container.querySelector('.session-download-all'));
+    const entry = {audio, controller: new AbortController(), url: null, loaded: false, progress: 0};
+    sessionResultCache.set(key, entry);
+    const prepare = async () => {
+      loading.disabled = true; loading.classList.add('loading');
+      fill.hidden = false;
+      try {
+        let blob = blobs[song.id];
+        if (!blob) {
+          const response = await fetch(`/montara/session/${session}/result/${song.id}?v=${fullSession.exportRun || 0}`, {signal: entry.controller.signal, cache: 'no-store'});
+          if (!response.ok) throw new Error('Could not load this song.');
+          const total = Number(response.headers.get('Content-Length'));
+          const reader = response.body.getReader(), chunks = []; let bytes = 0;
+          for (;;) {
+            const {done, value} = await reader.read(); if (done) break;
+            chunks.push(value); bytes += value.byteLength;
+            if (total) { fill.value = bytes / total; entry.progress = fill.value; } else fill.removeAttribute('value');
+            paintSessionRender(fullSession.data);
+          }
+          blob = new Blob(chunks, {type: 'audio/mpeg'});
+        }
+        if (entry.controller.signal.aborted) return;
+        entry.url = URL.createObjectURL(blob);
+        // Only attach a complete local blob: play can no longer outrun the network.
+        audio.src = entry.url; audio.load();
+        entry.loaded = true; entry.progress = 1;
+        audio.hidden = false; loading.hidden = true; fill.hidden = true;
+        paintSessionRender(fullSession.data);
+      } catch (error) {
+        if (entry.controller.signal.aborted) return;
+        loading.disabled = false; loading.classList.remove('loading'); loading.textContent = '↻';
+        loading.setAttribute('aria-label', `Retry loading ${song.name}`); fill.hidden = true;
+        loading.onclick = prepare;
+      }
+    };
+    prepare();
+  }
+  let all = container.querySelector('.session-download-all');
+  if (container.querySelectorAll('.session-result').length > 1) {
+    if (!all) {
+      all = document.createElement('div'); all.className = 'session-song session-download-all';
+      all.innerHTML = `<a class="btn primary small" href="/montara/session/${session}/results.zip" download>Download all</a>`;
+      container.append(all);
+    }
+  }
 }

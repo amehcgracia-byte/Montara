@@ -60,7 +60,7 @@ if [ "${1:-}" = "--mixer" ] || [ "${MONTARA_MIXER:-}" = "1" ]; then
   rm -rf "$MIX/mixer.new" && mkdir -p "$MIX/mixer.new"
   curl -fsSL "https://codeload.github.com/amehcgracia-byte/ZuckerMixer/tar.gz/$SHA" | tar -xz -C "$MIX/mixer.new" --strip-components=1
   rm -rf "$MIX/mixer" && mv "$MIX/mixer.new" "$MIX/mixer"
-  for f in mixer_adapter/single_song.py mixer_adapter/extract.py track_types.py; do
+  for f in mixer_adapter/single_song.py mixer_adapter/extract.py mixer_adapter/render_progress.py track_types.py; do
     curl -fsSL "$ROOT_RAW/$f" -o "$MIX/$f"
   done
   curl -fsSL "$RAW/local_mix.py" -o "$MIX/local_mix.py"

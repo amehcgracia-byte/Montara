@@ -86,15 +86,28 @@ const montaraCompanion = (() => {
     /* Local mixer (install.sh --mixer): the mixer commit it has, or null. */
     localMixer() { return info?.local_mix?.mixer || null; },
     /* Mix one song on this computer with the server's plan; resolves to {blob, seconds}. */
-    async mixSong(plan, mix) {
-      const response = await call('/mix-song', json({plan, mix}));
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        const error = new Error(data.error || 'The local mix failed');
-        error.status = response.status;
-        throw error;
-      }
-      return {blob: await response.blob(), seconds: Number(response.headers.get('X-Mix-Seconds')) || null};
+    async mixSong(plan, mix, onProgress = () => {}) {
+      const progressId = crypto.randomUUID().replaceAll('-', '');
+      let finished = false;
+      const polling = (async () => {
+        while (!finished && info?.mix_progress) {
+          try {
+            const response = await call(`/mix-progress/${progressId}`, {}, 3000);
+            if (response.ok && !finished) onProgress(await response.json());
+          } catch { /* the result request reports a lost connection */ }
+          if (!finished) await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      })();
+      try {
+        const response = await call('/mix-song', json({plan, mix, progress_id: progressId}));
+        if (!response.ok) {
+          const data = await response.json().catch(() => ({}));
+          const error = new Error(data.error || 'The local mix failed');
+          error.status = response.status;
+          throw error;
+        }
+        return {blob: await response.blob(), seconds: Number(response.headers.get('X-Mix-Seconds')) || null};
+      } finally { finished = true; await polling; }
     },
     async segment(original, start, duration, format = 'lossless') {
       if (!info?.audio_preview) throw new Error('Open the companion on this computer to export with your original audio.');
