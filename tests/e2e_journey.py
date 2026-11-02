@@ -117,7 +117,7 @@ def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
             dialog.locator('.light-original').click()
             assert dialog.locator('.light-original').get_attribute('aria-pressed') == 'true'
             dialog.locator('.light-original').click()
-            dialog.locator('[name="light"]').fill('0.05')
+            dialog.locator('[name="light"]').evaluate("e=>{e.value='0.05';e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));}")
             page.screenshot(path=str(shots / "05b-light-controls.png"), full_page=True)
             dialog.get_by_role('button', name='Save shot', exact=True).click()
             dialog.wait_for(state='detached', timeout=120_000)
