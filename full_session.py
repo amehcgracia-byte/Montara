@@ -16,7 +16,7 @@ from pathlib import Path
 from flask import jsonify, request, send_file
 from mixer_adapter.session import (listen_range, original_windows, read, received_originals, register_original, save, session_listen,
                                    session_waveform, song_windows, validate_songs, window_song, original_key,
-                                   local_plan, window_key)
+                                   local_plan, window_key, local_mix_signature)
 from resumable_upload import preview_original
 
 ROOT = Path(__file__).resolve().parent
@@ -309,6 +309,7 @@ def register_full_session(app, data_root, fixtures):
             if not saved_song:
                 raise ValueError('Save these song boundaries before exporting.')
             song['name'] = saved_song['name']
+            local_mix = mix_settings(body.get('mix') or {}, {t['file'] for t in data.get('tracks') or []})
             uploads = (Path(data_root).resolve() / 'Uploads').resolve()
             upload_id = str(body.get('upload_id') or '')
             if not re.fullmatch('[a-f0-9]{32}', upload_id):
@@ -328,7 +329,8 @@ def register_full_session(app, data_root, fixtures):
             tag_song_export(target, song['name'], song['id'])
             (work / 'local_results').mkdir(exist_ok=True)
             save(work / 'local_results' / f'{key}.json', dict(window=[song['start'], song['end']], path=str(target),
-                                                               mixer=str(body.get('mixer') or '')[:40], seconds=body.get('seconds')))
+                                                               mixer=str(body.get('mixer') or '')[:40], seconds=body.get('seconds'),
+                                                               mix_signature=local_mix_signature(data, local_mix)))
             # Publish each finished song while the companion is already mixing the next.
             with (work / 'request.lock').open('a') as lock:
                 fcntl.flock(lock, fcntl.LOCK_EX)

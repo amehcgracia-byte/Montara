@@ -167,14 +167,36 @@ def window_key(window):
     return f"{float(window[0]):.3f}-{float(window[1]):.3f}"
 
 
-def local_results(work):
+def local_mix_signature(data, settings):
+    """Never reuse a local master after its faders, source set or master policy changed."""
+    from mixer_adapter.single_song import AUTO_MASTER_TARGET_LUFS
+    values = {key: settings.get(key) or {} for key in ('faders', 'mutes', 'eq')}
+    values.update(effects=settings.get('effects'), reference=settings.get('reference') or None,
+                  target_lufs=AUTO_MASTER_TARGET_LUFS, track_types=data.get('track_types') or {},
+                  tracks=[t['file'] for t in used_tracks(data)])
+    return hashlib.sha256(json.dumps(values, sort_keys=True).encode()).hexdigest()
+
+
+def local_results(work, data=None):
     """Songs mixed on the person's computer, by window: {window key: {path, window}}."""
     result = {}
+    if data is not None:
+        version = subprocess.run(['git', '-C', str(Path(__file__).resolve().parents[1] / 'mixer'), 'rev-parse', 'HEAD'],
+                                 capture_output=True, text=True).stdout.strip()
     for path in (Path(work) / 'local_results').glob('*.json'):
         try:
             item = json.loads(path.read_text())
         except (OSError, ValueError):
             continue
+        if data is not None:
+            song = next((s for s in data['songs'] if window_key([s['start'], s['end']]) == window_key(item['window'])), None)
+            if not song:
+                continue
+            settings = data.get('settings') or {}
+            mine = (settings.get('per_song') or {}).get(str(song['id'])) or {}
+            effective = {key: mine.get(key, settings.get(key)) for key in ('faders', 'mutes', 'effects', 'eq', 'reference')}
+            if not version or item.get('mixer') != version or item.get('mix_signature') != local_mix_signature(data, effective):
+                continue
         if Path(item.get('path', '')).is_file():
             result[window_key(item['window'])] = item
     return result
@@ -522,7 +544,7 @@ def execute(work, action):
     data = read(work)
     # Set before importing the vendor; one independent state root per process/job.
     os.environ['ZUCKER_MIXER_STATE_ROOT'] = str(work / 'vendor-state')
-    from mixer_adapter.single_song import SingleSongMix, _load_mixer
+    from mixer_adapter.single_song import SingleSongMix, _load_mixer, tag_song_export
     _, pipeline = _load_mixer(work)
 
     def progress(update):
@@ -641,10 +663,11 @@ def execute(work, action):
         results.mkdir()
         shutil.rmtree(work / 'render_progress', ignore_errors=True)
         # Songs already mixed on the person's computer (companion) are taken as they are.
-        local = local_results(work)
+        local = local_results(work, data)
         for song in selected:
             done = local.get(window_key([song['start'], song['end']]))
             if done:
+                tag_song_export(Path(done['path']), song['name'], song['id'])
                 data['results'].append(dict(id=song['id'], name=song['name'], start=song['start'], end=song['end'], path=done['path'], local=True))
         local_ids = {r['id'] for r in data['results']}
         save(work / 'session.json', data)

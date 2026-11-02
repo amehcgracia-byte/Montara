@@ -515,7 +515,7 @@ async function mixSongsLocally(songs, perSong) {
       uploads.push((async () => {
         let uploadId = null;
         await sendResumableUpload(new File([blob], name, { type: 'audio/mpeg' }), () => {}, id => { uploadId = id; });
-        await api(`/montara/session/${fullSession.id}/local-result`, { song: song.id, window: plan.window, upload_id: uploadId, mixer: plan.mixer, seconds });
+        await api(`/montara/session/${fullSession.id}/local-result`, { song: song.id, window: plan.window, upload_id: uploadId, mixer: plan.mixer, seconds, mix });
         fullSession.localProgress[song.id] = {status: 'ready', progress: 1, tracks: plan.tracks.map(t => ({file: t.file, progress: 1}))};
         fullSession.localResults.push(song);
         drawSessionResults({results: fullSession.localResults}, {[song.id]: blob});
