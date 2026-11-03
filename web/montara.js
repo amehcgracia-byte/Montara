@@ -1457,7 +1457,7 @@ $("#cancel").addEventListener("click", async () => {
   if(native)native.cancelled=true;
   try {
     if(native){
-      if(native.startRequest)native.id=await native.startRequest;
+      if(native.startRequest)try{native.id=await native.startRequest;}catch(error){if(![400,404,409].includes(error.status))throw error;}
       if(native.id)await montaraCompanion.cancelVideo(native.id);
       state.nativeExport=null;
     }

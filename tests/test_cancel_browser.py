@@ -67,7 +67,8 @@ def test_result_download_uses_project_not_internal_filename(site):
         browser.close()
 
 
-def test_native_cancel_waits_for_late_job_id_and_keeps_shot_bars(site):
+@pytest.mark.parametrize('rejected',[False,True])
+def test_native_cancel_waits_for_late_job_id_and_keeps_shot_bars(site,rejected):
     with sync_playwright() as p:
         browser=p.chromium.launch();page=browser.new_page()
         page.route('http://127.0.0.1:47820/health',lambda route:route.fulfill(headers={'Access-Control-Allow-Origin':'*'},json={'app':'montara-companion','ffmpeg':True,'local_video':{'engine':'a'*40}}))
@@ -79,7 +80,9 @@ def test_native_cancel_waits_for_late_job_id_and_keeps_shot_bars(site):
           state.files=[{kind:'video',path:'camera.mp4',small:true,original:{name:'camera.mp4'}}];
           window.cancelledJobs=[];
           montaraCompanion.saveInProject=async()=>{};
-          montaraCompanion.startVideo=()=>new Promise(resolve=>window.releaseNative=()=>resolve('test-job'));
+          montaraCompanion.startVideo=()=>new Promise((resolve,reject)=>window.releaseNative=bad=>{
+            if(bad){const error=new Error('invalid job');error.status=400;reject(error);}else resolve('test-job');
+          });
           montaraCompanion.cancelVideo=async id=>cancelledJobs.push(id);
           void finishOriginalVideo({result:{}});
         }""")
@@ -88,9 +91,9 @@ def test_native_cancel_waits_for_late_job_id_and_keeps_shot_bars(site):
         assert page.locator('#renderBars').is_visible()
         page.locator('#cancel').click();page.wait_for_timeout(100)
         assert page.evaluate('cancelledJobs.length')==0
-        page.evaluate('releaseNative()')
+        page.evaluate('bad=>releaseNative(bad)',rejected)
         page.locator('#frames').wait_for(state='visible')
-        assert page.evaluate("cancelledJobs.includes('test-job')")
+        assert page.evaluate("cancelledJobs.includes('test-job')") is not rejected
         assert page.locator('#result').is_hidden()
         browser.close()
 

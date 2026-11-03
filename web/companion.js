@@ -11,6 +11,9 @@ const montaraCompanion = (() => {
   const EDGE = 65536;
   let info = null;
   async function call(path, options = {}, timeout = 0) {
+    // A mix returns its bytes after the headers: keep the caller's signal
+    // attached for the entire body transfer, not just until fetch resolves.
+    if(options.signal && !timeout)return fetch(BASE+path,options);
     const controller = new AbortController();
     const timer = timeout ? setTimeout(() => controller.abort(), timeout) : null;
     const abort=()=>controller.abort();
@@ -52,7 +55,7 @@ const montaraCompanion = (() => {
     },
     async startVideo(body) {
       const response=await call('/video-renders',json(body));const data=await response.json();
-      if(!response.ok)throw new Error(data.error || 'Could not start original-quality export');return data.id;
+      if(!response.ok){const error=new Error(data.error || 'Could not start original-quality export');error.status=response.status;throw error;}return data.id;
     },
     async videoStatus(id) {
       const response=await call(`/video-renders/${id}`);if(!response.ok)throw new Error('The companion video export is unavailable');return response.json();
