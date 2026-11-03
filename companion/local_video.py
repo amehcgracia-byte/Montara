@@ -17,12 +17,16 @@ def run(manifest):
     from core.ffmpeg import ffprobe
     from core.media_validation import validate_camera_video_metadata
     from core.stages.export import ExportStage
-    progress=Path(body['progress']);started=time.monotonic();progress_lock=threading.Lock()
+    progress=Path(body['progress']);started=time.monotonic();progress_lock=threading.Lock();last_progress_write=0.
     tasks={f'segment-{i+1}':{'id':f'segment-{i+1}','label':f'Shot {i+1}/{len(recipe["segments"])}','percent':0} for i in range(len(recipe['segments']))}
     def update(value,message):
+        nonlocal last_progress_write
         with progress_lock:
             task=getattr(message,'task',None)
             if task and task['id'].startswith('segment-'):tasks[task['id']]=dict(task)
+            now=time.monotonic()
+            if now-last_progress_write<.2 and value<100 and (not task or task.get('percent')!=100):return
+            last_progress_write=now
             atomic_write_json(progress,{'status':'rendering','progress':min(.99,max(0,float(value)/100)),'message':str(message)[:200],'tasks':list(tasks.values())})
     update(0,'Preparing original-quality video')
     p=create_project('Montara original quality',str(root/'edit.zuckervid'))

@@ -119,7 +119,7 @@ class VideoJobs:
         job=self.jobs.get(token)
         if not job:return False
         with self.lock:
-            if job['status'] in ('ready','failed','cancelled'):return True
+            if job['status'] in ('ready','failed'):return True
             job['status']='cancelled'
             process=job.get('process')
         if process and process.poll() is None:
