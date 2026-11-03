@@ -19,8 +19,8 @@ El renderizador opcional se instala con `companion/install.sh --video`. Solo añ
 
 ## Evidencia y aceptación
 
-- Motor candidato: `9136f1a894bd8fdbec2d2c4b46ee99dae94a92d4` (Editor PR #50), descendiente de `ff9baf45`; mixer sin cambios (`f15ff91`).
-- macOS: 28 pruebas de luz/encuadre/preview aprobadas. Incluyen dos fuentes oscuras controladas, negros y altas luces, paridad preview/export y guardas de proyecto/revisión.
+- Motor candidato: `731064690a75d030bd314f5bd131a18b90367b79` (Editor PR #50), descendiente de `ff9baf45`; mixer sin cambios (`f15ff91`).
+- macOS: 29 pruebas de luz/encuadre/preview aprobadas. Incluyen dos fuentes oscuras controladas, negros y altas luces, paridad preview/export y guardas de proyecto/revisión.
 - Se inspeccionaron muestras antes/después de dos originales SDR reales, uno full-range y otro limited-range. Es una revisión visual de muestras, no una certificación de toda la sesión.
 - Exportación local real controlada: original 1920×1080 de cuatro segundos, montaje del motor y salida 1920×1080; el error frente al original es menor que el de reducir a 720p y ampliar. No representa el tiempo de una canción real ni una promesa de velocidad.
 - El motor ya presenta diez fallos de expectativas geométricas 360: se reprodujeron los mismos diez en la base limpia y en el candidato (94 aprobadas y 8 omitidas en ambos). No se han ocultado ni modificado esas pruebas.

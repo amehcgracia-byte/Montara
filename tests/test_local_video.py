@@ -42,7 +42,7 @@ def test_recipe_rejects_invalid_or_executable_fields(change):
 def test_real_local_final_preserves_native_resolution_and_detail(tmp_path,monkeypatch):
     home=tmp_path/'companion';target,sha=install_layout(home,os.environ.get('MONTARA_TEST_EDITOR'))
     ff='ffmpeg';source=tmp_path/'camera-original.mp4'
-    subprocess.run([ff,'-v','error','-y','-f','lavfi','-i','testsrc2=size=1920x1080:rate=30:duration=4','-c:v','libx264','-crf','15','-threads','2',str(source)],check=True)
+    subprocess.run([ff,'-v','error','-y','-f','lavfi','-i','testsrc2=size=1920x1080:rate=30:duration=4','-c:v','libx264','-crf','15','-threads','2','-colorspace','bt709','-color_trc','bt709','-color_primaries','bt709','-color_range','tv',str(source)],check=True)
     folder=tmp_path/'chosen-project';folder.mkdir()
     master=folder/f'montara-render-audio-{uuid.uuid4().hex}.audio'
     subprocess.run([ff,'-v','error','-y','-f','lavfi','-i','sine=duration=4','-f','wav',str(master)],check=True)
