@@ -4,6 +4,7 @@ Una línea por acción de administrador (`sudo`). Sin contraseñas, tokens ni ll
 
 | Fecha (UTC) | Quién | Autorizó | Acción |
 |---|---|---|---|
+| 2026-11-03 | Codex | Chema | Lectura autenticada del estado del trabajo JM antes de preparar 0.60: `waiting_review`, sin exportación en curso; sin cambios a FER ni medios. |
 | 2026-10-29 | Claude (vía Cloud Shell de amehc) | Chema | `deploy/vm/admin_setup.sh`: paquetes del sistema, usuarios `jm` y `fer` (HOME en 750, linger), bloqueo `montara-bench` |
 | 2026-10-29 | Claude | Chema | Instalación de Montara para `jm` (`claude/jupiter-gcp-vm`, servicio de usuario en `127.0.0.1:8101`) |
 | 2026-10-29 | Claude | Chema | `deploy/vm/lab_logins.sh`: usuario de acceso propio para `jm`; instalación de `fer` copiada del checkout de `jm`, en `127.0.0.1:8102` |

@@ -55,10 +55,16 @@ def main():
             page.wait_for_timeout(1000);page.screenshot(path=str(out/'light-controls.png'),full_page=True)
             dialog.get_by_role('button',name='Save shot',exact=True).click();dialog.wait_for(state='detached',timeout=120000)
             page.locator('#renderFrames').click()
+            page.locator('#making #renderBars').wait_for(state='visible',timeout=120000)
+            page.wait_for_function("[...document.querySelectorAll('#renderBars i')].some(bar=>Number(bar.style.getPropertyValue('--p'))>0)",timeout=180000)
+            page.screenshot(path=str(out/'native-shot-progress.png'),full_page=True)
             page.wait_for_selector('#result:not([hidden]), #failed:not([hidden])',timeout=300000)
             assert not page.locator('#failed').is_visible(),page.locator('#errorText').inner_text()
             page.screenshot(path=str(out/'native-result.png'),full_page=True)
             result_url=page.locator('#resultVideo').get_attribute('src');assert result_url.startswith(base+'/video-renders/')
+            assert page.locator('#download').get_attribute('download')=='Native acceptance.mp4'
+            with urlopen(page.locator('#download').get_attribute('href'),timeout=120) as download:
+                assert 'Native%20acceptance.mp4' in download.headers['Content-Disposition']
             result=page.request.get(result_url,headers={'Origin':url,'Range':'bytes=0-1023'});assert result.status==206
             final=out/'render.mp4'
             # Stream the full file outside Playwright's base64 protocol: repeatedly

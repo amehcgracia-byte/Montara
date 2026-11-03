@@ -671,6 +671,7 @@ function isWholeSession() {
 }
 
 async function registerProject() {
+  if(work.cancelling)return toast('Wait for cancellation to finish.');
   if (videos().length && state.files.some(f => f.preview)) return toast('Some audio was sent as a light session preview. Remove it and add it again to use it in a video.', true);
   if (state.platform === 'youtube' && !videos().length && !$('#fullSessionOn').checked && isWholeSession()) {
     $('#fullSessionOn').checked = true;
@@ -1304,17 +1305,34 @@ async function saveCameras() {
 }
 
 // ---------- making ----------
+class WorkCancelled extends Error {}
+const work = {generation:0, cancelled:false, cancelling:false, pending:new Set()};
+function beginWork() {
+  if(work.cancelling)throw new Error('Wait for cancellation to finish.');
+  work.cancelled=false;
+  return ++work.generation;
+}
+function checkWork(generation) {
+  if(work.cancelled || generation!==work.generation)throw new WorkCancelled();
+}
+async function workRequest(generation,path,body) {
+  checkWork(generation);
+  const request=api(path,body);work.pending.add(request);
+  try {const result=await request;checkWork(generation);return result;}
+  finally {work.pending.delete(request);}
+}
 async function make() {
+  const generation=beginWork();
   const name = $("#videoName").value.trim() || todayName();
   const platform = state.platform;
   const data = inputs();
   setProgress(0, "Getting your footage ready…", "");
   show("making");
   if (platform === "youtube") {
-    await api("/wizard/prepare", { name, platform, project_id: state.projectId, ...data });
-    await waitFor((s) => ["waiting_choice", "done"].includes(s.status));
+    await workRequest(generation,"/wizard/prepare", { name, platform, project_id: state.projectId, ...data });
+    await waitFor((s) => ["waiting_choice", "done"].includes(s.status),generation);
   }
-  await api("/wizard/start", {
+  await workRequest(generation,"/wizard/start", {
     project_id: state.projectId, name, platform, ...data,
     reel_duration_sec: platform === "reel" ? Number($("#reelDuration").value) : undefined,
     trim_start_sec: platform === "youtube" && range.start > 0 ? range.start : undefined,
@@ -1334,17 +1352,21 @@ async function status() {
 // Long footage (a whole jam, 4K phone video) can prepare for hours. Wait while the
 // engine reports progress; give up only if nothing changes for 45 minutes.
 const STALL_LIMIT_MS = 45 * 60 * 1000;
-async function waitFor(predicate) {
+async function waitFor(predicate,generation=work.generation) {
   let signature = "", changedAt = Date.now();
   for (;;) {
+    checkWork(generation);
     let s;
     try { s = await status(); }
     catch (error) {  // a dropped connection must not end a job the server is still doing
+      checkWork(generation);
       if (Date.now() - changedAt > STALL_LIMIT_MS) throw error;
       await new Promise((r) => setTimeout(r, 5000));
       continue;
     }
+    checkWork(generation);
     renderStatus(s);
+    if(s.status==='cancelled' || s.status==='cancelling')throw new WorkCancelled();
     if (s.status === "failed") throw new Error(s.error || s.message || "Preparation failed");
     if (predicate(s)) return s;
     const now = JSON.stringify([s.status, s.stage, s.progress, s.message, s.detail, (s.tasks || []).map((t) => [t.label, t.progress])]);
@@ -1426,10 +1448,28 @@ function setProgress(percent, message, detail) {
 }
 
 $("#cancel").addEventListener("click", async () => {
-  if(state.nativeExport){state.nativeExport.cancelled=true;await montaraCompanion.cancelVideo(state.nativeExport.id);state.nativeExport=null;stopPolling();show('frames');return;}
-  try { await api("/wizard/cancel", {}); } catch (error) { toast(error.message, true); }
+  if(work.cancelling)return;
+  work.cancelled=true;++work.generation;work.cancelling=true;
   stopPolling();
-  show(state.platform === "show" ? "showSetup" : "footage");
+  const button=$('#cancel'),native=state.nativeExport;
+  button.disabled=true;setProgress(0,'Cancelling…','');
+  if(native)native.cancelled=true;
+  try {
+    if(native){
+      if(native.startRequest)native.id=await native.startRequest;
+      if(native.id)await montaraCompanion.cancelVideo(native.id);
+      state.nativeExport=null;
+    }
+    else {
+      // A start request may still be reaching the server. Fence its UI
+      // continuation, then cancel after it has actually registered the job.
+      await Promise.allSettled([...work.pending]);
+      await api('/wizard/cancel',{if_idle:true,project_id:state.projectId});
+      while(['running','cancelling'].includes((await status()).status))await new Promise(r=>setTimeout(r,250));
+    }
+    show(native?'frames':state.platform==='show'?'showSetup':'footage');
+  } catch(error){toast('Could not confirm cancellation. Please try Cancel again. '+error.message,true);}
+  finally {work.cancelling=false;button.disabled=false;}
 });
 
 // ---------- frames ----------
@@ -1513,11 +1553,14 @@ function startFrameHover(thumb) {
   }, thumb.dataset.warm ? 0 : 120);
 }
 async function openFrames() {
+  const generation=work.generation;
   show("frames");
   $("#frameGrid").innerHTML = "";
   $("#framesHint").textContent = "Preparing the shots…";
   await refreshFrames(true);
+  if(generation!==work.generation)throw new WorkCancelled();
   await loadMusicCuts();
+  if(generation!==work.generation)throw new WorkCancelled();
   clearInterval(state.framesPoll);
   state.framesPoll = setInterval(() => refreshFrames(false).catch(console.warn), 1500);
 }
@@ -1598,9 +1641,10 @@ $("#renderFrames").addEventListener("click", async () => {
   try {
     clearInterval(state.framesPoll);
     if(state.platform==='youtube' && state.files.some(f=>f.kind==='video' && f.small))return await finishOriginalVideo({result:{}});
-    await api("/wizard/review/render", {});
+    const generation=beginWork();
     setProgress(0, "Rendering your video…", "");
     show("making");
+    await workRequest(generation,"/wizard/review/render", {});
     startPolling();
   } catch (error) { fail(error); }
 });
@@ -1923,7 +1967,9 @@ $("#capApply").addEventListener("click", async () => {
   state.captioned = true;
   if (!cues.length && !title) return showResult(await status());
   try {
-    await api("/wizard/compose", {
+    const generation=beginWork();
+    setProgress(0, "Adding your captions…", "");show("making");
+    await workRequest(generation,"/wizard/compose", {
       cues, style: cap.style, lang: "und", texts: [], images: [], videos: [], letterbox: { enabled: false },
       header: { title_enabled: Boolean(title), title, logo_source: "none" },
     });
@@ -2029,10 +2075,12 @@ $("#showMake").addEventListener("click", () => {
   registerProject().catch(fail).finally(renderShowInput);
 });
 async function makeShow() {
+  const generation=beginWork();
   await prepareShowSources();
+  checkWork(generation);
   setProgress(0, "Listening to your video…", "Finding the natural cuts and preparing your preview.");
   show("making");
-  await api("/wizard/start", { project_id: state.projectId, name: $("#videoName").value, platform: "show", videos: videos().map(f => f.path), show_main: videos()[0].path,
+  await workRequest(generation,"/wizard/start", { project_id: state.projectId, name: $("#videoName").value, platform: "show", videos: videos().map(f => f.path), show_main: videos()[0].path,
     show_style: showEdit.pace, show_review: true, captions_english:false, show_captions:true, show_idea_mode: "automatic", show_gags: ["podcast","storytelling"].includes(showEdit.pace) ? "off" : "keywords", show_auto_research: !["podcast","storytelling"].includes(showEdit.pace) });
   startPolling();
 }
@@ -2044,6 +2092,7 @@ async function showPatch(path, body) {
   return data;
 }
 async function openShowReview() {
+  const generation=work.generation;
   showEdit.direction = await api("/montara/show/direction", {});
   const data = await api("/show/scenes");
   const fast=await api("/montara/show/editor");showEdit.timelineCache=fast.timeline;showEdit.narratorCache=fast.narrator;
@@ -2058,12 +2107,14 @@ async function openShowReview() {
   }
   showEdit.resources = data.resources || [];
   await loadShowModeReview(data);
+  if(generation!==work.generation)throw new WorkCancelled();
   if (!showEdit.scenes.length) throw new Error("No scenes were found in this video.");
   // Ready automatic effects are kept; no drawing or provider sign-in is triggered here.
   for (const scene of showEdit.scenes) if (scene.decision === "pending") {
     await api(`/show/scenes/${encodeURIComponent(scene.id)}/decision`, { decision: "modified" });
     scene.decision = "modified";
   }
+  if(generation!==work.generation)throw new WorkCancelled();
   showEdit.selected = 0;
   show("showReview");
   requestAnimationFrame(()=>document.querySelector(".show-picture-console").scrollIntoView({block:"start"}));
@@ -2181,22 +2232,30 @@ $("#showStartOver").addEventListener("click",()=>{clearTimeout(showEdit.previewT
 $("#showExport").addEventListener("click", async () => {
   const button = $("#showExport");button.disabled = true;
   try {
+    const generation=beginWork();
     clearTimeout(showEdit.previewTimer);++showEdit.previewToken;$("#showSceneVideo").pause();
     await prepareShowProgramPreview();
-    await api("/show/review/render", {});
+    checkWork(generation);
+    setProgress(0, "Finishing your video…", "Keeping the edits you chose.");show("making");
+    await workRequest(generation,"/show/review/render", {});
     setProgress(0, "Finishing your video…", "Keeping the edits you chose.");show("making");startPolling();
-  } catch (error) { toast(error.message, true); } finally { button.disabled = false; }
+  } catch (error) { if(!(error instanceof WorkCancelled))toast(error.message, true); } finally { button.disabled = false; }
 });
 
 async function finishOriginalVideo(s) {
   if(state.nativeExport)return;
+  beginWork();
   const job={cancelled:false,id:null};state.nativeExport=job;stopPolling();show('making');setProgress(0,'Preparing original-quality video…','');
   try {
     await montaraCompanion.detect();
+    if(job.cancelled)return;
     if(!montaraCompanion.info?.local_video)throw new Error('Update the Montara companion with the video renderer to export from your originals.');
     const recipe=await api('/edit/native-recipe?project_id='+encodeURIComponent(state.projectId));
+    if(job.cancelled)return;
+    renderShotBars({tasks:recipe.segments.map((_,i)=>({id:`segment-${i+1}`,label:`Shot ${i+1}/${recipe.segments.length}`,percent:0}))});
     if(recipe.engine!==montaraCompanion.info.local_video.engine)throw new Error('The companion needs the same editor version as this page. Update it before exporting.');
     if(!state.localProject)state.localProject=await montaraCompanion.projectFolder($('#videoName').value.trim()||todayName(),state.files.filter(f=>f.original).map(f=>f.original));
+    if(job.cancelled)return;
     if(!state.localProject)throw new Error('Choose a project folder to save the original-quality video.');
     const sources=[];
     for(const source of recipe.sources){
@@ -2217,17 +2276,21 @@ async function finishOriginalVideo(s) {
     const master='montara-render-audio-'+crypto.randomUUID().replaceAll('-','')+'.audio';
     await montaraCompanion.saveInProject(state.localProject.id,master,await response.blob());
     if(job.cancelled)return;
-    job.id=await montaraCompanion.startVideo({project:state.localProject.id,recipe,master,originals:sources,branding:state.branding||'none',name:$('#videoName').value.trim()||todayName()});
+    job.startRequest=montaraCompanion.startVideo({project:state.localProject.id,recipe,master,originals:sources,branding:state.branding||'none',name:projectDownloadName().slice(0,-4)});
+    job.id=await job.startRequest;
     for(;;){
       if(job.cancelled){await montaraCompanion.cancelVideo(job.id);return;}
       const status=await montaraCompanion.videoStatus(job.id);
+      if(job.cancelled)return;
       if(status.status==='failed')throw new Error(status.error || 'The original-quality export failed.');
       if(status.status==='cancelled')return;
+      renderShotBars(status);
       setProgress(Math.min(99,Math.round((status.progress||0)*100)),'Rendering original-quality video…','');
       if(status.status==='ready')break;
       await new Promise(resolve=>setTimeout(resolve,700));
     }
     if(job.cancelled)return;
+    renderShotBars({status:'done'});
     state.nativeExport=null;
     showResult({...s,result:{...s.result,native:true,url:montaraCompanion.videoUrl(job.id)}});
     $('#download').href=montaraCompanion.videoUrl(job.id,true);
@@ -2235,6 +2298,12 @@ async function finishOriginalVideo(s) {
 }
 
 // ---------- result ----------
+function projectDownloadName(audio=false) {
+  // Dots belong to the project name (e.g. Montara.Notetaker). Only an
+  // actual media extension is removed, never an arbitrary suffix or a job id.
+  const name=($('#videoName').value.trim()||todayName()).replace(/\.(mp4|mov|mkv|webm|mp3|wav)$/i,'').replace(/[\/\\\x00-\x1f\x7f]/g,'-').trim();
+  return (name||'Montara')+(audio?'.mp3':'.mp4');
+}
 function showResult(s) {
   const result = s.result || {};
   if(state.platform==='youtube' && !result.audio && !result.native && state.files.some(f=>f.kind==='video' && f.small))return finishOriginalVideo(s);
@@ -2244,7 +2313,7 @@ function showResult(s) {
   if (state.localProject && !state.savedLocally) {
     state.savedLocally = true;
     const resultUrl = result.url || `/api/v1/wizard/result?t=${Date.now()}`;
-    const fileName = `${(result.filename || $("#videoName").value.trim() || todayName()).replace(/\.[a-z0-9]+$/i, "").replace(/[\/\\]/g, "-")}${result.audio ? ".mp3" : ".mp4"}`;
+    const fileName = projectDownloadName(result.audio);
     fetch(resultUrl).then((r) => r.blob()).then((blob) => montaraCompanion.saveInProject(state.localProject.id, fileName, blob))
       .then((saved) => toast(`Saved on your computer: ${saved}`)).catch((error) => toast(error.message, true));
   }
@@ -2253,9 +2322,7 @@ function showResult(s) {
   $("#resultAudio").hidden = !result.audio;
   $("#resultAudio").src = result.audio ? url : "";
   $("#resultTitle").textContent = result.audio ? "Your master is ready." : state.platform === "show" ? "Your video is ready." : "Your night, edited.";
-  const sourceName = result.filename || $("#videoName").value.trim() || todayName();
-  const baseName = sourceName.replace(/\.[a-z0-9]+$/i, "").replace(/[\/\\]/g, "-");
-  const downloadName = `${baseName}${/montara/i.test(baseName) ? "" : "-Montara"}${result.audio ? ".mp3" : ".mp4"}`;
+  const downloadName = projectDownloadName(result.audio);
   $("#resultVideo").classList.toggle("vertical", state.platform === "reel");
   $("#resultVideo").src = result.audio ? "" : url;
   $("#download").href = `${url}${url.includes("?") ? "&" : "?"}download_name=${encodeURIComponent(downloadName)}`;
@@ -2269,6 +2336,7 @@ function showResult(s) {
 }
 
 function fail(error) {
+  if(error instanceof WorkCancelled)return;
   stopPolling();
   $("#errorText").textContent = error.message;
   show("failed");

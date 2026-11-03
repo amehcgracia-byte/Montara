@@ -27,7 +27,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-VERSION = "0.6.0"
+VERSION = "0.6.1"
 PORT = int(os.environ.get("MONTARA_COMPANION_PORT", "47820"))
 HOME = Path(os.environ.get("MONTARA_COMPANION_HOME", Path.home() / ".montara-companion"))
 CACHE = HOME / "proxies"
@@ -44,7 +44,7 @@ PLACES = HOME / "places.json"   # folders where originals were found: they survi
 MIXER_HOME = HOME / "mixer"   # optional: install.sh --mixer (same mixer as the server, songs mixed here)
 MIX_SLOTS = threading.Semaphore(max(1, int(os.environ.get("MONTARA_COMPANION_MIX_SLOTS", "1"))))
 
-from video_jobs import VideoJobs
+from video_jobs import VideoJobs, stop_process_tree
 video_jobs = VideoJobs(HOME)
 
 sources: dict[str, Path] = {}
@@ -492,7 +492,7 @@ class Handler(BaseHTTPRequestHandler):
             if native.group(2):
                 target=video_jobs.output(token)
                 if not target:return self.reply(404,{'error':'The final video is not ready'})
-                return self.send_video(target,download=self.path.endswith('?download=1'))
+                return self.send_video(target,download=self.path.endswith('?download=1'),download_name=video_jobs.jobs[token].get('download_name'))
             status=video_jobs.status(token)
             return self.reply(200,status) if status else self.reply(404,{'error':'Unknown video render'})
         match = re.fullmatch(r"/mix-progress/([a-f0-9]{32})", self.path)
@@ -501,6 +501,8 @@ class Handler(BaseHTTPRequestHandler):
                 job = mix_jobs.get(match.group(1))
                 if not job:
                     return self.reply(404, {"error": "unknown mix"})
+                if job.get('cancelled'):
+                    return self.reply(200, {'status':'cancelled','progress':0,'tracks':[]})
                 try:
                     snapshot = json.loads(job['path'].read_text())
                     job['snapshot'] = snapshot
@@ -537,6 +539,20 @@ class Handler(BaseHTTPRequestHandler):
         cancel_video=re.fullmatch(r'/video-renders/([a-f0-9]{32})/cancel',self.path)
         if cancel_video:
             return self.reply(200,{'cancelled':True}) if video_jobs.cancel(cancel_video.group(1)) else self.reply(404,{'error':'Unknown video render'})
+        cancel_mix=re.fullmatch(r'/mix-progress/([a-f0-9]{32})/cancel',self.path)
+        if cancel_mix:
+            with mix_jobs_lock:
+                # A cancellation can arrive before the POST /mix-song has
+                # registered. Keep a bounded tombstone so that job never starts.
+                token=cancel_mix.group(1)
+                if token not in mix_jobs:
+                    terminal=[k for k,j in mix_jobs.items() if j['snapshot']['status'] in {'ready','failed','cancelled'}]
+                    for key in terminal[:max(0,len(mix_jobs)-63)]:del mix_jobs[key]
+                job=mix_jobs.setdefault(token,{'snapshot':{'status':'cancelled'}})
+                job['cancelled']=True
+                process=job.get('process')
+            if process:stop_process_tree(process)
+            return self.reply(200,{'cancelled':True})
         if self.path == '/video-renders':
             try:
                 token=video_jobs.start(body,projects,find_original)
@@ -620,23 +636,31 @@ class Handler(BaseHTTPRequestHandler):
         if progress_id:
             with mix_jobs_lock:
                 if progress_id in mix_jobs:
+                    if mix_jobs[progress_id].get('cancelled'):return self.reply(409,{'error':'mix cancelled'})
                     return self.reply(409, {"error": "mix id already used"})
                 # Retain a bounded number of terminal snapshots; never evict an active mix.
-                terminal = [key for key, job in mix_jobs.items() if job['snapshot']['status'] in {'ready', 'failed'}]
+                terminal = [key for key, job in mix_jobs.items() if job['snapshot']['status'] in {'ready', 'failed', 'cancelled'}]
                 for key in terminal[:max(0, len(mix_jobs) - 63)]:
                     del mix_jobs[key]
                 mix_jobs[progress_id] = dict(path=progress_file, snapshot=dict(status='queued', progress=0,
                     tracks=[dict(file=t['file'], progress=0, active=False) for t in tracks]))
         plan_file.write_text(json.dumps({**plan, "tracks": tracks, **{k: mix.get(k) for k in ("faders", "mutes", "effects", "eq") if k in mix}}))
         started = time.monotonic()
+        process=None
         try:
             with MIX_SLOTS:   # one song at a time by default: the mixer uses every core it gets
-                done = subprocess.run([str(MIXER_HOME / "venv" / "bin" / "python"), str(MIXER_HOME / "local_mix.py"), str(plan_file), str(output), str(progress_file)],
-                                      cwd=MIXER_HOME, capture_output=True, text=True, timeout=3600,
+                with mix_jobs_lock:
+                    job=mix_jobs.get(progress_id,{})
+                    if job.get('cancelled'):return self.reply(409,{'error':'mix cancelled'})
+                    process=subprocess.Popen([str(MIXER_HOME / "venv" / "bin" / "python"), str(MIXER_HOME / "local_mix.py"), str(plan_file), str(output), str(progress_file)],
+                                      cwd=MIXER_HOME, stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,start_new_session=True,
                                       env={**os.environ, "MONTARA_FFMPEG": FFMPEG or "ffmpeg"})
-            if done.returncode != 0 or not output.is_file():
-                log(f"local mix failed: {done.stderr.strip()[-400:]}")
-                return self.reply(500, {"error": "the local mix failed", "detail": done.stderr.strip()[-400:]})
+                    job['process']=process
+                _,stderr=process.communicate(timeout=3600)
+            if job.get('cancelled'):return self.reply(409,{'error':'mix cancelled'})
+            if process.returncode != 0 or not output.is_file():
+                log(f"local mix failed: {stderr.strip()[-400:]}")
+                return self.reply(500, {"error": "the local mix failed", "detail": stderr.strip()[-400:]})
             log(f"mixed a song here in {time.monotonic() - started:.0f} s ({output.stat().st_size / 1e6:.1f} MB)")
             self.send_response(200)
             self.cors(self.origin_ok())
@@ -648,16 +672,19 @@ class Handler(BaseHTTPRequestHandler):
             with output.open("rb") as handle:
                 shutil.copyfileobj(handle, self.wfile, 1024 * 1024)
         except subprocess.TimeoutExpired:
+            if process:stop_process_tree(process)
             return self.reply(504, {"error": "the local mix took too long"})
         finally:
             if progress_id:
                 with mix_jobs_lock:
                     job = mix_jobs[progress_id]
+                    job.pop('process',None)
                     try:
                         job['snapshot'] = json.loads(progress_file.read_text())
                     except (OSError, ValueError):
                         pass
-                    if job['snapshot']['status'] != 'ready':
+                    if job.get('cancelled'):job['snapshot']['status']='cancelled'
+                    elif job['snapshot']['status'] != 'ready':
                         job['snapshot']['status'] = 'failed'
             progress_file.unlink(missing_ok=True)
             plan_file.unlink(missing_ok=True)
@@ -704,7 +731,7 @@ class Handler(BaseHTTPRequestHandler):
         finally:
             target.unlink(missing_ok=True)
 
-    def send_video(self,target,download=False):
+    def send_video(self,target,download=False,download_name=None):
         size=target.stat().st_size;start=0;end=size-1;header=self.headers.get('Range')
         if header:
             match=re.fullmatch(r'bytes=(\d*)-(\d*)',header)
@@ -719,7 +746,7 @@ class Handler(BaseHTTPRequestHandler):
         if header:self.send_header('Content-Range',f'bytes {start}-{end}/{size}')
         if download:
             from urllib.parse import quote
-            self.send_header('Content-Disposition',"attachment; filename*=UTF-8''"+quote(target.name))
+            self.send_header('Content-Disposition',"attachment; filename*=UTF-8''"+quote(download_name or target.name,safe=''))
         self.end_headers()
         try:
             with target.open('rb') as handle:

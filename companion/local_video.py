@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Render a reviewed Stage plan with verified local originals, in isolation."""
-import json,os,shutil,sys,time
+import json,os,shutil,sys,time,threading
 from pathlib import Path
 
 
@@ -17,6 +17,14 @@ def run(manifest):
     from core.ffmpeg import ffprobe
     from core.media_validation import validate_camera_video_metadata
     from core.stages.export import ExportStage
+    progress=Path(body['progress']);started=time.monotonic();progress_lock=threading.Lock()
+    tasks={f'segment-{i+1}':{'id':f'segment-{i+1}','label':f'Shot {i+1}/{len(recipe["segments"])}','percent':0} for i in range(len(recipe['segments']))}
+    def update(value,message):
+        with progress_lock:
+            task=getattr(message,'task',None)
+            if task and task['id'].startswith('segment-'):tasks[task['id']]=dict(task)
+            atomic_write_json(progress,{'status':'rendering','progress':min(.99,max(0,float(value)/100)),'message':str(message)[:200],'tasks':list(tasks.values())})
+    update(0,'Preparing original-quality video')
     p=create_project('Montara original quality',str(root/'edit.zuckervid'))
     sources={int(k):Path(v) for k,v in body['source_files'].items()}
     records=[]
@@ -42,9 +50,6 @@ def run(manifest):
         segments.append(s)
     p.save();atomic_write_json(p.artifacts_dir/'edit_plan.json',{'platform':'youtube','segments':segments})
     atomic_write_json(p.artifacts_dir/'coverage.json',{'platform':'youtube','sources':[],'segments':segments})
-    progress=Path(body['progress']);started=time.monotonic()
-    def update(value,message):
-        atomic_write_json(progress,{'status':'rendering','progress':min(.99,max(0,float(value)/100)),'message':str(message)[:200]})
     ExportStage().run(p,update)
     outputs=sorted(p.exports_dir.glob('*.mp4'),key=lambda v:v.stat().st_mtime)
     if not outputs:raise RuntimeError('No final video was produced')

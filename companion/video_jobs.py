@@ -4,6 +4,30 @@ from pathlib import Path
 from video_recipe import validate
 
 
+def stop_process_tree(process):
+    """Stop this worker and its FFmpeg descendants, including separate groups."""
+    if process.poll() is not None:return
+    rows=subprocess.check_output(['ps','-Ao','pid=,ppid='],text=True).splitlines()
+    children={}
+    for line in rows:
+        pid,parent=map(int,line.split());children.setdefault(parent,[]).append(pid)
+    tree=[]
+    def collect(pid):
+        for child in children.get(pid,[]):collect(child)
+        tree.append(pid)
+    collect(process.pid)
+    for pid in tree:
+        try:os.kill(pid,signal.SIGTERM)
+        except ProcessLookupError:pass
+    try:process.wait(timeout=2)
+    except subprocess.TimeoutExpired:pass
+    # Children can ignore TERM even after their parent has exited.
+    for pid in tree:
+        try:os.kill(pid,signal.SIGKILL)
+        except ProcessLookupError:pass
+    process.wait(timeout=5)
+
+
 class VideoJobs:
     def __init__(self,home):
         self.home=Path(home)/'video';self.jobs={};self.lock=threading.Lock();self.slot=threading.Semaphore(1)
@@ -63,7 +87,8 @@ class VideoJobs:
             manifest={'recipe':recipe,'source_files':source_files,'master':str(master),'branding':branding,'work':str(work),'output':str(output),'progress':str(progress)}
             (work/'render.json').write_text(json.dumps(manifest))
             for key in [k for k,j in self.jobs.items() if j['status'] in ('ready','failed','cancelled')][:-30]:self.jobs.pop(key)
-            self.jobs[token]={'status':'queued','progress':0,'path':output,'work':work,'snapshot':progress}
+            self.jobs[token]={'status':'queued','progress':0,'path':output,'work':work,'snapshot':progress,'download_name':name+'.mp4',
+                              'tasks':[{'id':f'segment-{i+1}','label':f'Shot {i+1}/{len(recipe["segments"])}','percent':0} for i in range(len(recipe['segments']))]}
         threading.Thread(target=self._run,args=(token,),daemon=True).start()
         return token
 
@@ -98,30 +123,18 @@ class VideoJobs:
             job['status']='cancelled'
             process=job.get('process')
         if process and process.poll() is None:
-            # Kill only this worker's descendants, even when FFmpeg starts a
-            # separate process group for its watchdog. Never match by name.
-            rows=subprocess.check_output(['ps','-Ao','pid=,ppid='],text=True).splitlines()
-            children={}
-            for line in rows:
-                pid,parent=map(int,line.split());children.setdefault(parent,[]).append(pid)
-            tree=[]
-            def collect(pid):
-                for child in children.get(pid,[]):collect(child)
-                tree.append(pid)
-            collect(process.pid)
-            for pid in tree:
-                try:os.kill(pid,signal.SIGTERM)
-                except ProcessLookupError:pass
+            stop_process_tree(process)
         return True
 
     def status(self,token):
         job=self.jobs.get(token)
         if not job:return None
-        result={k:job[k] for k in ('status','progress','error') if k in job}
+        result={k:job[k] for k in ('status','progress','error','tasks') if k in job}
         if job['status']=='rendering':
             try:
                 snap=json.loads(job['snapshot'].read_text())
                 result.update(progress=min(.99,float(snap.get('progress') or 0)),message=str(snap.get('message') or '')[:200])
+                if isinstance(snap.get('tasks'),list):result['tasks']=snap['tasks']
             except (OSError,ValueError,TypeError):pass
         return result
 

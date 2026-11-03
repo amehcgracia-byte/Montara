@@ -48,13 +48,16 @@ def test_real_local_final_preserves_native_resolution_and_detail(tmp_path,monkey
     subprocess.run([ff,'-v','error','-y','-f','lavfi','-i','sine=duration=4','-f','wav',str(master)],check=True)
     project='b'*16;manager=VideoJobs(home)
     original={'name':source.name,'size':source.stat().st_size,'fingerprint':fingerprint(source)}
-    payload={'project':project,'master':master.name,'recipe':recipe(sha),'originals':[{'source':0,'original':original}],'branding':'none'}
+    payload={'project':project,'master':master.name,'recipe':recipe(sha),'originals':[{'source':0,'original':original}],'branding':'none','name':'Montara.Notetaker'}
     token=manager.start(payload,{project:folder},lambda _:source)
     deadline=time.monotonic()+180
     while manager.status(token)['status'] not in ('ready','failed') and time.monotonic()<deadline:time.sleep(.2)
     status=manager.status(token)
     assert status['status']=='ready',(status,(folder/'.montara-renders'/token/'render.log').read_text()[-5000:])
     output=manager.output(token)
+    assert output.name=='Montara.Notetaker.mp4'
+    assert manager.jobs[token]['download_name']=='Montara.Notetaker.mp4'
+    assert manager.status(token)['tasks'][0]['label']=='Shot 1/1'
     info=json.loads(subprocess.check_output(['ffprobe','-v','error','-show_streams','-of','json',str(output)]))
     stream=next(s for s in info['streams'] if s['codec_type']=='video')
     assert (stream['width'],stream['height'])==(1920,1080)
@@ -95,7 +98,7 @@ def test_native_http_ranges_and_origin_boundaries(tmp_path,monkeypatch):
     spec=importlib.util.spec_from_file_location('native_http_test',ROOT/'companion/companion.py')
     helper=importlib.util.module_from_spec(spec);spec.loader.exec_module(helper)
     token='a'*32;video=tmp_path/'final.mp4';video.write_bytes(b'0123456789')
-    helper.video_jobs.jobs[token]={'status':'ready','progress':1,'path':video}
+    helper.video_jobs.jobs[token]={'status':'ready','progress':1,'path':video,'download_name':'Montara.Notetaker.mp4'}
     server=ThreadingHTTPServer(('127.0.0.1',0),helper.Handler)
     thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
     url=f'http://127.0.0.1:{server.server_port}/video-renders/{token}/file'
@@ -111,4 +114,5 @@ def test_native_http_ranges_and_origin_boundaries(tmp_path,monkeypatch):
         # job's exact download URL is a capability, never a filesystem path.
         with urlopen(url+'?download=1') as r:
             assert r.read()==b'0123456789' and 'attachment' in r.headers['Content-Disposition']
+            assert r.headers['Content-Disposition'].endswith('Montara.Notetaker.mp4')
     finally:server.shutdown();server.server_close();thread.join(timeout=3)
