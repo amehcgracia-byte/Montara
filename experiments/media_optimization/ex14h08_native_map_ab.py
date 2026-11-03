@@ -46,6 +46,30 @@ def git(repo: Path, *args: str) -> str:
     ).strip()
 
 
+def active_video_processes() -> list[str]:
+    result = []
+    for proc in Path("/proc").iterdir():
+        if not proc.name.isdigit():
+            continue
+        try:
+            name = (proc / "comm").read_text().strip()
+            if name in ("ffmpeg", "ffprobe"):
+                result.append(name)
+        except OSError:
+            pass
+    return result
+
+
+def cpu_sample(seconds: float = 2.0) -> float:
+    def measure():
+        fields = list(map(int, Path("/proc/stat").read_text().splitlines()[0].split()[1:]))
+        return sum(fields), fields[3] + fields[4]
+    before, idle_before = measure()
+    time.sleep(seconds)
+    after, idle_after = measure()
+    return 100 * (1 - (idle_after - idle_before) / (after - before)) if after > before else 0.0
+
+
 def preflight() -> dict:
     if not ROOT.is_dir() or not LAB.is_dir():
         raise RuntimeError("Missing baseline engine or experimental worktree")
@@ -62,21 +86,18 @@ def preflight() -> dict:
         subprocess.run(["git", "-C", str(repo), "diff", "--quiet"], check=True)
         subprocess.run(["git", "-C", str(repo), "diff", "--cached", "--quiet"], check=True)
 
-    processes = []
-    for proc in Path("/proc").iterdir():
-        if not proc.name.isdigit():
-            continue
-        try:
-            name = (proc / "comm").read_text().strip()
-            if name in ("ffmpeg", "ffprobe"):
-                processes.append(name)
-        except OSError:
-            pass
+    processes = active_video_processes()
     load1 = os.getloadavg()[0]
-    if processes or load1 > 5:
-        raise RuntimeError("Shared VM appears busy: stop without running benchmark")
+    cpu_pct = cpu_sample(2.0)
+    # 14% reported VM utilization is below this conservative cutoff.
+    if processes or load1 > 5 or cpu_pct > 30:
+        raise RuntimeError(
+            f"Shared VM busy: video_processes={len(processes)}, "
+            f"load1={load1:.2f}, cpu={cpu_pct:.1f}%; stop"
+        )
     return {"base_sha": baseline_sha[:12], "lab_sha": lab_sha[:12],
             "lab_branch": lab_branch, "load1": round(load1, 2),
+            "preflight_cpu_pct": round(cpu_pct, 1),
             "external_ffmpeg_processes": len(processes)}
 
 
@@ -137,8 +158,12 @@ def main():
     # Rotate execution order, reducing systematic order/warm-cache bias.
     variants = list(cases)
     for run in range(ROUNDS):
+        if active_video_processes():
+            raise RuntimeError("A video render started on shared VM; stop immediately")
         order = variants[run:] + variants[:run]
         for i in range(FRAMES):
+            if i % 5 == 0 and active_video_processes():
+                raise RuntimeError("A video render started on shared VM; stop immediately")
             reference = None
             outputs = {}
             # Compute all four for the identical pose.
