@@ -28,7 +28,7 @@ Actualizado: 2026-11-02 · lo mantiene el equipo de Chema · 40 líneas como má
 - Con ficha propia: percusión, guitarra acústica, trompeta, trombón, flauta, violín, cuerdas, coros, voz de podcast y narración. El resto usa el rol tal cual.
 - Pendiente: detección por audio (hoy por nombre o por la elección de la persona); fichas para más instrumentos; afinarlas de oído con jams reales.
 ## Pendiente
-- Iluminación: diagnóstico y muestras reales en `docs/AUDITORIA_ILUMINACION_2026-11-02.md`; recuperación de sombras y paridad preview/render aún sin implementar.
+- 0.59 candidata (PR #67): luz Auto/Light/Shadows y render Stage desde originales locales, con motor Editor PR #50; aceptación Linux/instalación en curso. Ver `docs/STAGE_LIGHT_AND_NATIVE_EXPORT_059.md`.
 - Vídeos por lote para canciones ya mezcladas y dos cámaras iguales con zoom según encuadre: revisión y aceptación pendientes en `docs/PENDIENTES_CAMARAS_Y_LOTES.md`.
 - **Mezcla en el Mac (companion 0.5.1, opcional, #59)**: `install.sh --mixer` instala el mezclador del servidor en el Mac (171 MB); cada canción se mezcla allí y solo sube el MP3. Salida idéntica bit a bit a la del servidor en el test. **Medido el 01-11 en el Mac de Chema (MacBook Pro 13" Intel i7, 4 núcleos), jam de 1h56 con 9 pistas: 12 de 12 canciones con `local: true`, 47,5 min de música en 12,4 min (entre 32 y 91 s por canción, unos 16 s por minuto), frente a la estimación de 140 min subiendo los originales al servidor.** Una canción a la vez (`MONTARA_COMPANION_MIX_SLOTS=1`); falta probar con 2 y confirmar por oído. Informe de Fer: `JUPITER_COMPANION_MAC_LOCAL_MIX_FEASIBILITY_2026-11-01.md`.
 - Licencias: Matchering (GPLv3, de terceros) solo se usa en el servidor; el mezclador del Mac no lo instala.
@@ -36,5 +36,5 @@ Actualizado: 2026-11-02 · lo mantiene el equipo de Chema · 40 líneas como má
 - El fallo de canciones cortadas o vacías del #48: arreglado el fallo de la cola (#52); falta confirmarlo con `deploy/vm/audio_check.py` en una sesión real.
 - Cola de render para unos 10 testers (VM más grande y luego workers bajo demanda): sin empezar.
 - Caché del companion sin límite; para las barras locales hace falta actualizarlo a 0.5.3 (`install.sh --mixer`).
-- `run_history.py` no guarda qué cámara usa cada plano.
+- `run_history.py` ya registra reparto por cámara y segundos 360 (`5fe4880`); falta el manifest del ensayo histórico de 628,2 s, no recuperable de la fila antigua.
 - Cambiar las contraseñas web de la VM que pasaron por chat (sin confirmar).

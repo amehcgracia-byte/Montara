@@ -33,3 +33,7 @@ Las muestras e informes se guardan en el equipo de trabajo, fuera de Git. No se 
 Herramientas disponibles y verificadas en el FFmpeg instalado: `exposure`, `eq` (gamma y peso de altas luces), `curves`; evaluar `hqdn3d` para ruido. Documentación oficial: https://www.ffmpeg.org/ffmpeg-filters.html .
 
 Aceptación pendiente: día/noche, dos cámaras igualmente oscuras, cámara ya bien expuesta, luces de color, foco blanco, ruido, cambios de iluminación, HDR/Log y paridad preview/render. No hay PR funcional ni mejora de iluminación instalada todavía. Cualquier cambio del motor se realiza primero en Zucker Editor y después mediante un commit separado del submódulo, conforme a CLAUDE.md.
+
+## Actualización de implementación
+
+La propuesta se ha convertido en candidato 0.59 (PR Montara #67, Editor #50), con pruebas controladas y revisión de muestras de originales SDR. Estado y alcance en [STAGE_LIGHT_AND_NATIVE_EXPORT_059.md](STAGE_LIGHT_AND_NATIVE_EXPORT_059.md); no confundir candidato con despliegue validado.

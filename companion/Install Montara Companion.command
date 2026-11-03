@@ -35,7 +35,9 @@ if ! command -v ffmpeg >/dev/null 2>&1; then
 fi
 
 mkdir -p "$DIR/bin"
-[ "$(pwd)" = "$DIR" ] || cp companion.py "$DIR/companion.py"
+if [ "$(pwd)" != "$DIR" ]; then
+  for f in video_recipe.py video_jobs.py companion.py; do cp "$f" "$DIR/$f" || { pause; exit 1; }; done
+fi
 mkdir -p "$HOME/Applications"
 if [ "$(cd "$(dirname "$0")" && pwd)" != "$HOME/Applications" ]; then
   sed 's#^cd "$(dirname "$0")" || exit 1#cd "$HOME/.montara-companion" || exit 1#' "$0" > "$HOME/Applications/Montara Companion.command"
@@ -49,6 +51,11 @@ EOF
 chmod +x "$DIR/bin/montara-companion"
 grep -q 'montara-companion/bin' "$HOME/.zshrc" 2>/dev/null || echo 'export PATH="$HOME/.montara-companion/bin:$PATH"' >> "$HOME/.zshrc"
 
+if [ ! -f "$DIR/video/ENGINE_COMMIT" ] || { [ -f EDITOR_COMMIT ] && [ "$(cat EDITOR_COMMIT)" != "$(cat "$DIR/video/ENGINE_COMMIT")" ]; }; then
+  echo "Preparing original-quality video export (first installation only)…"
+  curl -fsSL https://raw.githubusercontent.com/amehcgracia-byte/Montara/main/companion/install.sh | bash -s -- --video
+  pause; exit
+fi
 echo "Installed. Next time open 'Montara Companion' with Spotlight (Cmd+Space) or type: montara-companion"
 echo
 exec "$PY" "$DIR/companion.py"
