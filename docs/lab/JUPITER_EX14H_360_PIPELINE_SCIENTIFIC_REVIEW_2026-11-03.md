@@ -82,3 +82,28 @@ Motor local en checkout `ff9baf4`, worktree limpio. Archivo `engine/core/spheric
 Interpretación: original C es fuente idónea ya probada en los experimentos F4; el hecho de que el MOV B tenga `avg_frame_rate` ~29.978 **no demuestra VFR** ni se debe etiquetar como tal sin mirar `r_frame_rate` / PTS. `yuvj420p` para HEVC C requiere preservar rango/color al interpretar cambios; no modificar tratamiento de pixfmt ni interpolación para el primer perfil.
 
 **Siguiente gate:** perfilador Stage-native-remap de duración limitada, con checkpoints de metadatos y registro agregado, 1080p30, mismo `shot` y movimiento que usaría el motor, sin alterar `engine/` ni tocar originales. Priorizar medir `readinto`, `reproject_maps`, `cv2.remap`, `stdin.write`, `wait`; separar costes de bloqueo/arranque y no atribuir CPU sin medición adicional. Comparar contra invocación sin instrumentar para estimar overhead. No ejecutar hasta confirmación de VM libre.
+
+## EX-14H-06 — Primer perfil instrumentado de pipeline real (operador, 03-11-2026)
+**Se ejecutó una sola muestra exploratoria de la arquitectura de reproyección, sin editar el motor.** Versión local reportada `ff9baf4`, OpenCV `4.11.0`. Original HEVC 360 real 3840x1920, t=840s durante 2s, salida1920x1080 30fps (60 frames) H.264 libx264 `-preset veryfast -crf 23 -threads 2`. Movimiento artificial de yaw +0.3°/frame, pitch −30°, fov100°, llamada al `reproject_maps` original del motor, `cv2.remap INTER_CUBIC BORDER_WRAP`, pipes con FFmpeg. **No Stage completo, ni receta de movimiento exacta generada por `motion_pose`, ni experimento de producto.** Preflight load1 1.67, 0 ffmpeg/ffprobe detectados; Chema indicó VM libre.
+
+Resultado observado `ffprobe`: 60/60 frames, 1920x1080, 30/1fps y 2.000000s, 711815 bytes. Wall 8.565s, rendimiento efectivo 7.01 fps. Los originales no se modificaron; MP4 y logs temporales eliminados.
+
+| Instrumentación | Mediana ms/frame | Suma s / 60 frames | Máximo ms/frame | Cociente suma/wall |
+|---|---:|---:|---:|---:|
+| `decoder.stdout.readinto` con espera | 24.532 | 2.241 | 441.231 | 26.2% |
+| `reproject_maps` NumPy+resize | **64.121** | **3.874** | 84.093 | **45.2%** |
+| `cv2.remap` cubic | 24.022 | 1.469 | 34.090 | 17.2% |
+| `encoder.stdin.write` con espera | 8.404 | 0.584 | 21.473 | 6.8% |
+| **Wall** | — | **8.565** | — | 100% |
+
+Las cuatro sumas dan **8.168s**, quedando ~0.397s fuera del cronometraje explícito (incluye arranque/cierre, overhead Python/sondeo y espera final), sin afirmar que ese resto sea exclusivamente codificación. `read_ms` y `write_ms` son tiempos transcurridos bloqueantes de transferencia y esperas en tubería, **no** CPU propia de decodificador/codificador. Los procesos FFmpeg trabajan solapados; cocientes no son fracciones de CPU ni efecto causal de sustituir un algoritmo.
+
+**Lectura científica:** `reproject_maps` es la operación individual instrumentada más costosa (**3.874s, ~45.2% del wall**); cuello candidato de CPU, **no cuello crítico E2E probado**. Confirma dirección de EX-05 en 960x540 (map ~35.394ms/frame promedio excluyendo primer frame), pero **no es comparación A/B** por distinta resolución, estadístico, cargas y receta. La mediana de `read_ms` oculta un pico de arranque de hasta 441ms. No extrapolar a jam, metraje largo, Mac/Metal, HDR, todos los movimientos o escalado de concurrencia.
+
+**Siguientes gates mínimos (sin duplicar):**
+1. Validar la carga observada y overhead del perfilador con una repetición idéntica acotada (si VM sigue libre) y considerar control ON/OFF para cuantificar intrusividad; registrar entorno, variación y CPU/mem si se dispone. Solo después declarar línea base estable.
+2. Determinar sin ejecutar pruebas repetidas si EX-07/13 de la rama experimental PR #51 ya incluyen resultados sobre generación de mapa a 1080p con input real. Recuperar sus resultados y diffs primero; **no volver a probar lo ya validado**.
+3. Si los resultados EX-07/13 no cubren el pipeline 1080p E2E, A/B opt-in de **una sola variante** sobre idéntico segmento y movimiento, manteniendo SHA, codec y caché. Comparar tiempo map y wall, junto con QA frames/PTS/geometry/color; no asumir bit-identidad para EX-06 bilineal.
+4. Para aislar decodificación/encoder, distinguir espera sobre pipe del trabajo real de FFmpeg y medir procesos con observabilidad externa; no asignar 2.241s exclusivamente a decode CPU.
+
+**Decisión:** EX-14H-06 es una señal prometedora; **NO autoriza cambio al motor ni promesa de aceleración productiva**. Priorizar mapa geométrico y recuperar evidencia de PR #51 frente a nuevas propuestas algorítmicas.
