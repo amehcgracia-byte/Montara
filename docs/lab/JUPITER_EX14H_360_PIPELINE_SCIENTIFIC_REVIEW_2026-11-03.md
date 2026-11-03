@@ -1,0 +1,50 @@
+# JÚPITER EX-14H — Evaluación científica del coste real de reproyección 360
+
+**Fecha:** 2026-11-03. **Estado:** auditoría histórica, código actual y bibliografía verificada; SIN benchmark nuevo, SIN tocar motor ni servicios. Responsable: laboratorio FER.
+
+## 1. Objetivo
+Medir el peso en una exportación STAGE representativa de (i) decodificación del original HEVC, (ii) cálculo de mapa geométrico NumPy, (iii) remap OpenCV CPU/Metal, (iv) codificación y transporte pipe a FFmpeg, sin extrapolar microbenchmarks ajenos al pipeline. Se mantiene la ruta de revisión EX-06/07/13 en ZuckerVideos PR #51 frente a `claude/recover-montara-engine`; NO reensayar ni integrar unilateralmente.
+
+## 2. Lo investigado ya — no duplicar
+- `docs/lab/JUPITER_F4_REAL_360_FIRST_BENCHMARK_2026-11-01.md`: **v360 de FFmpeg estático**, HEVC real de 5 s, output1080, Lanczos media/mediana del estudio original 18.468s versus bilineal 15.5645s, diferencia 15.72% (LBBL, dos muestras cada variante). No es la ruta `native_remap` del engine.
+- `docs/lab/JUPITER_F4_REAL_STAGE_FOUR_INTERPOLATIONS_2026-11-01.md`, `JUPITER_F4_REAL_360_CLOSURE_2026-11-01.md`: otro tramo HEVC real de 5s, v360 L-linear-cubic-spline16; medias Lanczos 14.90s, bilineal 9.17s (−38.46%), SSIM bilineal vs Lanczos 0.990657 y PSNR 45.640404 dB; solo dos repeticiones y visual a escala.
+- `docs/JUPITER_19_V360_RESOLUTION_DURATION_MATRIX_2026-10-28.md`: 18 renders sintéticos 4/6/8K, 2/5/10s, mejoras 29–51% en filtro FFmpeg `v360`. No Stage ni cámara real.
+- `docs/lab/JUPITER_FOCUS_EXPORT_EX05_REAL_OPENCV_RESULTS_2026-11-01.md`: `native_remap` CPU OpenCV real HEVC 3840x1920→960x540, 11 frames medidos, mapa ~35.394ms, remap cubic 29.193ms, lineal float 13.449ms, convertMaps 1.762ms + remap fixed 8.787ms. Excluye decode/encode; map generation supera el coste del remap cubic en esa muestra. No extrapolar a 1080.
+- EX-06, EX-07, EX-13: ramas `fernando/ex06-engine-lab` **publicadas** con 4 commits en ZuckerVideos PR **#51 draft**, opt-in y sin modificación del default. EX-07 fast wrap, EX-13 smart unwrap, EX-06 bilineal opcional. Los experimentos de preparación fueron en rutas controladas; no es evidencia Stage completa.
+- `docs/lab/JUPITER_EX14D_STAGE_EXPORT_STATIC_AUDIT_2026-11-03.md` y `docs/lab/JUPITER_EX14E_03_EXISTING_PERFORMANCE_FINDINGS_2026-11-03.md`: tres manifiestos Stage/YouTube con times de segmentos, uno de seis planos pero `projection=null`; no acreditan uso 360. Historic jam real 628s output, export1388.1s (8CPU) y otro 654s export4101.5s (4CPU): no comparables, `shots` no registrado.
+
+## 3. Funcionamiento ACTUAL confirmado en ZuckerVideos `claude/recover-montara-engine`
+`core/stages/export.py::_render_segment` comprueba `native_motion` cuando hay `spherical_shot`, proyección equirect y movimiento. Invoca `core.spherical_motion.run_reprojected_command` con el original y los comandos del codificador; por otro camino, los planos estáticos pueden pasar por filtros FFmpeg. Por defecto usa `SPHERICAL_EXPORT_MOTION_MODE="native_remap"`.
+`core/spherical_motion.py::_run_reprojected_command` ejecuta:
+1. FFmpeg proceso decodificador `-threads 2`, selecciona frames (FPS) y convierte a BGR24 vía stdout;
+2. frame NumPy BGR leído por `readinto` (buffer reutilizado), mapa `reproject_maps` generado cuando cambia `pose`; usa grid cache LRU y una rejilla de 1/3 con `cv2.resize` cubic;
+3. `cv2.remap(...INTER_CUBIC,BORDER_WRAP)` a 1920x1080, a menos que `try_remap` Metal resuelva en hardware;
+4. flujo raw BGR a stdin de segundo FFmpeg para filtrado y codificación H.264.
+Los dos FFmpeg **se solapan** con el bucle Python por pipe/buffers. El tiempo dedicado a lectura/escritura incluye posible bloqueo por backpressure; la suma de etapas CPU no es igual al wall ni debe interpretarse automáticamente como camino crítico.
+
+**Limitación de telemetría:** `performance.segments[*].ffmpeg_sec` engloba render y potenciales reintentos: no desglosa decode/map/remap/pipe/encode ni captura el backend realmente usado. Los `spherical_shot` se encuentran en el edit plan; los manifiestos antiguos pueden no identificar por segmento. Para inferir impacto global se necesitan tiempo/peso por cada segmento esférico, número de cuadros y flags/método efectivo.
+
+## 4. Bibliografía reciente verificada y aplicabilidad
+1. ACM VRCAI 2026 `Efficient Projection of Panoramic Video onto Cube-Based Layouts for Immersive CAVE Visualization`, DOI **10.1145/3779232.3779286**. Demuestra proyección acelerada con CUDA/FFmpeg, layouts cubo 8K60, precomputación seam-aware y acceso a memoria optimizado; reporta <1ms de reproyección **solo en su GPU, pipeline y destino cubemap**. No es una métrica esperable de la VM GCP CPU ni del recorte perspectiva Stage. Uso: investigar coste potencial de transferencias y arquitectura GPU **solo tras medir**.
+2. OpenCV documentación oficial `remap` / `convertMaps` https://docs.opencv.org/4.10.0/da/d54/group__imgproc__transform.html . Conversiones a mapas fijos suelen acelerar el remap; **ya experimentado en EX-05**; usar para contrastar compatibilidad y precisión, no anunciar speedup nuevo.
+3. IEEE Signal Processing Letters 2025, `Viewport-Patch Extraction Enhanced 360° Video Quality Assessment`, DOI **10.1109/LSP.2025.3646129**. Motiva evaluar distorsiones con regiones del viewport en vez de confiar solo en imágenes ERP. **No propone acelerar la exportación**.
+4. IEEE Transactions on Image Processing 2025, `Subjective and Objective Audio-Visual Quality Assessment for Omnidirectional Videos`, DOI **10.1109/TIP.2025.3613957**. Motiva medir calidad perceptual, motion y audio además de métricas agregadas; no ofrece un ajuste de encoder.
+5. `NeRV360: Neural Representation for 360-Degree Videos with a Viewport Decoder`, arXiv **2512.20871** (dic2025). Integra viewport en decodificación desde una representación neural; **incompatible directamente con HEVC de cámara existente**, no prometer que acelere los originales de Montara.
+6. 2024 `Remote expert viewing, laboratory tests or objective metrics: which one(s) to trust?`, DOI **10.1186/s13640-024-00630-7**. Recomienda métricas objetivas más pruebas visuales en casos ambiguos. Aplica a política de aceptación, no a velocidad.
+
+## 5. Hipótesis ordenadas por valor informativo
+- **H0 / GATE 1:** el peso del 360 en los proyectos es desconocido. Antes de benchmark, cruzar `edit_plan.segments[*].spherical_shot` con `export_manifest.performance.segments[*].ffmpeg_sec` por índice y sumar duración de planos clasificados. Medir participación en *tiempo de vídeo*, por separado de wall solapado. Si no hay muestra 360 previa, documentar ausencia y diseñar un fixture real mínimo.
+- **H1 / GATE 2:** en motion activo, la generación de mapas es cuello importante de CPU; EX-05 sugiere map 35.39ms/frame a 960x540. Revalidar en 1080 solo si Stage real tiene porcentaje 360 material.
+- **H2:** la decodificación HEVC 4K o la transferencia BGR24 por pipes limita fps, pese a que remap por sí solo sea rápido; hay que medir bloqueo y subprocesos para no achacar a una función la latencia global.
+- **H3:** EX-07/13 reducen coste del mapa preservando output en escenarios seleccionados; verificar impacto de fase/E2E con flags opt-in y variante baseline contra mismo commit, una sola variable. La comparación está preparada en PR #51; **no duplicar bench** antes de revisión de Chema.
+- **H4:** en CPU vs Metal la asignación de costes cambia. Mac/RunPod es estrato separado; GPU no se presupone disponible.
+
+## 6. Protocolo propuesto, no ejecutado
+**Etapa A, cero render:** inventariar manifiestos ya existentes SOLO en proyectos de FER; extraer datos minimizados (proyecto identificador neutro, segmento índice, duración, si spherical_shot, movimiento activo, fps, ffmpeg_sec, cached, backend disponible) sin mostrar nombres de medios/rutas. No clasificar por campo `projection` solamente: puede ser null cuando exista `spherical_shot`.
+**Etapa B, si falta telemetría:** instrumentación opt-in en laboratorio aislado (no mutar globales CV2 ni código producción), contadores con `perf_counter_ns` para readinto/decode_wait, map, remap, encoder_write_wait, total; CPU de ffmpeg separado si viable. Logs solo acumulados, sin un registro por fotograma. No tratar write_wait como tiempo CPU encoder, puede bloquear por buffering.
+**Etapa C, con consentimiento VM libre:** segmento 360 real HEVC 3840x1920 de 2–5s, 1080p30, movimiento congelado y/o dinámico en grupos distintos, caché controlada, al menos tres pares alternados baseline/instrumented; al mismo tiempo verificar frames, PTS, duración, calidad visual, audio cuando procede. Para identificar sobrecoste del propio perfilador, comparar instrumental ON/OFF en A/A.
+**Etapa D:** intervenir una sola variable por vez con código de rama propia/revisión de Chema; medir mediana/dispersión y probar QA visual y audio; no comparar tiempos de prueba v360 con native_remap.
+**Condición de STOP:** fase no es material para tiempo total, mejora no robusta o no supera coste de complejidad/cambio visual.
+
+## 7. Decisión
+**PRIORIDAD INMEDIATA: clasificación read-only de planos 360 en manifiestos existentes.** Ningún benchmark autorizado todavía y ningún parche a engine, mixer, main o submódulos. Informar a Fernando antes de ocupar recursos compartidos. Investigar GPU solo si la distribución de costes demuestra que la reproyección domina y que el presupuesto/infraestructura la justifican.
