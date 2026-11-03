@@ -30,3 +30,10 @@ La última edición consume 17.379 s en intro+outro, el 40.07% de export total; 
 **H-remap:** estos tres ensayos no soportan inferencias sobre 360 dinámico. Se requiere un manifiesto nuevo clasificado con segundos de 360 y timings por segmento.
 
 No reproducir renders pesados sin coordinación VM. No cambiar `main`, `engine/`, `mixer/`.
+## EX-14E-05 — Reconstrucción de eventos y cronología (03-11-2026)
+- El fichero `export.log` contiene secuencias literales `\\n`; se reconstruyeron 3/3/8 eventos de los tres proyectos. Los eventos `PLAN`, `SEGMENT` y `PHASE` confirman 0 aciertos de **caché de segmento**, pero no informan del estado de **caché de logos** (logging separado en `_reuse_cached_logo`).
+- `montara-focus-ac-true-edit-01`: 6 segmentos completados, 4 workers, 0 cached, wall 18.079 s; completan fuera del orden numérico. Cronología 17:39:28 a 17:39:46.
+- Dos directorios `logo_clips` listados sin rutas privadas: 3 MP4 (3531.5 y 2959.1 KiB modificados 2026-10-30 17:39:28 y 17:39:50; uno 16.7 KiB modificado 2026-11-02 23:24:53), y 2 MP4 (373.0 y 374.8 KiB modificados 2026-10-30 13:29:37 y 13:31:53). El conjunto es **compatible** con generación y posterior reutilización de bookends, pero no se ha determinado identidad de caché ni hit/miss de cada render.
+- `intro_sec=12.777` y `outro_sec=4.602` del ensayo multicámara frente a milisegundos en otros dos casos: **hipótesis de caché fría**, no conclusión; los registros del export no bastan.
+- Información operativa de Fernando: Chema podría estar ejecutando pruebas de Companion y render. **No lanzar tareas que consuman CPU ni A/B concurrentes** hasta coordinación y preflight nuevo. Companion mezcla localmente en ciertos flujos, pero Stage vídeo puede seguir usando servidor.
+- Siguiente paso propuesto: comprobar contadores de hits/misses de logo por logger específico o inspección dirigida, solo lectura; si continúa la ambigüedad, priorizar instrumentación explícita sobre microbenchmark de logo. Evitar `rglob` global caro en VM compartida.
