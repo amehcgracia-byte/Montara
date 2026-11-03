@@ -28,3 +28,31 @@ H1: para vídeos multicámara exportados con múltiples procesos FFmpeg/decodifi
 
 ## Próxima acción segura
 Un preflight de solo lectura de capacidades del entorno (FFmpeg codecs, OpenCV versión/getNumThreads, cgroup CPU quotas, settings export sin tocar archivos) y localizar un fixture corto cuyo uso esté autorizado, sin lanzar render. Avisar a Fernando **antes** de cualquier benchmark consumidor de CPU.
+
+## Revisión de antecedentes 03-11-2026 — CORRECCIÓN DE PRIORIDAD
+
+Fernando señaló que la investigación de hilos ya estaba hecha. Se leyeron íntegramente estos antecedentes versionados (no solo nombres):
+- `docs/JUPITER_11_CONTAINER_RESOURCES_AND_TEST_GATES_2026-10-28.md`
+- `docs/JUPITER_12_CGROUP_POLICY_PROTOTYPE_2026-10-28.md`
+- `docs/JUPITER_14_FFMPEG_CGROUP_REAL_SAMPLE_2026-10-28.md`
+- `docs/JUPITER_15_HANDOFF_FINAL_2026-10-28.md`
+- `docs/SATURNO_07_FIRST_FFMPEG_STAGE_DIVERGENCE_2026-10-29.md`
+- `docs/SATURNO_08_ENCODER_VBV_PROTOCOL_2026-10-29.md`
+- `docs/SATURNO_08_ENCODER_VBV_RESULTS_2026-10-29.md`
+- `docs/JUPITER_OPT_07_CPU_DUPLICATION_AUDIT_2026-10-30.md`
+- `docs/JUPITER_OPT_07C_EXPORT_MANIFEST_DIAGNOSIS_2026-10-30.md`
+- `docs/JUPITER_OPT_08_EXPORT_FFMPEG_COMMAND_AUDIT_2026-10-30.md`
+- `docs/JUPITER_09_REPRODUCIBLE_MULTIPLATFORM_BENCHMARKS_2026-10-28.md`
+- `docs/JUPITER_CPU_COMPARISON_4V_8V_2026-10-30.md`
+
+### Resultados ya probados — no duplicar
+1. JÚPITER-14 **ya ejecutó** FFmpeg 8 clips sintéticos, 720p, bajo 4 CPU/4 GiB cgroup y `-threads 1`: 1 worker 10.930s (n=1), 2 workers 6.116/6.181s (n=2), 4 workers 4.976/4.711s (n=2). **Cuatro ganaron en ese escenario** pese al techo de 4 CPU; memoria cgroup pico ~1.02 GiB (no es RSS FFmpeg). No es Stage, no es 360, no prueba configuración óptima en VM 8vCPU. Particularmente, NO recomendar reducir automáticamente a 1 o 2 trabajadores alegando sobresuscripción.
+2. JÚPITER-11/12/15 **ya construyeron** `experiments/container_budget/resource_policy.py`, `cgroup_guard.py` y parche candidato de overlap con pruebas unitarias (7 pasadas para guard), sin validación integrada. Su hallazgo es riesgo cgroup cuando host>cuota, **no se observó OOM**. En VM sin límite cgroup restrictivo inferior al host no aplicar cambio preventivo al scheduler.
+3. SATURNO-07/08 **ya aislaron** no repetibilidad de libx264 + VBV multi-hilo: original en replays 54/60 y 53/60 frames; `-threads:v 1` o quitar VBV dio 60/60; controlar solo `-filter_complex_threads 1` NO resolvió (53/60). El control QA no es requisito de producción ni prueba de speedup: preservarlo únicamente para verificaciones estrictas A/A y no confundirlo con ajuste de rendimiento de workers.
+4. JÚPITER OPT-07/07C/08 **ya auditó** segmentos, dos workers, stream-copy, cachés y FFmpeg: flujo 720p→1080p con imposibilidad de stream-copy por tamaño. Sobre la VM previa hubo interferencia con jm, no A/B de escalado CPU. **Hallazgo nuevo prioritario a confirmar**: en Linux `_render_segment` intenta `h264_videotoolbox` de Apple y, tras error, usa `libx264`; `ffmpeg -encoders` del VM solo muestra `libx264` y no `h264_videotoolbox`. El coste es **desconocido**, puede ser solo arranque fallido rápido; inspeccionar trazas existentes antes de benchmark o cambio de motor.
+5. Herramientas de benchmark A/B **ya disponibles**: `ZuckerVideos/tools/benchmarks/render_ab.py` (Mac-specific) y `segment_costs.py` (instrumentación histórica); no reconstruir framework. Cache fría vs caliente y versión/fuente/plan congelados son controles imprescindibles.
+
+### Decisión actualizada
+**Congelar EX-14F como candidato de optimización, no realizar nuevo benchmark de trabajadores ahora.** La literatura externa es contexto de posibles políticas, pero nuestra evidencia histórica sobre 1/2/4 workers ya existe. Retomar workers solo tras seleccionar una pregunta distinta y un fixture Stage real reproducible con métricas que faltaban.
+Priorizar inspección sin render del fallback `h264_videotoolbox` en Linux: existe candidato preciso y contrastable en código, sin asumir ganancia; consultar logs de ejecución y `ffmpeg_commands` en manifiestos, sin publicar rutas privadas. Un A/B posterior solo con coordinación y autorización de Fernando; nunca tocar `main` ni ramas ajenas.
+El preflight EX-14F-01 dio 8 CPU visibles, FFmpeg 6.1.1 con `libx264` y sin `h264_videotoolbox` en listado, OpenCV no disponible en el Python **del sistema** (no informa sobre venv de motor).
