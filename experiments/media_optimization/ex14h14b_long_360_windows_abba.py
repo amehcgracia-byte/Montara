@@ -141,7 +141,9 @@ def main():
     p=argparse.ArgumentParser()
     p.add_argument("--mode",choices=("fidelity","performance"),required=True)
     p.add_argument("--duration",type=int,choices=(15,18),default=15)
+    p.add_argument("--window-start",type=int,choices=(600,840),help="Optional single window for shorter independently reportable runs")
     args=p.parse_args()
+    windows=(float(args.window_start),) if args.window_start is not None else WINDOWS
     safety(first=True)
     if h.capture(["git","-C",str(h.ROOT),"rev-parse","--short","HEAD"])!="0f9ec03":
         raise RuntimeError("STOP: expected isolated experimental engine 0f9ec03")
@@ -152,7 +154,7 @@ def main():
     selected=h.source()
     source_length=source_duration(selected)
     master_length=verify_audio_master()
-    if any(start+args.duration+0.2>source_length for start in WINDOWS):
+    if any(start+args.duration+0.2>source_length for start in windows):
         raise RuntimeError(f"STOP: 360 original duration {source_length:.1f}s too short for requested windows")
     if master_length < args.duration+0.1:
         raise RuntimeError(f"STOP: audio master {master_length:.1f}s too short for {args.duration}s")
@@ -163,7 +165,7 @@ def main():
     rows=[]
     print("EX14H14B_START "+json.dumps({
         "mode":args.mode,"duration_sec":args.duration,"frames_per_job":h.FRAMES,
-        "window_starts_sec":WINDOWS,"order_per_window":order,
+        "window_starts_sec":windows,"order_per_window":order,
         "original_duration_sec":round(source_length,3),
         "master_duration_sec":round(master_length,3),
         "safety":safety(),
@@ -173,7 +175,7 @@ def main():
 
     with tempfile.TemporaryDirectory(prefix="jupiter_ex14h14b_",dir="/home/fer") as tmp:
         root=Path(tmp)
-        for wi,start in enumerate(WINDOWS):
+        for wi,start in enumerate(windows):
             pairs=[]
             for j,mode in enumerate(order):
                 safety()
@@ -228,7 +230,7 @@ def main():
                 }),flush=True)
     print("EX14H14B_RESULT "+json.dumps({
         "mode":args.mode,"duration_sec":args.duration,
-        "windows_completed":len(WINDOWS),"runs_completed":len(rows),
+        "windows_completed":len(windows),"runs_completed":len(rows),
         "audio_consistent_across_runs":len({r["audio_sha"] for r in rows})==1,
         "temp_media_cleaned":True
     }),flush=True)
