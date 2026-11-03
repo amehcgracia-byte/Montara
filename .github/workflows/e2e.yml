@@ -72,7 +72,7 @@ jobs:
         run: python -m pytest tests -q
       - name: Engine lighting, framing and preview parity
         if: matrix.mode == 'session'
-        run: cd engine && python -m pytest tests/test_video_light.py tests/test_flat_framing.py tests/test_review_previews.py -q
+        run: cd engine && python -m pytest tests/test_video_light.py tests/test_flat_framing.py tests/test_review_previews.py tests/test_export_encoder_platform.py -q
       - name: Mixer waveform, stereo linking and peak safety
         if: matrix.mode == 'session'
         run: python -m pytest mixer/test_master_limiter.py -q
@@ -84,7 +84,11 @@ jobs:
         run: python tests/e2e_journey.py --mode ${{ matrix.mode }} --output e2e-output
       - name: Native Stage from browser to original-quality local export
         if: matrix.mode == 'session'
-        run: python tests/e2e_native_stage.py --output e2e-output/native-stage
+        env:
+          MONTARA_TEST_BROWSER_CHANNEL: chrome
+        run: |
+          python -m playwright install chrome
+          python tests/e2e_native_stage.py --output e2e-output/native-stage
       - name: Session detection, common mix, exports and resumable upload
         if: matrix.mode == 'session'
         run: python tests/e2e_session.py --output e2e-output/session --stdout-screenshots

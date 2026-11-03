@@ -19,15 +19,36 @@ $('#sessionResume').onclick = async () => {
 $('#stageAudioOnly').addEventListener('change', renderFiles);
 $('#fullSessionOn').addEventListener('change', renderFiles);
 $('#sessionBack').onclick = () => {
-  if (fullSession.busy) return toast('Cancel the session job first.');
+  if (fullSession.busy || fullSession.cancelling) return toast('Cancel the session job first.');
   fullSession.active = false;
   show('footage');
 };
 $('#sessionCancel').onclick = async () => {
+  if(fullSession.cancelling)return;
+  fullSession.cancelling=true;
   fullSession.cancelRequested = true;
-  try { await api(`/montara/session/${fullSession.id}/cancel`, {}); $('#sessionStatus').textContent = 'Cancelling…'; }
-  catch (error) { toast(error.message, true); }
+  fullSession.mixAbort?.abort();
+  $('#sessionCancel').disabled=true;$('#sessionStatus').textContent='Cancelling…';
+  try {
+    if(fullSession.mixPromise)try{await fullSession.mixPromise;}catch(error){if(error.name!=='AbortError')throw error;}
+    await Promise.allSettled([...sessionPending]);
+    await api(`/montara/session/${fullSession.id}/cancel`, {});
+    let data=await api(`/montara/session/${fullSession.id}`);
+    while(['detecting','preparing','rendering'].includes(data.status)){
+      await new Promise(resolve=>setTimeout(resolve,250));
+      data=await api(`/montara/session/${fullSession.id}`);
+    }
+    showSessionProgress({...data,status:'cancelled'});
+  }
+  catch (error) { fullSession.busy=true;$('#sessionBack').disabled=true;$('#sessionCancel').hidden=false;toast('Could not confirm cancellation. '+error.message, true); }
+  finally{fullSession.cancelling=false;$('#sessionCancel').disabled=false;}
 };
+const sessionPending=new Set();
+function checkSessionCancel(){if(fullSession.cancelRequested)throw new DOMException('Session cancelled','AbortError');}
+async function sessionRequest(path,body){
+  checkSessionCancel();const request=api(path,body);sessionPending.add(request);
+  try{const data=await request;checkSessionCancel();return data;}finally{sessionPending.delete(request);}
+}
 
 const SESSION_STAGE = {
   detecting: ['Finding the songs in your session', 'Listening to every track to find where each song starts and ends.'],
@@ -81,6 +102,8 @@ async function waitSession(initial) {
 }
 
 async function openFullSession() {
+  if(fullSession.cancelling)return;
+  fullSession.cancelRequested=false;
   if (!audioTracks().length) return toast('Add the audio tracks of your session first.', true);
   fullSession.active = true;
   show('sessionReview');
@@ -353,7 +376,8 @@ async function openSongMixer(i) {
       // The mixer screen opens now; the excerpt is cut while its faders move.
       const stop = mixLoadingScreen(fullSession.data.track_files || [], `${song.name}: preparing the busiest part of the song…`);
       let prepared;
-      try { prepared = await waitSession(await api(`/montara/session/${fullSession.id}/prepare`, { songs: songList(), song: song.id })); }
+      fullSession.cancelRequested=false;
+      try { prepared = await waitSession(await sessionRequest(`/montara/session/${fullSession.id}/prepare`, { songs: songList(), song: song.id }));checkSessionCancel(); }
       finally { stop(); }
       fullSession.data.songs = prepared.songs.map((s, j) => ({ ...s, confirmed: songList()[j]?.confirmed }));
       await openMixer(prepared.preview_tracks);
@@ -446,6 +470,7 @@ async function saveSongMix() {
 }
 
 async function renderFullSession() {
+  if(fullSession.cancelling)return;
   stopSongPreview();
   const songs = songList();
   if (!songs.some(s => s.selected)) return toast('Select at least one song.', true);
@@ -459,7 +484,7 @@ async function renderFullSession() {
   showSessionProgress({...fullSession.data, status: 'rendering', results: [], render_progress: {}});
   try {
     // Save the boundaries first: the original ranges and the per-song mixes follow them.
-    const saved = await api(`/montara/session/${fullSession.id}/songs`, { songs });
+    const saved = await sessionRequest(`/montara/session/${fullSession.id}/songs`, { songs });
     fullSession.data.songs = saved.songs.map((s, j) => ({ ...s, confirmed: songs[j]?.confirmed }));
     const ids = new Set(saved.songs.map(s => String(s.id)));
     const per_song = Object.fromEntries(Object.entries(fullSession.mixes).filter(([id]) => ids.has(String(id))));
@@ -470,12 +495,13 @@ async function renderFullSession() {
     const selected = saved.songs.filter(s => s.selected);
     const serverSongs = await mixSongsLocally(selected, per_song);
     if (fullSession.cancelRequested) { showSessionProgress({...fullSession.data, status: 'cancelled'}); return; }
-    const started = await api(`/montara/session/${fullSession.id}/render`, { songs: saved.songs, per_song });
-    for (const song of serverSongs) await queueSongOriginals(song);
+    const started = await sessionRequest(`/montara/session/${fullSession.id}/render`, { songs: saved.songs, per_song });
+    for (const song of serverSongs){checkSessionCancel();await queueSongOriginals(song);}
     const data = await waitSession(started);
+    checkSessionCancel();
     $('#sessionStatus').textContent = 'Your selected songs are ready.';
     drawSessionResults(data);
-  } catch (error) { toast(error.message, true); }
+  } catch (error) { if(!fullSession.cancelRequested)toast(error.message, true); }
   finally { fullSession.busy = false; $('#sessionBack').disabled = false; $('#sessionCancel').hidden = true; $('#sessionMix').hidden = false; }
 }
 
@@ -484,6 +510,7 @@ async function renderFullSession() {
 async function mixSongsLocally(songs, perSong) {
   if (!fullSession.data.uses_previews) return songs;
   await montaraCompanion.detect();   // the companion may have been started (or updated) since the page loaded
+  checkSessionCancel();
   const mixer = montaraCompanion.localMixer();
   if (!mixer) return songs;
   const left = [], uploads = [];
@@ -499,6 +526,7 @@ async function mixSongsLocally(songs, perSong) {
     try {
       const query = new URLSearchParams({ song: song.id, start: song.start, end: song.end, name: song.name || '' });
       const plan = await api(`/montara/session/${fullSession.id}/local-plan?${query}`);
+      checkSessionCancel();
       if (plan.mixer !== mixer) {
         if (!warned) console.info('Companion mixer version differs; using the server.');
         warned = true; left.push(song);
@@ -506,22 +534,28 @@ async function mixSongsLocally(songs, perSong) {
       }
       fullSession.localProgress[song.id].tracks = plan.tracks.map(t => ({file: t.file, progress: 0, active: true}));
       paintSessionRender(fullSession.data);
-      const { blob, seconds } = await montaraCompanion.mixSong(plan, mix, progress => {
+      fullSession.mixAbort=new AbortController();
+      fullSession.mixPromise=montaraCompanion.mixSong(plan, mix, progress => {
+        if(fullSession.cancelRequested)return;
         fullSession.localProgress[song.id] = progress;
         paintSessionRender(fullSession.data);
-      });
+      },fullSession.mixAbort.signal);
+      const {blob,seconds}=await fullSession.mixPromise;
+      checkSessionCancel();
       const name = `${(song.name || 'Song').replace(/[^\w .-]/g, '_')}.mp3`;
       // The next song is mixed while this MP3 uploads.
       uploads.push((async () => {
         let uploadId = null;
-        await sendResumableUpload(new File([blob], name, { type: 'audio/mpeg' }), () => {}, id => { uploadId = id; });
-        await api(`/montara/session/${fullSession.id}/local-result`, { song: song.id, window: plan.window, upload_id: uploadId, mixer: plan.mixer, seconds, mix });
+        await sendResumableUpload(new File([blob], name, { type: 'audio/mpeg' }), () => {}, id => { uploadId = id; },()=>fullSession.cancelRequested);
+        checkSessionCancel();
+        await sessionRequest(`/montara/session/${fullSession.id}/local-result`, { song: song.id, window: plan.window, upload_id: uploadId, mixer: plan.mixer, seconds, mix });
         fullSession.localProgress[song.id] = {status: 'ready', progress: 1, tracks: plan.tracks.map(t => ({file: t.file, progress: 1}))};
         fullSession.localResults.push(song);
         drawSessionResults({results: fullSession.localResults}, {[song.id]: blob});
         paintSessionRender(fullSession.data);
-      })().catch(error => { console.warn('local result upload failed', error); left.push(song); }));
+      })().catch(error => { if(!fullSession.cancelRequested){console.warn('local result upload failed', error); left.push(song);} }));
     } catch (error) {
+      if(fullSession.cancelRequested)break;
       console.warn('local mix failed', song.name, error);
       if (!warned) toast('Retrying the mix…');
       warned = true; left.push(song);

@@ -36,7 +36,10 @@ def main():
                 except Exception:time.sleep(1)
             else:raise AssertionError('Isolated test host did not start')
         with sync_playwright() as pw:
-            browser=pw.chromium.launch();page=browser.new_page(viewport={'width':1440,'height':1000})
+            channel=os.environ.get('MONTARA_TEST_BROWSER_CHANNEL')
+            browser=pw.chromium.launch(**({'channel':channel} if channel else {}));page=browser.new_page(viewport={'width':1440,'height':1000})
+            assert page.evaluate('!!document.createElement("video").canPlayType(\'video/mp4;codecs="avc1.42E01E"\')'), 'Native playback acceptance needs a browser with H.264 (set MONTARA_TEST_BROWSER_CHANNEL=chrome)'
+            page.on('console',lambda message:print('BROWSER_ERROR',message.text,flush=True) if message.type=='error' else None)
             page.route('**/companion.js',lambda route:route.fulfill(body=(ROOT/'web/companion.js').read_text().replace('http://127.0.0.1:47820',base),content_type='application/javascript'))
             page.route(base+'/projects',lambda route:route.fulfill(json={'id':project_id,'folder':str(chosen)},headers={'Access-Control-Allow-Origin':url}))
             page.goto(url);page.locator('#mode').wait_for(state='visible',timeout=30000)
@@ -55,16 +58,29 @@ def main():
             page.wait_for_timeout(1000);page.screenshot(path=str(out/'light-controls.png'),full_page=True)
             dialog.get_by_role('button',name='Save shot',exact=True).click();dialog.wait_for(state='detached',timeout=120000)
             page.locator('#renderFrames').click()
+            page.locator('#making #renderBars').wait_for(state='visible',timeout=120000)
+            page.wait_for_function("[...document.querySelectorAll('#renderBars i')].some(bar=>Number(bar.style.getPropertyValue('--p'))>=.99)",timeout=180000)
+            page.screenshot(path=str(out/'native-shot-progress.png'),full_page=True)
             page.wait_for_selector('#result:not([hidden]), #failed:not([hidden])',timeout=300000)
             assert not page.locator('#failed').is_visible(),page.locator('#errorText').inner_text()
-            page.screenshot(path=str(out/'native-result.png'),full_page=True)
             result_url=page.locator('#resultVideo').get_attribute('src');assert result_url.startswith(base+'/video-renders/')
-            result=page.request.get(result_url,headers={'Origin':url,'Range':'bytes=0-1023'});assert result.status==206
             final=out/'render.mp4'
-            # Stream the full file outside Playwright's base64 protocol: repeatedly
-            # concatenating its large message is quadratic in the Python client.
             with urlopen(Request(result_url,headers={'Origin':url}),timeout=120) as response,final.open('wb') as target:
                 shutil.copyfileobj(response,target,1024*1024)
+            # preload=metadata need not decode a picture until the user seeks
+            # or plays (Chromium on Linux can stop at HAVE_METADATA).
+            try:page.wait_for_function("document.querySelector('#resultVideo').readyState>=1",timeout=30000)
+            except Exception:
+                print('NATIVE_VIDEO_STATE',page.locator('#resultVideo').evaluate('v=>({ready:v.readyState,network:v.networkState,error:v.error?.message,duration:v.duration,seeking:v.seeking,h264:v.canPlayType(\'video/mp4;codecs="avc1.42E01E"\')})'),flush=True)
+                raise
+            page.locator('#resultVideo').evaluate('video=>{video.currentTime=2;}')
+            page.wait_for_function("!document.querySelector('#resultVideo').seeking && document.querySelector('#resultVideo').readyState>=2",timeout=30000)
+            page.screenshot(path=str(out/'native-result.png'),full_page=True)
+            result_url=page.locator('#resultVideo').get_attribute('src');assert result_url.startswith(base+'/video-renders/')
+            assert page.locator('#download').get_attribute('download')=='Native acceptance.mp4'
+            with urlopen(page.locator('#download').get_attribute('href'),timeout=120) as download:
+                assert 'Native%20acceptance.mp4' in download.headers['Content-Disposition']
+            result=page.request.get(result_url,headers={'Origin':url,'Range':'bytes=0-1023'});assert result.status==206
             # This branch bypasses the old server export rather than rendering twice.
             status=page.request.get(url+'/api/v1/wizard/status').json();assert not status.get('result')
             jobs=list((chosen/'.montara-renders').glob('*/render.json'));assert len(jobs)==1
@@ -78,6 +94,10 @@ def main():
             video=next(s for s in info['streams'] if s['codec_type']=='video');assert (video['width'],video['height'])==(1920,1080)
             run(['ffmpeg','-v','error','-i',str(final),'-f','null','-'])
             browser.close();(out/'summary.json').write_text(json.dumps({'passed':True,'size':'1920x1080','original_sources':len(recipe['source_files']),'native_render':True,'server_export_skipped':True},indent=2));print((out/'summary.json').read_text())
+    except Exception:
+        try:print('NATIVE_VIDEO_STATE',page.locator('#resultVideo').evaluate('v=>({ready:v.readyState,network:v.networkState,error:v.error?.message,duration:v.duration,seeking:v.seeking})'),flush=True)
+        except Exception:pass
+        raise
     finally:
         for process in processes:
             process.terminate()

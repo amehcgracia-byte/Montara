@@ -11,10 +11,16 @@ const montaraCompanion = (() => {
   const EDGE = 65536;
   let info = null;
   async function call(path, options = {}, timeout = 0) {
+    // A mix returns its bytes after the headers: keep the caller's signal
+    // attached for the entire body transfer, not just until fetch resolves.
+    if(options.signal && !timeout)return fetch(BASE+path,options);
     const controller = new AbortController();
     const timer = timeout ? setTimeout(() => controller.abort(), timeout) : null;
+    const abort=()=>controller.abort();
+    options.signal?.addEventListener('abort',abort,{once:true});
+    if(options.signal?.aborted)abort();
     try { return await fetch(BASE + path, {...options, signal: controller.signal}); }
-    finally { if (timer) clearTimeout(timer); }
+    finally { if (timer) clearTimeout(timer);options.signal?.removeEventListener('abort',abort); }
   }
   async function fingerprint(file) {
     const edges = await new Blob([file.slice(0, EDGE), file.slice(Math.max(0, file.size - EDGE))]).arrayBuffer();
@@ -49,12 +55,12 @@ const montaraCompanion = (() => {
     },
     async startVideo(body) {
       const response=await call('/video-renders',json(body));const data=await response.json();
-      if(!response.ok)throw new Error(data.error || 'Could not start original-quality export');return data.id;
+      if(!response.ok){const error=new Error(data.error || 'Could not start original-quality export');error.status=response.status;throw error;}return data.id;
     },
     async videoStatus(id) {
       const response=await call(`/video-renders/${id}`);if(!response.ok)throw new Error('The companion video export is unavailable');return response.json();
     },
-    async cancelVideo(id) {if(id)await call(`/video-renders/${id}/cancel`,json({}));},
+    async cancelVideo(id) {if(id){const response=await call(`/video-renders/${id}/cancel`,json({}));if(!response.ok)throw new Error('Could not confirm video cancellation.');}},
     videoUrl(id,download=false){return BASE+`/video-renders/${id}/file`+(download?'?download=1':'');},
     /* Resolves to {file, original} with the small version, {missing: true} if it is not on this
        computer, or null when the companion cannot help with this file. */
@@ -95,9 +101,13 @@ const montaraCompanion = (() => {
     /* Local mixer (install.sh --mixer): the mixer commit it has, or null. */
     localMixer() { return info?.local_mix?.mixer || null; },
     /* Mix one song on this computer with the server's plan; resolves to {blob, seconds}. */
-    async mixSong(plan, mix, onProgress = () => {}) {
+    async mixSong(plan, mix, onProgress = () => {}, signal) {
       const progressId = crypto.randomUUID().replaceAll('-', '');
       let finished = false;
+      let cancellation;
+      const cancel=()=>{cancellation=call(`/mix-progress/${progressId}/cancel`,json({})).then(response=>{if(!response.ok)throw new Error('Could not confirm mix cancellation.');});cancellation.catch(console.warn);};
+      signal?.addEventListener('abort',cancel,{once:true});
+      if(signal?.aborted){signal.removeEventListener('abort',cancel);throw new DOMException('Mix cancelled','AbortError');}
       const polling = (async () => {
         while (!finished && info?.mix_progress) {
           try {
@@ -108,7 +118,7 @@ const montaraCompanion = (() => {
         }
       })();
       try {
-        const response = await call('/mix-song', json({plan, mix, progress_id: progressId}));
+        const response = await call('/mix-song', {...json({plan, mix, progress_id: progressId}),signal});
         if (!response.ok) {
           const data = await response.json().catch(() => ({}));
           const error = new Error(data.error || 'The local mix failed');
@@ -116,7 +126,7 @@ const montaraCompanion = (() => {
           throw error;
         }
         return {blob: await response.blob(), seconds: Number(response.headers.get('X-Mix-Seconds')) || null};
-      } finally { finished = true; await polling; }
+      } finally { finished = true;signal?.removeEventListener('abort',cancel);await polling;if(cancellation)await cancellation; }
     },
     async segment(original, start, duration, format = 'lossless') {
       if (!info?.audio_preview) throw new Error('Open the companion on this computer to export with your original audio.');
