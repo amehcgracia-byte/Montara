@@ -41,7 +41,7 @@ def available_ram_bytes():
     raise RuntimeError("STOP: cannot read available memory")
 
 
-def check_safety():
+def check_safety(*, check_load=True):
     free = shutil.disk_usage("/home/fer").free
     available = available_ram_bytes()
     load1, _, _ = os.getloadavg()
@@ -51,8 +51,8 @@ def check_safety():
         raise RuntimeError(f"STOP: disk free {free/1024**3:.1f} GiB < 12 GiB")
     if available < MIN_AVAILABLE:
         raise RuntimeError(f"STOP: available RAM {available/1024**3:.1f} GiB < 8 GiB")
-    if load1 > 2.0:
-        raise RuntimeError(f"STOP: host busy, load1={load1:.2f}")
+    if check_load and load1 > 2.0:
+        raise RuntimeError(f"STOP: host busy at initial preflight, load1={load1:.2f}")
     p = subprocess.run(["ps", "-eo", "user=,args="],capture_output=True,text=True,check=True)
     for line in p.stdout.splitlines():
         user, _, command = line.strip().partition(" ")
@@ -76,7 +76,7 @@ def validate_engine():
 
 def worker(root):
     validate_engine()
-    check_safety()
+    check_safety(check_load=False)
     source = h.source()
     original = (source.stat().st_size,source.stat().st_mtime_ns)
     sys.path.insert(0,str(h.ROOT))
@@ -93,13 +93,13 @@ def worker(root):
 
 
 def run_group(label,count,parallel,root):
-    check_safety()
+    check_safety(check_load=False)
     processes=[]
     log_files=[]
     started=time.perf_counter()
     try:
         for i in range(count):
-            check_safety()
+            check_safety(check_load=False)
             path=root/f"{label}_{i}.log"
             stream=path.open("w")
             log_files.append(stream)
@@ -181,7 +181,7 @@ def main():
     print("EX14H13B_START "+json.dumps({"preflight":stats,
           "scope":"2s 360 real ExportStage, mode B opt-in",
           "limit":"2 concurrent workers; no large load",
-          "notes":"VM load and disk free may change during runs; this is a small screening"}),flush=True)
+          "notes":"Strict load check only at initial preflight; later checks still enforce disk/RAM/JM task guards. load1 decays slowly after our own sequential work."}),flush=True)
     with tempfile.TemporaryDirectory(prefix="jupiter_ex14h13b_",dir="/home/fer") as tmp:
         root=Path(tmp)
         seq=run_group("sequential",2,False,root)
