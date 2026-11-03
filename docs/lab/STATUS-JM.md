@@ -36,5 +36,5 @@ Actualizado: 2026-11-02 · lo mantiene el equipo de Chema · 40 líneas como má
 - El fallo de canciones cortadas o vacías del #48: arreglado el fallo de la cola (#52); falta confirmarlo con `deploy/vm/audio_check.py` en una sesión real.
 - Cola de render para unos 10 testers (VM más grande y luego workers bajo demanda): sin empezar.
 - Caché del companion sin límite; para las barras locales hace falta actualizarlo a 0.5.3 (`install.sh --mixer`).
-- `run_history.py` no guarda qué cámara usa cada plano.
+- `run_history.py` ya registra reparto por cámara y segundos 360 (`5fe4880`); falta el manifest del ensayo histórico de 628,2 s, no recuperable de la fila antigua.
 - Cambiar las contraseñas web de la VM que pasaron por chat (sin confirmar).

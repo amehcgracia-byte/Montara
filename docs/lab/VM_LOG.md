@@ -27,3 +27,5 @@ Una línea por acción de administrador (`sudo`). Sin contraseñas, tokens ni ll
 | 2026-11-02 | Codex | Chema | Extracted two midpoint gamma 1.65 comparison frames for lighting audit; candidates only, originals and live settings untouched. |
 | 2026-11-02 | Codex | Chema | Extracted two midpoint tone-curve comparison frames; inspected locally, no project settings, engine or service changes. |
 | 2026-11-02 | Codex | Chema | Read-only detailed JM project/coverage/edit-plan/export inspection: two source durations and overlap verified, proxy-derived final identified; no user project or FER changes. |
+| 2026-11-03 | Codex | Chema | Read-only JM export-manifest index/schema scan (three retained exports) to answer Fernando’s historical telemetry request; no projects, services or FER changes. |
+| 2026-11-03 | Codex | Chema | Read-only duration/performance summary of the same three JM manifests; historical 628.2 s manifest absent, no render launched or media changed. |
