@@ -180,16 +180,14 @@ def create_montara_app(data_root: Path = DEFAULT_DATA, samples: bool = True):
         # Never let a browser keep an older interface after an update.
         if request.path in {"/", "/index.html"} or request.path.endswith((".js", ".css", ".html")):
             response.headers["Cache-Control"] = "no-store"
-        if request.path == "/api/v1/wizard/result" or (request.path.startswith("/montara/mix/") and request.path.endswith("/result")):
-            from werkzeug.http import parse_options_header
-            from werkzeug.utils import secure_filename
-            _, options = parse_options_header(response.headers.get("Content-Disposition", ""))
-            name = secure_filename(request.args.get("download_name") or options.get("filename") or "master.mp3")
-            file = Path(name)
-            stem = file.stem or "master"
-            if "montara" not in stem.lower():
-                stem += "-Montara"
-            response.headers.set("Content-Disposition", "inline", filename=stem + file.suffix)
+        if response.status_code in (200,206) and request.args.get('download_name') and (request.path == "/api/v1/wizard/result" or (request.path.startswith("/montara/mix/") and request.path.endswith("/result"))):
+            from urllib.parse import quote
+            import unicodedata
+            name=re.sub(r'[/\\\x00-\x1f\x7f]','-',request.args['download_name']).strip() or 'Montara.mp4'
+            # Keep the project spelling, spaces and internal dots. RFC 5987
+            # supplies the exact Unicode filename; ASCII is for older clients.
+            ascii_name=unicodedata.normalize('NFKD',name).encode('ascii','ignore').decode() or 'Montara.mp4'
+            response.headers.set('Content-Disposition','attachment',filename=ascii_name,**{'filename*':"UTF-8''"+quote(name,safe='')})
         return response
 
     @app.get("/montara/show-studio")
