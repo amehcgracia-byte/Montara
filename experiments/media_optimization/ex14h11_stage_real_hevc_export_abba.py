@@ -99,16 +99,22 @@ def setup_project(destination, selected_source, mode):
         },
     }
     segment = {
-        "camera_id": "ex14h11_360", "filename": selected_source.name,
+        "camera_id": "originales", "filename": selected_source.name,
         "source_path": str(selected_source), "clip_path": str(selected_source),
         "spherical_source_path": str(selected_source),
         "projection": "equirect",
         "master_start_sec": 0.0, "clip_start_sec": 840.0,
         "duration_sec": 2.0, "frame_count": FRAMES,
-        "available_camera_ids": ["ex14h11_360"],
+        "available_camera_ids": ["originales"],
         "camera_alternative_available": False, "manual_view": True,
         "spherical_shot": shot,
     }
+    # Mirror the product invariant: the label must identify the actual render source.
+    from core.stages.edit import _camera_id_from_render_path, validate_plan_camera_source_consistency
+    source_camera = _camera_id_from_render_path(segment)
+    if source_camera != "originales":
+        raise RuntimeError(f"STOP: unexpected physical camera identity: {source_camera!r}")
+    validate_plan_camera_source_consistency({"segments": [segment]})
     doc["name"] = f"EX14H11-{mode}"
     doc["inputs"]["videos"] = [record]
     doc.setdefault("settings", {}).pop("spherical_landmarks", None)
@@ -127,7 +133,7 @@ def setup_project(destination, selected_source, mode):
     plan.update({
         "platform": "reel", "reel_aspect": "16:9",
         "segments": [segment], "cut_count": 0,
-        "camera_usage": {"ex14h11_360": 1},
+        "camera_usage": {"originales": 1},
         "master_window_start_sec": 0.0,
         "duration_sec": 2.0, "warnings": []
     })
