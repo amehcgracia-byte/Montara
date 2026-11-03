@@ -121,6 +121,7 @@ function stepApplies(step) {
   return true;
 }
 let showNavigating=false;
+let navigationFlow = crypto.randomUUID();
 let introTimer = null;
 function finishIntro() {
   if (!$("#home").hidden) { resetFlow(); show("mode"); }
@@ -134,7 +135,15 @@ function show(id) {
   const showStep=state.platform==='show' && ['showSetup','showStyle','making','showReview','result'].includes(id);
   $("#showNavigation").hidden=!showStep;
   $$("[data-show-step]").forEach(b=>b.classList.toggle('on',b.dataset.showStep===id));
-  if(showStep && !showNavigating && history.state?.montaraStep!==id)history.pushState({montaraStep:id},'',location.href);
+  if (!showNavigating) {
+    const entry = {...history.state, montaraStep:id, montaraFlow:navigationFlow,
+      montaraPlatform:state.platform, montaraProject:state.projectId};
+    if (id === 'home' || history.state?.montaraFlow !== navigationFlow || history.state?.montaraStep === 'home') {
+      history.replaceState(entry, '', location.href);
+    } else if (history.state?.montaraStep !== id) {
+      history.pushState(entry, '', location.href);
+    }
+  }
   $$(".screen").forEach((s) => { s.hidden = s.id !== id; });
   const inFlow = STEP_ORDER.includes(id) || id === "failed" || id === "mode";
   $("#steps").hidden = !inFlow || id === "mode" || state.platform==='show';
@@ -178,6 +187,15 @@ document.addEventListener("click", (event) => {
 });
 
 $$(".mode[data-platform]").forEach((card) => card.addEventListener("click", () => {
+  if (state.platform === card.dataset.platform && state.files.length) {
+    show(state.platform === 'show' ? 'showSetup' : 'footage');
+    return;
+  }
+  if (state.platform && state.platform !== card.dataset.platform) {
+    resetFlow();
+    history.replaceState({...history.state,montaraStep:'mode',montaraFlow:navigationFlow,
+      montaraPlatform:null,montaraProject:null},'',location.href);
+  }
   state.platform = card.dataset.platform;
   if (state.platform === "show") { openShowSetup().catch(fail); return; }
   $("#modeLabel").textContent = MODES[state.platform];
@@ -196,6 +214,7 @@ $$(".mode[data-platform]").forEach((card) => card.addEventListener("click", () =
 }));
 
 function resetFlow() {
+  navigationFlow = crypto.randomUUID();
   stopPolling();
   state.localProject = null;
   state.savedLocally = false;
@@ -2297,12 +2316,26 @@ $("#showStyleBack").addEventListener('click',()=>{show('showSetup');renderShowIn
 $("#showBackHome").addEventListener('click',()=>show('mode'));
 $$("[data-show-step]").forEach(button=>button.addEventListener('click',()=>{if(button.dataset.showStep==='showReview')openShowReview().catch(fail);else{show(button.dataset.showStep);renderShowInput();}}));
 window.addEventListener('popstate',event=>{
-  const step=event.state?.montaraStep;
-  if(state.platform==='show' && ['showSetup','showStyle','showReview','making','result'].includes(step)){
-    if(step==='showReview' && !showEdit.scenes.length){showNavigating=true;show('showSetup');showNavigating=false;return;}
-    if(['showSetup','showStyle'].includes(step))stopPolling();
-    $("#showSceneVideo").pause();showNavigating=true;show(step);showNavigating=false;renderShowInput();
-  }else if(state.platform==='show'){showNavigating=true;show('mode');showNavigating=false;}
+  const entry=event.state;
+  let step=entry?.montaraStep;
+  const stale=entry?.montaraFlow!==navigationFlow ||
+    (entry.montaraProject && entry.montaraProject!==state.projectId);
+  if(stale || !document.getElementById(step)?.classList.contains('screen'))step='mode';
+  stopPolling();
+  stopMix();
+  $$('video, audio').forEach(media=>media.pause());
+  if(!stale && entry.montaraPlatform)state.platform=entry.montaraPlatform;
+  if(step==='showReview' && !showEdit.scenes.length)step='showSetup';
+  showNavigating=true;
+  try {show(step);} finally {showNavigating=false;}
+  if(stale)history.replaceState({...history.state,montaraStep:step,montaraFlow:navigationFlow,
+    montaraPlatform:state.platform,montaraProject:state.projectId},'',location.href);
+  if(['showSetup','showStyle'].includes(step))renderShowInput();
+  if(step==='frames'){
+    refreshFrames(true).catch(fail);
+    state.framesPoll=setInterval(()=>refreshFrames(false).catch(console.warn),1500);
+  }
+  if(step==='making' && !state.nativeExport)startPolling();
 });
 
 function rejectRaw360(files) {
