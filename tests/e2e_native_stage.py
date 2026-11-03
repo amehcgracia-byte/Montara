@@ -36,7 +36,9 @@ def main():
                 except Exception:time.sleep(1)
             else:raise AssertionError('Isolated test host did not start')
         with sync_playwright() as pw:
-            browser=pw.chromium.launch();page=browser.new_page(viewport={'width':1440,'height':1000})
+            channel=os.environ.get('MONTARA_TEST_BROWSER_CHANNEL')
+            browser=pw.chromium.launch(**({'channel':channel} if channel else {}));page=browser.new_page(viewport={'width':1440,'height':1000})
+            assert page.evaluate('!!document.createElement("video").canPlayType(\'video/mp4;codecs="avc1.42E01E"\')'), 'Native playback acceptance needs a browser with H.264 (set MONTARA_TEST_BROWSER_CHANNEL=chrome)'
             page.on('console',lambda message:print('BROWSER_ERROR',message.text,flush=True) if message.type=='error' else None)
             page.route('**/companion.js',lambda route:route.fulfill(body=(ROOT/'web/companion.js').read_text().replace('http://127.0.0.1:47820',base),content_type='application/javascript'))
             page.route(base+'/projects',lambda route:route.fulfill(json={'id':project_id,'folder':str(chosen)},headers={'Access-Control-Allow-Origin':url}))
