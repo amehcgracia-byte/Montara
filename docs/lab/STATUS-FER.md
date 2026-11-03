@@ -15,6 +15,12 @@ Actualizado: **2026-11-03** · Rama `fernando/continuacion-montara` · laborator
 - Montara 0.59/0.60: luz per-shot y native export desde originales, cancelación y progreso restablecidos, mezclas locales Companion; E2E Linux de JM reportado OK. No duplicar pruebas.
 - Issues abiertas: Montara #58 sync global-consenso no corregido; #56 duration `-t` todavía falta; #54 disco subió a ~73% y retención automática pendiente; #53 FFmpeg global sigue 6.1.1. #34 canal de coordinación, #13 digests de main.
 
+## Criterios acordados con Fernando (03-11)
+- «main de ZuckerVideos» en conversación significa **motor más actualizado en uso efectivo**, no obligatoriamente la rama llamada `main`; contrastar `main`, rama activa de desarrollo y submódulo fijado en Montara.
+- Integraciones: PR pequeñas desde commit reciente + pruebas E2E/capturas para no revertir avances visuales; no merge de rama laboratorio completa. Avisado Chema en Montara #34.
+- **Capacidad objetivo futura**: 2, 5 y 10 usuarios simultáneos; el orden es medir primero E2E de un proyecto real con CPU/RAM/disco/cachés y costes, después pruebas de carga 2/5/10, sin prometer escalado lineal.
+- Auditoría histórica: índice `docs/lab/INVENTORY-FER.md` F1–F8 y revisión focal de SATURNO 24–25, recursos cgroup, seguridad Mixer y arquitectura esférica. **No afirmar que se han leído íntegramente los 177 documentos Markdown archivados**; ampliar la lectura y registrar hallazgos sin repetir experimentos.
+
 ## Próximos objetivos
 1. **Corto:** cerrar documentación de EX14H-08, control comparativo del motor actualizado y perfil de Stage representativo con EX07/13, misma fuente/máquina/pin, sin duplicar pruebas ya validadas.
 2. **Corto:** revisar PR #51 contra rama activa y preparar integración selectiva en rama CORTA de ZuckerVideos desde la revisión actual; no activar defaults ni forzar merge. Mantener EX06 separado.
