@@ -107,3 +107,16 @@ Las cuatro sumas dan **8.168s**, quedando ~0.397s fuera del cronometraje explíc
 4. Para aislar decodificación/encoder, distinguir espera sobre pipe del trabajo real de FFmpeg y medir procesos con observabilidad externa; no asignar 2.241s exclusivamente a decode CPU.
 
 **Decisión:** EX-14H-06 es una señal prometedora; **NO autoriza cambio al motor ni promesa de aceleración productiva**. Priorizar mapa geométrico y recuperar evidencia de PR #51 frente a nuevas propuestas algorítmicas.
+
+## EX-14H-07 — Auditoría documental de optimizaciones EX-07/13 SIN CPU/VM (03-11-2026)
+Comparación remota de GitHub `amehcgracia-byte/zucker_videos`, base **ff9baf45aef07f0e9f16c489cf5cbd15acbd1b2f** y head `fernando/ex06-engine-lab`: `ahead_by=4`, `behind_by=0`; solo `core/spherical_motion.py` (+54/-10) y tres módulos de tests añadidos: `tests/test_ex06_cpu_interpolation.py` (61), `tests/test_ex07_fast_wrap.py` (69), `tests/test_ex13_smart_unwrap.py` (90). Frente a `claude/recover-montara-engine` actual, ramas **divergidas** (`ahead_by=4, behind_by=7`), de modo que no comparar directamente rendimiento entre heads como si solo difiriesen por el experimento. La base común es `ff9baf4`, igual al motor local medido en EX-14H-06.
+
+**EX-07 fast_wrap:** añadido `_fast_wrap_x_inplace(mx, sw)`: si x ya está [0,sw) evita operación; rango [−sw,2sw) aplica restar/sumar con máscaras; en casos generales y no finitos vuelve al módulo original. Parámetro `fast_wrap=False` por defecto propagado hasta `run_reprojected_command`. Test compara exactitud de mapas x/y `np.testing.assert_array_equal` con dimensiones **960x540**, FOV/presets/yaws parametrizados, y verifica helper en casos extremos.
+
+**EX-13 smart_unwrap:** `_smart_unwrap_if_safe(a, axis)` comprueba finitud y magnitudes de saltos; solo omite `np.unwrap` cuando no se requiere corrección; para proyección estereográfica `sg` usa unwrap tradicional. Parámetro `smart_unwrap=False` por defecto. Test arrays especiales y mapas exactos a **960x540** para presets linear/dewarp/tiny_planet y orientaciones seleccionadas, también con fast_wrap combinado.
+
+**EX-06** `cpu_interpolation='cubic'` por defecto; `linear` solo opt-in, no es bit-exact respecto a cubic (por definición), con tests de selección y preservación del modo en fallback de decoder hardware. No confundir ahorro del remap con ahorro de mapa.
+
+**Lo NO demostrado en esta auditoría:** no se ha encontrado aquí una cifra de mejora EX-07/13 en mapa a **1920x1080** para los 60 fotogramas HEVC del EX-14H-06; los tests de exactitud inspeccionados están a 960x540. Que haya pruebas implementadas no demuestra ejecución CI actual ni rendimiento; no atribuir aceleración observada sin A/B. No se miraron comentarios/reviews de PR #51 ni issue #34, respetando la fase experimental acordada.
+
+**Siguiente gate** con Chema utilizando VM: cero CPU, revisar el protocolo de A/B y riesgos. Al liberar VM, una única comparación controlada (base, fast_wrap, smart_unwrap y ambas si justificado) con funciones remotas sobre el **mismo** `ff9baf4`, resolución 1080 y poses del EX-14H-06; test de igualdad de matrices `np.array_equal`, tiempo de generación mediana/dispersión y end-to-end solo si reducción real del mapa. Emplear diseño alternado y controles de contaminación; **no** activar flags por defecto ni cambiar producción.
