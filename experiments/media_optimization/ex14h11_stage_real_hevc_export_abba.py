@@ -211,10 +211,15 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", choices=("smoke", "abba"), required=True)
     args = parser.parse_args()
-    if capture(["git", "-C", str(ROOT), "rev-parse", "--short", "HEAD"]) != "2e76003":
-        raise RuntimeError("STOP: expected 2e76003")
+    if capture(["git", "-C", str(ROOT), "rev-parse", "--short", "HEAD^"]) != "2e76003":
+        raise RuntimeError("STOP: expected one native-call audit commit on top of 2e76003")
     if capture(["git", "-C", str(ROOT), "status", "--porcelain"]):
         raise RuntimeError("STOP: uncommitted changes in engine worktree")
+    changed = capture(["git", "-C", str(ROOT), "diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"])
+    if changed != "core/stages/export.py":
+        raise RuntimeError(f"STOP: unexpected audit commit changed {changed!r}")
+    if "_ex14h11_native_calls" not in (ROOT / "core/stages/export.py").read_text():
+        raise RuntimeError("STOP: required Stage native-call audit missing")
     if shutil.disk_usage("/home/fer").free < 10 * 1024**3:
         raise RuntimeError("STOP: less than 10 GiB free on VM")
     if not (REFERENCE / "project.json").is_file():
