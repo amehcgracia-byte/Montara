@@ -30,7 +30,8 @@ def site(tmp_path_factory):
     ('render','/api/v1/wizard/review/render'),
     ('captions','/api/v1/wizard/compose'),
 ])
-def test_cancel_fences_late_start_responses(site,operation,path):
+@pytest.mark.parametrize('late_status',[200,500])
+def test_cancel_fences_late_start_responses(site,operation,path,late_status):
     with sync_playwright() as p:
         browser=p.chromium.launch();page=browser.new_page()
         page.goto(site);page.locator('#mode').wait_for(state='visible')
@@ -47,7 +48,7 @@ def test_cancel_fences_late_start_responses(site,operation,path):
         page.wait_for_timeout(150);assert len(held)==1
         page.locator('#cancel').click();page.wait_for_timeout(100)
         assert not cancel  # cancel waits for the in-flight start to register
-        held[0].fulfill(json={})
+        held[0].fulfill(status=late_status,json={'error':{'message':'late error'}} if late_status==500 else {})
         page.locator('#footage').wait_for(state='visible')
         page.wait_for_timeout(600)
         assert len(cancel)==1 and cancel[0]['if_idle'] is True

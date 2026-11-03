@@ -1319,6 +1319,7 @@ async function workRequest(generation,path,body) {
   checkWork(generation);
   const request=api(path,body);work.pending.add(request);
   try {const result=await request;checkWork(generation);return result;}
+  catch(error){checkWork(generation);throw error;}
   finally {work.pending.delete(request);}
 }
 async function make() {
