@@ -60,7 +60,9 @@ def main():
             page.screenshot(path=str(out/'native-shot-progress.png'),full_page=True)
             page.wait_for_selector('#result:not([hidden]), #failed:not([hidden])',timeout=300000)
             assert not page.locator('#failed').is_visible(),page.locator('#errorText').inner_text()
-            page.wait_for_function("document.querySelector('#resultVideo').readyState>=2",timeout=30000)
+            # preload=metadata need not decode a picture until the user seeks
+            # or plays (Chromium on Linux can stop at HAVE_METADATA).
+            page.wait_for_function("document.querySelector('#resultVideo').readyState>=1",timeout=30000)
             page.locator('#resultVideo').evaluate('video=>{video.currentTime=2;}')
             page.wait_for_function("!document.querySelector('#resultVideo').seeking && document.querySelector('#resultVideo').readyState>=2",timeout=30000)
             page.screenshot(path=str(out/'native-result.png'),full_page=True)
@@ -87,6 +89,10 @@ def main():
             video=next(s for s in info['streams'] if s['codec_type']=='video');assert (video['width'],video['height'])==(1920,1080)
             run(['ffmpeg','-v','error','-i',str(final),'-f','null','-'])
             browser.close();(out/'summary.json').write_text(json.dumps({'passed':True,'size':'1920x1080','original_sources':len(recipe['source_files']),'native_render':True,'server_export_skipped':True},indent=2));print((out/'summary.json').read_text())
+    except Exception:
+        try:print('NATIVE_VIDEO_STATE',page.locator('#resultVideo').evaluate('v=>({ready:v.readyState,network:v.networkState,error:v.error?.message,duration:v.duration,seeking:v.seeking})'),flush=True)
+        except Exception:pass
+        raise
     finally:
         for process in processes:
             process.terminate()
