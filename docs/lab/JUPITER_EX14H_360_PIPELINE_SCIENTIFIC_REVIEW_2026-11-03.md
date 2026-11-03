@@ -48,3 +48,17 @@ Los dos FFmpeg **se solapan** con el bucle Python por pipe/buffers. El tiempo de
 
 ## 7. Decisión
 **PRIORIDAD INMEDIATA: clasificación read-only de planos 360 en manifiestos existentes.** Ningún benchmark autorizado todavía y ningún parche a engine, mixer, main o submódulos. Informar a Fernando antes de ocupar recursos compartidos. Investigar GPU solo si la distribución de costes demuestra que la reproyección domina y que el presupuesto/infraestructura la justifican.
+
+## EX-14H-01 — Inventario efectivo de manifiestos existentes (operador, 2026-11-03)
+Se ejecutó un script read-only que cruza `artifacts/edit_plan.json` y `artifacts/export_manifest.json` de cuatro proyectos FER, clasificando estrictamente como 360 cuando el objeto `spherical_shot` es un diccionario no vacío. Resultado total: **14 entradas de segmentos, 0 con `spherical_shot`**, ningún segmento con etiqueta 360; cuatro proyectos pero solo tres patrones de montaje (dos comparten seis cortes de duración idéntica). No deducir ausencia universal de 360 en Montara ni cuantificar coste de 360 desde estas muestras.
+
+| Proyecto | Segmentos | 360 | Duración editada | Wall segmentos s | Wall export s |
+|---|---:|---:|---:|---:|---:|
+| montara-focus-iphone-original-03 | 1 | 0 | 4.0 | 11.134 | 15.485 |
+| montara-focus-real-mini-01 | 1 | 0 | 4.0 | 6.593 | 9.628 |
+| montara-focus-ac-true-edit-01 | 6 | 0 | 20.0 | 18.079 | 43.365 |
+| E2E stage.zuckervid | 6 | 0 | 20.0 | 109.354 | 186.427 |
+
+**Resultado:** sin observación Stage real de `native_remap` 360 con desglose de tiempo. Los tiempos muy distintos de los dos montajes de seis cortes NO son prueba de velocidad por CPU ni diferencia de codec, dada concurrencia y configuraciones distintas. `projection` puede ser nulo incluso en planos esféricos; para clasificar un render futuro comprobar `spherical_shot`, probe de fuente, `runtime_motion_enabled` y condiciones reales de `_render_segment` (no solo etiqueta del plan).
+
+**Siguiente puerta, cero render:** inventariar únicamente carpetas de proyecto FER con `artifacts/edit_plan.json` y manifiestos que tengan `spherical_shot`; no escanear datos `jm`, no volcar rutas de medios, no hacer `rglob` de todo el HOME sobre grandes originales. Si no hay pareja plan+export 360, optar por un único fixture real de 2-5 s e instrumentación de etapa bajo laboratorio aislado, previo aviso y preflight VM compartida. 
