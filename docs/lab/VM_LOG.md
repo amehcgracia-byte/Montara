@@ -4,6 +4,11 @@ Una línea por acción de administrador (`sudo`). Sin contraseñas, tokens ni ll
 
 | Fecha (UTC) | Quién | Autorizó | Acción |
 |---|---|---|---|
+| 2026-11-03 | Codex | Chema | Preflight inicial 0.60 de JM: árbol limpio, ningún proceso multimedia y ninguna sesión bloqueada; sin cambios a FER. |
+| 2026-11-03 | Codex | Chema | Segunda comprobación 0.60 de JM, ahora con estado autenticado del wizard: `waiting_review`, sin procesos ni locks. |
+| 2026-11-03 | Codex | Chema | Repetición inmediatamente anterior a instalar 0.60: JM limpio y libre; wizard `waiting_review`. No se canceló ninguna exportación del usuario. |
+| 2026-11-03 | Codex | Chema | Instalación solo JM fijada a `5a65f509a7b7c2ac628fd8fcb455df119d38f3c2`; submódulos exactos, preflight/warmup y reinicio de su servicio `:8101`. FER sin cambios. |
+| 2026-11-03 | Codex | Chema | Verificación autenticada posterior: 0.60 `5a65f50`, engine `affe97a4`, mixer `f15ff91c`, HTML y scripts servidos correctamente. |
 | 2026-11-03 | Codex | Chema | Lectura autenticada del estado del trabajo JM antes de preparar 0.60: `waiting_review`, sin exportación en curso; sin cambios a FER ni medios. |
 | 2026-10-29 | Claude (vía Cloud Shell de amehc) | Chema | `deploy/vm/admin_setup.sh`: paquetes del sistema, usuarios `jm` y `fer` (HOME en 750, linger), bloqueo `montara-bench` |
 | 2026-10-29 | Claude | Chema | Instalación de Montara para `jm` (`claude/jupiter-gcp-vm`, servicio de usuario en `127.0.0.1:8101`) |
