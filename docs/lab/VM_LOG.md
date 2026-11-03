@@ -35,3 +35,7 @@ Una línea por acción de administrador (`sudo`). Sin contraseñas, tokens ni ll
 | 2026-11-03 | Codex | Chema | Read-only JM preflight after acceptance: clean checkout, four active FFmpeg processes, no locked audio session; left the render running and deferred restart. |
 | 2026-11-03 | Codex | Chema | Rechecked JM checkout, FFmpeg activity and worker locks while preparing rollout: four FFmpeg workers still active; no restart. |
 | 2026-11-03 | Codex | Chema | Authenticated read-only JM wizard status: export running at 77.75% overall, 25.82% export-stage progress; no project edits. |
+| 2026-11-03 | Codex | Chema | Authenticated read-only JM wizard check: previous export completed at 100%; no cancellation. |
+| 2026-11-03 | Codex | Chema | Final JM preflight: clean checkout, zero active media workers and no locked audio sessions; FER untouched. |
+| 2026-11-03 | Codex | Chema | Existing montara-update installed main 662c06a (0.59 plus browser history #69) for JM only, service 8101; no FER or global FFmpeg changes. |
+| 2026-11-03 | Codex | Chema | Authenticated post-update version/HTML/script verification: 0.59, engine 5877eacb, mixer f15ff91c; companion 0.6.0 verified separately on the Mac. |

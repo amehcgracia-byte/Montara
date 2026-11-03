@@ -27,7 +27,8 @@ El renderizador opcional se instala con `companion/install.sh --video`. Solo añ
 - Al cambiar el perfil compartido de una cámara se regeneran también las miniaturas dependientes, no solo la toma sustituida; una regresión cubre ese caso.
 - Siete pruebas locales del companion aprobadas, incluida comparación entre dos exportaciones reales (original 1080p frente a copia 720p codificada), HTTP Range, origen y validación de receta. Una prueba nativa 360 verificó dos puntos de vista distintos con el runtime mínimo.
 - Aceptación Linux: cinco recorridos aprobados en Actions `41558675123` (Stage, Push, Mix, sesión/companion y contenedor privado/persistencia); capturas inspeccionadas. Companion 0.6.0 instalado y comprobado con renderer `5877eac` y mixer intacto `f15ff91`.
-- Montara #67 y Editor #50 integradas. JM aún conserva 0.58 porque su render está activo; despliegue y comprobación de la página pendientes, sin declarar validación de producción.
+- Montara #67/#69 y Editor #50 integradas. Despliegue JM comprobado el 03-11: 0.59 `662c06a`, engine `5877eacb`, mixer `f15ff91c`; HTML/scripts y companion verificados. Su exportación anterior terminó al 100% antes del reinicio, sin cancelarla.
+- #69 añade Atrás/Adelante del navegador conservando los datos del flujo en memoria (no recuperación tras recargar). Su recorrido específico pasa en Mac/Linux y los cinco jobs Linux de `41561584703` están aprobados; capturas inspeccionadas. Falta la prueba del usuario con una canción completa y sus originales en esta instalación.
 
 ## Diagnóstico de las dos cámaras
 
