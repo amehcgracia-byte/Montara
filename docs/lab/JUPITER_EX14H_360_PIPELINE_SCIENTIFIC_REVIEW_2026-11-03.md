@@ -67,3 +67,18 @@ Se ejecutó un script read-only que cruza `artifacts/edit_plan.json` y `artifact
 Ejecución de inventario read-only en carpetas de laboratorio FER: **6 planes examinados, 0 con segmentos `spherical_shot` no vacío**. La búsqueda incluyó proyectos montara-/jupiter- y subárboles E2E bajo datos FER, sin entrar al home de JM. No demuestra ausencia de grabaciones 360 históricas ni excluye otras codificaciones del plan, únicamente que el selector inspeccionado no encontró planes Stage 360. Se **cierra** el rastreo repetitivo de manifiestos FER conocidos.
 
 **Gate siguiente:** EX-14H-03, perfil de pipeline **real de native_remap** sobre una muestra HEVC 360 ya usada en F4/FOCUS, sin tocar el motor original. Instrumentar tiempos readinto, reproject_maps, cv2.remap, stdin.write, cierre/espera del codificador y wall total con misma geometría/size/fps que export (1080p30), registrando distribución y coste propio del profiler. Deben conservarse outputs y verificar fps/frames, duración, color, movimiento y calidad. **No medir** si JM está renderizando; coordinar con FER y abortar si preflight muestra actividad. Sin pruebas de otras interpolaciones: EX-05/F4 ya las cubren. La fuente de 2 segundos no constituye Stage E2E ni muestra distribución de planos de una jam real.
+
+## EX-14H-04/05 — Inventario real y verificación de versión (operador, 03-11-2026)
+Carpeta compartida FER con 3 originales, 6.188 GiB en total. Mediante `ffprobe -select_streams v:0` y `git status --porcelain`:
+
+| Fuente anónima | Formato | GiB | Codec | Resolución | avg_frame_rate | Duración (s) | PixFmt | Color |
+|---|---|---:|---|---|---|---:|---|---|
+| A | MP4 | 0.531 | H.264 | 1920x1080 | 25/1 | 89.760000 | yuv420p | bt709 primaries/transfer/space |
+| B | MOV | 3.308 | H.264 | 3840x2160 | 2218725/74012 (~29.978) | 986.825011 | yuv420p | bt709 primaries/transfer/space |
+| C | MP4 | 2.349 | HEVC | 3840x1920 | 25/1 | 911.640000 | yuvj420p | bt709 primaries/transfer/space |
+
+Motor local en checkout `ff9baf4`, worktree limpio. Archivo `engine/core/spherical_motion.py` SHA256 **2b8d165172aa09308d442e0e8f1c5859dcd227cc07f6f35e0473a78a9a6e4bcf**; código del mismo ref inspeccionado en GitHub con `readinto`, `reproject_maps`, `cv2.remap` y pipe de salida. OpenCV **4.11.0** disponible en Python virtual verificado. CPU en último preflight: ningún ffmpeg ni ffprobe activo, load1 0.12 (valores de 5/15min 3.54/11.15); el estado es instantáneo y exige preflight inmediatamente antes de cualquier render.
+
+Interpretación: original C es fuente idónea ya probada en los experimentos F4; el hecho de que el MOV B tenga `avg_frame_rate` ~29.978 **no demuestra VFR** ni se debe etiquetar como tal sin mirar `r_frame_rate` / PTS. `yuvj420p` para HEVC C requiere preservar rango/color al interpretar cambios; no modificar tratamiento de pixfmt ni interpolación para el primer perfil.
+
+**Siguiente gate:** perfilador Stage-native-remap de duración limitada, con checkpoints de metadatos y registro agregado, 1080p30, mismo `shot` y movimiento que usaría el motor, sin alterar `engine/` ni tocar originales. Priorizar medir `readinto`, `reproject_maps`, `cv2.remap`, `stdin.write`, `wait`; separar costes de bloqueo/arranque y no atribuir CPU sin medición adicional. Comparar contra invocación sin instrumentar para estimar overhead. No ejecutar hasta confirmación de VM libre.
