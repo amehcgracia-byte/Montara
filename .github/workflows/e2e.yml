@@ -76,6 +76,9 @@ jobs:
       - name: Mixer waveform, stereo linking and peak safety
         if: matrix.mode == 'session'
         run: python -m pytest mixer/test_master_limiter.py -q
+      - name: Browser Back and Forward in Stage, Push and Show
+        if: matrix.mode == 'session'
+        run: python tests/e2e_navigation.py --output e2e-output/navigation
       - name: ${{ matrix.mode }} through the real interface
         if: matrix.mode != 'session'
         run: python tests/e2e_journey.py --mode ${{ matrix.mode }} --output e2e-output

@@ -8,14 +8,16 @@ engine: nothing is mocked. Produces screenshots and the exported videos.
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import os
+import shutil
 import socket
 import subprocess
 import sys
 import time
 from pathlib import Path
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
 REAL = ROOT / "tests" / "fixtures" / "much-to-me"
@@ -165,10 +167,15 @@ def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
     assert response.ok
     status = response.json()
     server_name = Path(status["result"]["path"]).name
-    exported = page.request.get(url + "/api/v1/wizard/result", timeout=180_000)
-    assert exported.ok
     path = shots / 'render.mp4'
-    path.write_bytes(exported.body())
+    # Stream the real HTTP download. Playwright's Python large-buffer decode
+    # repeatedly copies bytes and can consume minutes of CPU after export.
+    headers = {}
+    if password := os.environ.get('MONTARA_PREVIEW_PASSWORD'):
+        headers['Authorization'] = 'Basic ' + base64.b64encode(('montara:'+password).encode()).decode()
+    with urlopen(Request(url + '/api/v1/wizard/result', headers=headers), timeout=180) as exported, path.open('wb') as target:
+        assert exported.status == 200
+        shutil.copyfileobj(exported, target, length=1024*1024)
     journey_seconds = time.monotonic() - started
     probe = json.loads(run(["ffprobe", "-v", "error", "-show_streams", "-show_format", "-of", "json", str(path)]))
     run(["ffmpeg", "-v", "error", "-i", str(path), "-f", "null", "-"])  # decode the whole file
