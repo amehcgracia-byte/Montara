@@ -61,8 +61,21 @@ def test_real_local_final_preserves_native_resolution_and_detail(tmp_path,monkey
     def frame(path,filter_='null'):
         raw=subprocess.check_output([ff,'-v','error','-ss','2.0','-i',str(path),'-frames:v','1','-vf',filter_,'-pix_fmt','gray','-f','rawvideo','-'])
         return np.frombuffer(raw,np.uint8).astype(float)
-    original_pixels=frame(source);final=frame(output)
-    proxy=frame(source,'scale=1280:720,scale=1920:1080')
+    # Fair A/B: run an actual encoded 720p companion copy through the same
+    # final exporter. Comparing a multiply encoded final with an unencoded
+    # resize penalizes compression rather than testing the original relink.
+    import importlib.util
+    module=importlib.util.spec_from_file_location('quality_proxy_helper',ROOT/'companion/companion.py')
+    helper=importlib.util.module_from_spec(module);module.loader.exec_module(helper)
+    helper.HW_H264=False
+    proxy_source=tmp_path/'camera-copy.small.mp4'
+    subprocess.run(helper.proxy_command(source,proxy_source,helper.plan(helper.probe(source))),check=True,capture_output=True)
+    proxy_identity={'name':proxy_source.name,'size':proxy_source.stat().st_size,'fingerprint':fingerprint(proxy_source)}
+    proxy_token=manager.start({**payload,'originals':[{'source':0,'original':proxy_identity}]},{project:folder},lambda _:proxy_source)
+    deadline=time.monotonic()+180
+    while manager.status(proxy_token)['status'] not in ('ready','failed') and time.monotonic()<deadline:time.sleep(.2)
+    assert manager.status(proxy_token)['status']=='ready',manager.status(proxy_token)
+    original_pixels=frame(source);final=frame(output);proxy=frame(manager.output(proxy_token))
     assert np.mean((final-original_pixels)**2)<np.mean((proxy-original_pixels)**2)
     manifest=json.loads((folder/'.montara-renders'/token/'render.json').read_text())
     assert manifest['source_files']['0']==str(source.resolve())
