@@ -29,3 +29,9 @@ Una línea por acción de administrador (`sudo`). Sin contraseñas, tokens ni ll
 | 2026-11-02 | Codex | Chema | Read-only detailed JM project/coverage/edit-plan/export inspection: two source durations and overlap verified, proxy-derived final identified; no user project or FER changes. |
 | 2026-11-03 | Codex | Chema | Read-only JM export-manifest index/schema scan (three retained exports) to answer Fernando’s historical telemetry request; no projects, services or FER changes. |
 | 2026-11-03 | Codex | Chema | Read-only duration/performance summary of the same three JM manifests; historical 628.2 s manifest absent, no render launched or media changed. |
+| 2026-11-03 | Codex | Chema | Read-only JM preflight before 0.59: clean checkout and one matching media process; no deployment performed. |
+| 2026-11-03 | Codex | Chema | Read-only JM preflight repeated with shell processes excluded; no service or project changes. |
+| 2026-11-03 | Codex | Chema | Read-only JM process/worker-lock check: one actual FFmpeg process active, no locked session; left it running and deferred deployment. |
+| 2026-11-03 | Codex | Chema | Read-only JM preflight after acceptance: clean checkout, four active FFmpeg processes, no locked audio session; left the render running and deferred restart. |
+| 2026-11-03 | Codex | Chema | Rechecked JM checkout, FFmpeg activity and worker locks while preparing rollout: four FFmpeg workers still active; no restart. |
+| 2026-11-03 | Codex | Chema | Authenticated read-only JM wizard status: export running at 77.75% overall, 25.82% export-stage progress; no project edits. |

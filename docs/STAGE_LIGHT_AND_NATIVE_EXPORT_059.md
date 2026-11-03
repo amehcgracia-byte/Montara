@@ -26,7 +26,8 @@ El renderizador opcional se instala con `companion/install.sh --video`. Solo añ
 - El Fast CI del Editor presenta 22 fallos; se seleccionaron y reprodujeron los mismos 22 en la base limpia `ff9baf45` y el candidato `73106469`. No se han ocultado ni modificado esas pruebas, y no se declara ese CI completo aprobado.
 - Al cambiar el perfil compartido de una cámara se regeneran también las miniaturas dependientes, no solo la toma sustituida; una regresión cubre ese caso.
 - Siete pruebas locales del companion aprobadas, incluida comparación entre dos exportaciones reales (original 1080p frente a copia 720p codificada), HTTP Range, origen y validación de receta. Una prueba nativa 360 verificó dos puntos de vista distintos con el runtime mínimo.
-- La aceptación Linux y del companion instalado se registra al completar el despliegue; hasta entonces es candidato, no validado en producción.
+- Aceptación Linux: cinco recorridos aprobados en Actions `41558675123` (Stage, Push, Mix, sesión/companion y contenedor privado/persistencia); capturas inspeccionadas. Companion 0.6.0 instalado y comprobado con renderer `5877eac` y mixer intacto `f15ff91`.
+- Montara #67 y Editor #50 integradas. JM aún conserva 0.58 porque su render está activo; despliegue y comprobación de la página pendientes, sin declarar validación de producción.
 
 ## Diagnóstico de las dos cámaras
 
