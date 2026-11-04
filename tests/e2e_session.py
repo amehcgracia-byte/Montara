@@ -206,8 +206,8 @@ def run(output):
                 bundle = page.request.get(f'{url}/montara/session/{data["id"]}/results.zip')
                 assert bundle.ok and len(zipfile.ZipFile(io.BytesIO(bundle.body())).namelist()) == 2
                 page.screenshot(path=str(output / '04-exported.png'), full_page=True)
-                page.reload(); page.locator('#mode').wait_for(state='visible'); page.locator('[data-platform="youtube"]').click()
-                page.locator('#sessionResume').click()
+                page.reload(); page.locator('#sessionReview').wait_for(state='visible')
+                page.wait_for_function("fullSession.id==="+json.dumps(data['id']))
                 page.wait_for_function("document.querySelectorAll('#sessionResults audio').length===2")
                 page.set_viewport_size({'width': 390, 'height': 844})
                 page.screenshot(path=str(output / '05-mobile-resume.png'), full_page=True)

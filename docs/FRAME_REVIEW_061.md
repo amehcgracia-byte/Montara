@@ -20,6 +20,16 @@ La sesión se recupera mediante cronología del servidor, no un identificador an
 
 Se conserva el proyecto abierto, el proyecto más reciente, la sesión más reciente, trabajos activos, carpetas `.keep` y trabajo modificado en la última hora. Los ejemplos del repositorio, la carpeta compartida y los datos de FER no son destinos de limpieza. Metadatos ilegibles o un worker ocupado cancelan la limpieza. Auditoría en `retention.jsonl`. Si los elementos protegidos impiden bajar de 60 GB, se conservan: el umbral no garantiza espacio si solo queda trabajo protegido. La caché global no se borra a ciegas porque contiene proxies referenciados.
 
+## Push y edición por fuente
+
+Selector de audio antes de editar, con Start/End aplicados a la petición de reel. La configuración de cámaras se oculta en Push; se conserva el control 360 cuando corresponde. Fotos y previews usan el lienzo vertical y la geometría del exportador, incluida la variante con imagen completa y las mezclas. El cuadro de encuadre muestra una miniatura vertical en vivo. Luz disponible también en Push; los clips no reciben igualado de color entre cámaras por defecto.
+
+`Apply to whole source video` copia el encuadre y la luz a tomas del mismo archivo, identificado por su ruta resuelta, no por nombre ni cámara. Conserva los tiempos y las otras fuentes. Enter/Save sigue guardando una toma; aplicar a toda la fuente requiere su botón específico.
+
+## Marca dentro de la duración
+
+Los assets de Montara se regeneran desde el símbolo SVG existente, sin palabra. Apertura/cierre dentro del contenido seleccionado (1,4 s en cada extremo), con audio continuo y watermark de símbolo. No se añaden los anteriores 20,2 segundos. Una imagen personal opaca conserva todo su fondo; un logo con alfa real se superpone al vídeo. Blanco/negro no se tratan como transparencia. Se aplica en la ruta ExportStage Stage/Push y en el Companion Stage; las aperturas editoriales propias de Show siguen siendo otra herramienta, sin sustituirlas silenciosamente.
+
 ## Validación
 
 En curso. No instalada hasta comprobar el recorrido Linux y revisar capturas. Motor: `9d4abf75126e64e84f89d8310fb146709c0a73e7`, descendiente de `affe97a4`; mixer conservado `f15ff91`.

@@ -85,6 +85,7 @@ def _apply_branding(mode: str, data_root: Path) -> dict:
         "logo_path": str(BRAND / "montara-logo.png"),
         "watermark_path": str(BRAND / "montara-watermark.png"),
         "intro_card": False,
+        "bookends": "within-content",
     }
     mine = data_root / "Branding" / "my-logo.png"
     if mode == "mine" and mine.is_file():
