@@ -14,8 +14,8 @@ if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) {
 }
 
 $port = 47820
-$home = Join-Path $env:LOCALAPPDATA "Montara-Companion"
-$null = New-Item -ItemType Directory -Path $home -Force
+$dataDir = Join-Path $env:LOCALAPPDATA "Montara-Companion"
+$null = New-Item -ItemType Directory -Path $dataDir -Force
 
 # Never stop another process using the port.
 $occupied = Get-NetTCPConnection -LocalAddress "127.0.0.1" -LocalPort $port -State Listen -ErrorAction SilentlyContinue
@@ -29,15 +29,15 @@ $icon = $null
 $timer = $null
 $menu = $null
 try {
-    $env:MONTARA_COMPANION_HOME = $home
+    $env:MONTARA_COMPANION_HOME = $dataDir
     $env:MONTARA_COMPANION_PORT = "$port"
     $launch = @{
         FilePath = $exe
         WorkingDirectory = (Split-Path -Parent $exe)
         WindowStyle = "Hidden"
         PassThru = $true
-        RedirectStandardOutput = (Join-Path $home "stdout.log")
-        RedirectStandardError = (Join-Path $home "stderr.log")
+        RedirectStandardOutput = (Join-Path $dataDir "stdout.log")
+        RedirectStandardError = (Join-Path $dataDir "stderr.log")
     }
     $child = Start-Process @launch
 
