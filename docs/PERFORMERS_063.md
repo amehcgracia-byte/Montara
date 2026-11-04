@@ -47,9 +47,11 @@ obtain automatic crops. A source explicitly marked Moving remains moving.
 ## Validation
 
 Pending final Linux journeys and installation. Local directed engine tests:
-58 passed (performer policy/API, crop/filter parity, automatic light, previews
-and hardware-decode guards). Local adapter/browser: 3 passed.
+59 passed (performer policy/API, crop/filter parity, automatic light, previews
+and hardware-decode guards). Local adapter/browser/FX: 7 passed.
 
 A private real 20-second dark stage excerpt was tested locally, without uploading
 media. Detection and crop contact sheet were inspected. The intentionally
 pixelated repository fixture is not an adequate quality benchmark for recognition.
+
+Pinned engine: `0fc0ceb40661acb622014fa75aba321483af1ae2`; prior `a13dc640` remains an ancestor. Swapping cameras clears the previous source’s performer coordinates.
