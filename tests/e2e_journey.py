@@ -129,17 +129,16 @@ def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
             page.locator('.frame .shot-edit').first.click()
             dialog.wait_for(state='visible')
             page.wait_for_function("[...document.querySelectorAll('dialog .music-flat img,dialog .music-spherical')].some(e=>!e.closest('[hidden]') && e.naturalWidth>0)",timeout=60000)
-            assert dialog.locator('.music-light').is_visible()
-            if mode!='push':assert dialog.locator('[name="lightAuto"]').is_checked()
-            dialog.locator('.light-original').click()
-            assert dialog.locator('.light-original').get_attribute('aria-pressed') == 'true'
-            dialog.locator('.light-original').click()
-            dialog.locator('[name="light"]').evaluate("e=>{e.value='0.05';e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));}")
-            page.screenshot(path=str(shots / "05b-light-controls.png"), full_page=True)
+            assert dialog.locator('.music-light').count()==0
+            before_light=page.request.get(url+'/api/v1/edit/shot?index=0').json()['light']
+            if mode!='push':assert before_light['auto'] is True
+            if dialog.locator('.music-flat').is_visible():
+                dialog.locator('.flat-zoom-row input').evaluate("e=>{e.value='1.25';e.dispatchEvent(new Event('input',{bubbles:true}));}")
+            page.screenshot(path=str(shots / "05b-framing-controls.png"), full_page=True)
             dialog.get_by_role('button', name='Save shot', exact=True).click()
             dialog.wait_for(state='detached', timeout=120_000)
             response = page.request.get(url + '/api/v1/edit/shot?index=0')
-            assert response.ok and response.json()['light']['light'] == .05
+            assert response.ok and response.json()['light']==before_light
         first = page.locator(".frame .swap:not([disabled])").first
         if first.count():
             before = page.locator(".frame .thumb img").first.get_attribute("src")

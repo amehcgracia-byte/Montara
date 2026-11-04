@@ -53,9 +53,9 @@ def main():
             assert not page.locator('#failed').is_visible(),page.locator('#errorText').inner_text()
             page.wait_for_function("!document.querySelector('#framesHint').textContent.includes('Preparing')",timeout=180000)
             page.locator('.frame .shot-edit').first.click();dialog=page.locator('dialog.cut-dialog')
-            dialog.wait_for(state='visible');assert dialog.locator('[name=lightAuto]').is_checked()
-            dialog.locator('[name=light]').evaluate("e=>{e.value='0.05';e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));}")
-            page.wait_for_timeout(1000);page.screenshot(path=str(out/'light-controls.png'),full_page=True)
+            dialog.wait_for(state='visible');assert dialog.locator('[name=lightAuto]').count()==0
+            dialog.locator('.flat-zoom-row input').evaluate("e=>{e.value='1.2';e.dispatchEvent(new Event('input',{bubbles:true}));}")
+            page.wait_for_timeout(1000);page.screenshot(path=str(out/'framing-controls.png'),full_page=True)
             dialog.get_by_role('button',name='Save shot',exact=True).click();dialog.wait_for(state='detached',timeout=120000)
             page.locator('#renderFrames').click()
             page.locator('#making #renderBars').wait_for(state='visible',timeout=120000)
@@ -92,7 +92,8 @@ def main():
                 original=Path(value);expected=media/original.name
                 assert expected.is_file() and '.small.' not in original.name
                 assert hashlib.sha256(original.read_bytes()).digest()==hashlib.sha256(expected.read_bytes()).digest()
-            assert any(s.get('video_light',{}).get('light')==.05 for s in recipe['recipe']['segments'])
+            assert any(s.get('flat_framing',{}).get('zoom')==1.2 for s in recipe['recipe']['segments'])
+            assert any(s.get('video_light',{}).get('auto') is True for s in recipe['recipe']['segments'])
             info=json.loads(run(['ffprobe','-v','error','-show_streams','-of','json',str(final)]))
             video=next(s for s in info['streams'] if s['codec_type']=='video');assert (video['width'],video['height'])==(1920,1080)
             run(['ffmpeg','-v','error','-i',str(final),'-f','null','-'])
