@@ -92,7 +92,8 @@ def main():
                 original=Path(value);expected=media/original.name
                 assert expected.is_file() and '.small.' not in original.name
                 assert hashlib.sha256(original.read_bytes()).digest()==hashlib.sha256(expected.read_bytes()).digest()
-            assert any(s.get('video_light',{}).get('light')==.05 for s in recipe['recipe']['segments'])
+            assert any(s.get('flat_framing',{}).get('zoom')==1.2 for s in recipe['recipe']['segments'])
+            assert any(s.get('video_light',{}).get('auto') is True for s in recipe['recipe']['segments'])
             info=json.loads(run(['ffprobe','-v','error','-show_streams','-of','json',str(final)]))
             video=next(s for s in info['streams'] if s['codec_type']=='video');assert (video['width'],video['height'])==(1920,1080)
             run(['ffmpeg','-v','error','-i',str(final),'-f','null','-'])
