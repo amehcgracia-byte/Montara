@@ -44,25 +44,12 @@ jobs:
         shell: pwsh
         run: |
           $dest = "dist/MontaraCompanion/bin"
-          New-Item -ItemType Directory -Force $dest | Out-Null
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
+          $choco = if ($env:ChocolateyInstall) { $env:ChocolateyInstall } else { "C:\ProgramData\chocolatey" }
+          $package = Join-Path $choco "lib\ffmpeg"
           foreach ($name in @("ffmpeg", "ffprobe")) {
-            # Chocolatey exposes .exe shims which cannot be moved in isolation.
-            # Pick the real application binary inside the package instead.
-            $choco = if ($env:ChocolateyInstall) { $env:ChocolateyInstall } else { "C:\\ProgramData\\chocolatey" }
-            $package = Join-Path $choco "lib/ffmpeg"
-            $real = @(Get-ChildItem -Path $package -Filter "$name.exe" -File -Recurse -ErrorAction SilentlyContinue |
-                Where-Object { $_.DirectoryName -match '[\\/]bin
-          Write-Host "TEST_COPY_ONLY: no distributable artifact uploaded"
-      - name: Exercise frozen EXE and proxy via localhost
-        shell: pwsh
-        run: |
-          python tests/windows_companion_packaged_smoke.py dist/MontaraCompanion/MontaraCompanion.exe
-          if ($LASTEXITCODE -ne 0) { throw "Windows packaged smoke failed" }
- } |
-                Select-Object -First 1)
-            if ($real.Count -ne 1) {
-              throw "Real $name.exe not found in Chocolatey FFmpeg package"
-            }
+            $real = @(Get-ChildItem -Path $package -Filter "$name.exe" -File -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Directory.Name -eq "bin" } | Select-Object -First 1)
+            if ($real.Count -ne 1) { throw "Real $name.exe not found in Chocolatey package $package" }
             Copy-Item -LiteralPath $real[0].FullName -Destination (Join-Path $dest "$name.exe") -Force
             & (Join-Path $dest "$name.exe") -version | Select-Object -First 1
             if ($LASTEXITCODE -ne 0) { throw "Bundled $name.exe failed" }
