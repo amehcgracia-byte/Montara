@@ -12,7 +12,7 @@ La preparación termina grupos de tres fotos y previews antes del siguiente grup
 
 Eliminado el modal de 30 minutos y su recarga. La actividad real del ratón/teclado y las tareas en marcha mantienen el laboratorio despierto; una pestaña abandonada no. El watchdog existente sigue apagando la VM sin trabajo. Los renders del wizard y workers de sesiones actualizan el latido aunque el navegador no esté abierto.
 
-La sesión se recupera mediante cronología del servidor, no un identificador antiguo de localStorage. La pestaña recuerda la edición/proyecto al refrescar y vuelve a su estado guardado sin relanzar el procesamiento. No convierte los resultados del companion en archivos del servidor: estos deben seguir disponibles donde se guardaron.
+La sesión se recupera mediante cronología del servidor, no un identificador antiguo de localStorage. La pestaña recuerda la edición/proyecto al refrescar y vuelve a su estado guardado sin relanzar el procesamiento. Los vídeos nativos conservan el identificador del trabajo, las referencias a originales y la carpeta elegida. Los terminados se indexan también en Companion para recuperarlos tras reiniciarlo; no se sube el vídeo final al servidor. Los archivos deben seguir disponibles en su carpeta.
 
 ## Retención del laboratorio
 
@@ -28,8 +28,8 @@ Selector de audio antes de editar, con Start/End aplicados a la petición de ree
 
 ## Marca dentro de la duración
 
-Los assets de Montara se regeneran desde el símbolo SVG existente, sin palabra. Apertura/cierre dentro del contenido seleccionado (1,4 s en cada extremo), con audio continuo y watermark de símbolo. No se añaden los anteriores 20,2 segundos. Una imagen personal opaca conserva todo su fondo; un logo con alfa real se superpone al vídeo. Blanco/negro no se tratan como transparencia. Se aplica en la ruta ExportStage Stage/Push y en el Companion Stage; las aperturas editoriales propias de Show siguen siendo otra herramienta, sin sustituirlas silenciosamente.
+Los assets de Montara se regeneran desde el símbolo SVG existente, sin palabra. Apertura/cierre dentro del contenido seleccionado (1,4 s en cada extremo), con audio continuo y watermark de símbolo. No se añaden los anteriores 20,2 segundos. Una imagen personal opaca conserva todo su fondo; un logo con alfa real se superpone al vídeo. Blanco/negro no se tratan como transparencia. Se aplica en la ruta ExportStage Stage/Push y en el Companion Stage (0.6.2, incluido logo personal validado como PNG de hasta 1600×1600); las aperturas editoriales propias de Show siguen siendo otra herramienta, sin sustituirlas silenciosamente.
 
 ## Validación
 
-En curso. No instalada hasta comprobar el recorrido Linux y revisar capturas. Motor: `9d4abf75126e64e84f89d8310fb146709c0a73e7`, descendiente de `affe97a4`; mixer conservado `f15ff91`.
+En curso. No instalada hasta comprobar el recorrido Linux y revisar capturas. Motor: `c32dfbcd1e492a10ad8f8ff93b67767c85973972`, descendiente de `affe97a4`; mixer conservado `f15ff91`.

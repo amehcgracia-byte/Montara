@@ -42,7 +42,9 @@ def run(manifest):
     p.data['settings']['export'].update(segment_workers=2)
     brand=Path(__file__).parent/'brand'
     state=root/'state';state.mkdir(exist_ok=True)
-    atomic_write_json(state/'config.json',{'branding':{'mode':'none' if body['branding']=='none' else 'default','logo_path':str(brand/'montara-logo.png'),'watermark_path':str(brand/'montara-watermark.png'),'intro_card':False,'bookends':'within-content'}})
+    config={'branding':{'mode':'none' if body['branding']=='none' else 'custom' if body['branding']=='mine' else 'default','logo_path':str(brand/'montara-logo.png'),'watermark_path':str(brand/'montara-watermark.png'),'intro_card':False,'bookends':'within-content'}}
+    if body.get('personal_logo'):config['personal_logo_path']=body['personal_logo']
+    atomic_write_json(state/'config.json',config)
     segments=[]
     for raw in recipe['segments']:
         key=raw['source'];path=str(sources[key]);r=next(r for r in records if r['path']==path)

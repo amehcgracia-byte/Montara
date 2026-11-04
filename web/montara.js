@@ -126,11 +126,17 @@ let introTimer = null;
 function finishIntro() {
   if (!$("#home").hidden) { resetFlow(); show("mode"); }
 }
+function rememberOpenEdit(id){
+  if(!state.projectId || ['home','mode','footage'].includes(id))return;
+  try {sessionStorage.setItem('montara-open-edit',JSON.stringify({
+    project:state.projectId,platform:state.platform,step:id,name:$('#videoName').value,
+    branding:state.branding,localProject:state.localProject,
+    nativeJob:state.nativeExport?.id || state.lastNativeJob,
+    files:state.files.filter(f=>f.path).map(({id,name,path,kind,small,original,projection})=>({id,name,path,kind,small,original,projection}))
+  }));} catch {}
+}
 function show(id) {
-  if(state.projectId && !['home','mode','footage'].includes(id)){
-    try {sessionStorage.setItem('montara-open-edit',JSON.stringify({project:state.projectId,platform:state.platform,step:id}));} catch {}
-  }
-
+  rememberOpenEdit(id);
   clearTimeout(introTimer);
   stopFrameHover();
   document.body.classList.toggle("is-intro", id === "home");
@@ -222,6 +228,7 @@ function resetFlow() {
   try {sessionStorage.removeItem('montara-open-edit');} catch {}
   stopPolling();
   state.localProject = null;
+  state.lastNativeJob=null;
   state.savedLocally = false;
   range.start = 0; range.end = null;
   state.platform = null;
@@ -1321,7 +1328,7 @@ class WorkCancelled extends Error {}
 const work = {generation:0, cancelled:false, cancelling:false, pending:new Set()};
 function beginWork() {
   if(work.cancelling)throw new Error('Wait for cancellation to finish.');
-  work.cancelled=false;
+  work.cancelled=false;state.lastNativeJob=null;
   return ++work.generation;
 }
 function checkWork(generation) {
@@ -2325,8 +2332,20 @@ async function finishOriginalVideo(s) {
     const master='montara-render-audio-'+crypto.randomUUID().replaceAll('-','')+'.audio';
     await montaraCompanion.saveInProject(state.localProject.id,master,await response.blob());
     if(job.cancelled)return;
-    job.startRequest=montaraCompanion.startVideo({project:state.localProject.id,recipe,master,originals:sources,branding:state.branding||'none',name:projectDownloadName().slice(0,-4)});
+    let logo=null;
+    if(state.branding==='mine'){
+      const image=await fetch('/montara/logo');if(!image.ok)throw new Error('Your logo is unavailable. Choose it again.');
+      logo='montara-render-logo-'+crypto.randomUUID().replaceAll('-','')+'.png';
+      await montaraCompanion.saveInProject(state.localProject.id,logo,await image.blob());
+      if(job.cancelled)return;
+    }
+    job.startRequest=montaraCompanion.startVideo({project:state.localProject.id,recipe,master,originals:sources,logo,branding:state.branding||'none',name:projectDownloadName().slice(0,-4)});
     job.id=await job.startRequest;
+    rememberOpenEdit('making');
+    await watchNativeVideo(job,s);
+  } catch(error){if(!job.cancelled){state.nativeExport=null;fail(error);}}
+}
+async function watchNativeVideo(job,s={}) {
     for(;;){
       if(job.cancelled){await montaraCompanion.cancelVideo(job.id);return;}
       const status=await montaraCompanion.videoStatus(job.id);
@@ -2340,10 +2359,9 @@ async function finishOriginalVideo(s) {
     }
     if(job.cancelled)return;
     renderShotBars({status:'done'});
-    state.nativeExport=null;
+    state.nativeExport=null;state.lastNativeJob=job.id;
     showResult({...s,result:{...s.result,native:true,url:montaraCompanion.videoUrl(job.id)}});
     $('#download').href=montaraCompanion.videoUrl(job.id,true);
-  } catch(error){if(!job.cancelled){state.nativeExport=null;fail(error);}}
 }
 
 // ---------- result ----------
@@ -2400,12 +2418,24 @@ if(savedEdit?.project){
   clearTimeout(introTimer);
   show('making');setProgress(0,'Opening your edit…','');
   (async()=>{
+    state.projectId=savedEdit.project;state.platform=savedEdit.platform;
+    state.localProject=savedEdit.localProject || null;
+    state.files=savedEdit.files || [];
+    state.branding=savedEdit.branding || state.branding;
+    $('#videoName').value=savedEdit.name || todayName();
+    if(savedEdit.nativeJob && ['making','result'].includes(savedEdit.step)){
+      await montaraCompanion.detect();
+      if(!montaraCompanion.info?.local_video)throw new Error('Open your Montara companion to resume this local video.');
+      const job={id:savedEdit.nativeJob,cancelled:false};state.nativeExport=job;
+      await watchNativeVideo(job);return;
+    }
     const current=await status();
     if(current.project_path!==savedEdit.project){show('home');return;}
     const project=await api('/project');
     state.projectId=current.project_path;state.platform=savedEdit.platform;
     $('#videoName').value=project.name || todayName();
-    state.files=[...(project.inputs?.videos||[]).map(f=>({id:crypto.randomUUID(),name:f.path.split('/').pop(),kind:'video',path:f.path})),...(project.inputs?.audio||[]).map(f=>({id:crypto.randomUUID(),name:f.path.split('/').pop(),kind:'master',path:f.path}))];
+    const remembered=new Map(state.files.map(f=>[f.path,f]));
+    state.files=[...(project.inputs?.videos||[]).map(f=>({id:crypto.randomUUID(),name:f.path.split('/').pop(),kind:'video',path:f.path,small:/\.small\.mp4$/i.test(f.path),...remembered.get(f.path)})),...((project.inputs?.master?.path?[project.inputs.master]:project.inputs?.audio)||[]).map(f=>({id:crypto.randomUUID(),name:f.path.split('/').pop(),kind:'master',path:f.path,...remembered.get(f.path)}))];
     if(['done','completed'].includes(current.status)){showResult(current);return;}
     if(current.status==='waiting_review'){await openFrames();return;}
     if(current.status==='waiting_show_review'){await openShowReview();return;}

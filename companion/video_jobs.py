@@ -31,6 +31,24 @@ def stop_process_tree(process):
 class VideoJobs:
     def __init__(self,home):
         self.home=Path(home)/'video';self.jobs={};self.lock=threading.Lock();self.slot=threading.Semaphore(1)
+        try:
+            saved=json.loads((self.home/'completed-jobs.json').read_text())
+            if not isinstance(saved,dict):saved={}
+            for token,row in saved.items():
+                if not re.fullmatch('[a-f0-9]{32}',token) or not isinstance(row,dict):continue
+                path=Path(row['path'])
+                if path.is_file() and path.stat().st_size>0:
+                    self.jobs[token]={'status':'ready','progress':1.,'path':path,'work':Path(row['work']),
+                                      'snapshot':Path(row['snapshot']),'download_name':row['download_name']}
+        except (OSError,ValueError,KeyError,TypeError):pass
+
+    def _save_completed(self):
+        rows={token:{k:str(job[k]) for k in ('path','work','snapshot','download_name')}
+              for token,job in self.jobs.items() if job['status']=='ready'}
+        self.home.mkdir(parents=True,exist_ok=True)
+        temporary=self.home/'completed-jobs.tmp'
+        temporary.write_text(json.dumps(dict(list(rows.items())[-30:])))
+        temporary.replace(self.home/'completed-jobs.json')
 
     def runtime(self):
         python=self.home/'venv/bin/python';marker=self.home/'ENGINE_COMMIT'
@@ -73,7 +91,19 @@ class VideoJobs:
             if not path or not Path(path).is_file() or Path(path).suffix.lower() not in {'.mp4','.mov','.m4v','.mts','.mkv','.avi','.webm'}:raise ValueError('An original video is unavailable. Reconnect its drive and retry.')
             source_files[key]=str(Path(path).resolve())
         branding=body.get('branding','none')
-        if branding not in ('none','montara'):raise ValueError('Native export with a personal logo is not available yet')
+        if branding not in ('none','montara','mine'):raise ValueError('Choose a logo option')
+        personal_logo=None
+        if branding=='mine':
+            name=body.get('logo')
+            if not isinstance(name,str) or not re.fullmatch(r'montara-render-logo-[a-f0-9]{32}\.png',name):raise ValueError('Send your logo before rendering')
+            logo=folder/name
+            if logo.is_symlink() or not logo.is_file() or not 0<logo.stat().st_size<=10*1024*1024:raise ValueError('The logo is unavailable')
+            import struct
+            with logo.open('rb') as handle:header=handle.read(24)
+            if len(header)!=24 or header[:8]!=b'\x89PNG\r\n\x1a\n' or header[12:16]!=b'IHDR':raise ValueError('Choose a PNG logo')
+            width,height=struct.unpack('>II',header[16:24])
+            if not 1<=width<=1600 or not 1<=height<=1600:raise ValueError('Resize your logo before rendering')
+            personal_logo=str(logo.resolve())
         with self.lock:
             if sum(j['status'] in ('queued','rendering') for j in self.jobs.values())>=2:raise ValueError('Wait for the current video export')
             token=uuid.uuid4().hex;work=folder/'.montara-renders'/token;work.mkdir(parents=True)
@@ -84,7 +114,7 @@ class VideoJobs:
             while output.exists() or output in reserved:
                 output=folder/(name+f' ({suffix}).mp4');suffix+=1
             progress=work/'progress.json'
-            manifest={'recipe':recipe,'source_files':source_files,'master':str(master),'branding':branding,'work':str(work),'output':str(output),'progress':str(progress)}
+            manifest={'personal_logo':personal_logo,'recipe':recipe,'source_files':source_files,'master':str(master),'branding':branding,'work':str(work),'output':str(output),'progress':str(progress)}
             (work/'render.json').write_text(json.dumps(manifest))
             for key in [k for k,j in self.jobs.items() if j['status'] in ('ready','failed','cancelled')][:-30]:self.jobs.pop(key)
             self.jobs[token]={'status':'queued','progress':0,'path':output,'work':work,'snapshot':progress,'download_name':name+'.mp4',
@@ -112,6 +142,8 @@ class VideoJobs:
                     if job['status']=='cancelled':return
                     if code or not job['path'].is_file():raise RuntimeError('The original-quality render failed. The diagnostic is saved in the project folder.')
                     job.update(status='ready',progress=1.)
+                    try:self._save_completed()
+                    except OSError:pass  # The finished video stays downloadable if the index cannot be written.
             except Exception as exc:
                 if job['status']!='cancelled':job.update(status='failed',error=str(exc)[:250])
 
