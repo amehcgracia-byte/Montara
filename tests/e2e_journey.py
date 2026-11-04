@@ -90,6 +90,8 @@ def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
     page.locator("#continueFootage").click()
     page.wait_for_selector("#cameras:not([hidden]), #making:not([hidden])", timeout=120_000)
     if page.locator("#cameras").is_visible():
+        if mode == "stage" and media != REAL:
+            page.locator("[data-camera-type]").first.select_option("fixed")
         page.wait_for_timeout(3000)  # 360 frame + preview
         page.screenshot(path=str(shots / "03-cameras.png"), full_page=True)
         page.locator("#continueCameras").click()

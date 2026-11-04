@@ -190,7 +190,35 @@ class SingleSongMix:
             })
         order = ["kick", "snare", "hh", "drums", "overhead", "bass", "guitar", "keys", "keys_l", "synth", "horn", "sax", "vocal"]
         tracks.sort(key=lambda t: (order.index(t["role"]) if t["role"] in order else len(order), t["name"].lower()))
-        return {"duration": state["segments"][0].duration, "target_lufs": plan.get("target_lufs", -14.0), "tracks": tracks}
+        return {"duration": state["segments"][0].duration, "target_lufs": plan.get("target_lufs", -14.0), "tracks": tracks, "instrument_activity": self._instrument_activity(plan, tracks)}
+
+    def _instrument_activity(self, plan, tracks):
+        """Reuse the auto-mix's one-second envelopes; no second audio scan.
+
+        Called only inside the existing serialized mixer operation. Unknown
+        instruments remain unknown (a horn track is not necessarily a sax).
+        """
+        import numpy as np
+        try:
+            analysis = self.pipeline.load_analysis_cache(Path(plan["analysis_cache_path"]))
+        except (KeyError, OSError, ValueError, RuntimeError):
+            return None
+        types = self._types([t['file'] for t in tracks])
+        supported = {'bass','keys','keys_l','keys_r','sax','guitar','guitar_electric','guitar_acoustic','drums','vocal'}
+        result = []
+        for track in tracks:
+            identity = (types.get(track['file']) or {}).get('type') or track['role']
+            if identity not in supported or track.get('active') is False or track.get('mute'):
+                continue
+            values = analysis.get('segment_envelopes', {}).get(track['file'])
+            if values is None or not len(values):
+                continue
+            values = np.asarray(values, dtype=float)[:21600]
+            if not np.all(np.isfinite(values)):
+                continue
+            result.append({'file':track['file'], 'role':identity,
+                           'db':np.round(np.clip(20*np.log10(np.maximum(values,1e-6)), -120,24),1).tolist()})
+        return {'source':'separate_tracks','interval_sec':1,'tracks':result[:32]} if result else None
 
     def effect_track(self, name: str, effect: str) -> Path:
         """Cache a wet-only track using the original mixer's fixed DSP, for preview and export."""
