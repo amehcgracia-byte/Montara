@@ -22,3 +22,7 @@ Convertir los componentes W3L–W3O en **una carpeta portable verificable**, que
 ## Estado
 
 CI [41934811721](https://github.com/amehcgracia-byte/Montara/actions/runs/41934811721) **pendiente** en la primera consulta. No declarar W3P PASS antes de comprobar `W3P_PACKAGE_AUDIT_PASS` y que la ejecución completa termina en verde.
+
+## Resultado del CI
+
+**W3P AUDIT PASS**: [run 41934811721](https://github.com/amehcgracia-byte/Montara/actions/runs/41934811721) se completó con conclusión **success** para el commit `0c2fde3a4d06e89489b0fc10376966e610c999f8`. Los pasos de preparación/auditoría del paquete, parser del lanzador, terminación de árboles con FFmpeg activo y API/proxy empaquetado terminaron correctamente. **No** se publicó ningún artefacto ni binario. El resultado cubre los contenidos de la carpeta temporal de GitHub, no una entrega instalada por un usuario.
