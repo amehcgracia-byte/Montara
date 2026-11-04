@@ -40,6 +40,18 @@ jobs:
           if (-not (Test-Path "dist/MontaraCompanion/MontaraCompanion.exe")) { throw "EXE missing" }
           $bytes = (Get-ChildItem dist/MontaraCompanion -Recurse -File | Measure-Object -Sum Length).Sum
           Write-Host "PACKAGED_FOLDER_MB:" ([math]::Round($bytes/1MB, 1))
+      - name: Bundle FFmpeg tools for isolated smoke only
+        shell: pwsh
+        run: |
+          $dest = "dist/MontaraCompanion/bin"
+          New-Item -ItemType Directory -Force $dest | Out-Null
+          foreach ($name in @("ffmpeg", "ffprobe")) {
+            $command = Get-Command $name -CommandType Application -ErrorAction Stop
+            Copy-Item -LiteralPath $command.Source -Destination (Join-Path $dest "$name.exe") -Force
+            & (Join-Path $dest "$name.exe") -version | Select-Object -First 1
+            if ($LASTEXITCODE -ne 0) { throw "Bundled $name.exe failed" }
+          }
+          Write-Host "TEST_COPY_ONLY: no distributable artifact uploaded"
       - name: Exercise frozen EXE and proxy via localhost
         shell: pwsh
         run: |
