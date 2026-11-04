@@ -6,9 +6,9 @@ El diálogo Edit conserva la cámara, encuadre, zoom, orientación 360 y aplicar
 
 Un encuadre plano ampliado abre suavemente; un general se acerca. Es un movimiento relativo de 6% dentro del área elegida, sin alejarse más allá de esa selección ni añadir paneos al azar. Preview y export usan la misma receta. Estos recortes no se amplían a un intermedio 4K para hacer el pequeño movimiento. Se invalidan las previews/segmentos de la receta anterior.
 
-Editor: `a19fded506c586acdf7e458d0423b009f030b93e`, descendiente de `3ff470ee`, mediante su rama activa. Mixer `f15ff91` sin cambios. No se copia una rama experimental de Fernando.
+Editor: `a13dc640ad9b6995b36b3a9f0c6011d20d4e6885`, descendiente de `3ff470ee`, mediante su rama activa. Mixer `f15ff91` sin cambios. No se copia una rama experimental de Fernando.
 
-Validación local: 40 tests de luz/encuadre/previews aprobados; después 13 de encuadre, incluidos dos renders FFmpeg reales que comprueban el sentido del movimiento por el tamaño del objetivo en el primer/último frame. Regresión de revisión por grupos de tres en navegador aprobada. Aceptación Linux e instalación pendientes.
+Validación local: 40 tests de luz/encuadre/previews aprobados; después 14 de encuadre, incluidos tres renders FFmpeg reales que comprueban el sentido del movimiento por el tamaño del objetivo en el primer/último frame. Regresión de revisión por grupos de tres en navegador aprobada. Aceptación Linux e instalación pendientes.
 
 ## Personas y solos: trabajo separado, todavía no activado
 
