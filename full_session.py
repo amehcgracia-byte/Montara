@@ -118,6 +118,21 @@ def register_full_session(app, data_root, fixtures):
             raise
         return jsonify(public(data)), 202
 
+    @app.get('/montara/session/latest')
+    def latest_session():
+        # Server-owned chronology, not a stale id from one browser/device.
+        candidates = sorted(root.glob('*/session.json'), key=lambda p: p.stat().st_mtime_ns, reverse=True)
+        for path in candidates:
+            if not re.fullmatch('[a-f0-9]{12}', path.parent.name) or path.parent.is_symlink():
+                continue
+            try:
+                data = read(path.parent)
+                if data.get('id') == path.parent.name:
+                    return jsonify(public(data))
+            except (OSError, ValueError, KeyError):
+                continue
+        return error('No saved session.', 404)
+
     @app.get('/montara/session/<job_id>')
     def session_status(job_id):
         try:

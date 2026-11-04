@@ -1,9 +1,11 @@
 /* Optional Stage session flow; the single-song journey stays unchanged. */
 const fullSession = { id: null, active: false, data: null, busy: false };
-try { $('#sessionResume').hidden = !localStorage.getItem('montara-session'); } catch { /* private storage unavailable */ }
+api('/montara/session/latest').then(()=>{$('#sessionResume').hidden=false;}).catch(()=>{});
 $('#sessionResume').onclick = async () => {
   try {
-    fullSession.id = localStorage.getItem('montara-session');
+    const latest=await api('/montara/session/latest');
+    fullSession.id=latest.id;
+    try {localStorage.setItem('montara-session',latest.id);} catch {}
     fullSession.localProgress = {}; fullSession.localResults = [];
     fullSession.active = true;
     show('sessionReview'); $('#sessionSongs').hidden = false; clearSessionResults();
@@ -779,3 +781,13 @@ function drawSessionResults(data, blobs = {}) {
     }
   }
 }
+
+// Keep the exact session through a refresh; no rerun of detection or mixing.
+addEventListener('pagehide',()=>{
+  try {if(fullSession.active && fullSession.id)sessionStorage.setItem('montara-open-session',fullSession.id);else sessionStorage.removeItem('montara-open-session');} catch {}
+});
+document.addEventListener('DOMContentLoaded',()=>{
+  try {if(sessionStorage.getItem('montara-open-session') && !sessionStorage.getItem('montara-open-edit')){
+    clearTimeout(introTimer);state.platform='youtube';$('#sessionResume').click();
+  }} catch {}
+});

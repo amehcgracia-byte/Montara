@@ -318,3 +318,14 @@ def test_empty_tracks_are_not_sent_or_mixed_and_can_be_brought_back(tmp_path):
     assert c.post('/montara/session/abcdefabcdef/include', json={'file': 'Bass.wav'}).json['empty_tracks'] == []
     assert not (work / 'songs').exists()
     assert c.post('/montara/session/abcdefabcdef/include', json={'file': 'Bass.wav'}).status_code == 400
+
+
+def test_latest_session_comes_from_server_not_old_browser_pointer(tmp_path):
+    c=client(tmp_path)
+    root=tmp_path/'data'/'Sessions'
+    for name,stamp in [('a'*12,100),('b'*12,200)]:
+        work=root/name;work.mkdir(parents=True)
+        path=work/'session.json';path.write_text(json.dumps({'id':name,'status':'done','songs':[],'results':[]}));os.utime(path,(stamp,stamp))
+    assert c.get('/montara/session/latest').json['id']=='b'*12
+    (root/('b'*12)/'session.json').write_text('bad')
+    assert c.get('/montara/session/latest').json['id']=='a'*12

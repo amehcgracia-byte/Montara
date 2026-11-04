@@ -161,7 +161,7 @@ async function openMusicShot(index){
     };field('camera').onchange=()=>{flatUI?.set({zoom:1,x:.5,y:.5});setLight(doc.choices[Number(field('camera').value)].light);update();};
     ['light','shadows'].forEach(n=>{field(n).oninput=showLightLabels;field(n).onchange=update;});field('lightAuto').onchange=update;
     dialog.querySelector('.light-original').onclick=e=>{showOriginal=!showOriginal;e.target.setAttribute('aria-pressed',String(showOriginal));e.target.textContent=showOriginal?'Show corrected':'Show original';update();};update();
-    dialog.querySelector('.actions button[type=button]').onclick=()=>dialog.close();dialog.onclose=()=>dialog.remove();dialog.querySelector('form').onsubmit=async e=>{e.preventDefault();try{await showPatch('/edit/shot',{project_id:doc.project_id,revision:doc.revision,index,choice:Number(field('camera').value),yaw:Number(field('yaw').value),pitch:Number(field('pitch').value),fov:Number(field('fov').value),flat_framing:flatUI?.get(),...(doc.platform==='youtube'?{video_light:lightValue(),light_scope:field('lightCamera').checked?'camera':'shot'}:{})});dialog.close();await refreshMusicReview();await loadMusicCuts();$('#musicCutStatus').textContent='Shot saved.';}catch(error){dialog.querySelector('.cut-error').textContent=error.message;}};document.body.append(dialog);dialog.showModal();
+    dialog.querySelector('.actions button[type=button]').onclick=()=>dialog.close();dialog.onclose=()=>{sphericalImage.src='';flatUI?.destroy();dialog.remove();};dialog.querySelector('form').onsubmit=async e=>{e.preventDefault();try{await showPatch('/edit/shot',{project_id:doc.project_id,revision:doc.revision,index,choice:Number(field('camera').value),yaw:Number(field('yaw').value),pitch:Number(field('pitch').value),fov:Number(field('fov').value),flat_framing:flatUI?.get(),...(doc.platform==='youtube'?{video_light:lightValue(),light_scope:field('lightCamera').checked?'camera':'shot'}:{})});dialog.close();await refreshMusicReview();await loadMusicCuts();$('#musicCutStatus').textContent='Shot saved.';}catch(error){dialog.querySelector('.cut-error').textContent=error.message;}};document.body.append(dialog);dialog.showModal();
   }catch(error){$('#musicCutStatus').textContent=error.message;}
 }
 document.addEventListener('montara:show-scene',renderCutTimelines);
@@ -171,5 +171,6 @@ function previewMusicShot(index){
 }
 
 async function refreshMusicReview(){
-  await refreshFrames(true);clearInterval(state.framesPoll);state.framesPoll=setInterval(()=>{if($('#frames').hidden){clearInterval(state.framesPoll);state.framesPoll=null;return;}refreshFrames(false).catch(console.warn);},1500);
+  await refreshFrames(true);
+  if(state.framesPending)pollFrames();
 }
