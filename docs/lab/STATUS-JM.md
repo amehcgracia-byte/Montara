@@ -1,10 +1,10 @@
 # STATUS — laboratorio de Chema (main · claude/* · codex/*)
 
-Actualizado: 2026-11-03 · lo mantiene el equipo de Chema · 40 líneas como máximo, se sobrescribe.
+Actualizado: 2026-11-04 · lo mantiene el equipo de Chema · 40 líneas como máximo, se sobrescribe.
 
 - `mixer`: rama `claude/winds-synth-bass-lowpass` (ZuckerMixer PR #8, **sin mergear en master**); Montara fija `f15ff91` (limitador suave, PR Mixer #9)
 - VM: e2-standard-8, `jm` en `127.0.0.1:8101`, `fer` en `:8102`; apagado automático (60 min sin web, 120 min sin SSH)
-- Companion **0.6.1 instalado en el Mac**: mixer `f15ff91` conservado y renderizador Stage opcional `affe97a`; sin modelos de IA.
+- Companion **0.6.2 instalado en el Mac**: mixer `f15ff91` conservado, renderizador Stage `3ff470ee`; logo propio y resultados terminados recuperables tras reinicio; sin modelos nuevos de IA.
 
 ## Sesión completa (jam entera) — cómo va
 | Pieza | PR |
@@ -28,13 +28,13 @@ Actualizado: 2026-11-03 · lo mantiene el equipo de Chema · 40 líneas como má
 - Con ficha propia: percusión, guitarra acústica, trompeta, trombón, flauta, violín, cuerdas, coros, voz de podcast y narración. El resto usa el rol tal cual.
 - Pendiente: detección por audio (hoy por nombre o por la elección de la persona); fichas para más instrumentos; afinarlas de oído con jams reales.
 ## Pendiente
-- **0.60 instalada JM (`5a65f50`)**: cancelación confirmada (servidor/local/cola), cuadrados por plano desde originales y descarga con nombre de proyecto (#70, Editor #52). Luz, originales y Atrás/Adelante de 0.59 conservados. Cinco recorridos Linux aprobados en `41620201927`, capturas revisadas; reproducción H.264 aceptada con Chrome oficial. Ver `docs/CANCEL_AND_PROGRESS_060.md`.
+- **0.61 instalada JM (`58e4134`)**: revisión de frames por grupos de tres y consulta única, luz/imagen de Edit en caché, Push vertical con rango de audio, ajustes por fuente, logos dentro de la duración y recuperación al refrescar (#72, Editor #53). Cinco recorridos Linux aprobados en `41806669269`, capturas revisadas. Cancelación, progreso por plano y descarga con nombre de proyecto de 0.60 conservados. Ver `docs/FRAME_REVIEW_061.md`.
 - Vídeos por lote para canciones ya mezcladas y dos cámaras iguales con zoom según encuadre: revisión y aceptación pendientes en `docs/PENDIENTES_CAMARAS_Y_LOTES.md`.
 - **Mezcla en el Mac (companion 0.5.1, opcional, #59)**: `install.sh --mixer` instala el mezclador del servidor en el Mac (171 MB); cada canción se mezcla allí y solo sube el MP3. Salida idéntica bit a bit a la del servidor en el test. **Medido el 01-11 en el Mac de Chema (MacBook Pro 13" Intel i7, 4 núcleos), jam de 1h56 con 9 pistas: 12 de 12 canciones con `local: true`, 47,5 min de música en 12,4 min (entre 32 y 91 s por canción, unos 16 s por minuto), frente a la estimación de 140 min subiendo los originales al servidor.** Una canción a la vez (`MONTARA_COMPANION_MIX_SLOTS=1`); falta probar con 2 y confirmar por oído. Informe de Fer: `JUPITER_COMPANION_MAC_LOCAL_MIX_FEASIBILITY_2026-11-01.md`.
 - Licencias: Matchering (GPLv3, de terceros) solo se usa en el servidor; el mezclador del Mac no lo instala.
 - Mergear ZuckerMixer PR #8 en master.
 - El fallo de canciones cortadas o vacías del #48: arreglado el fallo de la cola (#52); falta confirmarlo con `deploy/vm/audio_check.py` en una sesión real.
-- Cola de render para unos 10 testers (VM más grande y luego workers bajo demanda): sin empezar.
+- Retención automática VM a 60 GB ocupados: conserva último/abierto/activo/reciente/pinned y ejemplos; carpeta común JM/FER `/srv/montara-lab/media`. Colaboración web/móvil: diseño en `docs/SHARED_MEDIA_AND_PROJECTS.md`, sin cuentas ni enlaces implementados; cola para 10 testers pendiente.
 - Caché del companion sin límite; barras locales ya disponibles en el 0.6.0 instalado.
 - `run_history.py` ya registra reparto por cámara y segundos 360 (`5fe4880`); falta el manifest del ensayo histórico de 628,2 s, no recuperable de la fila antigua.
 - Cambiar las contraseñas web de la VM que pasaron por chat (sin confirmar).

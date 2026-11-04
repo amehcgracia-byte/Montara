@@ -32,4 +32,6 @@ Los assets de Montara se regeneran desde el símbolo SVG existente, sin palabra.
 
 ## Validación
 
-En curso. No instalada hasta comprobar el recorrido Linux y revisar capturas. Motor: `3ff470eeac992e29e8cdd98ef41a631f72369d2b`, descendiente de `affe97a4`; mixer conservado `f15ff91`.
+Aceptación Linux completa aprobada en los cinco trabajos de [41806669269](https://github.com/amehcgracia-byte/Montara/actions/runs/41806669269): Stage, Push, Mix, sesión (incluido Companion nativo, navegación y recuperación) y contenedor privado. Capturas revisadas. PR Montara #72 integrada en main `58e4134`; Editor #53 integrado en su rama activa, sin modificar su main. Companion 0.6.2 instalado en el Mac y JM actualizado. Verificación HTTP autenticada: versión 0.61/58e4134, scripts nuevos, engine 3ff470ee y mixer f15ff91; retención habilitada en el servicio. VM reencendida y página abierta mediante el túnel privado estable http://127.0.0.1:8101/. No es una publicación pública de Vercel.
+
+Pruebas locales adicionales: cuatro exportaciones reales de logos con duración/audio/píxeles comprobados; recuperación de resultado nativo tras reiniciar Companion; 18 comprobaciones de cancelación/retención. Editor Fast mantiene 22 fallos preexistentes contrastados con la base, 1316 aprobadas y ningún fallo nuevo; Slow aprobado. No se afirma que toda la batería del Editor esté verde. Motor: `3ff470eeac992e29e8cdd98ef41a631f72369d2b`, descendiente de `affe97a4`; mixer conservado `f15ff91`.

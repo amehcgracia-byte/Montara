@@ -51,3 +51,11 @@ Una línea por acción de administrador (`sudo`). Sin contraseñas, tokens ni ll
 | 2026-11-04 | Codex/JM | Chema: biblioteca compartida de pruebas | Un `sudo bash`: creado grupo montara-media y directorio compartido `/srv/montara-lab/media` (2770), añadidos JM y FER al grupo; no se movieron ni borraron originales ni se reinició FER. |
 
 | 2026-11-04 | Codex/JM | Chema: carpeta común de ensayos | Un `sudo bash`: comprobado acceso lectura/escritura/recorrido con `runuser` para JM y FER; ambos OK. Sin acceso a sus archivos ni cambios de servicio. |
+
+| 2026-11-04 | Codex/JM | Chema: actualización 0.61 | `sudo -u jm`: preflight de solo lectura; checkout limpio, cero procesos multimedia y sesiones bloqueadas, wizard done; nada reiniciado. |
+| 2026-11-04 | Codex/JM | Chema: actualización 0.61 | `sudo -u jm`: segundo preflight inmediatamente antes de instalar; mismos resultados, trabajo del usuario conservado. |
+| 2026-11-04 | Codex/JM | Chema: actualización 0.61 | `sudo -H -u jm bash`: fetch previo al despliegue; detenido por comprobación de referencia origin/main antigua, antes de checkout o reinicio. |
+| 2026-11-04 | Codex/JM | Chema: actualización 0.61 | `sudo -H -u jm git log`: diagnóstico de solo lectura de origin/main; confirmada referencia antigua; FER intacto. |
+| 2026-11-04 | Codex/JM | Chema: actualización 0.61 | `sudo -H -u jm bash`: fetch con refspec explícito, fast-forward main 58e4134, submódulos fijados y user_install offline; reiniciado solo JM:8101, retención 60 GB habilitada. |
+| 2026-11-04 | Codex/JM | Chema: actualización 0.61 | `sudo -u jm`: verificación autenticada HTTP/version/scripts/pines y configuración de retención tras instalar; sin tocar proyectos ni FER. |
+| 2026-11-04 | Codex/JM | Chema: abrir versión nueva | Primer intento de verificación SSH no llegó a ejecutarse: VM TERMINATED. `montara-start` la encendió y reutilizó el túnel; segunda verificación sudo registrada arriba completada. Página 0.61 abierta, Companion 0.6.2 verificado; FER no reiniciado por nosotros. |
