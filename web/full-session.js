@@ -1,6 +1,6 @@
 /* Optional Stage session flow; the single-song journey stays unchanged. */
 const fullSession = { id: null, active: false, data: null, busy: false };
-api('/montara/session/latest').then(()=>{$('#sessionResume').hidden=false;}).catch(()=>{});
+if(typeof api==='function')api('/montara/session/latest').then(()=>{$('#sessionResume').hidden=false;}).catch(()=>{});
 $('#sessionResume').onclick = async () => {
   try {
     const latest=await api('/montara/session/latest');

@@ -337,7 +337,7 @@ function audioUrl(f) {
   return f.path ? `/montara/audio?path=${encodeURIComponent(f.path)}` : "";
 }
 function openSongRange() {
-  rangeSourcesList = state.platform === "youtube" ? audioTracks().filter((f) => audioUrl(f)) : [];
+  rangeSourcesList = ["youtube","reel"].includes(state.platform) ? audioTracks().filter((f) => audioUrl(f)) : [];
   $("#songRange").hidden = !rangeSourcesList.length;
   if (!rangeSourcesList.length) return;
   const select = $("#rangeTrack");
@@ -345,8 +345,10 @@ function openSongRange() {
   select.innerHTML = rangeSourcesList.map((f, i) => `<option value="${i}">${escapeHtml(f.name)}</option>`).join("");
   select.value = String(preferred >= 0 ? preferred : 0);
   select.hidden = rangeSourcesList.length < 2;
+  $("#songRange .hint").textContent=state.platform==='reel' ? "Choose the part of your audio for this reel." : "Play the song and mark where the video starts and ends.";
+  $("#rangeReset").textContent=state.platform==='reel' ? "First "+$("#reelDuration").value+" seconds" : "Whole song";
   const url = audioUrl(rangeSourcesList[Number(select.value)]);
-  if ($("#rangeAudio").dataset.url !== url) { $("#rangeAudio").src = url; $("#rangeAudio").dataset.url = url; }
+  if ($("#rangeAudio").dataset.url !== url) { range.start=0;range.duration=0;range.end=state.platform==='reel'?Number($("#reelDuration").value):null; $("#rangeAudio").src = url; $("#rangeAudio").dataset.url = url; }
   drawRange();
 }
 function drawRange() {
@@ -363,11 +365,12 @@ $("#rangeTrack").addEventListener("change", () => {
   audio.src = url; audio.dataset.url = url;
   audio.addEventListener("loadedmetadata", () => { audio.currentTime = t; }, { once: true });
 });
-$("#rangeAudio").addEventListener("loadedmetadata", () => { range.duration = $("#rangeAudio").duration || 0; drawRange(); });
+$("#rangeAudio").addEventListener("loadedmetadata", () => { range.duration = $("#rangeAudio").duration || 0; if(state.platform==='reel')range.end=Math.min(range.duration,range.start+Number($("#reelDuration").value));drawRange(); });
 $("#rangeAudio").addEventListener("timeupdate", drawRange);
 $("#rangeStart").addEventListener("click", () => {
   range.start = $("#rangeAudio").currentTime || 0;
-  if (range.end !== null && range.end <= range.start + 1) range.end = null;
+  if(state.platform==='reel')range.end=Math.min(range.duration||Infinity,range.start+Number($("#reelDuration").value));
+  else if (range.end !== null && range.end <= range.start + 1) range.end = null;
   drawRange();
 });
 $("#rangeEnd").addEventListener("click", () => {
@@ -375,10 +378,17 @@ $("#rangeEnd").addEventListener("click", () => {
   if (t <= range.start + 1) return toast("Mark the end after the start.", true);
   range.end = t; drawRange();
 });
-$("#rangeReset").addEventListener("click", () => { range.start = 0; range.end = null; drawRange(); });
+$("#rangeReset").addEventListener("click", () => { range.start = 0; range.end = state.platform==='reel'?Math.min(range.duration||Infinity,Number($("#reelDuration").value)):null; drawRange(); });
 $("#rangeBar").addEventListener("click", (e) => {
   const audio = $("#rangeAudio"), d = range.duration || audio.duration || 0, box = $("#rangeBar").getBoundingClientRect();
-  if (d) audio.currentTime = Math.max(0, Math.min(d, ((e.clientX - box.left) / box.width) * d));
+  if(d){
+    const at=Math.max(0,Math.min(d,((e.clientX-box.left)/box.width)*d));
+    if(state.platform==='reel'){
+      range.start=Math.min(at,Math.max(0,d-Number($('#reelDuration').value)));
+      range.end=Math.min(d,range.start+Number($('#reelDuration').value));
+      audio.currentTime=range.start;drawRange();
+    }else audio.currentTime=at;
+  }
 });
 
 // ---------- companion: offer it on a Mac, notice when it starts ----------
@@ -696,7 +706,7 @@ async function registerProject() {
     $("#continueFootage").disabled = false;
   }
   if (state.platform === "show") return makeShow();
-  const needsCameras = videos().length > 0;
+  const needsCameras = videos().length > 0 && (state.platform!=='reel' || audioTracks().length || videos().some(isSphere));
   if (!needsCameras) return afterCameras();
   renderCameras();
   openSongRange();
@@ -706,6 +716,9 @@ async function registerProject() {
 // ---------- cameras & 360 viewpoints ----------
 function cameraTypeOf(f){return f.cameraType || (isSphere(f)?'360':(state.roles[f.path] || guessRole(f))==='fixed_rear'?'fixed':'moving');}
 function renderCameras() {
+  $('#cameras>h2').textContent=state.platform==='reel'?'Your reel':'Your cameras';
+  $('#cameras>.lead').hidden=state.platform==='reel';
+  $('#cameraList').hidden=state.platform==='reel';
   $('#cameraList').innerHTML=videos().map((f,index)=>`<div class="cam"><span class="kind video">${String(index+1).padStart(2,'0')}</span><span class="name">${escapeHtml(f.name)}</span><span class="camsel"><label>Camera type<select data-camera-type="${escapeHtml(f.path)}" aria-label="Camera type for ${escapeHtml(f.name)}">${[['360','360'],['fixed','Fixed camera'],['moving','Moving camera']].map(([value,label])=>`<option value="${value}" ${cameraTypeOf(f)===value?'selected':''}>${label}</option>`).join('')}</select></label></span></div>`).join('');
   $$('[data-camera-type]').forEach(select=>select.onchange=()=>{const f=videos().find(v=>v.path===select.dataset.cameraType);f.cameraType=select.value;if(select.value!=='360')state.roles[f.path]=select.value==='fixed'?'fixed_rear':'handheld';renderCameras();});
   const spheres=videos().filter(isSphere);
@@ -1335,8 +1348,8 @@ async function make() {
   await workRequest(generation,"/wizard/start", {
     project_id: state.projectId, name, platform, ...data,
     reel_duration_sec: platform === "reel" ? Number($("#reelDuration").value) : undefined,
-    trim_start_sec: platform === "youtube" && range.start > 0 ? range.start : undefined,
-    trim_end_sec: platform === "youtube" && range.end !== null ? range.end : undefined,
+    trim_start_sec: ["youtube","reel"].includes(platform) && range.start > 0 ? range.start : undefined,
+    trim_end_sec: ["youtube","reel"].includes(platform) && range.end !== null ? range.end : undefined,
     reel_aspect: platform === "reel" ? engineReelFormat() : undefined,
     reel_mix_vertical_ratio: platform === "reel" ? (reelFormat() === "mix" ? $("#mixShare").value : "auto") : undefined,
   });
@@ -1625,10 +1638,12 @@ async function updateFrames(first) {
       thumb.onkeydown = (event) => { if (event.target === thumb && ["Enter", " "].includes(event.key)) { event.preventDefault(); startFrameHover(thumb); } };
     });
   }
-  for (const item of items) {
+  for (const item of all) {
     const fig = grid.querySelector(`[data-index="${item.index}"]`);
+    if(!fig)continue;
     const img = fig.querySelector("img");
     const thumb = fig.querySelector(".thumb");
+    fig.classList.toggle("reel-frame",state.platform==='reel');
     if(item.preview_error){const label=thumb.querySelector(".hover-status");label.textContent="Preview unavailable · Edit to change camera";label.hidden=false;}
     // The thumbnail changes when a shot is swapped: use it to version the preview URL.
     const preview = item.preview || `/api/v1/wizard/review/preview/${item.index}?v=${encodeURIComponent(item.thumbnail || "")}`;
@@ -1647,7 +1662,7 @@ async function updateFrames(first) {
     }
     fig.querySelector(".src").textContent=label;
     if(!item.thumbnail)img.hidden=true;
-    fig.classList.toggle("busy", !item.thumbnail || swapping.has(item.index));
+    fig.classList.toggle("busy", !item.thumbnail || (!item.preview_ready && !item.preview_error) || swapping.has(item.index));
     fig.querySelector(".dur").textContent = `${Number(item.duration_sec).toFixed(1)} s`;
     fig.querySelector(".swap").disabled = item.candidate_count !== undefined && item.candidate_count < 2;
   }
@@ -1667,7 +1682,7 @@ async function swap(index) {
   }
   clearInterval(state.framesPoll);
   pollFrames();
-  await refreshFrames(false);
+  await refreshFrames(true);
   await loadMusicCuts();
 }
 

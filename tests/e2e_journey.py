@@ -60,6 +60,9 @@ BRANDING = {"stage": "montara", "push": "none", "mix": "montara"}
 
 def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
     started = time.monotonic()
+    # This journey exercises the server path. The separate native journey covers
+    # the companion; an installed Mac helper must not open a system folder picker.
+    page.route('http://127.0.0.1:47820/**', lambda route: route.abort())
     shots = out / mode
     shots.mkdir(parents=True, exist_ok=True)
     page.goto(url)
