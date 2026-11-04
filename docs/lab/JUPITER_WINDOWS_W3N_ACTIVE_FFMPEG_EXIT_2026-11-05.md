@@ -21,3 +21,7 @@ W3M comprobó el cierre del árbol de procesos padre/hijo con un hijo Python fic
 **Próximo gate:** validar resultado del CI; luego diseñar política segura y testeable de recuperación de archivos pendientes sin borrar trabajos de otra instancia. La experiencia de usuario definitiva (app sin consola/instalador firmado) sigue pendiente; cualquier prueba visual real se hará como aceptación final y no como paso de depuración repetitivo.
 
 **Regla:** sin releases ni binarios FFmpeg distribuidos; revisar licencias y firma antes de publicar.
+
+## Resultado real (GitHub Actions)
+
+**W3N PASS:** [Windows runner 41933549150](https://github.com/amehcgracia-byte/Montara/actions/runs/41933549150) finalizó **completed/success**. El paso `Stop active synthetic FFmpeg on simulated tray exit` superó el experimento con FFmpeg vivo, y continuaron en verde la prueba del cierre padre/hijo, el parser del lanzador y el circuito HTTP del ejecutable empaquetado. Esto **no demuestra** todavía la parada de un job que se haya iniciado realmente desde `/proxies` con un usuario pulsando el menú de bandeja.
