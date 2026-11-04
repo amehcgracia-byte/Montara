@@ -124,7 +124,7 @@ def main():
                 print("WARNING: packaged EXE did not stop within 10s", flush=True)
             print("---- COMPANION LOG (tail) ----", flush=True)
             if log.exists():
-                print(log.read_text(encoding="utf-8", errors="replace")[-2400:], flush=True)
+                print(log.read_text(encoding="utf-8", errors="replace")[-2400:].encode("ascii", "backslashreplace").decode("ascii"), flush=True)
 
 
 if __name__ == "__main__":
