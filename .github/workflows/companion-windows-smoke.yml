@@ -5,6 +5,7 @@ on:
     paths:
       - 'companion/**'
       - 'tests/windows_companion_packaged_smoke.py'
+      - 'tests/windows_companion_process_tree_smoke.py'
       - '.github/workflows/companion-windows-smoke.yml'
   workflow_dispatch:
 
@@ -56,6 +57,11 @@ jobs:
             Write-Host ($versionLines | Select-Object -First 1)
           }
           Write-Host "TEST_COPY_ONLY: no distributable artifact uploaded"
+      - name: Stop Windows video worker and descendants safely
+        shell: pwsh
+        run: |
+          python tests/windows_companion_process_tree_smoke.py
+          if ($LASTEXITCODE -ne 0) { throw "Windows process-tree smoke failed" }
       - name: Exercise frozen EXE and proxy via localhost
         shell: pwsh
         run: |
