@@ -7,6 +7,7 @@ on:
       - 'tests/windows_companion_packaged_smoke.py'
       - 'tests/windows_companion_process_tree_smoke.py'
       - 'tests/windows_companion_active_ffmpeg_exit_smoke.py'
+      - 'tests/windows_companion_package_audit.py'
       - '.github/workflows/companion-windows-smoke.yml'
   workflow_dispatch:
 
@@ -58,6 +59,13 @@ jobs:
             Write-Host ($versionLines | Select-Object -First 1)
           }
           Write-Host "TEST_COPY_ONLY: no distributable artifact uploaded"
+      - name: Prepare and audit portable laboratory folder
+        shell: pwsh
+        run: |
+          Copy-Item -LiteralPath "companion/windows_tray.ps1" -Destination "dist/MontaraCompanion/windows_tray.ps1"
+          python tests/windows_companion_package_audit.py dist/MontaraCompanion
+          if ($LASTEXITCODE -ne 0) { throw "W3P package audit failed" }
+          Write-Host "W3P_TEST_PACKAGE_NOT_UPLOADED"
       - name: Parse hidden Windows tray launcher
         shell: pwsh
         run: |
