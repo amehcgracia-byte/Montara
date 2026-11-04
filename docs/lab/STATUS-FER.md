@@ -8,6 +8,12 @@ Actualizado: **2026-11-04** · Rama `fernando/continuacion-montara` · laborator
 - **W3C Windows parcial:** `/health` y `/locate` HTTP 200, pero `/proxies` timeout 100 s; **W3D** confirma comando FFmpeg directo exit 0 y `make_proxy` bloqueado 20 s por lectura secuencial de stdout/stderr. Fix `7964645` y test regresión `d92c5e8`. **W3E Windows PASS**: test saturación 0,707 s; `make_proxy` real `ready` en 0,31 s, proxy 169.608 bytes (36 % de original sintético), limpieza OK. [Informe W3](JUPITER_COMPANION_WINDOWS_W3B_W3E_2026-11-04.md).
 - **W3F–W3H Windows PASS (04-11):** tras fix pipe, API HTTP completa 200/202/ready/descarga. W3F detectó falta de transfer/primaries BT.709; W3G confirmó que FFmpeg `setparams` las añade; patch `6858afa` y tests `cca1bce` en PR draft. W3H nativo desde `cca1bce`: proxy HTTP **159.816 bytes**, 0,2 s, H.264 640×360 30 fps, **las tres etiquetas BT.709 presentes**, Companion detenido, laboratorio limpio. [Evidencia ampliada](JUPITER_COMPANION_WINDOWS_W3B_W3E_2026-11-04.md). CI del último commit pendiente de confirmación.\n- **Siguiente:** selector Windows «Aceptar» y comprobación de raíces; después prototipo de arranque de un clic e instalación mínima. Quedan USB, HDR/GPU/Stage, integración cliente real; sin merge.
 
+## Windows W3I–W3K · selector y bandeja · 04-11
+- W3I PASS: 10 raíces, 5 existentes, 1 unidad; selector Windows con «Aceptar» y carpeta válida.
+- W3J PASS: lanzador CMD y `/health` Companion 0.6.2, FFmpeg disponible; local_video/local_mix no habilitados.
+- W3K PASS local comunicado: arranque sin consola, icono de bandeja, estado y salida operativos. **Prototipo PowerShell dependiente de Python 3.11 y FFmpeg instalados; no instalador independiente**. [Informe W3I–W3K](JUPITER_COMPANION_WINDOWS_W3I_W3K_2026-11-04.md).
+- Siguiente: empaquetado one-folder sin requerir Python de usuario, revisión de gestión de procesos y licencias FFmpeg; PR #74 sigue draft, sin merge.
+
 ## Hito de cierre 04-11 · JÚPITER EX-14H-21–24
 - **CERRADA y publicada** la investigación sobre EX-07/EX-13, tiempos de Stage, caché de color y branding: [informe reproducible](JUPITER_EX14H21_24_CLOSURE_2026-11-04.md). No se solicita merge.
 - Motor de referencia JM 0.61 `3ff470ee`; worktree opt-in de pruebas `f305961` aislado, **sin tocar `main`, pin de motor ni servicios JM**. 35 tests focalizados PASS.
