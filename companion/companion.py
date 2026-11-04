@@ -137,7 +137,7 @@ def walk_root(root: Path) -> None:
     # time budget as the originating locate request; never follow junctions.
     deadline = time.monotonic() + SEARCH_BUDGET_SEC if sys.platform == "win32" else None
     try:
-        for folder, dirs, files in os.walk(root, followlinks=False):
+        for folder, dirs, files in os.walk(root):
             if deadline is not None and time.monotonic() >= deadline:
                 break
             dirs[:] = [d for d in dirs if not d.startswith(".") and d not in SKIP_DIRS
