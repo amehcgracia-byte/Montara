@@ -1,5 +1,15 @@
 # STATUS — laboratorio de Fernando
-Actualizado: **2026-11-03** · Rama `fernando/continuacion-montara` · laboratorio / investigación; **no producción**.
+Actualizado: **2026-11-04** · Rama `fernando/continuacion-montara` · laboratorio / investigación; **no producción**.
+
+
+## Hito de cierre 04-11 · JÚPITER EX-14H-21–24
+- **CERRADA y publicada** la investigación sobre EX-07/EX-13, tiempos de Stage, caché de color y branding: [informe reproducible](JUPITER_EX14H21_24_CLOSURE_2026-11-04.md). No se solicita merge.
+- Motor de referencia JM 0.61 `3ff470ee`; worktree opt-in de pruebas `f305961` aislado, **sin tocar `main`, pin de motor ni servicios JM**. 35 tests focalizados PASS.
+- EX21C/21D: renders móviles 360 de 3 s, 90 poses cada uno, cuatro ejecuciones A–B–B–A por escena: ahorro wall **23.40 %** (`pull_out`) y **19.28 %** (`pan_right`) con MP4 byte a byte idénticos. Cortes 360 reales inferiores a 2 s: estáticos por política editorial, sin speedup E2E demostrado.
+- EX22A: mapas con EX-07 solo **31.96 %** menos tiempo; EX-13 solo **26.13 %**; ambas **46.74 %** (dos rondas, equivalencia exacta en 90 poses). Prueba solo geométrica, no render.
+- EX24F: Stage 114.7103 s; reloj interno 95.611 s; análisis color 19.0875 s fuera del interno. EX24L: 84.1019 s y salida 12.0 s usando branding integrado y caché de segmentos privada; EX24F con bookends externos duró 32.2 s y los dos bookends costaron 27.817 s. **Comparación exploratoria**, no prometer mejora general. Branding integrado ya existía en motor JM.
+- Caché de color v6→v7 deliberada en `4dee4a6`; no fallo demostrado. EX24F escribió en caché global de segmentos FER por referencia importada; EX24L corrigió aislamiento de las rutas utilizadas. `export.log` muestra saltos de línea literales `\\n`. No modificar caché histórica ni tocar el motor sin PR selectiva.
+- **Siguiente fase:** retomar prioridades globales con Chema (Companion Windows, propuesta relink/local y F4 según estado vigente), sin encadenar nuevas pruebas EX-24 por inercia. El render local opcional Mac ya existe; no duplicarlo.
 
 ## Bases verificadas (escafandra 2026-11-03)
 - Montara `main=8c7b54f` (versión JM 0.60 instalada en `5a65f50`); fija `engine=affe97a4`, `mixer=f15ff91`. Nuestro laboratorio sigue con `engine=ff9baf4` para ensayos controlados.
