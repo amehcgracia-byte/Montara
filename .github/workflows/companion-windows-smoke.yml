@@ -8,6 +8,7 @@ on:
       - 'tests/windows_companion_process_tree_smoke.py'
       - 'tests/windows_companion_active_ffmpeg_exit_smoke.py'
       - 'tests/windows_companion_package_audit.py'
+      - 'tests/windows_companion_tray_lifecycle_smoke.py'
       - '.github/workflows/companion-windows-smoke.yml'
   workflow_dispatch:
 
@@ -77,6 +78,11 @@ jobs:
             throw "Windows tray launcher syntax invalid"
           }
           Write-Host "WINDOWS_TRAY_SYNTAX_PASS"
+      - name: Exercise actual tray event loop with packaged EXE
+        shell: pwsh
+        run: |
+          python tests/windows_companion_tray_lifecycle_smoke.py dist/MontaraCompanion
+          if ($LASTEXITCODE -ne 0) { throw "Windows tray lifecycle failed" }
       - name: Stop Windows video worker and descendants safely
         shell: pwsh
         run: |
