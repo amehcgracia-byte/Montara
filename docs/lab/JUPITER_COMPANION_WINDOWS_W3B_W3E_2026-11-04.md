@@ -56,3 +56,26 @@ Ejecutada con código exacto del commit `d92c5e88f1cffdd58fd7af0c2904b1e7ab702cc
 4. No editar `engine/`, `mixer/` ni servicios existentes de JM.
 
 **Documentación de laboratorio: no solicitud de merge automático.**
+
+
+## Actualización W3F–W3H · HTTP Windows y metadatos de color (04-11-2026)
+
+**W3F, commit `d92c5e8`:** con Windows 10/Python 3.11.9 y un vídeo sintético de 2 s (475.402 bytes) finalizó el circuito HTTP `/health` 200 → `/locate` 200 → `/proxies` 202 → `working`→`ready` 0,2 s → descarga `/proxies/{id}/file` HTTP 200 de 169.608 bytes. FFprobe detectó H.264, 640×360, 30/1 fps y `color_space=bt709`, **pero `color_transfer` y `color_primaries` estaban ausentes**. Por ello el test integral W3F terminó en aserción fallida de color aunque el transporte y el proxy funcionaban; Companion se detuvo y el laboratorio se conservó.
+
+**W3G, diagnóstico focalizado:** el original sintético no declaraba etiquetas de color; el proxy antiguo solo indicaba rango TV y espacio BT.709. Un FFmpeg aislado con `setparams=range=tv:color_primaries=bt709:color_trc=bt709:colorspace=bt709` produjo las **tres** etiquetas. Hallazgo reproducible en este FFmpeg Windows, sin afirmar equivalencia visual o HDR.
+
+**Fix de color en PR #74:** commit `6858afa` añade `setparams` en la cadena software cuando el plan es SDR o el HDR tiene ruta de tonemapping; commit `cca1bce` añade tres tests de regresión unitarios (SDR, HDR sin tonemap y HDR con tonemap). Nota: las opciones de salida BT.709 ya existían en el motor. Este cambio **etiqueta fotogramas; no certifica una transformación de gamut real en todas las entradas**. La rama sigue draft y CI de `cca1bce` está pendiente en la última consulta.
+
+**W3H, commit exacto `cca1bceffcf5e5c35475becb3aea37861499e71b`: PASS Windows nativo con laboratorio limpio.**
+
+| Validación | Evidencia |
+|---|---|
+| `/health`, `/locate` | HTTP 200 ambos |
+| `/proxies` | HTTP 202, `working → ready`, FFmpeg 0,2 s |
+| Descarga de proxy | HTTP 200; 159.816 bytes |
+| FFprobe | H.264; 640×360; 30/1 fps |
+| Color | `color_space=bt709`, `color_transfer=bt709`, `color_primaries=bt709` |
+| Cierre | Companion detenido y laboratorio limpiado |
+| Resultado consola | `W3H_WINDOWS_BT709_PASS` |
+
+**Alcance confirmado:** circuito HTTP+proxy nativo Windows **PASS** con original sintético SDR. Pendientes: selector de carpeta con «Aceptar», medio extraíble, instalación ligera, posibles encoders GPU, HDR real y cliente web real. No se ha fusionado la PR, instalado servicio ni editado producción.
