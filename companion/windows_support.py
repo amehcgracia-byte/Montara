@@ -73,6 +73,6 @@ def choose_folder(prompt):
             return Path(selected) if selected else None
         finally:
             root.destroy()
-    except (ImportError, RuntimeError, OSError):
+    except Exception:
         # No graphical desktop / Tk not installed. Never silently select HOME.
         return None
