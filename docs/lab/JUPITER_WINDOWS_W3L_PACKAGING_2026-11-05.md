@@ -40,3 +40,9 @@ La primera prueba utilizaba FFmpeg del PATH del runner; el EXE empaquetado no ne
 - Commit `b956b56`: recoge primero toda la salida de `-version` y solo después muestra la primera línea. CI Windows [41932220683](https://github.com/amehcgracia-byte/Montara/actions/runs/41932220683) **aún en ejecución en última consulta**. No afirmar PASS de FFmpeg empaquetado sin `WINDOWS_PACKAGED_SMOKE_PASS`.
 
 **Licencia pendiente:** el mantenedor de los binarios Gyan declara todos los builds estáticos de su web **GPLv3**; FFmpeg diferencia licencia LGPL por defecto de componentes GPL opcionales. Antes de redistribuir el ZIP/instalador deberá evaluarse el conjunto concreto de componentes, obligaciones de código fuente, créditos y avisos legales con revisión jurídica. Fuentes: https://www.gyan.dev/ffmpeg/builds/ y https://ffmpeg.org/legal.html. El CI copia binarios solo para prueba, **no los publica**.
+
+## Resultado final del experimento de herramientas embebidas: PASS
+
+El CI [Windows `41932220683`](https://github.com/amehcgracia-byte/Montara/actions/runs/41932220683) terminó en **SUCCESS** en commit `b956b566916d5b9a98dbf2864338c4bce089af3b`. Tanto la fase **Bundle FFmpeg tools for isolated smoke only** como **Exercise frozen EXE and proxy via localhost** completaron **success**. El test lanzó el EXE empaquetado con PATH del hijo restringido a System32, mientras `ffmpeg.exe` y `ffprobe.exe` se encontraban en `bin/` junto a la aplicación. Se confirmó así que el circuito HTTP y el proxy sintético funcionan con las herramientas proporcionadas en el paquete experimental, sin recurrir al FFmpeg global del runner.
+
+**Resultado limitado:** máquina virtual GitHub `windows-latest`, vídeo sintético SDR de 2 s, sin interfaz de usuario ni pruebas HDR/GPU. Los binarios solo se copiaron para este CI; **no se publicaron artifacts, instaladores ni releases**. Licencias, tamaño del paquete final y firma/distribución pendientes.
