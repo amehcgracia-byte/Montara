@@ -64,6 +64,12 @@ def main():
             "MONTARA_COMPANION_PORT": str(port),
             "MONTARA_COMPANION_ROOTS": str(root),
         })
+        # Prove the packaged EXE is not silently using the runner's FFmpeg.
+        # Keep the Windows system directory for OS helpers and DLL resolution.
+        env["PATH"] = str(Path(os.environ["SystemRoot"]) / "System32")
+        assert (exe.parent / "bin" / "ffmpeg.exe").is_file()
+        assert (exe.parent / "bin" / "ffprobe.exe").is_file()
+        print("PACKAGED_FFMPEG_PATH_ISOLATED", flush=True)
         base = f"http://127.0.0.1:{port}"
         log = root / "companion.log"
         with log.open("wb") as out:
