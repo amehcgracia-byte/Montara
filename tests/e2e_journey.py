@@ -60,6 +60,9 @@ BRANDING = {"stage": "montara", "push": "none", "mix": "montara"}
 
 def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
     started = time.monotonic()
+    # This journey exercises the server path. The separate native journey covers
+    # the companion; an installed Mac helper must not open a system folder picker.
+    page.route('http://127.0.0.1:47820/**', lambda route: route.abort())
     shots = out / mode
     shots.mkdir(parents=True, exist_ok=True)
     page.goto(url)
@@ -111,11 +114,23 @@ def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
     if page.locator("#frames").is_visible():
         page.wait_for_function("!document.querySelector('#framesHint').textContent.includes('Preparing')", timeout=300_000)
         page.screenshot(path=str(shots / "05-frames.png"), full_page=True)
-        if mode in {"stage", "mix"}:
+        if mode == 'push':
+            assert page.locator('#songRange').evaluate('e=>!e.hidden')
+            assert page.locator('#cameraList').evaluate('e=>e.hidden')
+            assert page.locator('.frame .thumb').first.evaluate('e=>e.clientHeight>e.clientWidth')
+            page.wait_for_function("document.querySelector('.frame img').naturalHeight>document.querySelector('.frame img').naturalWidth")
+        if mode in {"stage", "mix", "push"}:
             page.locator(".frame .shot-edit").first.click()
             dialog = page.locator("dialog.cut-dialog")
             dialog.wait_for(state="visible")
-            assert dialog.locator('[name="lightAuto"]').is_checked()
+            page.wait_for_function("[...document.querySelectorAll('dialog .music-flat img,dialog .music-spherical')].some(e=>!e.closest('[hidden]') && e.naturalWidth>0)",timeout=60000)
+            dialog.get_by_role('button',name='Cancel',exact=True).click()
+            dialog.wait_for(state='detached')
+            page.locator('.frame .shot-edit').first.click()
+            dialog.wait_for(state='visible')
+            page.wait_for_function("[...document.querySelectorAll('dialog .music-flat img,dialog .music-spherical')].some(e=>!e.closest('[hidden]') && e.naturalWidth>0)",timeout=60000)
+            assert dialog.locator('.music-light').is_visible()
+            if mode!='push':assert dialog.locator('[name="lightAuto"]').is_checked()
             dialog.locator('.light-original').click()
             assert dialog.locator('.light-original').get_attribute('aria-pressed') == 'true'
             dialog.locator('.light-original').click()
@@ -162,6 +177,11 @@ def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
         return {"mode": mode, "passed": False, "error": page.locator("#errorText").inner_text()}
     page.wait_for_timeout(1500)
     page.screenshot(path=str(shots / "07-result.png"))
+    saved_project=page.request.get(url+'/api/v1/wizard/status').json()['project_path']
+    page.reload()
+    page.locator('#result').wait_for(state='visible',timeout=60000)
+    assert page.request.get(url+'/api/v1/wizard/status').json()['project_path']==saved_project
+    page.screenshot(path=str(shots/'08-result-restored.png'))
     # HTTP also exercises a real container/private host; never read its disk paths.
     response = page.request.get(url + "/api/v1/wizard/status")
     assert response.ok

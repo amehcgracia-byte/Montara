@@ -53,6 +53,7 @@ cat > "$HOME/.config/systemd/user/montara.service" <<UNIT
 Description=Montara ($(whoami), $branch) on 127.0.0.1:$port
 [Service]
 WorkingDirectory=$root
+Environment=MONTARA_RETENTION_USED_GB=60
 EnvironmentFile=$conf/env
 ExecStart=$root/.venv/bin/gunicorn --bind 127.0.0.1:$port --workers 1 --threads 8 --timeout 1800 --access-logfile - --access-logformat '%%(t)s %%(m)s %%(U)s %%(s)s %%(b)s %%(L)ss' deploy.entry:app
 Restart=on-failure

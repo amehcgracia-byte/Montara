@@ -45,3 +45,9 @@ Una línea por acción de administrador (`sudo`). Sin contraseñas, tokens ni ll
 | 2026-11-03 | Codex | Chema | Final JM preflight: clean checkout, zero active media workers and no locked audio sessions; FER untouched. |
 | 2026-11-03 | Codex | Chema | Existing montara-update installed main 662c06a (0.59 plus browser history #69) for JM only, service 8101; no FER or global FFmpeg changes. |
 | 2026-11-03 | Codex | Chema | Authenticated post-update version/HTML/script verification: 0.59, engine 5877eacb, mixer f15ff91c; companion 0.6.0 verified separately on the Mac. |
+
+| 2026-11-04 | Codex/JM | Chema: diagnóstico y limpieza | `sudo -u jm`: inventario de disco y diagnose.py, solo lectura; 48 GiB usados, 49 libres, datos JM ~28 GiB; sin borrar ni alterar FER. |
+
+| 2026-11-04 | Codex/JM | Chema: biblioteca compartida de pruebas | Un `sudo bash`: creado grupo montara-media y directorio compartido `/srv/montara-lab/media` (2770), añadidos JM y FER al grupo; no se movieron ni borraron originales ni se reinició FER. |
+
+| 2026-11-04 | Codex/JM | Chema: carpeta común de ensayos | Un `sudo bash`: comprobado acceso lectura/escritura/recorrido con `runuser` para JM y FER; ambos OK. Sin acceso a sus archivos ni cambios de servicio. |

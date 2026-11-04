@@ -116,3 +116,30 @@ def test_native_http_ranges_and_origin_boundaries(tmp_path,monkeypatch):
             assert r.read()==b'0123456789' and 'attachment' in r.headers['Content-Disposition']
             assert r.headers['Content-Disposition'].endswith('Montara.Notetaker.mp4')
     finally:server.shutdown();server.server_close();thread.join(timeout=3)
+
+
+def test_personal_transparent_logo_renders_locally_without_extra_seconds(tmp_path):
+    from PIL import Image
+    home=tmp_path/'companion';target,sha=install_layout(home)
+    folder=tmp_path/'project';folder.mkdir()
+    source=folder/f'montara-render-source-{uuid.uuid4().hex}.mp4'
+    master=folder/f'montara-render-audio-{uuid.uuid4().hex}.audio'
+    subprocess.run(['ffmpeg','-v','error','-y','-f','lavfi','-i','color=blue:s=320x180:r=30:d=4','-c:v','libx264',str(source)],check=True)
+    subprocess.run(['ffmpeg','-v','error','-y','-f','lavfi','-i','sine=duration=4','-f','wav',str(master)],check=True)
+    logo=folder/f'montara-render-logo-{uuid.uuid4().hex}.png'
+    image=Image.new('RGBA',(64,64),(0,0,0,0));image.paste((255,0,0,255),(16,16,48,48));image.save(logo)
+    manager=VideoJobs(home);project='a'*16
+    body={'project':project,'master':master.name,'recipe':recipe(sha),'originals':[{'source':0,'asset':source.name}],'branding':'mine','logo':logo.name,'name':'Personal'}
+    with pytest.raises(ValueError):manager.start({**body,'logo':'../private.png'},{project:folder},lambda _:None)
+    token=manager.start(body,{project:folder},lambda _:None)
+    deadline=time.monotonic()+180
+    while manager.status(token)['status'] not in ('ready','failed') and time.monotonic()<deadline:time.sleep(.2)
+    assert manager.status(token)['status']=='ready',(manager.status(token),(folder/'.montara-renders'/token/'render.log').read_text()[-2000:])
+    output=manager.output(token)
+    info=json.loads(subprocess.check_output(['ffprobe','-v','error','-show_format','-of','json',str(output)]))
+    assert abs(float(info['format']['duration'])-4)<.08
+    reopened=VideoJobs(home)
+    assert reopened.status(token)['status']=='ready' and reopened.output(token)==output
+    raw=subprocess.check_output(['ffmpeg','-v','error','-ss','0.1','-i',str(output),'-frames:v','1','-vf','scale=192:108','-f','rawvideo','-pix_fmt','rgb24','-'])
+    frame=np.frombuffer(raw,np.uint8).reshape(108,192,3)
+    assert frame[10,10,2]>150 and frame[54,96,0]>150

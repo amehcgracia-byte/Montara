@@ -81,6 +81,9 @@ def main():
             with urlopen(page.locator('#download').get_attribute('href'),timeout=120) as download:
                 assert 'Native%20acceptance.mp4' in download.headers['Content-Disposition']
             result=page.request.get(result_url,headers={'Origin':url,'Range':'bytes=0-1023'});assert result.status==206
+            page.reload();page.locator('#result').wait_for(state='visible',timeout=60000)
+            assert page.locator('#resultVideo').get_attribute('src')==result_url
+            page.screenshot(path=str(out/'native-result-restored.png'),full_page=True)
             # This branch bypasses the old server export rather than rendering twice.
             status=page.request.get(url+'/api/v1/wizard/status').json();assert not status.get('result')
             jobs=list((chosen/'.montara-renders').glob('*/render.json'));assert len(jobs)==1

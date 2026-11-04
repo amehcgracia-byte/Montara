@@ -42,7 +42,7 @@ SAMPLE_SETS = {
 }
 DEFAULT_DATA = Path.home() / "MontaraData"
 # Shown at the bottom of every page, so it is obvious which build is running.
-MONTARA_VERSION = "0.60 · 2026-11-03 · Cancel reliably and show original-quality shot progress"
+MONTARA_VERSION = "0.61 · 2026-11-04 · Responsive frame review and saved sessions"
 
 
 def _build_label() -> str:
@@ -85,6 +85,7 @@ def _apply_branding(mode: str, data_root: Path) -> dict:
         "logo_path": str(BRAND / "montara-logo.png"),
         "watermark_path": str(BRAND / "montara-watermark.png"),
         "intro_card": False,
+        "bookends": "within-content",
     }
     mine = data_root / "Branding" / "my-logo.png"
     if mode == "mine" and mine.is_file():
@@ -113,6 +114,8 @@ def create_montara_app(data_root: Path = DEFAULT_DATA, samples: bool = True):
     bind_editor_callbacks()
     app = create_app(project_path=saved_project, dev=False)
     register_editor_state(app)
+    from retention import start as start_retention
+    start_retention(app, data_root)
     # Swap the interface: same engine API, Montara's own pages.
     from show_library import register_show_library
     register_show_library(app, data_root)
@@ -163,6 +166,10 @@ def create_montara_app(data_root: Path = DEFAULT_DATA, samples: bool = True):
         except OSError:
             pass
         return None
+
+    @app.post("/montara/activity")
+    def montara_activity():
+        return "", 204
 
     @app.before_request
     def montara_raw_camera_guard():
