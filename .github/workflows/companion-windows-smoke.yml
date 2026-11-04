@@ -6,6 +6,7 @@ on:
       - 'companion/**'
       - 'tests/windows_companion_packaged_smoke.py'
       - 'tests/windows_companion_process_tree_smoke.py'
+      - 'tests/windows_companion_active_ffmpeg_exit_smoke.py'
       - '.github/workflows/companion-windows-smoke.yml'
   workflow_dispatch:
 
@@ -73,6 +74,11 @@ jobs:
         run: |
           python tests/windows_companion_process_tree_smoke.py
           if ($LASTEXITCODE -ne 0) { throw "Windows process-tree smoke failed" }
+      - name: Stop active synthetic FFmpeg on simulated tray exit
+        shell: pwsh
+        run: |
+          python tests/windows_companion_active_ffmpeg_exit_smoke.py
+          if ($LASTEXITCODE -ne 0) { throw "Active FFmpeg lifecycle smoke failed" }
       - name: Exercise frozen EXE and proxy via localhost
         shell: pwsh
         run: |
