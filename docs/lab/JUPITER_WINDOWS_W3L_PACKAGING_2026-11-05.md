@@ -31,3 +31,12 @@ La primera prueba utilizaba FFmpeg del PATH del runner; el EXE empaquetado no ne
 4. Probar en máquina Windows limpia y con usuario final; PR requiere revisión JM, CI y acuerdo explícito para merge.
 
 **Política:** no producción, no servicios JM, no publicar paquetes como releases.
+
+
+## Seguimiento de CI de FFmpeg embebido (05-11)
+
+- Commit `f59d531`: intento de copiar el ejecutable FFmpeg resuelto en PATH. **FAIL** del CI porque la ruta apuntaba a un *shim* de Chocolatey, cuya ruta relativa deja de ser válida al copiarlo.
+- Commit `955f0a2`: localizar el ejecutable verdadero dentro del paquete Chocolatey. El primer parche produjo un YAML truncado; se reemplazó por un YAML completo y verificado en `ad14ae0`. La prueba de empaquetado llegó a copiar y ejecutar FFmpeg 9.0.2, pero falló la verificación del código de salida al canalizar `-version` a `Select-Object -First 1`.
+- Commit `b956b56`: recoge primero toda la salida de `-version` y solo después muestra la primera línea. CI Windows [41932220683](https://github.com/amehcgracia-byte/Montara/actions/runs/41932220683) **aún en ejecución en última consulta**. No afirmar PASS de FFmpeg empaquetado sin `WINDOWS_PACKAGED_SMOKE_PASS`.
+
+**Licencia pendiente:** el mantenedor de los binarios Gyan declara todos los builds estáticos de su web **GPLv3**; FFmpeg diferencia licencia LGPL por defecto de componentes GPL opcionales. Antes de redistribuir el ZIP/instalador deberá evaluarse el conjunto concreto de componentes, obligaciones de código fuente, créditos y avisos legales con revisión jurídica. Fuentes: https://www.gyan.dev/ffmpeg/builds/ y https://ffmpeg.org/legal.html. El CI copia binarios solo para prueba, **no los publica**.
