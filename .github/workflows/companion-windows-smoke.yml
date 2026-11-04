@@ -57,6 +57,17 @@ jobs:
             Write-Host ($versionLines | Select-Object -First 1)
           }
           Write-Host "TEST_COPY_ONLY: no distributable artifact uploaded"
+      - name: Parse hidden Windows tray launcher
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile("companion/windows_tray.ps1", [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -ne 0) {
+            $errors | ForEach-Object { Write-Host $_ }
+            throw "Windows tray launcher syntax invalid"
+          }
+          Write-Host "WINDOWS_TRAY_SYNTAX_PASS"
       - name: Stop Windows video worker and descendants safely
         shell: pwsh
         run: |
