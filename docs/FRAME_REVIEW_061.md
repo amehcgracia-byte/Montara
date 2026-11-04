@@ -32,4 +32,4 @@ Los assets de Montara se regeneran desde el símbolo SVG existente, sin palabra.
 
 ## Validación
 
-En curso. No instalada hasta comprobar el recorrido Linux y revisar capturas. Motor: `c32dfbcd1e492a10ad8f8ff93b67767c85973972`, descendiente de `affe97a4`; mixer conservado `f15ff91`.
+En curso. No instalada hasta comprobar el recorrido Linux y revisar capturas. Motor: `3ff470eeac992e29e8cdd98ef41a631f72369d2b`, descendiente de `affe97a4`; mixer conservado `f15ff91`.
