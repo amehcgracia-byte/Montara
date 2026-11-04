@@ -19,3 +19,9 @@ GitHub Actions no sustituye una sesión interactiva del usuario. Aunque el test 
 ## Estado
 
 Prueba CI [41935284051](https://github.com/amehcgracia-byte/Montara/actions/runs/41935284051) **pendiente de resultado** al crear este informe. No declarar W3Q PASS final hasta la revisión del estado CI y la aceptación visual local.
+
+## Resultado automático W3Q
+
+La primera ejecución CI [41935284051](https://github.com/amehcgracia-byte/Montara/actions/runs/41935284051) detectó un fallo de PowerShell que la prueba puramente sintáctica no había encontrado: la variable `$home` entra en conflicto con la variable automática de PowerShell `$HOME` (nombres insensibles a mayúsculas). Se corrigieron sus cinco usos a `$dataDir` en commit `265dfe4`.
+
+**W3Q-LIFECYCLE PASS:** el runner Windows [41935447237](https://github.com/amehcgracia-byte/Montara/actions/runs/41935447237), commit `265dfe407463ae4c1fcfd9ba3cc5558d2c85fb82`, finalizó **completed/success**. El paso `Exercise actual tray event loop with packaged EXE` quedó verde: WinForms ejecutó su event loop, lanzó el binario empaquetado, detectó `/health`, realizó salida normal y dejó libre el puerto local. Volvieron a pasar las pruebas de FFmpeg y proxy. **Queda pendiente la aceptación visual por una persona en Windows 10 y las obligaciones de distribución/licencia.**
