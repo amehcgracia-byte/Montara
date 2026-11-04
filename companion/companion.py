@@ -377,6 +377,7 @@ def make_proxy(key: str) -> None:
     if target.is_file() and target.stat().st_size:
         job.update(status="ready", progress=1.0, bytes=target.stat().st_size)
         return
+    pending = None
     try:
         p = audio_plan(probe(source)) if is_audio(source) else plan(probe(source))
         if p.get("skip"):
@@ -384,6 +385,10 @@ def make_proxy(key: str) -> None:
             log(f"skip {source.name}: {p['skip']}")
             return
         pending = output_path(key, pending=True)
+        # A previous forced exit can leave an incomplete .part file. A new
+        # job for the same key exclusively owns this path; discard only that
+        # partial before starting FFmpeg, never a completed proxy or original.
+        pending.unlink(missing_ok=True)
         if p.get("audio"):
             job.update(info={k: p[k] for k in ("codec", "bits", "channels")})
             if key.endswith("p"):
@@ -431,6 +436,13 @@ def make_proxy(key: str) -> None:
             f"({p['duration'] / max(elapsed, 0.1):.1f}x real time)")
     except Exception as error:  # reported to the page, which then uploads the original
         job.update(status="failed", error=str(error)[:300])
+        # On a normal FFmpeg failure, remove only this job's incomplete output.
+        # Hard kills cannot execute this handler; the next retry cleans it.
+        if pending is not None:
+            try:
+                pending.unlink(missing_ok=True)
+            except OSError as cleanup_error:
+                log(f"partial cleanup failed for {source.name}: {cleanup_error}")
         log(f"failed {source.name}: {error}")
     finally:
         job.pop("process", None)
