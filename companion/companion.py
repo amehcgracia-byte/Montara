@@ -335,6 +335,11 @@ def proxy_command(source: Path, target: Path, p: dict, hardware: bool = False) -
             chain += ["zscale=t=linear:npl=100", "format=gbrpf32le", "zscale=p=bt709",
                       "tonemap=tonemap=hable:desat=0", "zscale=t=bt709:m=bt709:r=tv"]
         chain.append("format=yuv420p")
+        # Windows FFmpeg/libx264 may not write all three BT.709 tags from
+        # output options alone. Tag the actual SDR frames in the filtergraph.
+        # Do not label unconverted HDR as SDR when tone mapping is unavailable.
+        if not p["hdr"] or TONEMAP:
+            chain.append("setparams=range=tv:color_primaries=bt709:color_trc=bt709:colorspace=bt709")
         if HW_H264:
             head += ["-hwaccel", "videotoolbox"]
     if HW_H264:
