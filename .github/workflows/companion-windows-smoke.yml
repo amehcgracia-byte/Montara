@@ -1,0 +1,47 @@
+name: Companion Windows packaged smoke (FER)
+
+on:
+  pull_request:
+    paths:
+      - 'companion/**'
+      - 'tests/windows_companion_packaged_smoke.py'
+      - '.github/workflows/companion-windows-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  companion-windows-exe:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Ensure FFmpeg on Windows runner
+        shell: pwsh
+        run: |
+          if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
+            choco install ffmpeg -y --no-progress
+            echo "C:\ProgramData\chocolatey\bin" >> $env:GITHUB_PATH
+          }
+          ffmpeg -version | Select-Object -First 1
+          ffprobe -version | Select-Object -First 1
+      - name: Build isolated one-folder EXE
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check "pyinstaller>=6,<7"
+          python -m PyInstaller --noconfirm --clean --onedir --console --name MontaraCompanion --paths companion --distpath dist --workpath .work --specpath .work companion/companion.py
+          if ($LASTEXITCODE -ne 0) { throw "PyInstaller build failed" }
+          if (-not (Test-Path "dist/MontaraCompanion/MontaraCompanion.exe")) { throw "EXE missing" }
+          $bytes = (Get-ChildItem dist/MontaraCompanion -Recurse -File | Measure-Object -Sum Length).Sum
+          Write-Host "PACKAGED_FOLDER_MB:" ([math]::Round($bytes/1MB, 1))
+      - name: Exercise frozen EXE and proxy via localhost
+        shell: pwsh
+        run: |
+          python tests/windows_companion_packaged_smoke.py dist/MontaraCompanion/MontaraCompanion.exe
+          if ($LASTEXITCODE -ne 0) { throw "Windows packaged smoke failed" }
