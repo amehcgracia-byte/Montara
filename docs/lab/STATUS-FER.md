@@ -2,6 +2,11 @@
 Actualizado: **2026-11-04** · Rama `fernando/continuacion-montara` · laboratorio / investigación; **no producción**.
 
 
+## Companion Windows W1 + integración Linux W2 · 04-11
+- [PR #74](https://github.com/amehcgracia-byte/Montara/pull/74) W1 (Windows búsqueda/selector) sigue **draft sin merge**; 4 tests unitarios focalizados PASS en Linux. CI inicial mostró regresión en búsqueda simulada; parche de compatibilidad `fe3e70e`, CI de esa revisión pendiente de resultado confirmado. **Windows real no validado**.
+- **W2 Linux PASS focalizado** con Companion **0.6.2**, Montara main `4f96af9`: HTTP `/health`, `/locate` por fingerprint, `/proxies` (working→ready, 0.5 s con vídeo sintético 640×360), descarga H.264 30 fps BT.709; `/projects` y `/projects/{id}/save` con bytes idénticos. [Informe W2](JUPITER_COMPANION_W2_LINUX_HTTP_PROXY_PASS_2026-11-04.md). Lab temporal en loopback, no E2E del producto ni Windows, sin tocar JM.
+- **Siguiente:** confirmar CI W1, probar selector/unidades Windows nativos con instalación mínima y sin motor, y luego instalador/codificadores. URANO avanza como diseño separado.
+
 ## Hito de cierre 04-11 · JÚPITER EX-14H-21–24
 - **CERRADA y publicada** la investigación sobre EX-07/EX-13, tiempos de Stage, caché de color y branding: [informe reproducible](JUPITER_EX14H21_24_CLOSURE_2026-11-04.md). No se solicita merge.
 - Motor de referencia JM 0.61 `3ff470ee`; worktree opt-in de pruebas `f305961` aislado, **sin tocar `main`, pin de motor ni servicios JM**. 35 tests focalizados PASS.
