@@ -25,3 +25,7 @@ CI Windows [41932982496](https://github.com/amehcgracia-byte/Montara/actions/run
 - Siguiente: revisar resultado CI; si verde, inspección visual/funcional de bandeja con EXE en Windows, y evaluar una parada elegante del servidor con limpieza de trabajos para producción.
 
 **Seguridad:** no tocar servicios JM, engine, mixer ni producción. No merge automático.
+
+## Validación CI completada
+
+El workflow [41932982496](https://github.com/amehcgracia-byte/Montara/actions/runs/41932982496) terminó **SUCCESS**, commit de código `86cf6783b5fc14b4e43f4f462dfda5c0867fc1b9`: build one-folder, preparación de FFmpeg, parser `WINDOWS_TRAY_SYNTAX_PASS`, proceso padre+hijo cancelados y circuito EXE HTTP/proxy superados. **Se ha probado el cierre de árboles en Windows runner; la interacción del icono y los casos de cierre durante un trabajo real aún no.**
