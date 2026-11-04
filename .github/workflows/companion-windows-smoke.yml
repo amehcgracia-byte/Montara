@@ -51,8 +51,9 @@ jobs:
             $real = @(Get-ChildItem -Path $package -Filter "$name.exe" -File -Recurse -ErrorAction SilentlyContinue | Where-Object { $_.Directory.Name -eq "bin" } | Select-Object -First 1)
             if ($real.Count -ne 1) { throw "Real $name.exe not found in Chocolatey package $package" }
             Copy-Item -LiteralPath $real[0].FullName -Destination (Join-Path $dest "$name.exe") -Force
-            & (Join-Path $dest "$name.exe") -version | Select-Object -First 1
+            $versionLines = & (Join-Path $dest "$name.exe") -version 2>&1
             if ($LASTEXITCODE -ne 0) { throw "Bundled $name.exe failed" }
+            Write-Host ($versionLines | Select-Object -First 1)
           }
           Write-Host "TEST_COPY_ONLY: no distributable artifact uploaded"
       - name: Exercise frozen EXE and proxy via localhost
