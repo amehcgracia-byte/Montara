@@ -47,3 +47,5 @@ Una línea por acción de administrador (`sudo`). Sin contraseñas, tokens ni ll
 | 2026-11-03 | Codex | Chema | Authenticated post-update version/HTML/script verification: 0.59, engine 5877eacb, mixer f15ff91c; companion 0.6.0 verified separately on the Mac. |
 
 | 2026-11-04 | Codex/JM | Chema: diagnóstico y limpieza | `sudo -u jm`: inventario de disco y diagnose.py, solo lectura; 48 GiB usados, 49 libres, datos JM ~28 GiB; sin borrar ni alterar FER. |
+
+| 2026-11-04 | Codex/JM | Chema: biblioteca compartida de pruebas | Un `sudo bash`: creado grupo montara-media y directorio compartido `/srv/montara-lab/media` (2770), añadidos JM y FER al grupo; no se movieron ni borraron originales ni se reinició FER. |
