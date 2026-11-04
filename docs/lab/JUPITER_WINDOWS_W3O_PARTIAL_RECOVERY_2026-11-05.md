@@ -19,3 +19,7 @@ Fecha: 2026-11-05. Entorno: rama experimental `fernando/companion-windows-w1`, [
 Este experimento simula de forma controlada el residuo de un proceso interrumpido; **no** prueba recuperación de un corte de energía real ni transacciones de edición complejas. No limpiar a ciegas todo `*.part` al arrancar: otras instancias/trabajos podrían necesitarlos. La caché se recupera por clave al recibir de nuevo la solicitud de proxy.
 
 Para W3P: comprobar entrega de paquete Windows/UI final, licencia FFmpeg y control de instancias simultáneas. Mantener la PR en draft hasta revisión y acuerdo de merge.
+
+## Resultado CI W3O
+
+**PASS** — [Windows GitHub Actions 41934150697](https://github.com/amehcgracia-byte/Montara/actions/runs/41934150697) terminó `completed/success` para commit `321be9e3881b3985dc881ce7361f876bb1edb8ed`. Se validó el ejecutable congelado con FFmpeg integrado y la reconstrucción desde parcial corrupto; la prueba fuerza que `.part.mp4` no sobreviva al reintento y que la descarga coincida exactamente con el fichero final. Permanecieron verdes también la prueba de cierre con FFmpeg activo y el parser de bandeja. **No** reproduce un corte de alimentación real.
