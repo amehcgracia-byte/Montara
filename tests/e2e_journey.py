@@ -115,8 +115,8 @@ def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
         page.wait_for_function("!document.querySelector('#framesHint').textContent.includes('Preparing')", timeout=300_000)
         page.screenshot(path=str(shots / "05-frames.png"), full_page=True)
         if mode == 'push':
-            assert page.locator('#songRange').is_hidden() is False
-            assert page.locator('#cameraList').is_hidden()
+            assert page.locator('#songRange').evaluate('e=>!e.hidden')
+            assert page.locator('#cameraList').evaluate('e=>e.hidden')
             assert page.locator('.frame .thumb').first.evaluate('e=>e.clientHeight>e.clientWidth')
             page.wait_for_function("document.querySelector('.frame img').naturalHeight>document.querySelector('.frame img').naturalWidth")
         if mode in {"stage", "mix", "push"}:
