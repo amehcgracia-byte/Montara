@@ -64,6 +64,14 @@ def log(message: str) -> None:
 
 # ---------- tools ----------
 def tool(name: str) -> str | None:
+    # Frozen one-folder builds may ship FFmpeg alongside the EXE, inside
+    # bin/. Prefer those copies over unrelated installations on PATH.
+    if getattr(sys, "frozen", False):
+        folder = Path(sys.executable).resolve().parent
+        suffix = ".exe" if sys.platform == "win32" else ""
+        for candidate in (folder / "bin" / (name + suffix), folder / (name + suffix)):
+            if candidate.is_file():
+                return str(candidate)
     found = shutil.which(name)
     for extra in ("/opt/homebrew/bin", "/usr/local/bin"):
         candidate = Path(extra) / name
