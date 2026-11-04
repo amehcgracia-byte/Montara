@@ -76,6 +76,12 @@ try {
         try {
             $response = Invoke-RestMethod -Uri "http://127.0.0.1:47820/health" -TimeoutSec 2
             $status.Text = if ($response.app -eq "montara-companion") { "Estado: funcionando" } else { "Estado: comprobando" }
+            # Opt-in runner smoke: exercise the real WinForms event loop and
+            # menu lifecycle, then exit normally without any mouse automation.
+            if ($env:MONTARA_TRAY_SMOKE_MARKER -and $response.app -eq "montara-companion") {
+                [System.IO.File]::WriteAllText($env:MONTARA_TRAY_SMOKE_MARKER, "W3Q_TRAY_HEALTH_PASS")
+                $ctx.ExitThread()
+            }
         } catch {
             $status.Text = "Estado: iniciando"
         }
