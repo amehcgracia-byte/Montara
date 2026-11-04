@@ -1355,7 +1355,11 @@ async function make() {
   }
   if (platform === 'youtube') {
     const evidence = state.mixMaster && state.mixMaster === mix.masterPath ? mix.plan?.instrument_activity : null;
-    const activity = evidence ? {...evidence, tracks:evidence.tracks.filter(t => !mix.plan.tracks.find(v=>v.file===t.file)?.mute).map(({file,...t})=>t)} : null;
+    const activity = evidence ? {...evidence, tracks:evidence.tracks.map(({file,...t})=>{
+      const track=mix.plan.tracks.find(v=>v.file===file),silent=!track||track.mute||track.active===false;
+      const gain=Number(track?.fader_db||0);
+      return {...t,db:t.db.map(v=>silent?-120:Math.max(-120,Math.min(24,v+gain)))};
+    })} : null;
     await workRequest(generation, '/settings/stage-performers', {project_id:state.projectId, master:state.mixMaster, activity});
   }
   await workRequest(generation,"/wizard/start", {

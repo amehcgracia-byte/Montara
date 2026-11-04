@@ -21,7 +21,7 @@ This completes the missing connection between Stage and automatic person crops;
   remembered from the current crop. Role/region corrections persist by source;
   auto takes update, while already manual crops, timing and light are preserved.
 - The one-song mixer publishes its existing one-second RMS analysis. Muted and
-  inactive tracks are omitted. Stage receives bounded finite metadata, tied to
+  inactive tracks remain explicitly silent evidence. Stage receives bounded finite metadata, tied to
   that exact mix master. No extra audio decode or model download.
 - Known silent instruments are excluded; relative stem prominence biases takes
   without starving the others. Missing/out-of-window evidence remains unknown.

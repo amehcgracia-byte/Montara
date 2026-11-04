@@ -208,7 +208,7 @@ class SingleSongMix:
         result = []
         for track in tracks:
             identity = (types.get(track['file']) or {}).get('type') or track['role']
-            if identity not in supported or track.get('active') is False or track.get('mute'):
+            if identity not in supported:
                 continue
             values = analysis.get('segment_envelopes', {}).get(track['file'])
             if values is None or not len(values):
@@ -216,6 +216,8 @@ class SingleSongMix:
             values = np.asarray(values, dtype=float)[:21600]
             if not np.all(np.isfinite(values)):
                 continue
+            if track.get('active') is False or track.get('mute'):
+                values = np.zeros_like(values)
             result.append({'file':track['file'], 'role':identity,
                            'db':np.round(np.clip(20*np.log10(np.maximum(values,1e-6)), -120,24),1).tolist()})
         return {'source':'separate_tracks','interval_sec':1,'tracks':result[:32]} if result else None

@@ -18,8 +18,9 @@ def test_reuses_mix_analysis_does_not_decode_and_preserves_exact_instrument_type
     tracks[-1]['mute']=True
     evidence=job._instrument_activity({'analysis_cache_path':'analysis.npz'},tracks)
     assert calls==[Path('analysis.npz')]
-    assert [t['role'] for t in evidence['tracks']]==['sax','keys']
+    assert [t['role'] for t in evidence['tracks']]==['sax','keys','bass']
     assert evidence['tracks'][0]['db']==[-120.,-20.,-14.]
+    assert evidence['tracks'][2]['db']==[-120.]*3
     assert evidence['interval_sec']==1
 
 
