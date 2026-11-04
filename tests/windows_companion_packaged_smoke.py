@@ -93,6 +93,12 @@ def main():
             })
             assert code == 200, found
             print("PACKAGED_LOCATE_PASS", flush=True)
+            # Emulate a hard exit during an earlier proxy: persisted .part
+            # must be discarded on retry, never served as completed media.
+            partial = root / "state" / "proxies" / (found["id"] + ".part.mp4")
+            partial.parent.mkdir(parents=True, exist_ok=True)
+            partial.write_bytes(b"BROKEN_PARTIAL_FROM_PREVIOUS_RUN" * 80)
+            assert partial.is_file()
             code, job = request(base, "/proxies", {"id": found["id"]})
             assert code == 202, job
             deadline = time.monotonic() + 45
@@ -106,6 +112,11 @@ def main():
             assert state["status"] == "ready", state
             code, data = request(base, "/proxies/" + job["id"] + "/file")
             assert code == 200 and len(data) > 1000
+            assert not partial.exists(), "stale partial survived successful retry"
+            assert b"BROKEN_PARTIAL_FROM_PREVIOUS_RUN" not in data
+            final = root / "state" / "proxies" / (found["id"] + ".mp4")
+            assert final.is_file() and final.read_bytes() == data
+            print("W3O_STALE_PARTIAL_RECOVERED_PASS", flush=True)
             output = root / "proxy.mp4"
             output.write_bytes(data)
             probe = subprocess.run([
