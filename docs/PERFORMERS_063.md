@@ -46,12 +46,21 @@ obtain automatic crops. A source explicitly marked Moving remains moving.
 
 ## Validation
 
-Pending final Linux journeys and installation. Local directed engine tests:
+Installed on JM and Mac Companion with engine `0fc0ceb4` (Montara main `2a1cbe7`, PR #75; Editor PR #55). Local directed engine tests:
 59 passed (performer policy/API, crop/filter parity, automatic light, previews
-and hardware-decode guards). Local adapter/browser/FX: 7 passed.
+and hardware-decode guards). Local adapter/browser/FX: 7 passed. Full Montara suite on Mac: 233 passed.
+
+Linux acceptance run `41925326769` on the final head: all five jobs passed
+(Stage, Push, Mix, session including native Stage, authenticated container).
+Screenshots inspected: frame review, shared framing dialog, Push vertical canvas
+and native result recovery. Engine Fast run `41925238599`: 1,330 passed and
+the same 22 named pre-existing failures as 0.62, with no new failures; Slow passed.
+Those historical failures are not presented as a green full engine suite.
 
 A private real 20-second dark stage excerpt was tested locally, without uploading
 media. Detection and crop contact sheet were inspected. The intentionally
 pixelated repository fixture is not an adequate quality benchmark for recognition.
 
 Pinned engine: `0fc0ceb40661acb622014fa75aba321483af1ae2`; prior `a13dc640` remains an ancestor. Swapping cameras clears the previous source’s performer coordinates.
+
+The 80-second real fixture Stage journey exported 1920×1080 on Linux and included five fixed-camera takes; this is not a speed comparison against the previous release. Existing user projects and FER services were not modified.
