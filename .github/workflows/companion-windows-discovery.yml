@@ -1,0 +1,24 @@
+name: Companion Windows discovery tests
+
+on:
+  pull_request:
+    paths:
+      - 'companion/companion.py'
+      - 'companion/windows_support.py'
+      - 'tests/test_companion_windows_support.py'
+      - '.github/workflows/companion-windows-discovery.yml'
+  workflow_dispatch:
+
+jobs:
+  windows-discovery:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Unit tests (Windows paths and cancellation)
+        run: python -m unittest discover -s tests -p test_companion_windows_support.py -v
+      - name: Compile Companion on Windows
+        run: python -m py_compile companion/companion.py companion/windows_support.py
