@@ -1289,6 +1289,7 @@ $("#useMix").addEventListener("click", async () => {
     await animation;
     if (job.status === "failed") throw new Error(job.error || "The final mix failed");
     state.mixMaster = job.master_path;
+    mix.masterPath = job.master_path;
     if (audioOnly()) return showResult({ result: { audio: true, url: `/montara/mix/${mix.job}/result` } });
     // Register the mix as the project's master audio, then make the video.
     const data = inputs();
@@ -1351,6 +1352,15 @@ async function make() {
   if (platform === "youtube") {
     await workRequest(generation,"/wizard/prepare", { name, platform, project_id: state.projectId, ...data });
     await waitFor((s) => ["waiting_choice", "done"].includes(s.status),generation);
+  }
+  if (platform === 'youtube') {
+    const evidence = state.mixMaster && state.mixMaster === mix.masterPath ? mix.plan?.instrument_activity : null;
+    const activity = evidence ? {...evidence, tracks:evidence.tracks.map(({file,...t})=>{
+      const track=mix.plan.tracks.find(v=>v.file===file),silent=!track||track.mute||track.active===false;
+      const gain=Number(track?.fader_db||0);
+      return {...t,db:t.db.map(v=>silent?-120:Math.max(-120,Math.min(24,v+gain)))};
+    })} : null;
+    await workRequest(generation, '/settings/stage-performers', {project_id:state.projectId, master:state.mixMaster, activity});
   }
   await workRequest(generation,"/wizard/start", {
     project_id: state.projectId, name, platform, ...data,
