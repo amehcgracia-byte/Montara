@@ -2429,11 +2429,22 @@ function fail(error) {
   show("failed");
 }
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
 loadBranding();
 api("/montara/version").then((v) => { $("#version").textContent = `Montara ${v.version}`; }).catch(() => {});
 let savedEdit=null;
 try {savedEdit=JSON.parse(sessionStorage.getItem('montara-open-edit'));} catch {}
+const resumeFrames=new URLSearchParams(location.search).get('resume')==='frames';
+if(resumeFrames){
+  clearTimeout(introTimer);show('making');setProgress(0,'Opening your edit…','');
+  try {
+    const current=await status();
+    if(current.project_path){
+      const project=await api('/project');
+      savedEdit={project:current.project_path,platform:project.settings?.wizard?.platform || 'youtube',step:'frames'};
+    }
+  } catch(error){toast(error.message,true);}
+}
 if(savedEdit?.project){
   clearTimeout(introTimer);
   show('making');setProgress(0,'Opening your edit…','');
@@ -2456,6 +2467,7 @@ if(savedEdit?.project){
     $('#videoName').value=project.name || todayName();
     const remembered=new Map(state.files.map(f=>[f.path,f]));
     state.files=[...(project.inputs?.videos||[]).map(f=>({id:crypto.randomUUID(),name:f.path.split('/').pop(),kind:'video',path:f.path,small:/\.small\.mp4$/i.test(f.path),...remembered.get(f.path)})),...((project.inputs?.master?.path?[project.inputs.master]:project.inputs?.audio)||[]).map(f=>({id:crypto.randomUUID(),name:f.path.split('/').pop(),kind:'master',path:f.path,...remembered.get(f.path)}))];
+    if(resumeFrames && ['waiting_review','done','completed'].includes(current.status)){await openFrames();return;}
     if(['done','completed'].includes(current.status)){showResult(current);return;}
     if(current.status==='waiting_review'){await openFrames();return;}
     if(current.status==='waiting_show_review'){await openShowReview();return;}

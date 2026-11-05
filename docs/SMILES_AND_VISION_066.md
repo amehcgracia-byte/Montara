@@ -23,6 +23,12 @@ master start invalidates the preview cache. Only one card plays, and leaving
 it or navigating stops playback. Browsers that block audible autoplay show
 "Tap for sound" and allow a user click to enable it.
 
+An explicit `?resume=frames` link recovers the current server project on a fresh
+device, using the server's existing authentication. It does not depend on that
+browser's sessionStorage or a local Companion result. Normal visits retain the
+existing start flow. This is a private lab recovery link, not multi-user project
+sharing or a public account system.
+
 ## Existing recognition models worth testing
 
 These are licensed tools, not public-domain or "without rights" assets. Their

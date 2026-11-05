@@ -58,6 +58,12 @@ def main():
             thumb.click()  # Explicit user gesture unlocks audio on restrictive browsers.
             page.wait_for_function("!document.querySelector('.frame video').paused && !document.querySelector('.frame video').muted",timeout=15000)
             page.screenshot(path=str(out/'audible-frame-preview.png'))
+            recovered=browser.new_page(viewport={'width':390,'height':844})
+            recovered.goto(url+'/?resume=frames')
+            recovered.locator('#frames').wait_for(state='visible',timeout=120000)
+            assert recovered.locator('#frameGrid .frame').count()>0
+            recovered.screenshot(path=str(out/'mobile-project-recovered.png'))
+            recovered.close()
             page.locator('.frame .shot-edit').first.click();dialog=page.locator('dialog.cut-dialog')
             dialog.wait_for(state='visible');assert dialog.locator('[name=lightAuto]').count()==0
             dialog.locator('.flat-zoom-row input').evaluate("e=>{e.value='3.4';e.dispatchEvent(new Event('input',{bubbles:true}));}")
