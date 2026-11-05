@@ -1,0 +1,26 @@
+name: URANO U3A original-upload baseline (FER)
+
+on:
+  pull_request:
+    paths:
+      - 'web/montara.js'
+      - 'tests/urano_u3a_upload_baseline.cjs'
+      - '.github/workflows/urano-u3a-upload-baseline.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  original-fallback-baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Characterize current uploads with simulated Companion and network
+        run: node tests/urano_u3a_upload_baseline.cjs
