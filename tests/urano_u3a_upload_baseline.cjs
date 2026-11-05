@@ -75,6 +75,7 @@ async function scenario(name, config) {
   console.log("U3A_CHARACTERIZED",name,expected,sent?.route || "no transfer");
 }
 (async()=>{
+  await scenario("no_companion_2MiB",{companion:false,mb:2,expected:"none"});
   await scenario("no_companion_10MiB",{companion:false,mb:10,expected:"none"});
   await scenario("no_companion_300MiB",{companion:false,mb:300,expected:"none"});
   await scenario("companion_missing_10MiB",{companion:true,mb:10,result:"missing",expected:"none"});
@@ -82,5 +83,7 @@ async function scenario(name, config) {
   await scenario("companion_failed_300MiB",{companion:true,mb:300,result:"null",expected:"none"});
   await scenario("companion_ffmpeg_throws_300MiB",{companion:true,mb:300,result:"throw",expected:"none"});
   await scenario("companion_success_300MiB",{companion:true,mb:300,result:"proxy",expected:"proxy",route:"/api/v1/wizard/upload"});
-  console.log("URANO_U3B_VIDEO_POLICY_PASS: 7 mocked cases; no original videos sent, valid proxy still uploads.");
+  // Stage audio routing remains unchanged; removing that path needs its own review.
+  await scenario("legacy_stage_audio_10MiB",{companion:false,name:"session.wav",mb:10,expected:"original",route:"/montara/uploads"});
+  console.log("URANO_U3B_VIDEO_POLICY_PASS: 9 mocked cases; no original videos sent, valid proxy uploads, Stage audio unchanged.");
 })().catch(error=>{console.error(error);process.exitCode=1;});
