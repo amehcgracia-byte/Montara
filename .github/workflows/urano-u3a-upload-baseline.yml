@@ -4,7 +4,9 @@ on:
   pull_request:
     paths:
       - 'web/montara.js'
+      - 'web/companion.js'
       - 'tests/urano_u3a_upload_baseline.cjs'
+      - 'tests/urano_companion_browser_bridge.cjs'
       - '.github/workflows/urano-u3a-upload-baseline.yml'
   workflow_dispatch:
 
@@ -24,3 +26,5 @@ jobs:
           node-version: '22'
       - name: Check explicit test consent and blocked silent video uploads
         run: node tests/urano_u3a_upload_baseline.cjs
+      - name: Check browser-to-Companion proxy bridge with real frontend functions
+        run: node tests/urano_companion_browser_bridge.cjs
