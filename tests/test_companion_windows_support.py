@@ -55,6 +55,14 @@ class WindowsSupportTests(unittest.TestCase):
         with patch.dict(sys.modules, {"tkinter": fake, "tkinter.filedialog": fake.filedialog}):
             self.assertEqual(mod.choose_folder("Select"), Path("D:/Montara"))
 
+    def test_reparse_point_junction_is_rejected(self):
+        # Windows junctions are not always exposed as ordinary symlinks.
+        with patch.object(Path, "lstat", return_value=types.SimpleNamespace(st_file_attributes=0x400)):
+            self.assertTrue(mod.is_reparse_point(Path("D:/Junction")))
+        with patch.object(Path, "lstat", return_value=types.SimpleNamespace(st_file_attributes=0)):
+            with patch.object(Path, "is_symlink", return_value=False):
+                self.assertFalse(mod.is_reparse_point(Path("D:/Normal")))
+
     def test_no_tk_does_not_choose_home(self):
         fake = types.ModuleType("tkinter")
         fake.Tk = lambda: (_ for _ in ()).throw(RuntimeError("no display"))
