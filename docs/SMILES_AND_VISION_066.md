@@ -52,6 +52,18 @@ provider fee but still consumes compute.
 
 ## Validation
 
-95 local engine quality, preview, speed and edit tests passed, including decoded
-two-tone audio alignment and preview cache identity. Linux browser acceptance
-and installation pending. No user project or source media was committed.
+96 local engine quality, preview, speed and edit tests passed, including decoded
+two-tone audio alignment and preview cache identity. Linux acceptance `42021999693` passed all five jobs (Stage, Push, Mix,
+session/native Stage and authenticated private container). Audible preview playback
+and fresh-browser mobile recovery screenshots were inspected. Full Montara suite:
+234 passed locally, and again in Linux CI. Engine Fast `42021979186`: 1,341
+passed / the same 22 historical failures as 0.65 (failure names compared); Slow
+passed. The whole engine suite is not claimed green.
+
+Installed JM main `2a3104c`, engine `bfb964c3f7b17fe643039b74001543c08a43fc0b`,
+mixer `f15ff91` unchanged; Mac Companion 0.6.5 uses the same engine. The previous
+engine pin is an ancestor of the new one. Montara #78 and Editor #58 are merged.
+The current user project was preserved with two videos and its master. A temporary
+Cloudflare tunnel retains the existing lab authentication; no credentials or
+private media are published here. Telegram desktop was not accessible to the
+available browser tool, so no message was sent. No user project or source media was committed.

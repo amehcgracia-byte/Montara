@@ -79,3 +79,8 @@ Una línea por acción de administrador (`sudo`). Sin contraseñas, tokens ni ll
 | 2026-11-05 | Codex/JM | Chema: instalar la corrección validada | `sudo -u jm`: segundo preflight inmediato, antes de actualizar JM a 0.65; nunca se cancela un render para instalar. |
 | 2026-11-05 | Codex/JM | Chema: instalar 0.65 | `sudo -H -u jm bash`: fetch explícito y fast-forward main e8a8c83, engine 6283d87e, user_install offline y reinicio solo JM:8101; FER intacto. |
 | 2026-11-05 | Codex/JM | Chema: comprobar y abrir la actualización | `sudo -u jm`: HTTP autenticado, versión y pines de JM; Companion Mac 0.6.4 con engine 6283d87e y mixer f15ff91 conservado. Se reutiliza el túnel; FER intacto. |
+
+| 2026-11-05 | Codex/JM | Chema: recuperar último proyecto y abrir móvil | `sudo -u jm`: lectura del estado, nombre y cantidad de vídeos/máster del proyecto actual, además de trabajos/bloqueos. Cloudflare quick tunnel abierto con el helper existente, sin sudo; no se modifica FER. |
+| 2026-11-05 | Codex/JM | Chema: instalar sonrisas, audio y recuperación móvil | `sudo -u jm`: segundo preflight inmediato de JM antes de instalar 0.66; comprobar procesos y bloqueos sin cancelar trabajos, FER intacto. |
+| 2026-11-05 | Codex/JM | Chema: instalar la 0.66 validada | `sudo -H -u jm bash`: fetch explícito, fast-forward main 2a3104c, engine bfb964c3 y user_install offline; reinicio solo JM:8101. Proyecto y datos conservados, FER intacto. |
+| 2026-11-05 | Codex/JM | Chema: verificar proyecto y acceso móvil | `sudo -u jm`: HTTP autenticado verifica 0.66/2a3104c, engine bfb964c3, mixer f15ff91, proyecto con dos vídeos y máster; Cloudflare responde 200 autenticado y conserva 401 sin acceso. Companion 0.6.5 al mismo motor; FER intacto. |
