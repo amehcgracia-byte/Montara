@@ -500,7 +500,12 @@ async function uploadSmall(file, entry) {
 function upload(file, entry) {
   // A local video normally uses Companion; importing its full original is
   // allowed only after a per-attempt explicit test-only confirmation.
-  if (montaraCompanion.isVideo(file) && !entry.small && !entry.manualOriginalUpload) {
+  // A restored browser handle reopens the ORIGINAL, even if its persisted
+  // entry.small flag was set during an interrupted proxy upload. Only the
+  // derived .small.mp4 file itself is exempt from original-upload consent.
+  const proxyName = entry.original?.name?.replace(/\.[^.]+$/, '') + '.small.mp4';
+  const isCompanionProxy = entry.small && entry.original?.name && file.name === proxyName;
+  if (montaraCompanion.isVideo(file) && !isCompanionProxy && !entry.manualOriginalUpload) {
     if (montaraCompanion.info) return uploadSmall(file, entry);
     const message = "Open Montara Companion to import a video from your computer.";
     if (!confirmOriginalVideoUpload(file, entry, message)) {
