@@ -6,6 +6,7 @@ on:
       - 'companion/companion.py'
       - 'companion/windows_support.py'
       - 'tests/test_companion_windows_support.py'
+      - 'tests/test_companion_proxy_pipe.py'
       - '.github/workflows/companion-windows-discovery.yml'
   workflow_dispatch:
 
@@ -20,5 +21,7 @@ jobs:
           python-version: '3.11'
       - name: Unit tests (Windows paths and cancellation)
         run: python -m unittest discover -s tests -p test_companion_windows_support.py -v
+      - name: FFmpeg stderr deadlock regression
+        run: python -m unittest discover -s tests -p test_companion_proxy_pipe.py -v
       - name: Compile Companion on Windows
         run: python -m py_compile companion/companion.py companion/windows_support.py
