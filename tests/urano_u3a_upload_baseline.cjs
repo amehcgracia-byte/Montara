@@ -77,7 +77,7 @@ async function scenario(name, config) {
   if (expected==="none") assert.equal(entry.kind,"error",name+" blocking error");
   if (expected==="none") assert.match(entry.error,/Companion|not found/i,name+" helpful guidance");
   if (config.expectedPrompt !== undefined) assert.equal(prompts.length,config.expectedPrompt,name+" prompt count");
-  if (prompts.length) assert.match(prompts[0],/ORIGINAL video.*MiB[\\s\\S]*storage/i,name+" consent information");
+  if (prompts.length) { assert.match(prompts[0], /ORIGINAL video.*MiB/i, name+" consent size"); assert.ok(prompts[0].includes("server storage"), name+" consent costs"); }
   console.log("U3C_POLICY",name,expected,sent?.route || "no transfer");
 }
 (async()=>{
