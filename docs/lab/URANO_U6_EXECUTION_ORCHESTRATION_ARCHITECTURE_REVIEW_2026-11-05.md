@@ -62,3 +62,24 @@ No decidir entre B y C hasta evaluar cuenta, aislamiento, frecuencia de trabajos
 - ¿Queremos costes máximos por trabajo / SLA / usuarios simultáneos y qué pagaríamos por colas en lugar de retrasar el trabajo?
 
 **Conclusión:** el esquema inicial es una implementación parcial útil, no la distribución final. Existe coordinación por componentes; no se ha verificado orquestación transversal. La ruta razonable es primero inventario + benchmarks + contrato de trabajos, y solo entonces escoger orquestador, persistencia y despliegue. Esta nota no autoriza cambios a producción, Engine/Mixer ni instaladores.
+
+## 6. Contexto comercial y experimental aportado por propietario — 05-11-2026
+
+**Intención de producto:** Montara se concibe **de pago desde el lanzamiento**, no como un servicio gratuito que se monetizará después. La estructura de suscripciones sigue totalmente abierta: el intervalo **15–50 €/mes es una intuición inicial**, no precios aprobados, márgenes calculados ni funcionalidades contratadas.
+
+**Hipótesis de segmentación:** el acceso a procesos acelerados con GPU podría corresponder a planes **Pro**. **No está aprobado**; no hay que convertir esa sugerencia en una condición del código ni asumir que toda edición Pro debe usar GPU. Es razonable comparar aceleración GPU solo donde aporta valor real por etapa y unidad de coste.
+
+**Infraestructura GPU:** existen créditos experimentales del propietario en **RunPod**, por lo que tiene sentido usar ese proveedor como laboratorio para medir, no comprometer la infraestructura definitiva. Alternativa futura: GPU bajo demanda en el ecosistema Google Cloud para reducir integraciones/latencia si la disponibilidad, cuotas, coste real y perfil de carga lo justifican. Ningún proveedor, GPU, modalidad de pago o tiempo está elegido.
+
+**Estado de madurez:** existe mucho código avanzado y bien cuidado, pero algunas funciones transversales —suscripciones, aislamiento multiusuario, persistencia duradera de jobs, scheduler, cálculo de costes— pueden estar por diseñar. La falta de estos componentes **no implica fallo del prototipo**; son requisitos de maduración hacia producto de pago.
+
+**Implicaciones para el estudio:**
+
+1. Instrumentar **coste por proyecto y por operación**: tiempo local, tiempo CPU cloud, tiempo GPU, bytes originales/proxy/segmentos, almacenamiento residual y transferencia de salida, además del tiempo de preparación/cola/inicio.
+2. Comparar **cuándo la GPU ahorra tiempo neto**; tener en cuenta esperas, inicio del equipo, carga de modelos y transferencia. No presuponer superioridad en FFmpeg o la mezcla de audio.
+3. Estimar margen por perfil de consumo y concurrencia **antes** de fijar cuotas: usuarios ligeros, medios y exigentes; límites de trabajos, almacenamiento, GPU y tamaño de vídeos, evitando diseñar una «tarifa ilimitada» implícita.
+4. El primer coordinador podría ser un **motor de reglas** auditable que opere con capacidades/plan/cuotas/coste estimado; la asignación por plan es **un parámetro configurable**, no una política cerrada.
+5. La planificación de SaaS de pago requiere contabilidad de uso, identidad, atribución de jobs a cuenta y cuotas verificadas **en backend**; no usar datos del navegador como fuente de verdad.
+6. El laboratorio RunPod puede aprovechar créditos actuales, pero el análisis de coste comercial debe computar **precios reales sin descontar créditos promocionales**, para no falsear la viabilidad.
+
+**Acción inmediata:** continuar inventario técnico y tests; no activar GPU de pago, servicios nuevos ni cobrar usuarios. Revisar posicionamiento y costes después de evidencia reproducible.
