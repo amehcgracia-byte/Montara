@@ -35,3 +35,11 @@ Actualizado el **05-11-2026** por laboratorio FER. Estado **registrado en el mom
 5. Posteriormente URANO local-first con continuidad real mismo ordenador, sin inventar esquema de proyecto o SQLite por inercia.
 
 **Regla transversal:** si un gate no está verde, se investiga el error y no se da el paso por aprobado. No confundir tests simulados con E2E real, ni un CI verde con aceptación física/visual.
+
+
+## 5. Seguimiento adicional · 05-11 · pruebas y corrección de caché
+
+- **#79:** E2E Linux run `42089713664` SUCCESS, Windows discovery run `42089713726` SUCCESS; aún falta aceptación física del selector/USB en Windows y revisión de artefactos/capturas.
+- **#80:** en reejecución `42095382907`, **Push E2E PASS** tras añadir una aprobación explícita y verificable en el test Playwright; Session y contenedor privado también PASS, Stage/Mix aún en marcha en la revisión. No declarar CI completo antes de concluir.
+- **Editor #59:** primer Fast run `42096222899` registró **23 fallos** (1342 aprobados). La mayoría estaban en áreas API/360 históricamente problemáticas, pero **uno atribuible al parche**: `test_audit_performance.py::test_quality_shared_across_projects_and_retimed` dejó de reconocer el key anterior de cache para duración desconocida. Se corrigió en commit `a953719`: conservar clave anterior para extracción sin duración limitada, añadir dimensión de duración únicamente cuando se aplica `-t`. Nueva ejecución de Actions iniciada `42097202010`; no afirmar que está verde. La comparación formal contra baseline sigue siendo el gate si Fast continúa con fallos.
+- Política de integración: cambios identificados por test y fuente exacta; no prometer compatibilidad visual ni equivalencia de resultados solo porque una prueba de comando esté verde.
