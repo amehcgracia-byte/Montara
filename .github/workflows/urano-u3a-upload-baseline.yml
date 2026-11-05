@@ -1,4 +1,4 @@
-name: URANO U3B Companion-only video upload guard (FER)
+name: URANO U3C test-only original upload consent (FER)
 
 on:
   pull_request:
@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 jobs:
-  companion-video-policy:
+  companion-original-consent:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -22,5 +22,5 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Assert video original uploads blocked with simulated Companion and network
+      - name: Check explicit test consent and blocked silent video uploads
         run: node tests/urano_u3a_upload_baseline.cjs
