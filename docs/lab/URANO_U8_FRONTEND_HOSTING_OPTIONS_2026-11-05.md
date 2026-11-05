@@ -49,3 +49,20 @@ Separamos (A) **web / frontend estático** HTML/CSS/JS e imágenes/assets, CDN, 
 6. Tras pruebas elegir; si Cloudflare gana, conservar web de Chema y publicar allí, enlazando backend aparte. Si Vercel gana en integración, mantenerla conscientemente y evaluar coste Sandbox aparte.
 
 **Bloqueadores**: aún no existe contrato definitivo frontend↔backend↔cuentas; dominio de producción, login y propiedad de proyectos y tokens Companion pendientes. **No hacer despliegue en cuentas del usuario ni alterar URL existente sin autorización.**
+
+## Actualización — alojamiento independiente de proveedor cloud y continuidad `main`
+
+**Preferencia actual del propietario:** conservar Vercel como baseline mientras continúa el producto funcional. El experimento Cloudflare es **opcional y no bloqueante**, solo si es barato en tiempo e infraestructura. Google Cloud es laboratorio con créditos, **no** proveedor de producción elegido. Se considerarán Azure, AWS y Oracle para CPU/VM y GPU solo tras mediciones.
+
+**Compatibilidad:** frontend Cloudflare (Pages/Workers Static Assets) o Vercel puede comunicarse por HTTPS con API en Google Cloud, Azure, AWS, Oracle o VPS independiente. El enlace usa DNS, TLS, autorización de sesión, CORS/CSRF adecuado, límites de subida, streaming y URLs de servicio; **no hay dependencia de proveedor** para servir HTML/CSS/JS. Cuidado con la aplicación actual: `web/montara.js` usa rutas relativas `/api/v1/*` y `/montara/*`, mientras `deployment/vercel/runtime.js` administra Vercel Sandboxes. No basta replicar estáticos: si cambia host web hay que conservar/reconfigurar la capa API y la sesión. Las cookies y la API local del Companion requieren revisión específica de seguridad.
+
+**Créditos oficiales 05-11-2026 (USD, para cuentas nuevas elegibles, no saldo verificado):**
+- Google Cloud: 300 USD / 90 días, https://cloud.google.com/signup-faqs ; cuenta de Free Trial restringe GPUs sin upgrade a pago, https://docs.cloud.google.com/free/docs/free-cloud-features
+- Azure: 200 USD / 30 días, https://azure.microsoft.com/es-es/pricing/purchase-options/azure-account
+- AWS: hasta 200 USD (100 al registrarse + hasta 100 por actividades) en Free plan hasta seis meses, https://aws.amazon.com/es/free/free-tier-faqs/
+- Oracle: 300 USD / 30 días, https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier.htm ; Always Free separado y sujeto a capacidad/disponibilidad.
+No suponer elegibilidad, canje, ampliación o equivalencia de promociones entre proveedores ni nuevos créditos para cuentas duplicadas. Preparar benchmark antes de abrir cuentas para aprovechar caducidad. Estimar viabilidad comercial **sin** crédito. Mantener presupuesto y alarmas de gasto donde se active facturación.
+
+**Estado de GitHub a la última revisión:** PR #79–#83 fusionadas en `main` (HEAD `4f1dceb904056abd8e3598ba7f356e5234f6c1df`). PR #84 (rama `fernando/lab-cloudflare-static-benchmark`) permanece DRAFT **sin integrar**: build estático sin llamadas a red, [CI específico](https://github.com/amehcgracia-byte/Montara/actions/runs/42113736215) PASS; [E2E Linux](https://github.com/amehcgracia-byte/Montara/actions/runs/42113735287) aún corriendo en última consulta. Sin deployment Cloudflare, no se han tocado DNS ni demo Vercel.
+
+**Portabilidad mínima:** mantener Engine/servicios con configuración de host y directorio por entorno, usar imágenes/dependencias reproducibles, no persistir estado importante solo en memoria de proceso, separar ficheros temporales de metadatos de proyecto y usar tests E2E igual en proveedor distinto. Elegir proveedor final por ratio precio/rendimiento, egress, almacenamiento, disponibilidad de CPU/GPU y esfuerzo operativo, **después** de montar el flujo funcional.
