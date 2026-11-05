@@ -21,7 +21,9 @@ const actualUploadCode = source.slice(start, end);
 async function scenario(name, config) {
   const recorded = [];
   const state = {uploads: 0, platform: "reel", files: []};
-  const file = {name: config.name || "original.mov", size: config.mb * 1024 * 1024, type: "video/quicktime"};
+  const fileName = config.name || "original.mov";
+  const file = {name: fileName, size: config.mb * 1024 * 1024,
+    type: /\.(wav|aiff?|mp3)$/i.test(fileName) ? "audio/wav" : "video/quicktime"};
   const entry = {name: file.name, removed: false, progress: 0};
   const companion = {
     info: config.companion ? {ffmpeg:true} : null,
