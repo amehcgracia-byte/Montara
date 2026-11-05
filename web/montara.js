@@ -444,7 +444,8 @@ $("#restoreFiles").addEventListener("click", async () => {
   renderFiles();
 });
 
-const WHOLE_FILE_ASK_BYTES = 200 * 1024 * 1024;
+// URANO U3B: do not send local video originals if Companion is unavailable.
+// Only a proxy explicitly returned by Companion may use the normal upload path.
 
 // With the companion running, a video becomes a small version on the person's
 // computer and only that is uploaded; the original stays where it is.
@@ -458,9 +459,14 @@ async function uploadSmall(file, entry) {
     const preview = state.platform === 'youtube' && ($('#fullSessionOn').checked || (montaraCompanion.isAudio(file) && file.size > LONG_AUDIO_BYTES && !videos().length));
     small = await montaraCompanion.smallVersion(file, (phase, progress) => { entry.phase = phase; entry.progress = progress; renderFiles(); }, () => entry.removed, {preview});
   } catch (error) { console.warn(error); }
-  // A big original never travels without asking: the point of the companion is not to upload it.
-  if (!entry.removed && small?.missing && file.size > WHOLE_FILE_ASK_BYTES) {
-    entry.kind = "error"; entry.error = "Not found on this computer"; entry.wholeFile = file;
+  // A failed local video proxy must never fall back to uploading the original.
+  // Audio retains the pre-existing Stage behavior until its policy is reviewed.
+  if (!entry.removed && montaraCompanion.isVideo(file) && !small?.file) {
+    entry.kind = "error";
+    entry.error = small?.missing
+      ? "Video not found on this computer. Check the file and retry with Companion."
+      : "Companion could not prepare this video. Check Companion and retry.";
+    entry.wholeFile = file;
     state.uploads -= 1;
     renderFiles();
     return;
@@ -477,6 +483,15 @@ async function uploadSmall(file, entry) {
 }
 
 function upload(file, entry) {
+  // Original local videos always go through Companion, regardless of file size.
+  // entry.small is set only after smallVersion() returns the proxy for this upload.
+  if (montaraCompanion.isVideo(file) && !entry.small) {
+    if (montaraCompanion.info) return uploadSmall(file, entry);
+    entry.kind = "error";
+    entry.error = "Open Montara Companion to import a video from your computer.";
+    renderFiles();
+    return;
+  }
   if (montaraCompanion.info && !entry.viaCompanion && montaraCompanion.helps(file)) return uploadSmall(file, entry);
   // A lossless copy must reach the server through the resumable path, which restores the WAV.
   if (file.size > 8 * 1024 * 1024 || /\.(wav|aiff?)\.(flac|opus|wv)$/i.test(file.name)) return uploadInParts(file, entry);
