@@ -101,6 +101,9 @@ def fingerprint(path: Path) -> str:
 
 
 def search_roots() -> list[Path]:
+    if sys.platform == "win32":
+        from windows_support import search_roots as windows_search_roots
+        return [p for p in windows_search_roots() if p.is_dir()]
     extra = [Path(p).expanduser() for p in os.environ.get("MONTARA_COMPANION_ROOTS", "").split(os.pathsep) if p]
     home = Path.home()
     roots = extra + [home / d for d in ("Movies", "Desktop", "Downloads", "Documents", "Pictures", "Videos")]
@@ -130,9 +133,14 @@ def remember_place(folder: Path) -> None:
 
 
 def walk_root(root: Path) -> None:
+    # Limit each Windows scan; keep macOS/Linux traversal unchanged.
+    deadline = time.monotonic() + SEARCH_BUDGET_SEC if sys.platform == "win32" else None
     try:
         for folder, dirs, files in os.walk(root):
-            dirs[:] = [d for d in dirs if not d.startswith(".") and d not in SKIP_DIRS]
+            if deadline is not None and time.monotonic() >= deadline:
+                break
+            dirs[:] = [d for d in dirs if not d.startswith(".") and d not in SKIP_DIRS
+                       and (deadline is None or not (Path(folder) / d).is_symlink())]
             media = [Path(folder) / n for n in files if Path(n).suffix.lower() in VIDEO_SUFFIXES | AUDIO_SUFFIXES]
             if media:
                 with walking:
@@ -408,7 +416,10 @@ def make_proxy(key: str) -> None:
 
 # ---------- project folder on this computer ----------
 def choose_folder(prompt: str) -> Path | None:
-    """Native folder dialog on a Mac; elsewhere MONTARA_COMPANION_PROJECTS or the home folder."""
+    """Native folder dialog on macOS and Windows; preserve existing Linux behavior."""
+    if sys.platform == "win32":
+        from windows_support import choose_folder as windows_choose_folder
+        return windows_choose_folder(prompt)
     if sys.platform == "darwin":
         script = f'POSIX path of (choose folder with prompt "{prompt}")'
         result = subprocess.run(["osascript", "-e", "activate", "-e", script], capture_output=True, text=True, timeout=900)
