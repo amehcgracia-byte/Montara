@@ -31,11 +31,20 @@ projects.
 
 ## Validation
 
-Local engine: 63 focused tests passed, including head containment during motion,
+Local engine: 64 focused tests passed (63 plus the hair/ear regression), including head containment during motion,
 neighbor exclusion at source edges, overlapping silhouettes and actual decoded
 pixels for all 30 frames of a rendered close-up. The native recipe accepts a
 5.4x flat crop and rejects out-of-bound crops and oversized motion recipes.
 Linux native Stage acceptance now exports a 3.4x crop to exercise the whole path.
 
 A private real dark-stage contact sheet was inspected locally; no source media
-was committed. Production installation and Linux acceptance pending.
+was committed. Installed on JM and Mac Companion; Montara main `d9f9cab`, engine `d4e596700039f1704a3e93c128678c92c048f2c0`, mixer `f15ff91` unchanged. Companion 0.6.3. Both immutable revisions verified; FER untouched.
+
+
+Linux acceptance `41946885272` passed all five jobs: Stage, Push, Mix, session
+including original-quality local export at 3.4x, and authenticated private
+container. Frame review and native 3.4x editor screenshots inspected. Montara
+full local suite: 234 passed; six targeted native recipe tests passed.
+Engine Fast `41946844808`: 1,335 passed / the same 22 historical failures as
+0.63, no new failure names; Slow passed. The whole engine suite is not claimed
+green. PRs: Montara #76 and Editor #56, merged into their respective active branches.

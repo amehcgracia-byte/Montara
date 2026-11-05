@@ -69,3 +69,8 @@ Una línea por acción de administrador (`sudo`). Sin contraseñas, tokens ni ll
 | 2026-11-05 | Codex/JM | Chema: actualizar sin interrumpir trabajos | `sudo -u jm`: segundo preflight inmediatamente antes de instalar 0.63; mismo estado libre, no se cancela ninguna tarea. |
 | 2026-11-05 | Codex/JM | Chema: instalar la versión validada | `sudo -H -u jm bash`: fetch explícito, fast-forward main a 2a1cbe7, pin engine 0fc0ceb4 y user_install offline; solo JM:8101. FER intacto. |
 | 2026-11-05 | Codex/JM | Chema: verificar y abrir Montara | `sudo -u jm`: HTTP autenticado confirmó 0.63/2a1cbe7, engine 0fc0ceb4, mixer f15ff91, JS de músicos y luz automática preservada. Companion Mac 0.6.2 actualizado al mismo motor, mezclador conservado. Sin cambios a FER. |
+
+| 2026-11-05 | Codex/JM | Chema: aislar músicos conservando cabezas | `sudo -u jm`: preflight de solo lectura para 0.64; limpio, cero trabajos multimedia y bloqueos; wizard waiting_review. |
+| 2026-11-05 | Codex/JM | Chema: actualizar la versión validada | `sudo -u jm`: segundo preflight inmediatamente antes de instalar 0.64; libre, no se cancela ninguna exportación. |
+| 2026-11-05 | Codex/JM | Chema: instalar 0.64 | `sudo -H -u jm bash`: fetch explícito/fast-forward main d9f9cab, engine d4e59670 y user_install offline; reinicio solo JM:8101. FER intacto. |
+| 2026-11-05 | Codex/JM | Chema: comprobar y abrir 0.64 | `sudo -u jm`: HTTP autenticado verificó 0.64/d9f9cab, engine d4e59670, mixer f15ff91 y editor plano hasta 6×. Companion Mac 0.6.3 al mismo engine; mezclador conservado; se reutiliza túnel 8101 y se abre la página. |
