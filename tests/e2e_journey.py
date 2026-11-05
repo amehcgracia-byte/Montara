@@ -82,7 +82,24 @@ def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
         page.locator("#switchSample").click()
         page.wait_for_function(f"{rows} === {len(files)}", timeout=30_000)
     else:
+        # Push E2E intentionally tests the legacy server path without Companion.
+        # Under U3C, original video upload requires explicit per-file consent;
+        # the test itself supplies that consent rather than bypassing the guard.
+        if mode == "push":
+            accepted_originals = []
+
+            def approve_test_original(dialog):
+                assert dialog.type == "confirm", f"Unexpected upload dialog: {dialog.type}"
+                assert "For testing only: upload the ORIGINAL video" in dialog.message, dialog.message
+                assert "server storage" in dialog.message, dialog.message
+                accepted_originals.append(dialog.message)
+                dialog.accept()
+
+            page.on("dialog", approve_test_original)
         page.locator("[data-drop=video] input").set_input_files([str(f) for f in files])
+        if mode == "push":
+            page.wait_for_function("document.querySelectorAll('#videoFiles li').length > 0", timeout=30_000)
+            assert accepted_originals, "Push test expected explicit original-upload consent"
     page.locator(f'input[name=branding][value="{BRANDING[mode]}"]').check()
     page.wait_for_function("!document.querySelector('#continueFootage').disabled", timeout=120_000)
     page.wait_for_timeout(300)
