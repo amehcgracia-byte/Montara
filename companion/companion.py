@@ -64,6 +64,14 @@ def log(message: str) -> None:
 
 # ---------- tools ----------
 def tool(name: str) -> str | None:
+    # Frozen one-folder builds may ship FFmpeg alongside the EXE, inside
+    # bin/. Prefer those copies over unrelated installations on PATH.
+    if getattr(sys, "frozen", False):
+        folder = Path(sys.executable).resolve().parent
+        suffix = ".exe" if sys.platform == "win32" else ""
+        for candidate in (folder / "bin" / (name + suffix), folder / (name + suffix)):
+            if candidate.is_file():
+                return str(candidate)
     found = shutil.which(name)
     for extra in ("/opt/homebrew/bin", "/usr/local/bin"):
         candidate = Path(extra) / name
@@ -101,6 +109,9 @@ def fingerprint(path: Path) -> str:
 
 
 def search_roots() -> list[Path]:
+    if sys.platform == "win32":
+        from windows_support import search_roots as windows_search_roots
+        return [p for p in windows_search_roots() if p.is_dir()]
     extra = [Path(p).expanduser() for p in os.environ.get("MONTARA_COMPANION_ROOTS", "").split(os.pathsep) if p]
     home = Path.home()
     roots = extra + [home / d for d in ("Movies", "Desktop", "Downloads", "Documents", "Pictures", "Videos")]
@@ -130,9 +141,15 @@ def remember_place(folder: Path) -> None:
 
 
 def walk_root(root: Path) -> None:
+    # Windows removable drives can be enormous. Stop each scan at the same
+    # time budget as the originating locate request; never follow junctions.
+    deadline = time.monotonic() + SEARCH_BUDGET_SEC if sys.platform == "win32" else None
     try:
         for folder, dirs, files in os.walk(root):
-            dirs[:] = [d for d in dirs if not d.startswith(".") and d not in SKIP_DIRS]
+            if deadline is not None and time.monotonic() >= deadline:
+                break
+            dirs[:] = [d for d in dirs if not d.startswith(".") and d not in SKIP_DIRS
+                       and (deadline is None or not (Path(folder) / d).is_symlink())]
             media = [Path(folder) / n for n in files if Path(n).suffix.lower() in VIDEO_SUFFIXES | AUDIO_SUFFIXES]
             if media:
                 with walking:
@@ -326,6 +343,11 @@ def proxy_command(source: Path, target: Path, p: dict, hardware: bool = False) -
             chain += ["zscale=t=linear:npl=100", "format=gbrpf32le", "zscale=p=bt709",
                       "tonemap=tonemap=hable:desat=0", "zscale=t=bt709:m=bt709:r=tv"]
         chain.append("format=yuv420p")
+        # Windows FFmpeg/libx264 may not write all three BT.709 tags from
+        # output options alone. Tag the actual SDR frames in the filtergraph.
+        # Do not label unconverted HDR as SDR when tone mapping is unavailable.
+        if not p["hdr"] or TONEMAP:
+            chain.append("setparams=range=tv:color_primaries=bt709:color_trc=bt709:colorspace=bt709")
         if HW_H264:
             head += ["-hwaccel", "videotoolbox"]
     if HW_H264:
@@ -355,6 +377,7 @@ def make_proxy(key: str) -> None:
     if target.is_file() and target.stat().st_size:
         job.update(status="ready", progress=1.0, bytes=target.stat().st_size)
         return
+    pending = None
     try:
         p = audio_plan(probe(source)) if is_audio(source) else plan(probe(source))
         if p.get("skip"):
@@ -362,6 +385,10 @@ def make_proxy(key: str) -> None:
             log(f"skip {source.name}: {p['skip']}")
             return
         pending = output_path(key, pending=True)
+        # A previous forced exit can leave an incomplete .part file. A new
+        # job for the same key exclusively owns this path; discard only that
+        # partial before starting FFmpeg, never a completed proxy or original.
+        pending.unlink(missing_ok=True)
         if p.get("audio"):
             job.update(info={k: p[k] for k in ("codec", "bits", "channels")})
             if key.endswith("p"):
@@ -377,18 +404,26 @@ def make_proxy(key: str) -> None:
                 f"{'hardware' if HW_H264 else 'software'} encoder)")
         started = time.monotonic()
         for attempt, command in enumerate(commands, 1):
-            process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            # Drain both FFmpeg output streams concurrently through one pipe.
+            # Reading stdout to EOF while stderr has its own pipe can deadlock
+            # when FFmpeg's diagnostic output fills the stderr OS pipe (Windows).
+            process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                       text=True, errors="replace")
             job["process"] = process
+            diagnostic_tail = []
             for line in process.stdout:
                 if line.startswith("out_time_us=") and p["duration"]:
                     try:
                         job["progress"] = min(0.99, int(line.split("=", 1)[1]) / 1e6 / p["duration"])
                     except ValueError:
                         pass
-            error = process.stderr.read()
+                if not line.startswith(("frame=", "fps=", "out_time_", "progress=", "speed=")):
+                    diagnostic_tail.append(line.strip())
+                    if len(diagnostic_tail) > 20:
+                        diagnostic_tail.pop(0)
             if process.wait() == 0:
                 break
-            reason = error.strip().splitlines()[-1] if error.strip() else "FFmpeg failed"
+            reason = next((line for line in reversed(diagnostic_tail) if line), "FFmpeg failed")
             if attempt == len(commands):
                 raise RuntimeError(reason)
             log(f"{source.name}: the fast way failed ({reason}); trying the software way")
@@ -401,6 +436,13 @@ def make_proxy(key: str) -> None:
             f"({p['duration'] / max(elapsed, 0.1):.1f}x real time)")
     except Exception as error:  # reported to the page, which then uploads the original
         job.update(status="failed", error=str(error)[:300])
+        # On a normal FFmpeg failure, remove only this job's incomplete output.
+        # Hard kills cannot execute this handler; the next retry cleans it.
+        if pending is not None:
+            try:
+                pending.unlink(missing_ok=True)
+            except OSError as cleanup_error:
+                log(f"partial cleanup failed for {source.name}: {cleanup_error}")
         log(f"failed {source.name}: {error}")
     finally:
         job.pop("process", None)
@@ -408,7 +450,10 @@ def make_proxy(key: str) -> None:
 
 # ---------- project folder on this computer ----------
 def choose_folder(prompt: str) -> Path | None:
-    """Native folder dialog on a Mac; elsewhere MONTARA_COMPANION_PROJECTS or the home folder."""
+    """Native directory selector on macOS and Windows."""
+    if sys.platform == "win32":
+        from windows_support import choose_folder as windows_choose_folder
+        return windows_choose_folder(prompt)
     if sys.platform == "darwin":
         script = f'POSIX path of (choose folder with prompt "{prompt}")'
         result = subprocess.run(["osascript", "-e", "activate", "-e", script], capture_output=True, text=True, timeout=900)

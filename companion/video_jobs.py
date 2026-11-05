@@ -5,8 +5,17 @@ from video_recipe import validate
 
 
 def stop_process_tree(process):
-    """Stop this worker and its FFmpeg descendants, including separate groups."""
+    """Stop this worker and its FFmpeg descendants on Windows and POSIX."""
     if process.poll() is not None:return
+    if os.name == 'nt':
+        # Windows has no 'ps' or POSIX signals. taskkill /T scopes the action to
+        # the PID owned by this job and its child tree (e.g. FFmpeg).
+        subprocess.run(['taskkill','/PID',str(process.pid),'/T','/F'],
+                       stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,
+                       check=False,timeout=10)
+        try:process.wait(timeout=5)
+        except subprocess.TimeoutExpired:raise RuntimeError('Worker did not stop')
+        return
     rows=subprocess.check_output(['ps','-Ao','pid=,ppid='],text=True).splitlines()
     children={}
     for line in rows:
