@@ -61,3 +61,13 @@ Actualizado el **05-11-2026** por laboratorio FER. Estado **registrado en el mom
 4. [Editor PR #59](https://github.com/amehcgracia-byte/zucker_videos/pull/59) sigue **DRAFT NO MERGED**; última CI `42097202010` concluyó `failure`, 22 fallos Fast restantes (1343 PASS). Se corrigió nuestro fallo de clave cache legacy (23→22); no se ha demostrado aún contra ejecución baseline que los otros 22 coincidan, ni inspeccionado paridad visual con vídeo real. **No mover pin de Montara**.
 
 **Siguiente trabajo:** revisión focalizada de FOCUS_A_C / vinculación original→proxy→receta respecto a main ahora actualizado, o continuación de validación Editor #59; evitar nuevos experimentos redundantes.
+
+## 8. PR #81 — FFmpeg stdout/stderr deadlock Windows · MERGED
+
+**Hallazgo FER 05-11-2026:** Windows 3 s synthetic, companion 0.6.5 sin fix en puerto 47821: `health=true`, `locate=true`, pero `/proxies` no acabó (`working` 0.973333). La misma causa del laboratorio JÚPITER W3D: `stdout=PIPE,stderr=PIPE` leídos secuencialmente. La corrección W3E estaba en rama experimental pero no llegó a la PR #79.
+
+**[PR Montara #81](https://github.com/amehcgracia-byte/Montara/pull/81): MERGED** con squash `7decf8e5a5b45497ae2b92c0355eb7708e434c7f`. Solo tres ficheros: `companion/companion.py` (merge stderr a stdout), `tests/test_companion_proxy_pipe.py` (regresión de saturación), workflow Windows. HEAD main actualizado a `7decf8e5a5b45497ae2b92c0355eb7708e434c7f`; 1 commit sobre `0db9f75`, sin modificar pines Engine/Mixer.
+
+Gates: [Windows CI 42102443407](https://github.com/amehcgracia-byte/Montara/actions/runs/42102443407) SUCCESS; [Linux E2E 42102441945](https://github.com/amehcgracia-byte/Montara/actions/runs/42102441945) SUCCESS. Prueba física FER (comentario [#81](https://github.com/amehcgracia-byte/Montara/pull/81#issuecomment-6668550362)): con el nuevo código `locate=true`, `proxy_status=ready`, HTTP mp4, 1.924.300 bytes original / 460.393 bytes proxy (≈24 %), descarga válida, original inalterado, sin subida cloud. Script reporta intento de limpieza de directorio temporal; no se verificó desaparición física del directorio ni se probó navegador drag & drop real.
+
+**Estado PC:** Companion 0.6.2 W3L antiguo fue cerrado y el puerto 47820 quedó libre. Intento de renombrar carpeta `Montara-W3L-Build` dio `Acceso denegado` pese a permitir crear/quitar un archivo temporal y sin procesos detectados bajo la carpeta. No modificar ACL ni reiniciar; el usuario tiene aplicaciones abiertas y desea aplazar limpieza. `Montara-Companion-Lab` y `MONTARA_PRUEBAS` permanecen sin borrar. **No se instaló, publicó ni desplegó Companion nuevo; distribución/legal FFmpeg pendiente.**
