@@ -133,14 +133,16 @@ def remember_place(folder: Path) -> None:
 
 
 def walk_root(root: Path) -> None:
-    # Limit each Windows scan; keep macOS/Linux traversal unchanged.
+    # Limit each Windows scan; avoid following junctions or symlink directories.
     deadline = time.monotonic() + SEARCH_BUDGET_SEC if sys.platform == "win32" else None
+    if deadline is not None:
+        from windows_support import is_reparse_point
     try:
         for folder, dirs, files in os.walk(root):
             if deadline is not None and time.monotonic() >= deadline:
                 break
             dirs[:] = [d for d in dirs if not d.startswith(".") and d not in SKIP_DIRS
-                       and (deadline is None or not (Path(folder) / d).is_symlink())]
+                       and (deadline is None or not is_reparse_point(Path(folder) / d))]
             media = [Path(folder) / n for n in files if Path(n).suffix.lower() in VIDEO_SUFFIXES | AUDIO_SUFFIXES]
             if media:
                 with walking:
