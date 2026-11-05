@@ -66,3 +66,17 @@ No suponer elegibilidad, canje, ampliación o equivalencia de promociones entre 
 **Estado de GitHub a la última revisión:** PR #79–#83 fusionadas en `main` (HEAD `4f1dceb904056abd8e3598ba7f356e5234f6c1df`). PR #84 (rama `fernando/lab-cloudflare-static-benchmark`) permanece DRAFT **sin integrar**: build estático sin llamadas a red, [CI específico](https://github.com/amehcgracia-byte/Montara/actions/runs/42113736215) PASS; [E2E Linux](https://github.com/amehcgracia-byte/Montara/actions/runs/42113735287) aún corriendo en última consulta. Sin deployment Cloudflare, no se han tocado DNS ni demo Vercel.
 
 **Portabilidad mínima:** mantener Engine/servicios con configuración de host y directorio por entorno, usar imágenes/dependencias reproducibles, no persistir estado importante solo en memoria de proceso, separar ficheros temporales de metadatos de proyecto y usar tests E2E igual en proveedor distinto. Elegir proveedor final por ratio precio/rendimiento, egress, almacenamiento, disponibilidad de CPU/GPU y esfuerzo operativo, **después** de montar el flujo funcional.
+
+## Laboratorio Cloudflare: cuenta conectada y bloqueo de GitHub — 05-11-2026
+
+El propietario ha creado cuenta Cloudflare sin tarjeta y ha conectado el plugin Cloudflare a ChatGPT. Lectura API real: cuenta standard accesible, **0 proyectos Pages y 0 Workers**, ninguna migración, factura, DNS ni dominio tocado.
+
+La [PR #84](https://github.com/amehcgracia-byte/Montara/pull/84) (solo benchmark web estática, sin red de API) tiene **build específico SUCCESS** 42113736215 y **E2E Linux SUCCESS** 42113735287, sigue DRAFT sin fusionar.
+
+Se intentó crear proyecto Pages `montara-cloudflare-lab` vía API, rama GitHub `fernando/lab-cloudflare-static-benchmark`, con configuración `python3 tools/cloudflare-static/build.py` → `dist`, sin preview extra, **pero Cloudflare rechazó POST con HTTP 401 / código 8000011 «There is an internal issue with your Cloudflare Pages Git installation»**. La cuenta dispone de permiso OAuth `page.write`; faltaría instalar/autorizar correctamente en GitHub la aplicación `Cloudflare Workers and Pages`, asignándole solo `amehcgracia-byte/Montara`. Tras fallar se volvió a consultar: sigue **0 proyectos Pages / 0 Workers**, no quedó ningún recurso incompleto.
+
+GitHub API del repositorio indica que la identidad conectada tiene **push pero no admin** sobre repo propiedad de `amehcgracia-byte`. La autorización de una GitHub App para el repositorio puede requerir intervención de quien tenga permisos de administración (Chema, según sus permisos reales). No asumir que el propietario de Cloudflare posee esos permisos; evitar insistir con credenciales o hacer bypass. Fuentes oficiales:
+- https://developers.cloudflare.com/pages/configuration/git-integration/
+- https://developers.cloudflare.com/pages/configuration/git-integration/github-integration/
+
+**Siguiente acción humana mínima:** desde el panel Cloudflare, Workers & Pages → Create application → Pages → Connect to Git → GitHub → instalar/autorizar Cloudflare Workers and Pages sobre **solo Montara**. Si GitHub indica falta de permisos, pedir aprobación a administrador de `amehcgracia-byte/Montara`. Cuando aparezca el repositorio en la lista, ChatGPT podrá volver a crear proyecto vía API o guiar; sin otras cuentas ni pagos. No activar producción en `main`. **URANO funcional sigue sin bloquearse por esta prueba opcional.**
