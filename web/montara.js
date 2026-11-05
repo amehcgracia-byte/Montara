@@ -1530,6 +1530,16 @@ function viewpointName(item) {
 }
 const swapping = new Set();
 let frameHover = null;
+function playFrameHover(entry) {
+  const {video,thumb}=entry, label=thumb.querySelector('.hover-status');
+  video.muted=false;
+  video.play().then(()=>{if(frameHover===entry)label.hidden=true;else video.pause();}).catch(()=>{
+    if(frameHover!==entry)return;
+    // Browsers can require a tap before allowing audible autoplay.
+    video.muted=true;video.play().catch(()=>{});
+    label.textContent='Tap for sound';label.hidden=false;
+  });
+}
 // Shot previews stay loaded once played, and are made in the background one by one
 // after the shots appear, so hovering shows the movement at once.
 function stopFrameHover() {
@@ -1567,7 +1577,7 @@ function startFrameHover(thumb) {
   const entry = { thumb, video, timer: null }; frameHover = entry;
   if (video.getAttribute("src") === thumb.dataset.preview && video.readyState >= 2) {
     video.hidden = false; label.hidden = true;
-    video.play().catch(() => {});
+    playFrameHover(entry);
     return;
   }
   entry.timer = setTimeout(() => {
@@ -1576,7 +1586,7 @@ function startFrameHover(thumb) {
     video.oncanplay = () => {
       if (frameHover !== entry) return;
       video.hidden = false; label.hidden = true;
-      video.play().catch(() => { label.textContent = "Tap the picture to play"; label.hidden = false; });
+      playFrameHover(entry);
     };
     video.onerror = () => { if (frameHover === entry) { label.textContent = "Preview unavailable"; label.hidden = false; } };
     video.preload = "auto";
@@ -1649,7 +1659,7 @@ async function updateFrames(first) {
       thumb.onblur = () => { if (!thumb.matches(":hover") && frameHover?.thumb === thumb) stopFrameHover(); };
       thumb.onclick = (event) => {
         if (event.target.closest("button")) return;
-        if (frameHover?.thumb === thumb && frameHover.video.readyState >= 2) frameHover.video.play().catch(() => {});
+        if (frameHover?.thumb === thumb && frameHover.video.readyState >= 2) playFrameHover(frameHover);
         else startFrameHover(thumb);
       };
       thumb.onkeydown = (event) => { if (event.target === thumb && ["Enter", " "].includes(event.key)) { event.preventDefault(); startFrameHover(thumb); } };

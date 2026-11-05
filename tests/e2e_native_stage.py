@@ -52,6 +52,12 @@ def main():
             page.locator('#continueCameras').click();page.wait_for_selector('#frames:not([hidden]), #failed:not([hidden])',timeout=600000)
             assert not page.locator('#failed').is_visible(),page.locator('#errorText').inner_text()
             page.wait_for_function("!document.querySelector('#framesHint').textContent.includes('Preparing')",timeout=180000)
+            thumb=page.locator('.frame .thumb').first
+            thumb.click()
+            page.wait_for_function("document.querySelector('.frame video').readyState>=2",timeout=120000)
+            thumb.click()  # Explicit user gesture unlocks audio on restrictive browsers.
+            page.wait_for_function("!document.querySelector('.frame video').paused && !document.querySelector('.frame video').muted",timeout=15000)
+            page.screenshot(path=str(out/'audible-frame-preview.png'))
             page.locator('.frame .shot-edit').first.click();dialog=page.locator('dialog.cut-dialog')
             dialog.wait_for(state='visible');assert dialog.locator('[name=lightAuto]').count()==0
             dialog.locator('.flat-zoom-row input').evaluate("e=>{e.value='3.4';e.dispatchEvent(new Event('input',{bubbles:true}));}")
