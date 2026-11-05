@@ -143,3 +143,14 @@ def test_personal_transparent_logo_renders_locally_without_extra_seconds(tmp_pat
     raw=subprocess.check_output(['ffmpeg','-v','error','-ss','0.1','-i',str(output),'-frames:v','1','-vf','scale=192:108','-f','rawvideo','-pix_fmt','rgb24','-'])
     frame=np.frombuffer(raw,np.uint8).reshape(108,192,3)
     assert frame[10,10,2]>150 and frame[54,96,0]>150
+
+
+def test_native_recipe_accepts_deep_flat_crop_but_keeps_motion_limits():
+    data=recipe('a'*40)
+    data['segments'][0]['flat_framing']={'zoom':5.4,'x':.3,'y':.4}
+    validate(data)
+    data['segments'][0]['flat_framing']['zoom']=6.1
+    with pytest.raises(ValueError):validate(data)
+    data['segments'][0]['flat_framing']['zoom']=5.4
+    data['segments'][0]['motion']={'type':'ken_burns','zoom_start':5.4}
+    with pytest.raises(ValueError):validate(data)

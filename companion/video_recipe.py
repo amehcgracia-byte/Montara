@@ -31,7 +31,7 @@ def controls(name,value):
         raise ValueError('Invalid camera controls')
     if name=='flat_framing' and value:
         if set(value)-{'zoom','x','y'}:raise ValueError('Unknown crop control')
-        for k,lo,hi,default in [('zoom',1,3,1),('x',0,1,.5),('y',0,1,.5)]:bounded(value.get(k,default),lo,hi)
+        for k,lo,hi,default in [('zoom',1,6,1),('x',0,1,.5),('y',0,1,.5)]:bounded(value.get(k,default),lo,hi)
     if name=='video_light' and value is not None:
         if set(value)-{'auto','light','shadows'} or not isinstance(value.get('auto',True),bool):raise ValueError('Invalid light controls')
         for k in ('light','shadows'):bounded(value.get(k,0),-1,1)
@@ -42,7 +42,7 @@ def controls(name,value):
             for k,item in v.items():
                 if isinstance(item,(int,float)) and not isinstance(item,bool):
                     if k in ('fov','insv_fov'):bounded(item,1,360)
-                    elif k in ('zoom','zoom_start','zoom_end'):bounded(item,1,3)
+                    elif k in ('zoom','zoom_start','zoom_end'):bounded(item,1,6 if name=='flat_framing' else 3)
                     elif k in ('yaw','pitch','roll'):bounded(item,-360,360)
                     elif k in ('width','height','w','h'):raise ValueError('Output dimensions are fixed')
                 check(item)
