@@ -1530,6 +1530,16 @@ function viewpointName(item) {
 }
 const swapping = new Set();
 let frameHover = null;
+function playFrameHover(entry) {
+  const {video,thumb}=entry, label=thumb.querySelector('.hover-status');
+  video.muted=false;
+  video.play().then(()=>{if(frameHover===entry)label.hidden=true;else video.pause();}).catch(()=>{
+    if(frameHover!==entry)return;
+    // Browsers can require a tap before allowing audible autoplay.
+    video.muted=true;video.play().catch(()=>{});
+    label.textContent='Tap for sound';label.hidden=false;
+  });
+}
 // Shot previews stay loaded once played, and are made in the background one by one
 // after the shots appear, so hovering shows the movement at once.
 function stopFrameHover() {
@@ -1567,7 +1577,7 @@ function startFrameHover(thumb) {
   const entry = { thumb, video, timer: null }; frameHover = entry;
   if (video.getAttribute("src") === thumb.dataset.preview && video.readyState >= 2) {
     video.hidden = false; label.hidden = true;
-    video.play().catch(() => {});
+    playFrameHover(entry);
     return;
   }
   entry.timer = setTimeout(() => {
@@ -1576,7 +1586,7 @@ function startFrameHover(thumb) {
     video.oncanplay = () => {
       if (frameHover !== entry) return;
       video.hidden = false; label.hidden = true;
-      video.play().catch(() => { label.textContent = "Tap the picture to play"; label.hidden = false; });
+      playFrameHover(entry);
     };
     video.onerror = () => { if (frameHover === entry) { label.textContent = "Preview unavailable"; label.hidden = false; } };
     video.preload = "auto";
@@ -1649,7 +1659,7 @@ async function updateFrames(first) {
       thumb.onblur = () => { if (!thumb.matches(":hover") && frameHover?.thumb === thumb) stopFrameHover(); };
       thumb.onclick = (event) => {
         if (event.target.closest("button")) return;
-        if (frameHover?.thumb === thumb && frameHover.video.readyState >= 2) frameHover.video.play().catch(() => {});
+        if (frameHover?.thumb === thumb && frameHover.video.readyState >= 2) playFrameHover(frameHover);
         else startFrameHover(thumb);
       };
       thumb.onkeydown = (event) => { if (event.target === thumb && ["Enter", " "].includes(event.key)) { event.preventDefault(); startFrameHover(thumb); } };
@@ -2419,11 +2429,22 @@ function fail(error) {
   show("failed");
 }
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
 loadBranding();
 api("/montara/version").then((v) => { $("#version").textContent = `Montara ${v.version}`; }).catch(() => {});
 let savedEdit=null;
 try {savedEdit=JSON.parse(sessionStorage.getItem('montara-open-edit'));} catch {}
+const resumeFrames=new URLSearchParams(location.search).get('resume')==='frames';
+if(resumeFrames){
+  clearTimeout(introTimer);show('making');setProgress(0,'Opening your edit…','');
+  try {
+    const current=await status();
+    if(current.project_path){
+      const project=await api('/project');
+      savedEdit={project:current.project_path,platform:project.settings?.wizard?.platform || 'youtube',step:'frames'};
+    }
+  } catch(error){toast(error.message,true);}
+}
 if(savedEdit?.project){
   clearTimeout(introTimer);
   show('making');setProgress(0,'Opening your edit…','');
@@ -2446,6 +2467,7 @@ if(savedEdit?.project){
     $('#videoName').value=project.name || todayName();
     const remembered=new Map(state.files.map(f=>[f.path,f]));
     state.files=[...(project.inputs?.videos||[]).map(f=>({id:crypto.randomUUID(),name:f.path.split('/').pop(),kind:'video',path:f.path,small:/\.small\.mp4$/i.test(f.path),...remembered.get(f.path)})),...((project.inputs?.master?.path?[project.inputs.master]:project.inputs?.audio)||[]).map(f=>({id:crypto.randomUUID(),name:f.path.split('/').pop(),kind:'master',path:f.path,...remembered.get(f.path)}))];
+    if(resumeFrames && ['waiting_review','done','completed'].includes(current.status)){await openFrames();return;}
     if(['done','completed'].includes(current.status)){showResult(current);return;}
     if(current.status==='waiting_review'){await openFrames();return;}
     if(current.status==='waiting_show_review'){await openShowReview();return;}
