@@ -74,3 +74,8 @@ Una línea por acción de administrador (`sudo`). Sin contraseñas, tokens ni ll
 | 2026-11-05 | Codex/JM | Chema: actualizar la versión validada | `sudo -u jm`: segundo preflight inmediatamente antes de instalar 0.64; libre, no se cancela ninguna exportación. |
 | 2026-11-05 | Codex/JM | Chema: instalar 0.64 | `sudo -H -u jm bash`: fetch explícito/fast-forward main d9f9cab, engine d4e59670 y user_install offline; reinicio solo JM:8101. FER intacto. |
 | 2026-11-05 | Codex/JM | Chema: comprobar y abrir 0.64 | `sudo -u jm`: HTTP autenticado verificó 0.64/d9f9cab, engine d4e59670, mixer f15ff91 y editor plano hasta 6×. Companion Mac 0.6.3 al mismo engine; mezclador conservado; se reutiliza túnel 8101 y se abre la página. |
+
+| 2026-11-05 | Codex/JM | Chema: corregir color y calidad del render | `sudo -u jm`: preflight de solo lectura antes de instalar 0.65; estado de JM y bloqueos multimedia, sin tocar FER. |
+| 2026-11-05 | Codex/JM | Chema: instalar la corrección validada | `sudo -u jm`: segundo preflight inmediato, antes de actualizar JM a 0.65; nunca se cancela un render para instalar. |
+| 2026-11-05 | Codex/JM | Chema: instalar 0.65 | `sudo -H -u jm bash`: fetch explícito y fast-forward main e8a8c83, engine 6283d87e, user_install offline y reinicio solo JM:8101; FER intacto. |
+| 2026-11-05 | Codex/JM | Chema: comprobar y abrir la actualización | `sudo -u jm`: HTTP autenticado, versión y pines de JM; Companion Mac 0.6.4 con engine 6283d87e y mixer f15ff91 conservado. Se reutiliza el túnel; FER intacto. |

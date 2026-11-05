@@ -4,7 +4,7 @@ Actualizado: 2026-11-05 · lo mantiene el equipo de Chema · 40 líneas como má
 
 - `mixer`: rama `claude/winds-synth-bass-lowpass` (ZuckerMixer PR #8, **sin mergear en master**); Montara fija `f15ff91` (limitador suave, PR Mixer #9)
 - VM: e2-standard-8, `jm` en `127.0.0.1:8101`, `fer` en `:8102`; apagado automático (60 min sin web, 120 min sin SSH)
-- Companion **0.6.3 instalado en el Mac**: mixer `f15ff91` conservado, renderizador Stage `d4e59670`; logo propio y resultados terminados recuperables tras reinicio; sin modelos nuevos de IA.
+- Companion **0.6.4 instalado en el Mac**: mixer `f15ff91` conservado, renderizador Stage `6283d87e`; logo propio y resultados terminados recuperables tras reinicio; sin modelos nuevos de IA.
 
 ## Sesión completa (jam entera) — cómo va
 | Pieza | PR |
@@ -28,7 +28,7 @@ Actualizado: 2026-11-05 · lo mantiene el equipo de Chema · 40 líneas como má
 - Con ficha propia: percusión, guitarra acústica, trompeta, trombón, flauta, violín, cuerdas, coros, voz de podcast y narración. El resto usa el rol tal cual.
 - Pendiente: detección por audio (hoy por nombre o por la elección de la persona); fichas para más instrumentos; afinarlas de oído con jams reales.
 ## Pendiente
-- **0.64 instalada JM (`d9f9cab`)**: encuadres individuales según cabeza y vecinos, margen para pelo/orejas durante el movimiento; zoom plano hasta 6× en editor y Companion. Conserva generales, manuales y luz automática. Los solapamientos y la estimación de cabeza sin cara detectada limitan el aislamiento; no reconoce solos desde un máster. Linux: cinco recorridos aprobados `41946885272`, incluido render local 3,4×, capturas vistas; 234 tests Mac. Engine `d4e59670` (Editor #56), Montara #76; `docs/HEAD_SAFE_CROPS_064.md`.
+- **0.65 instalada JM (`e8a8c83`)**: medición de color normalizada entre cámaras 8/10 bits, caché v8; luz automática v2 con menor levantamiento de sombras en escenarios oscuros. Originales verificados; no son proxies. Mantiene encuadres 0.64 y zoom 6×. Linux: cinco recorridos aprobados `42001327109`, capturas vistas; 234 tests Mac y 50 de motor. Engine `6283d87e` (Editor #57), Montara #77. `docs/CAMERA_COLOUR_065.md`: limitaciones de zoom, roles/solos aún sin reconocimiento automático y ensayo CLIP no integrado.
 - Vídeos por lote para canciones ya mezcladas y dos cámaras iguales con zoom según encuadre: revisión y aceptación pendientes en `docs/PENDIENTES_CAMARAS_Y_LOTES.md`.
 - **Mezcla en el Mac (companion 0.5.1, opcional, #59)**: `install.sh --mixer` instala el mezclador del servidor en el Mac (171 MB); cada canción se mezcla allí y solo sube el MP3. Salida idéntica bit a bit a la del servidor en el test. **Medido el 01-11 en el Mac de Chema (MacBook Pro 13" Intel i7, 4 núcleos), jam de 1h56 con 9 pistas: 12 de 12 canciones con `local: true`, 47,5 min de música en 12,4 min (entre 32 y 91 s por canción, unos 16 s por minuto), frente a la estimación de 140 min subiendo los originales al servidor.** Una canción a la vez (`MONTARA_COMPANION_MIX_SLOTS=1`); falta probar con 2 y confirmar por oído. Informe de Fer: `JUPITER_COMPANION_MAC_LOCAL_MIX_FEASIBILITY_2026-11-01.md`.
 - Licencias: Matchering (GPLv3, de terceros) solo se usa en el servidor; el mezclador del Mac no lo instala.

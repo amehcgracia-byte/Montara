@@ -43,4 +43,29 @@ and re-encoding. The native source-linking and 6× user controls remain intact.
   matching luma/chroma and neutral correction for equivalent pictures.
 - Privately inspected original / previous / corrected comparison frames from
   the actual fixed source. Media and diagnostics remain outside Git.
-- Linux browser journeys and installation: pending; do not present as installed.
+- Linux acceptance `42001327109`: Stage, Push, Mix, session/native Stage and
+  private-container all passed. Stage frames, native framing and result screenshots
+  inspected. Full local Montara suite: 234 passed.
+- Engine run `42001227390`: Fast 1,338 passed / the same 22 historical failures
+  as 0.64 (failure names compared); Slow passed. No whole-engine green claim.
+- Installed JM main `e8a8c83`, engine `6283d87e84342f2b14633248ac45d34ca89e196e`,
+  mixer `f15ff91` unchanged. Mac Companion 0.6.4 uses that same engine.
+  Both installations verified; FER untouched. PRs Montara #77 and Editor #57.
+
+## Additional private feasibility checks
+
+A three-frame, three-person CLIP probe ran in 2.79 seconds on the existing Mac
+using the engine's existing quantized vision/text models (pinned files verified
+by the existing fetch helper). It ranked pianist first for the seated musician
+in all three frames, but misclassified the bassist in one. This is an experiment,
+not a deployed recognizer; no new model/dependency was installed in JM or the
+Companion. Local ignored model files and private probe outputs remain outside Git.
+
+One second of the actual fixed-camera source, with identical 3.575x framing,
+light and motion, was encoded at 18 and 40 Mb/s with VideoToolbox and compared
+against a lossless reference of that same processed picture. SSIM was 0.982381
+and 0.983392 respectively (this is not comparison against an uncropped source).
+The sample is too small to certify whole-video quality. Doubling the default
+bitrate was not adopted for this marginal improvement. Software CRF18 in the
+same experiment measured 0.981865; encoding time observations include creating
+that lossless reference and are not full-render benchmarks.
