@@ -387,18 +387,25 @@ def make_proxy(key: str) -> None:
                 f"{'hardware' if HW_H264 else 'software'} encoder)")
         started = time.monotonic()
         for attempt, command in enumerate(commands, 1):
-            process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            # Merge FFmpeg progress and diagnostics to avoid a blocked stderr
+            # pipe on Windows when the encoder emits many warnings.
+            process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                       text=True, errors="replace")
             job["process"] = process
+            diagnostic_tail = []
             for line in process.stdout:
                 if line.startswith("out_time_us=") and p["duration"]:
                     try:
                         job["progress"] = min(0.99, int(line.split("=", 1)[1]) / 1e6 / p["duration"])
                     except ValueError:
                         pass
-            error = process.stderr.read()
+                if not line.startswith(("frame=", "fps=", "out_time_", "progress=", "speed=")):
+                    diagnostic_tail.append(line.strip())
+                    if len(diagnostic_tail) > 20:
+                        diagnostic_tail.pop(0)
             if process.wait() == 0:
                 break
-            reason = error.strip().splitlines()[-1] if error.strip() else "FFmpeg failed"
+            reason = next((line for line in reversed(diagnostic_tail) if line), "FFmpeg failed")
             if attempt == len(commands):
                 raise RuntimeError(reason)
             log(f"{source.name}: the fast way failed ({reason}); trying the software way")
