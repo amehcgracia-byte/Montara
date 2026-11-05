@@ -59,6 +59,26 @@ def search_roots(home=None, environ=None, drives=None):
     return list(dict.fromkeys(roots))
 
 
+
+def is_reparse_point(path):
+    """Reject Windows junctions as well as symlinks during bounded scans.
+
+    Some directory junctions are not reported by Path.is_symlink() on
+    supported Windows/Python combinations. They carry the NTFS reparse flag.
+    """
+    path = Path(path)
+    try:
+        attributes = path.lstat().st_file_attributes
+        if attributes & 0x400:  # FILE_ATTRIBUTE_REPARSE_POINT
+            return True
+    except (OSError, AttributeError):
+        pass
+    try:
+        return path.is_symlink()
+    except OSError:
+        return True
+
+
 def choose_folder(prompt):
     """Use the native Windows folder picker. Return None on cancellation/failure."""
     try:
