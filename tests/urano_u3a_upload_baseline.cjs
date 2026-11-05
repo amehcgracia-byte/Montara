@@ -1,10 +1,10 @@
 /**
- * URANO U3A — characterize the current original-upload fallback.
+ * URANO U3B — guard against uploading local original videos.
  * Runs actual uploadSmall/upload/uploadInParts functions from web/montara.js
  * under vm with ALL network calls mocked. No real files, uploads, or browser.
  *
- * Expected failures are documented observations, not desired future policy.
- * When U3B removes a fallback, update its expectation intentionally.
+ * Original U3A baseline is documented in docs/lab; these are now the
+ * U3B desired-policy assertions. No actual bytes leave this test.
  */
 "use strict";
 const assert = require("node:assert/strict");
@@ -13,7 +13,7 @@ const vm = require("node:vm");
 const path = require("node:path");
 
 const source = fs.readFileSync(path.join(__dirname, "..", "web", "montara.js"), "utf8");
-const start = source.indexOf("const WHOLE_FILE_ASK_BYTES =");
+const start = source.indexOf("// URANO U3B: do not send local video originals");
 const end = source.indexOf("const KIND_LABEL =", start);
 assert(start !== -1 && end > start, "Upload function boundaries changed: review test extraction");
 const actualUploadCode = source.slice(start, end);
@@ -26,6 +26,7 @@ async function scenario(name, config) {
   const companion = {
     info: config.companion ? {ffmpeg:true} : null,
     helps: () => true,
+    isVideo: file => /video\//.test(file.type) || /\.(mp4|mov|mkv|avi)$/i.test(file.name),
     isAudio: () => false,
     smallVersion: async () => {
       if (config.result === "throw") throw new Error("simulated FFmpeg error");
@@ -70,15 +71,16 @@ async function scenario(name, config) {
   }
   if (config.route) assert.equal(sent.route,config.route,name+" path");
   if (expected==="none") assert.equal(entry.kind,"error",name+" blocking error");
+  if (expected==="none") assert.match(entry.error,/Companion|not found/i,name+" helpful guidance");
   console.log("U3A_CHARACTERIZED",name,expected,sent?.route || "no transfer");
 }
 (async()=>{
-  await scenario("no_companion_10MiB",{companion:false,mb:10,expected:"original",route:"/montara/uploads"});
-  await scenario("no_companion_300MiB",{companion:false,mb:300,expected:"original",route:"/montara/uploads"});
-  await scenario("companion_missing_10MiB",{companion:true,mb:10,result:"missing",expected:"original",route:"/montara/uploads"});
+  await scenario("no_companion_10MiB",{companion:false,mb:10,expected:"none"});
+  await scenario("no_companion_300MiB",{companion:false,mb:300,expected:"none"});
+  await scenario("companion_missing_10MiB",{companion:true,mb:10,result:"missing",expected:"none"});
   await scenario("companion_missing_300MiB",{companion:true,mb:300,result:"missing",expected:"none"});
-  await scenario("companion_failed_300MiB",{companion:true,mb:300,result:"null",expected:"original",route:"/montara/uploads"});
-  await scenario("companion_ffmpeg_throws_300MiB",{companion:true,mb:300,result:"throw",expected:"original",route:"/montara/uploads"});
+  await scenario("companion_failed_300MiB",{companion:true,mb:300,result:"null",expected:"none"});
+  await scenario("companion_ffmpeg_throws_300MiB",{companion:true,mb:300,result:"throw",expected:"none"});
   await scenario("companion_success_300MiB",{companion:true,mb:300,result:"proxy",expected:"proxy",route:"/api/v1/wizard/upload"});
-  console.log("URANO_U3A_BASELINE_PASS: 7 fully mocked characterization scenarios; current fallback is intentionally present.");
+  console.log("URANO_U3B_VIDEO_POLICY_PASS: 7 mocked cases; no original videos sent, valid proxy still uploads.");
 })().catch(error=>{console.error(error);process.exitCode=1;});
