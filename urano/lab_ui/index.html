@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Montara · URANO laboratorio</title>
+<link rel="stylesheet" href="/urano-lab/lab.css">
+<script src="/urano-lab/lab.js" defer></script>
+</head>
+<body>
+<header class="top"><div class="brand"><span class="mark">M</span><span>ontara</span></div><span class="tag">URANO · LABORATORIO AISLADO</span></header>
+<main>
+  <p class="eyebrow">MIS PROYECTOS · U12b</p>
+  <h1>Tu espacio creativo.</h1>
+  <p class="muted">Una primera prueba de acceso y proyectos. Aquí todavía no se abre el editor ni se procesan vídeos.</p>
+  <p id="notice" class="notice" role="status" aria-live="polite"></p>
+  <section id="authPanel">
+    <div class="tabs" role="group" aria-label="Acceso">
+      <button id="loginTab" type="button" aria-pressed="true">Iniciar sesión</button>
+      <button id="registerTab" type="button" aria-pressed="false">Crear cuenta de prueba</button>
+    </div>
+    <form id="authForm">
+      <label>Correo electrónico <input type="email" name="email" autocomplete="email" maxlength="254" required></label>
+      <label>Contraseña <input type="password" name="password" minlength="12" maxlength="256" autocomplete="current-password" required></label>
+      <button class="primary" id="submitAuth" type="submit">Entrar</button>
+    </form>
+    <p class="fine">Sólo pruebas con datos inventados. No introduzcas tu contraseña real.</p>
+  </section>
+  <section id="projectsPanel" hidden>
+    <div class="section-head"><h2>Mis proyectos</h2><button type="button" id="logoutBtn" class="secondary">Cerrar sesión</button></div>
+    <form id="newProjectForm" class="create-row">
+      <label>Nuevo proyecto <input name="title" placeholder="Mi próximo vídeo" maxlength="160" required></label>
+      <button class="primary" type="submit">Crear proyecto</button>
+    </form>
+    <p class="muted">Tus proyectos recientes y antiguos se muestran aquí. Seleccionar uno abre sus detalles guardados; todavía no activa el Engine.</p>
+    <div id="projectList" class="project-list" aria-live="polite"></div>
+    <section id="projectDetail" class="detail" hidden>
+      <h3 id="projectTitle"></h3><p id="projectMeta" class="muted"></p>
+      <p class="fine">Receta de laboratorio, no un archivo de vídeo.</p>
+      <label>Notas de edición (demo) <textarea id="recipeNotes" rows="3" maxlength="3000"></textarea></label>
+      <button id="saveNotes" class="primary" type="button">Guardar notas</button>
+    </section>
+  </section>
+</main>
+<footer>U12b · Sólo catálogo y sesiones de prueba · No conectado a la web principal</footer>
+</body>
+</html>

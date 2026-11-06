@@ -1,0 +1,29 @@
+name: URANO authenticated HTTP contracts
+
+on:
+  push:
+    branches:
+      - fernando/urano-u11-session-http-contract
+  pull_request:
+    paths:
+      - 'urano/**'
+      - 'tests/test_urano_session_http.py'
+      - 'tests/test_urano_project_catalog.py'
+      - '.github/workflows/urano-session-http.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  session-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install isolated HTTP test requirement
+        run: python -m pip install 'Flask>=3.0,<4'
+      - name: Run catalog and authenticated HTTP contracts
+        run: python -m unittest discover -s tests -p 'test_urano_*.py' -v
