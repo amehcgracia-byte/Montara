@@ -1,6 +1,6 @@
 # URANO U13D2B — Puerta de aislamiento de contenedores
 
-**Fecha:** 2026-11-06. **Estado:** PR DRAFT, CI pendiente de comprobación. **No desplegado, no integrado con Engine real y NO apto aún para beta pública**.
+**Fecha:** 2026-11-06. **Estado:** PR DRAFT. **CI específica verde** en [run 42222303679](https://github.com/amehcgracia-byte/Montara/actions/runs/42222303679) (tests de contrato y dos contenedores Docker reales). E2E general separado y pendiente de cierre en última consulta. **No desplegado, no integrado con Engine real y NO apto aún para beta pública**.
 
 ## Decisión de arquitectura
 Por indicación del propietario, **no habrá cola global obligatoria entre usuarios**. Una cuenta puede tener un trabajo dentro de su runtime mientras otras cuentas utilizan sus propios procesos simultáneamente. Los bloqueos U13B/U13D aplican únicamente a operaciones incompatibles del mismo runtime.
@@ -24,3 +24,9 @@ Tampoco hay lanzamiento automático de `PrivateWorkerSupervisor` dentro de estos
 La arquitectura sigue sin cola FIFO global y conserva el plan de pruebas de capacidad **1,2,4,8,10,25 usuarios**, con carga compartida Companion/servidor y sin suponer capacidad antes de medir.
 
 **No tocar `main`, producción Vercel, Cloudflare Pages estático, servicios FER/JM, DNS ni datos.** Documentar resultados CI reales y actualización del handoff.
+
+## Historial de fallos detectados y corregidos en CI
+
+- Primera ejecución: el script independiente no encontraba el módulo `urano`; corregido usando `PYTHONPATH=.` exclusivamente para la prueba.
+- Segunda ejecución: Docker rechazó `--mount type=bind,...,rw`, porque `rw` no es un campo válido en esta sintaxis. Docker usa bind RW por defecto si no se especifica `readonly`. Corregida la construcción del argumento y el contrato asociado.
+- Tercera ejecución: **PASS** para las dos pruebas (contrato y Docker real) en run 42222303679; dos contenedores sin red, sin root y sin montajes cruzados de las carpetas ficticias. Esto NO certifica un entorno multiusuario comercial.
