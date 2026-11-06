@@ -4,6 +4,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 from urano.engine_worker_process import _project_folder, run
 
@@ -21,12 +22,15 @@ class FakeEngine:
     def __init__(self):
         self.active = None
         self.calls = []
+        self.application = SimpleNamespace(config={"ZUCKER_STATE":
+            SimpleNamespace(project=None)})
 
     def post(self, route, json):
         self.calls.append(("post", route, json))
         if self.active == "locked":
             return FakeReply(409)
         self.active = json["path"]
+        self.application.config["ZUCKER_STATE"].project = SimpleNamespace(folder=Path(self.active))
         return FakeReply(200)
 
     def get(self, route):
@@ -78,7 +82,9 @@ class EngineWorkerProtocolTests(unittest.TestCase):
     def test_engine_failure_and_mismatched_loaded_project_fail_closed(self):
         class WrongEngine(FakeEngine):
             def get(self, route):
-                return FakeReply(200, {"folder": "/unrelated/project"})
+                self.application.config["ZUCKER_STATE"].project = SimpleNamespace(
+                    folder=Path("/unrelated/project"))
+                return FakeReply(200)
         self.assertFalse(self.roundtrip([{"op": "open", "folder": "Old"}],
                                         WrongEngine())[1]["ok"])
         self.fake.active = "locked"
