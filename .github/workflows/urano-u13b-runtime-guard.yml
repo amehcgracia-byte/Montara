@@ -1,0 +1,28 @@
+name: URANO U13B isolated runtime activation guard
+
+on:
+  push:
+    branches:
+      - fernando/urano-u13b-isolated-runtime-guard
+  pull_request:
+    paths:
+      - 'urano/**'
+      - 'tests/test_urano_*.py'
+      - '.github/workflows/urano-u13b-runtime-guard.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  isolation-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install 'Flask>=3.0,<4'
+      - name: Run all URANO owner, HTTP, dashboard and runtime tests
+        run: python -m unittest discover -s tests -p 'test_urano_*.py' -v
+      - run: node --check urano/lab_ui/lab.js
