@@ -583,7 +583,12 @@ async function renderFullSession(forVideo = false) {
     }
     $('#sessionStatus').textContent = 'Your selected songs are ready.';
     drawSessionResults(data);
-  } catch (error) { if(!fullSession.cancelRequested)toast(error.message, true); }
+  } catch (error) {
+    if(!fullSession.cancelRequested){
+      showSessionProgress({...fullSession.data,status:'failed',error:error.message});
+      toast(error.message,true);
+    }
+  }
   finally { fullSession.busy = false; $('#sessionBack').disabled = false; $('#sessionCancel').hidden = true; $('#sessionMix').hidden = false; }
 }
 
