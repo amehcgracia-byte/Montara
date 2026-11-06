@@ -11,7 +11,7 @@ La prueba deriva la idea de medios sintéticos existentes en `tests/e2e_journey.
 - `POST /api/v1/inputs/videos` para registrar el MP4.
 - `POST /api/v1/inputs/master` para registrar el WAV.
 - `POST /api/v1/stages/ingest/run` para arrancar la fase real.
-- `GET /api/v1/project` para seguir el estado ingest hasta `done` o fallo y verificar que todas las rutas de artefactos permanecen en el proyecto privado.
+- `GET /api/v1/project` para seguir el estado ingest hasta `done` o fallo y verificar metadatos de cámara obtenidos por ffprobe y la normalización real de vídeo dentro del workspace privado. El Engine fijado devuelve deliberadamente `outputs={}` para ingest; no confundirlo con ausencia de trabajo.
 
 La ejecución CI construye imagen Montara fijada, la arranca con `isolated_container_command` (rootfs de solo lectura, sin red/capacidades, UID no root, límites 2 CPU/2 GB, workspace único). Los datos generados son ficticios y se eliminan tras la prueba. No se accede a medios privados ni se toca host.
 
