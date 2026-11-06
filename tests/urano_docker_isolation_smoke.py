@@ -45,7 +45,13 @@ def main() -> None:
                 workspace=owners[name],
                 command=["python", "-c", script, name],
                 memory_mb=256, cpus=0.5)
-            return subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=90)
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=90)
+            if result.returncode:
+                raise AssertionError(
+                    f"Container {name} exited {result.returncode}: "
+                    f"stderr={result.stderr[-1800:]}, stdout={result.stdout[-500:]}"
+                )
+            return result
 
         # Run both containers in parallel, without a global owner/render queue.
         with ThreadPoolExecutor(max_workers=2) as executor:
