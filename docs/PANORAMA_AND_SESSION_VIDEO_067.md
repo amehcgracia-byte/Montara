@@ -1,7 +1,8 @@
 # Montara 0.67 — panoramas ligeros y mezcla antes del rango
 
-Base: main `4f1dceb` (incluye PR #79–83 de Fernando). Engine `bfb964c3`,
-Mixer `f15ff91`: sin cambios de submódulos ni copia de ramas experimentales.
+Base: main `4f1dceb` (incluye PR #79–83 de Fernando). Engine `172f8302` (descendiente del pin `bfb964c3`), Mixer `f15ff91`.
+Motor: solo acotar la extracción del frame panorámico a la duración del clip.
+Sin cambios de exportación ni copia de ramas experimentales.
 
 ## Correcciones
 
@@ -12,6 +13,8 @@ Mixer `f15ff91`: sin cambios de submódulos ni copia de ramas experimentales.
   codificación al inyectar metadatos. El render local conserva el original.
 - Los formatos esféricos no compatibles (estéreo, proyección distinta o
   panorámica rotada) fallan explícitamente: no se reinterpretan como mono.
+- El visor panorámico ya no busca siempre el segundo 30: en clips cortos
+  extrae un frame dentro de su duración (regresión real con 40 ms, 1 s y 20 s).
 - La protección de consentimiento de Fernando permanece. Un error de proxy
   no autoriza una subida original. Installer incorpora también windows_support.
 - Stage con pistas separadas: mezcla y masteriza antes de mostrar el rango;
