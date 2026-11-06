@@ -749,8 +749,8 @@ async function registerProject({mixed = false} = {}) {
       state.localProject = await montaraCompanion.projectFolder(name, state.files.filter((f) => f.original).map((f) => f.original));
       if (state.localProject) toast(`Project folder: ${state.localProject.folder}`);
     }
-    await api("/wizard/projects/new", {});
-    const draft = await api("/wizard/draft", { name, project_id: null, platform: state.platform, audio_paths: data.master ? [data.master] : [], ...data });
+    if (!mixed) await api("/wizard/projects/new", {});
+    const draft = await api("/wizard/draft", { name, project_id: mixed ? state.projectId : null, platform: state.platform, audio_paths: data.master ? [data.master] : [], ...data });
     if (!mixed) state.mixMaster = null;
     state.projectId = draft.project_id;
   } finally {

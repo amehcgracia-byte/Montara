@@ -8,6 +8,7 @@ $('#sessionResume').onclick = async () => {
     try {localStorage.setItem('montara-session',latest.id);} catch {}
     fullSession.localProgress = {}; fullSession.localResults = [];
     fullSession.active = true;
+    fullSession.forVideo = false;
     show('sessionReview'); $('#sessionSongs').hidden = false; clearSessionResults();
     const data = await waitSession(await api(`/montara/session/${fullSession.id}`));
     if (data.songs) drawSessionSongs(data.songs);
@@ -109,6 +110,7 @@ async function waitSession(initial) {
 
 async function openFullSession(forVideo = false) {
   if(fullSession.cancelling)return;
+  fullSession.forVideo = forVideo === true;
   fullSession.cancelRequested=false;
   if (!audioTracks().length) return toast('Add the audio tracks of your session first.', true);
   fullSession.active = true;
@@ -450,7 +452,7 @@ $('#sessionSongs').onclick = event => {
   drawSessionSongs(songs);
 };
 
-$('#sessionMix').onclick = () => renderFullSession();
+$('#sessionMix').onclick = () => renderFullSession(fullSession.forVideo === true);
 
 // A track detection found empty can be brought back (the excerpts are cut again).
 $('#sessionEmpty').addEventListener('click', async event => {

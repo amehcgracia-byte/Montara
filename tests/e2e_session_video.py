@@ -20,7 +20,7 @@ def main():
     pulse=np.exp(-10*(t%.5))*beats[np.minimum((t*2).astype(int),779)]
     tracks=[]
     for name,freq in [('Kick',80),('Bass',160)]:
-        sound=(.16*np.sin(2*np.pi*freq*t)*active*(pulse if name=='Kick' else .3+.7*pulse)).astype('float32')
+        sound=((.07*np.sin(2*np.pi*freq*t)+.04*rng.standard_normal(t.size))*active*(pulse if name=='Kick' else .3+.7*pulse)).astype('float32')
         tracks.append(sound);sf.write(media/(name+'.wav'),sound,sr)
     sf.write(media/'guide.wav',sum(tracks),sr)
     source=media/'panorama.mp4'
@@ -64,8 +64,8 @@ def main():
             assert page.evaluate('state.files.filter(f=>f.preview).length')==2
             page.screenshot(path=str(out/'01-proxy-and-stems.png'),full_page=True)
             page.locator('#continueFootage').click()
-            page.wait_for_function("!document.querySelector('#cameras').hidden || document.querySelector('#sessionStatus').textContent.includes('Could not') || document.querySelector('#failed:not([hidden])')",timeout=600000)
-            assert page.locator('#cameras').is_visible(),page.locator('#sessionStatus').inner_text()
+            page.wait_for_function("!document.querySelector('#cameras').hidden || /Could not|different songs|several songs|failed/i.test(document.querySelector('#toast:not([hidden])')?.textContent || '') || document.querySelector('#failed:not([hidden])')",timeout=600000)
+            assert page.locator('#cameras').is_visible(),page.locator('#toast').inner_text()
             assert page.evaluate('fullSession.data.songs.filter(s=>s.selected).length')==1
             song=page.evaluate('fullSession.data.songs.find(s=>s.selected)')
             assert song['start']>180,song
