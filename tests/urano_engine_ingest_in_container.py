@@ -6,6 +6,7 @@ Engine Flask endpoints. NOT an export or Companion benchmark.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import time
@@ -41,6 +42,9 @@ def main():
            "-threads", "2", "-pix_fmt", "yuv420p",
            "-c:a", "aac", "-shortest", str(camera))
     # Entrypoint is under /app/tests while the pinned engine package is under /app/engine.
+    os.environ["MONTARA_DATA"] = "/workspace"
+    os.environ["ZUCKER_DATA_ROOT"] = "/workspace"
+    os.environ["ZUCKER_MIXER_STATE_ROOT"] = "/workspace/Mixer/state"
     sys.path.insert(0, "/app/engine")
     from core.project import new_project_document
     (project_dir / "project.json").write_text(
@@ -70,14 +74,22 @@ def main():
     else:
         raise AssertionError("Real Engine ingest timed out: " + repr(seen))
     state = snapshot["stages"]["ingest"]
-    assert state.get("outputs"), "Engine marked ingest done without any outputs"
-    for path in state["outputs"].values():
-        assert Path(path).is_file(), "Ingest output not found inside isolated workspace"
-        assert Path(path).resolve().is_relative_to(project_dir.resolve()), "Output escaped project workspace"
+    # This pinned Engine explicitly returns {} for ingest outputs.
+    # Its real artifact is probe metadata plus normalized proxy state in
+    # the project's input record, NOT a stage outputs map.
+    assert state.get("outputs") == {}, "Engine ingest contract changed unexpectedly"
+    video_records = snapshot["inputs"]["videos"]
+    assert len(video_records) == 1, "Synthetic camera registration lost"
+    record = video_records[0]
+    assert record.get("probe", {}).get("width") == 640, "Real ffprobe metadata missing"
+    normalized = record.get("normalized") or {}
+    normalized_path = Path(normalized.get("path", ""))
+    assert normalized_path.is_file(), "Expected Engine-normalized media missing"
+    assert normalized_path.resolve().is_relative_to(root), "Normalized media escaped workspace"
     assert camera.stat().st_size > 1000 and master.stat().st_size > 1000
     print(json.dumps({"passed": True, "engine_stage": "ingest",
                       "media_sources": 2, "stage_states": seen,
-                      "output_count": len(state["outputs"]), "export_tested": False,
+                      "normalized_proxy": True, "export_tested": False,
                       "companion_tested": False}))
 
 
