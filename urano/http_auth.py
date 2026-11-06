@@ -11,7 +11,7 @@ from urllib.parse import urlsplit
 from flask import Blueprint, jsonify, request
 
 from urano.accounts import AccountStore, DuplicateAccount, LoginDenied
-from urano.session_auth import SessionStore, set_session_cookie
+from urano.session_auth import SESSION_COOKIE, SessionStore, set_session_cookie
 
 
 def auth_blueprint(accounts: AccountStore, sessions: SessionStore) -> Blueprint:
@@ -64,6 +64,24 @@ def auth_blueprint(accounts: AccountStore, sessions: SessionStore) -> Blueprint:
         response = jsonify(csrf=issued.csrf, expires_at=issued.expires_at)
         response.headers["Cache-Control"] = "no-store"
         set_session_cookie(response, issued)
+        return response
+
+    @bp.post("/session/refresh")
+    def refresh_session():
+        """Restore page CSRF after reload; cookie alone authenticates this endpoint.
+
+        Only a same-origin HTTPS request can trigger a rotation. The existing
+        expiry is unchanged; older CSRF values become invalid.
+        """
+        token = request.cookies.get(SESSION_COOKIE)
+        identity = sessions.verify(token)
+        if identity is None:
+            return jsonify(error="Authentication required"), 401
+        csrf = sessions.rotate_csrf(token)
+        if csrf is None:
+            return jsonify(error="Authentication required"), 401
+        response = jsonify(csrf=csrf, expires_at=identity.expires_at)
+        response.headers["Cache-Control"] = "no-store"
         return response
 
     return bp
