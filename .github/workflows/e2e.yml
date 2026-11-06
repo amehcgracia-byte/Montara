@@ -85,6 +85,9 @@ jobs:
       - name: Browser Back and Forward in Stage, Push and Show
         if: matrix.mode == 'session'
         run: python tests/e2e_navigation.py --output e2e-output/navigation
+      - name: Isolated account and historical project browser acceptance
+        if: matrix.mode == 'session'
+        run: python tests/e2e_urano_dashboard.py --output e2e-output/urano-dashboard
       - name: ${{ matrix.mode }} through the real interface
         if: matrix.mode != 'session'
         run: python tests/e2e_journey.py --mode ${{ matrix.mode }} --output e2e-output
