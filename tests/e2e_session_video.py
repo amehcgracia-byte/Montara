@@ -67,6 +67,8 @@ def main():
             assert all(sf.info(p).subtype=='OPUS' for p in compressed)
             assert not list((out/'data'/'Uploads').glob('*/*.wav')), 'No full-jam PCM expanded during upload'
             page.screenshot(path=str(out/'01-proxy-and-stems.png'),full_page=True)
+            # The user's manual instrument choice survives the compact source suffix.
+            page.locator('#audioFiles [data-track-type]').first.select_option('sax')
             renders=[]
             page.on('request',lambda request:renders.append(request.url) if '/montara/session/' in request.url and request.url.endswith('/render') else None)
             page.locator('#continueFootage').click()
@@ -110,6 +112,8 @@ def main():
             assert page.evaluate('!!state.mixMaster')
             page.screenshot(path=str(out/'03-source-stems-recovered.png'),full_page=True)
             session_dir=out/'data'/'Sessions'/session_id
+            session_data=json.loads((session_dir/'session.json').read_text())
+            assert session_data['track_types'].get('kick',{}).get('type')=='sax'
             assert not (session_dir/'extras.log').exists(), 'Video mode must not launch full-song detection/listening extras'
             assert json.loads((session_dir/'waveform.json').read_text())['source']=='video-sync-guide'
             extracted=list((session_dir/'songs'/'1'/'tracks').glob('*.wav'))

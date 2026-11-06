@@ -33,7 +33,9 @@ chunk que no avance falla de forma acotada, en vez de repetir indefinidamente.
 
 ## Verificación
 
-Pendiente de completar: aceptación real cámara + dos pistas comprimidas,
+Aceptación local real: cámara 360 + dos pistas comprimidas de 390 s → un máster
+de 20,096 s, con ambos instrumentos presentes, sin mixer web; recuperación de
+las fuentes y máster comprobada. Pendiente de completar:
 regresión audio-only Full session, Stage/Push/Mix y Linux con capturas revisadas.
 Engine 4f481002950a9dd1488957cac0214d5a0759c909;
 Mixer f15ff91c1b80fc5f157099dcd9451d958d553ae6.
