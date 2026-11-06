@@ -1,0 +1,29 @@
+name: URANO U13 Engine project binding contract
+
+on:
+  push:
+    branches:
+      - fernando/urano-u13-engine-project-binding
+  pull_request:
+    paths:
+      - 'urano/**'
+      - 'tests/test_urano_*.py'
+      - '.github/workflows/urano-u13-engine-bindings.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  binding-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install 'Flask>=3.0,<4'
+      - name: Test all URANO contracts, including Engine binding
+        run: python -m unittest discover -s tests -p 'test_urano_*.py' -v
+      - name: Check standalone browser JS syntax
+        run: node --check urano/lab_ui/lab.js
