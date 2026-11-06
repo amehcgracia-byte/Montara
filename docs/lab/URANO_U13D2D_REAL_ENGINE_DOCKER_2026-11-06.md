@@ -1,6 +1,6 @@
 # URANO U13D2D — Engine real en contenedores privados
 
-Fecha: 2026-11-06. **Estado: PR draft. CI inicial pendiente. No desplegado.**
+Fecha: 2026-11-06. **Estado: PR draft. CI específica completa PASS** en [run 42228564845](https://github.com/amehcgracia-byte/Montara/actions/runs/42228564845): tests rápidos y engine-in-docker ambos SUCCESS. No desplegado.
 
 ## Hipótesis y novedad
 
@@ -28,3 +28,11 @@ La pila de PR U10 → U11 → U12 → U12b → U13A → U13B → U13C → U13D �
 - Confirmar y documentar estado exacto del job Docker U13D2D y corregir fallos reproducibles del gate.
 - U13E: añadir material sintético y ejecutar **edición/export real**, primero local en contenedor y después workflow distribuido Companion/servidor, incluyendo recuperación de medios/proxies. El objetivo de concurrencia es 1,2,4,8,10,25 usuarios con trabajo dividido según el Companion, **NO todo render en servidor**. Sin cola global obligatoria.
 - Antes de beta externa: host endurecido, identidad real, autorización de rutas, lifecycle del worker muerto, relink de originales, revocación y prueba E2E navegador/edición/export con dos cuentas. Solicitud de acceso de Chema pendiente; sin contraseña predecible ni usuario vacío.
+
+## Ejecuciones observadas y corrección
+
+- Primera prueba completa [run 42228147808](https://github.com/amehcgracia-byte/Montara/actions/runs/42228147808): imagen Docker **construida correctamente**; los dos casos del Engine ejecutaron su lógica, pero el job falló al **limpiar archivos temporales creados por el UID 10001** del contenedor en el runner. No atribuir ese error a la apertura del Engine ni ocultarlo.
+- Solución en test de CI: limpieza exclusivamente en un runner efímero de GitHub (GITHUB_ACTIONS=true), recuperación de propiedad de sus propios datos sintéticos antes de borrar el directorio. **No utilizar esta operación en datos de usuario o un host real**.
+- Segunda ejecución [run 42228564845](https://github.com/amehcgracia-byte/Montara/actions/runs/42228564845): contracts y **engine-in-docker SUCCESS**. Se crean proyectos con el Engine fijado, se abren en dos contenedores privados simultáneos, se vuelve a un proyecto reciente, se rechaza proyecto de otro propietario y se invalidan runtimes al cerrar.
+
+**Evidencia limitada:** es apertura de proyectos sintéticos reales del Engine, no render, edición, exportación, conexión Companion, experiencia web ni certificación de aislamiento de producción. No inferir capacidad de 2–25 usuarios renderizando de esta prueba.
