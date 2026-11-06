@@ -76,16 +76,15 @@ class RealSamplePreflightTests(unittest.TestCase):
         self.assertIn("Insufficient", report["warning"])
         self.assertEqual(list(self.work.iterdir()), [])
 
-    @patch("urano.real_media_preflight.subprocess.run", side_effect=lambda argv, **_: ffprobe_result(argv))
+    @patch("urano.real_media_preflight.subprocess.run")
     def test_master_must_have_audio(self, run):
+        run.side_effect = lambda argv, **_: (
+            type("Result", (), {"stdout": json.dumps({
+                "format": {"duration": "20"},
+                "streams": [{"codec_type": "video", "width": 640}]})})()
+            if Path(argv[-1]).name == "sony.mp4" else ffprobe_result(argv)
+        )
         with self.assertRaises(PreflightError):
-            evaluate(self.source, self.work, ["iphone.mov"],
-                     "sony.mp4", minimum_free_gb=0) if False else self._no_audio()
-
-    def _no_audio(self):
-        with patch("urano.real_media_preflight.subprocess.run", return_value=type(
-                "Result", (), {"stdout": json.dumps({"format": {"duration": "20"},
-                                                     "streams": [{"codec_type": "video", "width": 640}]})})()):
             evaluate(self.source, self.work, ["iphone.mov"], "sony.mp4", 0)
 
 
