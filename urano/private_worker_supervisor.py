@@ -38,6 +38,7 @@ class PrivateWorkerSupervisor:
         self.command = command
         self.process: subprocess.Popen | None = None
         self._buffer = b""
+        self._generation: int | None = None
 
     def _receive(self, deadline: float) -> dict:
         process = self.process
@@ -71,6 +72,10 @@ class PrivateWorkerSupervisor:
     def start(self) -> None:
         if self.process is not None:
             raise WorkerFailure("Worker already started")
+        state, _, gen = self.guard.get_state(self.owner_id, self.runtime_id)
+        if state != "idle":
+            raise WorkerFailure("Runtime must be idle before a new worker starts")
+        self._generation = gen
         if (not self.engine_dir.is_dir() or not self.data_root.is_dir()
             or self.data_root.is_symlink() or not (self.data_root / "Projects").is_dir()):
             raise ValueError("Missing private Engine runtime paths")
@@ -112,6 +117,7 @@ class PrivateWorkerSupervisor:
         if self.process is None or self.process.poll() is not None:
             raise WorkerFailure("Worker not running")
         ticket = self.guard.request_open(self.owner_id, self.runtime_id, project_id)
+        self._generation = ticket.generation
         try:
             self._send({"op": "open", "folder": ticket.project_path.name})
             packet = self._receive(time.monotonic() + self.open_timeout)
@@ -125,7 +131,6 @@ class PrivateWorkerSupervisor:
             # A stuck worker must die: its Engine state may have changed even
             # when the command timed out. Never reuse this process.
             self.stop()
-            self.guard.acknowledge_open(self.owner_id, ticket, success=False)
             raise
 
     def stop(self) -> None:
@@ -148,3 +153,8 @@ class PrivateWorkerSupervisor:
             if process.stdout: process.stdout.close()
             try: process.wait(timeout=1)
             except subprocess.TimeoutExpired: pass
+            if process.poll() is not None and self._generation is not None:
+                self.guard.invalidate_after_worker_exit(
+                    self.owner_id, self.runtime_id, self._generation)
+                self._generation = None
+
