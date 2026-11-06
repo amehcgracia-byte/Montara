@@ -40,6 +40,8 @@ def main():
            "-i", str(master), "-c:v", "libx264", "-preset", "ultrafast",
            "-threads", "2", "-pix_fmt", "yuv420p",
            "-c:a", "aac", "-shortest", str(camera))
+    # Entrypoint is under /app/tests while the pinned engine package is under /app/engine.
+    sys.path.insert(0, "/app/engine")
     from core.project import new_project_document
     (project_dir / "project.json").write_text(
         json.dumps(new_project_document("URANO synthetic ingest")))
