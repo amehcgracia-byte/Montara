@@ -562,8 +562,8 @@ function upload(file, entry) {
 async function uploadInParts(file, entry) {
   state.uploads += 1;
   try {
-    const extra = /\.opus$/i.test(file.name) && entry.original ? {original: {name: entry.original.name, size: entry.original.size, fingerprint: entry.original.fingerprint}} : {};
-    const data = await sendResumableUpload(file, progress => { entry.progress = progress; renderFiles(); }, id => {entry.uploadId = id; remember(entry);}, () => entry.removed, extra);
+    const extra = /\.opus$/i.test(file.name) && entry.original ? {original: {name: entry.original.name, size: entry.original.size, fingerprint: entry.original.fingerprint}, compact_preview:state.platform==='youtube' && state.files.some(f=>f.kind==='video'||/\.(mp4|mov|mkv|mts|m2ts|webm|avi|m4v)$/i.test(f.name))} : {};
+    const data = await sendResumableUpload(file, (progress, phase) => { entry.progress = progress; if(phase)entry.phase=phase; renderFiles(); }, id => {entry.uploadId = id; remember(entry);}, () => entry.removed, extra);
     const found = ['videos', 'master', 'songs', 'ignored'].map(kind => [kind, (data[kind] || [])[0]]).find(([, item]) => item);
     if (!found) throw new Error('Not a usable media file');
     entry.kind = found[0] === 'videos' ? 'video' : found[0];
@@ -736,7 +736,7 @@ function isWholeSession() {
 async function registerProject({mixed = false} = {}) {
   if(work.cancelling)return toast('Wait for cancellation to finish.');
   if(!mixed){state.mixMaster=null;state.mixDownload=null;}
-  if (!mixed && state.platform === 'youtube' && videos().length && audioTracks().length >= 2 && isWholeSession()) return openFullSession(true);
+  if (!mixed && state.platform === 'youtube' && videos().length && (audioTracks().length >= 2 || state.files.some(f=>f.preview))) return openFullSession(true);
   if (!mixed && videos().length && state.files.some(f => f.preview)) return toast('Some audio was sent as a light session preview. Remove it and add it again to use it in a video.', true);
   if (state.platform === 'youtube' && !videos().length && !$('#fullSessionOn').checked && isWholeSession()) {
     $('#fullSessionOn').checked = true;

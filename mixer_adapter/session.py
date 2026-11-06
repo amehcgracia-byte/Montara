@@ -580,6 +580,15 @@ def execute(work, action):
         # Acoustic detection works offline; cloud AI is not a prerequisite.
         pipeline.WHISPER_ALLOWED = False
         stems = pipeline.inspect_stems(work / 'tracks')
+        # Compressed camera previews keep BWF timing as Opus tags. Never divide
+        # those original sample counts by the decoder's fixed 48 kHz rate.
+        from dataclasses import replace
+        from resumable_upload import preview_original, compact_preview_metadata
+        compressed = {stem.path: compact_preview_metadata(stem.path) for stem in stems
+                      if stem.path.suffix.lower() == '.ogg' and preview_original(stem.path.resolve())}
+        stems = [replace(stem, offset_seconds=compressed[stem.path]['offset'],
+                         offset_source='companion recorder metadata') if stem.path in compressed else stem
+                 for stem in stems]
         if not stems:
             raise ValueError('No readable audio tracks.')
         if len(stems) != len(list((work / 'tracks').iterdir())):
@@ -587,10 +596,9 @@ def execute(work, action):
         import track_types  # the person's track types: detection weighs instruments and voices by role
         stems = track_types.apply(pipeline, stems, track_types.for_files(data.get('track_types'), [s.path.name for s in stems]))
         origin = min(s.offset_seconds for s in stems)
-        from dataclasses import replace
         stems = [replace(s, offset_seconds=s.offset_seconds - origin) for s in stems]
         data['duration'] = max(s.offset_seconds + s.duration for s in stems)
-        data['tracks'] = [dict(file=s.path.stem + '.wav', path=str(s.path), samplerate=s.samplerate,
+        data['tracks'] = [dict(file=s.path.stem + '.wav', path=str(s.path), samplerate=compressed.get(s.path, {}).get('samplerate', s.samplerate),
                                channels=s.channels, offset=s.offset_seconds, duration=s.duration) for s in stems]
         # The listening copy only needs the tracks and their offsets: make it in the
         # background now, while the songs are being found; the review waits for it.

@@ -62,20 +62,17 @@ def main():
             page.wait_for_function("state.files.length===3 && !state.uploads && state.files.every(f=>f.path)",timeout=120000)
             assert page.evaluate("state.files.filter(f=>f.kind==='video').every(f=>f.small && f.original && f.projection==='equirect')")
             assert page.evaluate('state.files.filter(f=>f.preview).length')==2
+            compressed=page.evaluate('audioTracks().map(f=>f.path)')
+            assert all(Path(p).suffix=='.ogg' for p in compressed)
+            assert all(sf.info(p).subtype=='OPUS' for p in compressed)
+            assert not list((out/'data'/'Uploads').glob('*/*.wav')), 'No full-jam PCM expanded during upload'
             page.screenshot(path=str(out/'01-proxy-and-stems.png'),full_page=True)
             renders=[]
             page.on('request',lambda request:renders.append(request.url) if '/montara/session/' in request.url and request.url.endswith('/render') else None)
             page.locator('#continueFootage').click()
-            page.locator('#mix').wait_for(state='visible',timeout=600000)
-            page.wait_for_function("!document.querySelector('#useMix').disabled && mix.plan?.tracks.length===2",timeout=180000)
-            assert not page.locator('#cameras').is_visible()
-            assert not renders, 'Do not render the song before the person accepts the mixer'
-            assert page.evaluate('fullSession.data.results.length')==0
-            assert page.locator('#useMix').inner_text()=='Use this mix for the video'
-            assert not page.locator('#mixAll').is_visible()
-            page.locator('#strips .strip input[type=range]').first.evaluate("e=>{e.value=Number(e.value)-6;e.dispatchEvent(new Event('input',{bubbles:true}));}")
-            page.screenshot(path=str(out/'02-mixer-before-accept.png'),full_page=True)
-            page.locator('#useMix').click()
+            # No browser mixer preview or acceptance in the camera + stems path.
+            mixer_requests=[]
+            page.on('request',lambda request:mixer_requests.append(request.url) if '/montara/mix' in request.url else None)
             page.wait_for_function("!document.querySelector('#cameras').hidden || /Could not|different songs|several songs|failed/i.test(document.querySelector('#toast:not([hidden])')?.textContent || '') || document.querySelector('#failed:not([hidden])')",timeout=600000)
             assert page.locator('#cameras').is_visible(),page.locator('#toast').inner_text()
             assert page.evaluate('fullSession.data.songs.filter(s=>s.selected).length')==1
@@ -87,7 +84,8 @@ def main():
             assert page.evaluate('!!state.mixMaster')
             assert len(renders)==1
             assert page.evaluate('fullSession.data.results.length')==1
-            assert page.evaluate('Object.values(fullSession.mixes[fullSession.mixSong].faders).some(db=>Math.abs(db)>.05)')
+            assert not mixer_requests, 'Automatic master must not prepare/analyse a separate browser mixer'
+            assert not page.locator('#mix').is_visible()
             page.wait_for_function('range.duration>18 && range.duration<22',timeout=30000)
             download=page.request.get(url+page.locator('#mixedMasterDownload').get_attribute('href'))
             assert download.ok and 'audio/' in download.headers.get('content-type','')
@@ -118,7 +116,7 @@ def main():
             assert len(extracted)==2
             for track in extracted:
                 assert 18<sf.info(track).duration<22, 'Only camera-range PCM is extracted, not the whole jam/song'
-            summary={'passed':True,'panorama_proxy':True,'stems_mixed':2,'mixer_accepted':True,'saved_fader_applied':True,'downloadable_master':True,'matched_song':song,'master_before_range':True,'session_seconds':390,'mixed_seconds':round(song['end']-song['start'],3),'all_song_detection_skipped':True}
+            summary={'passed':True,'panorama_proxy':True,'stems_mixed':2,'automatic_master':True,'browser_mixer_skipped':True,'compact_uploads':True,'downloadable_master':True,'matched_song':song,'master_before_range':True,'session_seconds':390,'mixed_seconds':round(song['end']-song['start'],3),'all_song_detection_skipped':True}
             (out/'summary.json').write_text(json.dumps(summary,indent=2));print(json.dumps(summary),flush=True)
             browser.close()
     finally:
