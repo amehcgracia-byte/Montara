@@ -1,0 +1,31 @@
+name: URANO U13E2B real-footage native Companion acceptance adapter
+
+on:
+  push:
+    branches:
+      - fernando/urano-u13e2b-native-real-footage-e2e
+  pull_request:
+    paths:
+      - 'tests/e2e_native_stage.py'
+      - 'tests/native_real_media_input.py'
+      - 'tests/test_native_real_media_input.py'
+      - '.github/workflows/urano-u13e2b-native-real-media.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  real-input-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate real-media paths, isolation and bounded memory hashing
+        run: python -m unittest discover -s tests -p 'test_native_real_media_input.py' -v
+      - name: Syntax-check native browser/Companion journey (not executed without private media)
+        run: |
+          python -m py_compile tests/native_real_media_input.py
+          python -m py_compile tests/e2e_native_stage.py
