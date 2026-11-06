@@ -1,6 +1,6 @@
 # URANO U13E1 — vídeo sintético real, ingest del Engine en Docker
 
-**Fecha:** 2026-11-06. **Estado:** PR draft; pendiente resultado del job multimedia. No desplegado.
+**Fecha:** 2026-11-06. **Estado:** PR draft; prueba multimedia y contratos **SUCCESS** en [GitHub Actions run 42238824152](https://github.com/amehcgracia-byte/Montara/actions/runs/42238824152). No desplegado.
 
 ## Objetivo y evidencia esperada
 
@@ -28,3 +28,10 @@ La ejecución CI construye imagen Montara fijada, la arranca con `isolated_conta
 Probar sync/edit/export reales con 2 cámaras + master sintéticos, comprobar export MP4 mediante ffprobe/decodificación, aislar dos usuarios, reabrir/recuperar trabajo; y después integrar navegador/Companion local-first, control de originales y autorización de rutas. Para Chema no hay aún una URL privada con capacidad completa ni validación de seguridad.
 
 Toda prueba debe tener resultados separados: **ingest**, **export real**, **reapertura**, **Companion+servidor** y **concurrencia real**, sin dar por superado un gate a partir de otro.
+
+## Evidencia de ejecución y corrección
+
+- [Primera ejecución 42238510851](https://github.com/amehcgracia-byte/Montara/actions/runs/42238510851): el Engine completó ingest con estado `done`, pero el test asumía erróneamente que esa fase produce un mapa `stages.ingest.outputs` no vacío. Inspección del Engine fijado `core/stages/ingest.py`: su método devuelve `{}` deliberadamente. Fue un **error de aserción del test**, no un fallo del ingest.
+- Corregimos el gate para comprobar `inputs.videos[0].probe` real (ancho 640 px) y un archivo de vídeo normalizado existente dentro del workspace privado, sin inventar outputs. También fijamos las variables de almacenamiento Engine a `/workspace`.
+- [Segunda ejecución 42238824152](https://github.com/amehcgracia-byte/Montara/actions/runs/42238824152): **SUCCESS** tanto `contracts` como `real-media-ingest`, con FFmpeg sintético + Engine real en Docker. Demuestra ingest real, NO edición/export, recuperación multiusuario ni Companion.
+- Se mantiene un run ulterior por una actualización documental, que no cambia el gate multimedia aprobado; no confundir esas ejecuciones.
