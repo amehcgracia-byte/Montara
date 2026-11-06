@@ -40,6 +40,10 @@ class ContainerIsolationContract(unittest.TestCase):
         self.assertNotIn("/var/run/docker.sock", " ".join(cmd))
         self.assertEqual(cmd[-3:], ["python", "-c", "print(42)"])
 
+    def test_local_immutable_image_id_allowed_without_registry_push(self):
+        cmd = self.command(image="sha256:" + "b" * 64)
+        self.assertIn("sha256:" + "b" * 64, cmd)
+
     def test_different_owners_never_mount_same_directory(self):
         ac = self.command()
         bc = self.command(workspace=self.bob, name="urano-bob-00002")

@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-_IMAGE_DIGEST = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._/-]*(@sha256:[0-9a-f]{64})$")
+_IMAGE_DIGEST = re.compile(r"^(?:[a-zA-Z0-9][a-zA-Z0-9._/-]*@)?sha256:[0-9a-f]{64}$")
 _CONTAINER_NAME = re.compile(r"^urano-[a-z0-9-]{5,60}$")
 
 
@@ -23,7 +23,7 @@ def isolated_container_command(*, image: str, name: str, workspace: Path,
     Requiring an image SHA256 digest prevents silent image tag drift.
     """
     if not isinstance(image, str) or not _IMAGE_DIGEST.fullmatch(image):
-        raise ValueError("Container image must be pinned by sha256 digest")
+        raise ValueError("Container image must have immutable sha256 digest or local image ID")
     if not isinstance(name, str) or not _CONTAINER_NAME.fullmatch(name):
         raise ValueError("Invalid container name")
     root = Path(workspace)
@@ -57,5 +57,6 @@ def isolated_container_command(*, image: str, name: str, workspace: Path,
         "--workdir", "/workspace",
         "--env", "HOME=/workspace",
         "--env", "PYTHONDONTWRITEBYTECODE=1",
+        "--env", "PYTHONPATH=/app",
         image, *command,
     ]
