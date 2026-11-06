@@ -11,7 +11,7 @@ La web principal de Chema **no se sustituye**. Esta rama genera una copia de `we
 - **Environment/secrets:** ninguno necesario.
 - **Production deployments:** no habilitarlos para `main` en este laboratorio; usar solo preview/proyecto temporal, sin dominio propio. GitHub debe autorizar acceso al repositorio al conectar Cloudflare Pages.
 
-La configuración del proyecto de Cloudflare requiere autorización de su propietario y **no se ha realizado**; esta rama solo prepara material reproducible. Puedes retirar el proyecto de Cloudflare después de comparar.
+**Actualización 2026-11-06:** autorizada la conexión GitHub–Cloudflare y creado en la cuenta del proyecto el laboratorio aislado `montara-cloudflare-lab.pages.dev`, enlazado únicamente a esta rama. Este cambio documental dispara la primera compilación; verificar su resultado antes de declarar el sitio publicado. La web resultante **no procesa proyectos ni permite edición real**. Puedes retirar el laboratorio después de comparar.
 
 ## Qué comparar
 
