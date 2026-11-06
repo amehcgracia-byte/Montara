@@ -67,3 +67,27 @@ def test_video_index_reports_listening_progress(tmp_path):
                                  started_at=time.time(),progress={'progress':0}))
     (work/'listen.progress').write_text('42')
     assert c.get('/montara/session/'+'a'*12).json['progress']['progress']==42
+
+
+def test_compressed_camera_tracks_keep_original_bwf_offsets_and_export_rate(tmp_path, monkeypatch):
+    import subprocess
+    from resumable_upload import save as save_upload
+    from mixer_adapter.session import local_plan
+    work=tmp_path/'job';(work/'tracks').mkdir(parents=True)
+    # Real vendor inspection of Ogg Opus (header only), not a mocked decoder.
+    for name,rate,reference in [('Bass',44100,88200),('Piano',48000,192000)]:
+        folder=tmp_path/name;folder.mkdir()
+        path=folder/(name+'.ogg')
+        subprocess.run(['ffmpeg','-v','error','-f','lavfi','-i','sine=f=220:d=6',
+            '-c:a','libopus','-metadata',f'montara_sample_rate={rate}',
+            '-metadata',f'time_reference={reference}',str(path)],check=True)
+        save_upload(folder/'upload.json',dict(restored=path.name,preview_of=dict(name=name+'.wav')))
+        (work/'tracks'/path.name).symlink_to(path)
+    save(work/'session.json',dict(id='a'*12,status='detecting',video_excerpt=True,
+        previews={name+'.wav':dict(name=name+'.wav') for name in ('Bass','Piano')}))
+    execute(work,'detect');data=read(work)
+    assert [(t['file'],t['offset'],t['samplerate']) for t in data['tracks']]==[
+        ('Bass.wav',0,44100),('Piano.wav',2,48000)]
+    plan=local_plan(data,dict(id=1,name='song',start=2,end=5))
+    assert [(t['source_start'],t['samplerate']) for t in plan['tracks']]==[(2,44100),(0,48000)]
+    assert not list((work/'tracks').glob('*.wav'))

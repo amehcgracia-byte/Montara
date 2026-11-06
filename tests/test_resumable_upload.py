@@ -168,3 +168,28 @@ def test_fast_song_range_opus_comes_back_as_wav_at_the_original_rate(tmp_path):
     restored = Path(c.post(url + '/finish', json={}).json['videos'][0]['path'])
     info = sf.info(restored)
     assert restored.name == 'Bass.wav' and info.samplerate == 44100 and abs(info.frames - 44100 * 3) < 50
+
+
+def test_camera_preview_keeps_opus_without_full_pcm_and_preserves_recorder_clock(tmp_path):
+    import subprocess
+    import soundfile as sf
+    from resumable_upload import compact_preview_metadata, preview_original
+    wav, opus = tmp_path/'src.wav', tmp_path/'Piano.wav.opus'
+    subprocess.run(['ffmpeg','-v','error','-f','lavfi','-i','sine=f=220:d=3',
+        '-ar','44100','-write_bext','1','-metadata','time_reference=88200',str(wav)],check=True)
+    subprocess.run(['ffmpeg','-v','error','-i',str(wav),'-c:a','libopus',
+        '-metadata','montara_sample_rate=44100','-f','ogg',str(opus)],check=True)
+    payload=opus.read_bytes();c=make_client(tmp_path/'data')
+    original=dict(name='Piano.wav',size=wav.stat().st_size,fingerprint='b'*64)
+    job=c.post('/montara/uploads',json=dict(name=opus.name,size=len(payload),
+        fingerprint=fingerprint(payload),original=original,compact_preview=True)).json
+    url='/montara/uploads/'+job['id']
+    assert c.put(url,data=payload,headers={'Upload-Offset':'0'}).status_code==200
+    response=c.post(url+'/finish',json={});assert response.status_code==200
+    path=Path(response.json['master'][0]['path'])
+    assert path.name=='Piano.ogg' and path.read_bytes()==payload
+    assert sf.info(path).subtype=='OPUS'
+    assert not list(path.parent.glob('*.wav'))
+    assert compact_preview_metadata(path)==dict(samplerate=44100,offset=2.0)
+    assert preview_original(path)==original
+    assert c.post(url+'/finish',json={}).json==response.json

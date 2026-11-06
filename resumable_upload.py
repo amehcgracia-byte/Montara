@@ -77,6 +77,36 @@ def restore_preview(path: Path) -> Path:
     return target
 
 
+def keep_compact_preview(path: Path) -> Path:
+    """Register the existing Opus for camera analysis without expanding hours of PCM.
+
+    libsndfile reads Ogg directly. Preserve its recorder tags: session inspection
+    converts time_reference with the ORIGINAL rate, not Opus's 48 kHz rate.
+    """
+    import soundfile as sf
+    info = sf.info(str(path))
+    if info.format != 'OGG' or info.subtype != 'OPUS' or info.frames <= 0:
+        raise ValueError('Could not read this audio preview.')
+    target = path.with_name(path.name[:-len('.opus')].rsplit('.', 1)[0] + '.ogg')
+    path.replace(target)
+    return target
+
+
+def compact_preview_metadata(path: Path) -> dict:
+    """Bounded header probe; no audio samples decoded or full-file scan."""
+    info = json.loads(subprocess.check_output([ffmpeg_tool('ffprobe'), '-v', 'error', '-select_streams', 'a:0',
+        '-show_entries', 'stream_tags:format_tags', '-of', 'json', str(path)], timeout=60))
+    tags = {k.lower(): v for item in [info.get('format', {}), *info.get('streams', [])]
+            for k, v in item.get('tags', {}).items()}
+    rate = int(tags.get('montara_sample_rate', 48000))
+    if not 8000 <= rate <= 384000:
+        raise ValueError('Invalid preview sample rate.')
+    reference = int(tags.get('time_reference', 0))
+    if reference < 0:
+        raise ValueError('Invalid recorder time reference.')
+    return dict(samplerate=rate, offset=reference / rate)
+
+
 def restore_range(path: Path) -> Path:
     """Decode a Fast song range (high-bitrate Opus) to a WAV at the original rate for the mixer."""
     target = path.with_name(path.name[:-len('.hq.opus')].rsplit('.', 1)[0] + '.wav')
@@ -168,6 +198,9 @@ def register_resumable_upload(app, data_root, classify):
                         or isinstance(original.get('size'), bool) or not isinstance(original.get('size'), int)
                         or not re.fullmatch('[a-f0-9]{64}', str(original.get('fingerprint')))):
                     return failure('A preview must name its original.')
+                if not isinstance(body.get('compact_preview', False), bool):
+                    return failure('Invalid preview mode.')
+                record['compact_preview'] = body.get('compact_preview', False)
                 record['preview_of'] = dict(name=original['name'], size=original['size'], fingerprint=original['fingerprint'])
             save(work / 'upload.json', record)
             (work / 'source.part').touch()
@@ -241,9 +274,14 @@ def register_resumable_upload(app, data_root, classify):
                     elif data['name'].lower().endswith(RANGE):
                         data['restored'] = restore_range(work / data['name']).name
                     elif data['name'].lower().endswith(PREVIEW):
-                        data['restored'] = restore_preview(work / data['name']).name
+                        data['restored'] = (keep_compact_preview if data.get('compact_preview') else restore_preview)(work / data['name']).name
                     data['complete'] = True
                     save(work / 'upload.json', data)
-                return jsonify(classify([str(work / data.get('restored', data['name']))]))
+                path = work / data.get('restored', data['name'])
+                if data.get('compact_preview'):
+                    import soundfile as sf
+                    return jsonify(master=[dict(path=str(path), name=path.name, kind='master',
+                        duration=sf.info(str(path)).duration)], videos=[], songs=[], ignored=[])
+                return jsonify(classify([str(path)]))
         except ValueError as exc:
             return failure(str(exc), 404)

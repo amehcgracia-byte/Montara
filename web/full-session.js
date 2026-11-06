@@ -78,9 +78,9 @@ function showSessionProgress(data) {
   fullSession.busy = ['detecting', 'preparing', 'rendering'].includes(data.status);
   const now = performance.now() / 1000;
   if (sessionClock.status !== data.status) Object.assign(sessionClock, { status: data.status, started: now });
-  const [title, hint] = data.status === 'detecting' && fullSession.forVideo
-    ? ['Finding the audio in your videos', ''] : SESSION_STAGE[data.status] || [];
-  $('#sessionHint').hidden = ['rendering', 'done'].includes(data.status);
+  const [title, hint] = fullSession.forVideo && ['detecting','rendering'].includes(data.status)
+    ? [data.status==='detecting' ? 'Analysing your tracks' : 'Mixing and mastering your song', ''] : SESSION_STAGE[data.status] || [];
+  $('#sessionHint').hidden = fullSession.forVideo || ['rendering', 'done'].includes(data.status);
   $('#sessionHint').textContent = hint || 'Review the suggested boundaries and choose the songs. Each song gets its own automatic mix; your fader moves apply on top.';
   $('#sessionCancel').hidden = !fullSession.busy;
   $('#sessionBack').disabled = fullSession.busy;
@@ -139,7 +139,10 @@ async function openFullSession(forVideo = false) {
   } catch (error) {
     if (forVideo && fullSession.data?.video_excerpt) fullSession.data.songs?.forEach(song => {song.selected=false;});
     if (forVideo && fullSession.data?.songs) drawSessionSongs(fullSession.data.songs);
-    if (!fullSession.cancelRequested) toast(error.message, true);
+    if (!fullSession.cancelRequested) {
+      showSessionProgress({...fullSession.data,status:'failed',error:error.message});
+      toast(error.message, true);
+    }
   }
 }
 
@@ -148,6 +151,10 @@ async function mixSessionForVideo(data) {
   const generation = beginWork();
   fullSession.busy = true;
   fullSession.videoMatching = true;
+  $('#sessionWorking').classList.remove('done');
+  $('#sessionProgress').hidden=true;
+  $('#sessionEta').textContent='';
+  $('#sessionBack').disabled=true;
   $('#sessionStatus').textContent = 'Finding your song from the camera audio…';
   $('#sessionWorking').hidden = false;
   $('#sessionCancel').hidden = false;
@@ -167,8 +174,9 @@ async function mixSessionForVideo(data) {
     fullSession.data.songs = data.video_excerpt ? [song]
       : data.songs.map(s=>({...s, selected:s.id===song.id, confirmed:s.id===song.id}));
     drawSessionSongs();
-    // Let the person hear and edit all stems before rendering the song master.
-    await openSongMixer(fullSession.data.songs.findIndex(s=>s.id===song.id));
+    // Camera + stems: one automatic mix/master, without preparing a separate
+    // browser mixer preview. Audio-only Full session still opens its song review.
+    await renderFullSession(true);
   } finally { fullSession.busy = false; fullSession.videoMatching = false; }
 }
 
@@ -575,7 +583,12 @@ async function renderFullSession(forVideo = false) {
     }
     $('#sessionStatus').textContent = 'Your selected songs are ready.';
     drawSessionResults(data);
-  } catch (error) { if(!fullSession.cancelRequested)toast(error.message, true); }
+  } catch (error) {
+    if(!fullSession.cancelRequested){
+      showSessionProgress({...fullSession.data,status:'failed',error:error.message});
+      toast(error.message,true);
+    }
+  }
   finally { fullSession.busy = false; $('#sessionBack').disabled = false; $('#sessionCancel').hidden = true; $('#sessionMix').hidden = false; }
 }
 
@@ -593,7 +606,7 @@ async function mixSongsLocally(songs, perSong) {
     if (fullSession.cancelRequested) break;
     const mix = perSong[song.id] || {};
     if (mix.reference) { left.push(song); continue; }   // mastering references are mixed on the server
-    $('#sessionStatus').textContent = 'Mixing songs…';
+    $('#sessionStatus').textContent = fullSession.forVideo ? 'Mixing and mastering your song…' : 'Mixing songs…';
     fullSession.localProgress[song.id] = {status: 'working', progress: 0, tracks: []};
     paintSessionRender(fullSession.data);
     $('#sessionWorking').hidden = false;

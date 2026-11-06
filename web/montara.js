@@ -116,7 +116,7 @@ function stepApplies(step) {
   if (state.platform === "show") return ["footage", "making", "showReview", "result"].includes(step);
   if (step === "showReview") return false;
   if (step === "cameras") return !state.files.length || videos().length > 0;
-  if (step === "mix") return mixerMode();
+  if (step === "mix") return mixerMode() && videos().length===0;
   if (step === "captions") return state.platform === "reel";
   return true;
 }
@@ -562,8 +562,8 @@ function upload(file, entry) {
 async function uploadInParts(file, entry) {
   state.uploads += 1;
   try {
-    const extra = /\.opus$/i.test(file.name) && entry.original ? {original: {name: entry.original.name, size: entry.original.size, fingerprint: entry.original.fingerprint}} : {};
-    const data = await sendResumableUpload(file, progress => { entry.progress = progress; renderFiles(); }, id => {entry.uploadId = id; remember(entry);}, () => entry.removed, extra);
+    const extra = /\.opus$/i.test(file.name) && entry.original ? {original: {name: entry.original.name, size: entry.original.size, fingerprint: entry.original.fingerprint}, compact_preview:state.platform==='youtube' && state.files.some(f=>f.kind==='video'||/\.(mp4|mov|mkv|mts|m2ts|webm|avi|m4v)$/i.test(f.name))} : {};
+    const data = await sendResumableUpload(file, (progress, phase) => { entry.progress = progress; if(phase)entry.phase=phase; renderFiles(); }, id => {entry.uploadId = id; remember(entry);}, () => entry.removed, extra);
     const found = ['videos', 'master', 'songs', 'ignored'].map(kind => [kind, (data[kind] || [])[0]]).find(([, item]) => item);
     if (!found) throw new Error('Not a usable media file');
     entry.kind = found[0] === 'videos' ? 'video' : found[0];
@@ -658,8 +658,8 @@ function renderFiles() {
   if (state.platform === 'youtube' && !$('#fullSessionOn').checked && !state.uploads && longest > 20 * 60) hint = `Your audio is ${Math.round(longest / 60)} min long. If it is a whole session and you want one song, tick Full session to find the songs first, or trim the tracks to that song.`;
   // Long sessions: everything scales with how much audio comes in.
   if (state.platform === 'youtube' && longest > 30 * 60) hint = `${hint ? hint + ' ' : ''}Tip: only send what you need. If you want a few songs from a ${Math.round(longest / 60)} min session, export just that part of the tracks: uploading, finding songs and mixing all take much less time.`;
-  if (state.platform === 'youtube' && videos().length && audioTracks().length >= 2 && isWholeSession() && !state.uploads)
-    hint = 'Montara will find the song in your videos and mix its instrument tracks.';
+  if (state.platform === 'youtube' && videos().length && (audioTracks().length >= 2 || state.files.some(f=>f.preview)) && !state.uploads)
+    hint = 'Montara will find, mix and master the song in your videos.';
   if (!audioOnly() && state.branding === "mine" && !state.hasLogo) { hint = "Choose your logo, or pick another option."; ready = false; }
   $("#footageHint").textContent = hint;
   $("#continueFootage").disabled = !ready;
@@ -736,7 +736,7 @@ function isWholeSession() {
 async function registerProject({mixed = false} = {}) {
   if(work.cancelling)return toast('Wait for cancellation to finish.');
   if(!mixed){state.mixMaster=null;state.mixDownload=null;}
-  if (!mixed && state.platform === 'youtube' && videos().length && audioTracks().length >= 2 && isWholeSession()) return openFullSession(true);
+  if (!mixed && state.platform === 'youtube' && videos().length && (audioTracks().length >= 2 || state.files.some(f=>f.preview))) return openFullSession(true);
   if (!mixed && videos().length && state.files.some(f => f.preview)) return toast('Some audio was sent as a light session preview. Remove it and add it again to use it in a video.', true);
   if (state.platform === 'youtube' && !videos().length && !$('#fullSessionOn').checked && isWholeSession()) {
     $('#fullSessionOn').checked = true;

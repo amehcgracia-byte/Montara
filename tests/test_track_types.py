@@ -70,3 +70,9 @@ def test_the_mixer_gets_the_instrument_of_each_track(tmp_path):
     job._register()
     assert job.pipeline.STEM_INSTRUMENTS == {'Host.wav': 'podcast_voice'}
     assert job.pipeline.role_eq_bands('vocal', name='Host.wav')[0][2] == 80
+
+
+def test_compact_preview_and_extracted_wav_share_instrument_and_stereo_choice():
+    types=track_types.validate({'Mic.ogg':dict(type='keys',side='R',chosen=True)})
+    assert track_types.for_files(types,['Mic.wav'])=={'Mic.wav':dict(type='keys',side='R',chosen=True)}
+    assert track_types.mixer_roles(track_types.for_files(types,['Mic.wav']))=={'Mic.wav':'keys_r'}

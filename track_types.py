@@ -38,7 +38,7 @@ TYPES: dict[str, tuple[str, str]] = {
 SIDES = {"", "L", "R"}
 
 
-AUDIO_SUFFIXES = {".wav", ".flac", ".wv", ".opus", ".aif", ".aiff", ".mp3", ".m4a"}
+AUDIO_SUFFIXES = {".wav", ".flac", ".wv", ".opus", ".aif", ".aiff", ".mp3", ".m4a", ".ogg"}
 
 
 def track_key(name) -> str:

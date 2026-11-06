@@ -29,6 +29,7 @@ async function sendResumableUpload(file, progress, registered = () => {}, cancel
           const response = await fetch(`/montara/uploads/${job.id}`, {method: 'PUT', headers: {'Upload-Offset': String(offset), 'Content-Type': 'application/octet-stream'}, body: file.slice(offset, end)});
           const data = await response.json();
           if (!response.ok) throw new Error(data.error?.message || 'Upload paused. Choose this file again to resume.');
+          if (!Number.isSafeInteger(data.received) || data.received <= offset || data.received > file.size) throw new Error('Upload did not advance. Choose this file again to resume.');
           offset = data.received; lastError = null; break;
         } catch (error) {
           lastError = error;
@@ -39,6 +40,7 @@ async function sendResumableUpload(file, progress, registered = () => {}, cancel
       progress(offset / file.size);
     }
     stopIfCancelled();
+    progress(1, 'Preparing file');
     return await api(`/montara/uploads/${job.id}/finish`, {});
   } finally {
     const next = lane.waiting.shift();
