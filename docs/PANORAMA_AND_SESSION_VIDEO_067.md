@@ -1,6 +1,6 @@
 # Montara 0.67 — panoramas ligeros y mezcla antes del rango
 
-Base: main `4f1dceb` (incluye PR #79–83 de Fernando). Engine `172f8302` (descendiente del pin `bfb964c3`), Mixer `f15ff91`.
+Base: main `4f1dceb` (incluye PR #79–83 de Fernando). Engine `cbeb811b` (descendiente del pin `bfb964c3`), Mixer `f15ff91`.
 Motor: solo acotar la extracción del frame panorámico a la duración del clip.
 Sin cambios de exportación ni copia de ramas experimentales.
 

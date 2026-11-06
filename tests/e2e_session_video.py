@@ -50,7 +50,7 @@ def main():
             browser=pw.chromium.launch();page=browser.new_page(viewport={'width':1280,'height':900})
             page.on('pageerror',lambda e:print('BROWSER',e,flush=True))
             page.route('**/companion.js',lambda r:r.fulfill(body=(ROOT/'web/companion.js').read_text().replace('http://127.0.0.1:47820',base),content_type='application/javascript'))
-            page.route(base+'/projects',lambda r:r.fulfill(json={},headers={'Access-Control-Allow-Origin':url}))
+            page.route(base+'/projects',lambda r:r.fulfill(json=None,headers={'Access-Control-Allow-Origin':url}))
             # Any original-video fallback must fail this journey rather than authorize it.
             page.on('dialog',lambda d:(_ for _ in ()).throw(AssertionError(d.message)))
             page.goto(url);page.locator('#mode').wait_for(state='visible',timeout=30000)
@@ -73,6 +73,11 @@ def main():
             assert page.locator('#rangeTrack option').inner_text()=='Your song master'
             assert page.evaluate('!!state.mixMaster')
             page.wait_for_function("document.querySelector('.pano-img').style.backgroundImage !== ''",timeout=60000)
+            page.locator('.pano').scroll_into_view_if_needed()
+            page.locator('.pano').click(position={'x':160,'y':80})
+            page.wait_for_function("document.querySelector('.preview img').naturalWidth>0 && !document.querySelector('.preview img').hidden",timeout=30000)
+            page.evaluate('()=>new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done)))')
+            page.locator('.pano').screenshot(path=str(out/'panorama-visible.png'))
             page.screenshot(path=str(out/'02-master-before-range.png'),full_page=True)
             summary={'passed':True,'panorama_proxy':True,'stems_mixed':2,'matched_song':song,'master_before_range':True}
             (out/'summary.json').write_text(json.dumps(summary,indent=2));print(json.dumps(summary),flush=True)
