@@ -57,5 +57,6 @@ def isolated_container_command(*, image: str, name: str, workspace: Path,
         "--workdir", "/workspace",
         "--env", "HOME=/workspace",
         "--env", "PYTHONDONTWRITEBYTECODE=1",
+        "--env", "PYTHONPATH=/app",
         image, *command,
     ]
