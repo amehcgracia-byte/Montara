@@ -42,4 +42,4 @@ jobs:
           test -n "$image"
           echo "URANO_TEST_IMAGE_DIGEST=$image" >> "$GITHUB_ENV"
       - name: Parallel isolated containers cannot see each other's synthetic data
-        run: python tests/urano_docker_isolation_smoke.py
+        run: PYTHONPATH=. python tests/urano_docker_isolation_smoke.py
