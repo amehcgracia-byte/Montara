@@ -237,8 +237,9 @@ def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
     # (the engine may rename a camera to a cached proxy, so count cameras, not names)
     all_used = mode == "push" or (len([k for k, n in used.items() if n]) >= len(cameras) and not result.get("excluded_clips"))
     if mode == 'stage':
-        # Real recovery after a render, in a fresh tab without browser edit memory.
-        recovered = page.context.new_page()
+        # Real recovery after a render, without saved browser edit memory.
+        recovered = page
+        recovered.evaluate("sessionStorage.removeItem('montara-open-edit')")
         recovered.route('http://127.0.0.1:47820/**', lambda route: route.abort())
         recovered.on('dialog', lambda dialog: dialog.accept() if dialog.type=='confirm' and 'upload the ORIGINAL video' in dialog.message else dialog.dismiss())
         recovered.goto(url)
@@ -267,7 +268,6 @@ def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
         assert recovered.locator('#audioFiles li').count()>=1
         recovered.screenshot(path=str(shots/'09-recovered-add-files.png'), full_page=True)
         assert recovered.request.get(url+'/api/v1/wizard/status').json()['project_path']==saved_project
-        recovered.close()
     return {"mode": mode, "media": media.name, "branding": BRANDING[mode], "passed": has_audio and duration > 0 and all_used and (mode != "mix" or bool(mixed and "Mixer" in mixed)),
             "duration": duration, "captioned": captioned, "size": f"{video['width']}x{video['height']}", "frames_swapped": swapped, "mixed_master": Path(mixed).name if mixed else None,
             "measured_browser_journey_seconds_including_ui_waits_and_download": round(journey_seconds, 3),
