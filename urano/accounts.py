@@ -119,7 +119,11 @@ class AccountStore:
                 lock_until = timestamp + _LOCK_SECONDS if failed >= _MAX_FAILURES else 0
                 db.execute("""UPDATE urano_accounts SET failed_attempts=?,locked_until=?
                               WHERE owner_id=?""", (failed, lock_until, row["owner_id"]))
-                raise LoginDenied("Invalid credentials")
-            db.execute("""UPDATE urano_accounts SET failed_attempts=0,locked_until=0
-                          WHERE owner_id=?""", (row["owner_id"],))
-            return row["owner_id"]
+            else:
+                db.execute("""UPDATE urano_accounts SET failed_attempts=0,locked_until=0
+                              WHERE owner_id=?""", (row["owner_id"],))
+                verified_id = row["owner_id"]
+        # Raise only AFTER the transaction commits the failed-attempt counter.
+        if not ok:
+            raise LoginDenied("Invalid credentials")
+        return verified_id
