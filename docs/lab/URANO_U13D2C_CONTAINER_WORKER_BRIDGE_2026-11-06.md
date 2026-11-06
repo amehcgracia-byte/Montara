@@ -1,6 +1,6 @@
 # URANO U13D2C — puente supervisor ↔ contenedor privado
 
-**Fecha:** 2026-11-06. **Estado:** PR DRAFT, prueba de integración con Docker real pendiente de verificación al publicarse. No desplegado.
+**Fecha:** 2026-11-06. **Estado:** PR DRAFT; pruebas **PASS** en [GitHub Actions run 42224036778](https://github.com/amehcgracia-byte/Montara/actions/runs/42224036778): jobs `contracts` y `container-bridge` con Docker real ambos SUCCESS. No desplegado.
 
 ## Contexto y objetivo
 
