@@ -56,8 +56,8 @@ class EngineBindingContract(unittest.TestCase):
         for name in ("../outsider", "/tmp", "..", ".", "shortcut", "missing", "a/b", " "):
             with self.subTest(name=name), self.assertRaises(ValueError):
                 self.registry.bind_trusted("test:alice", self.alice.id, name)
-        self.assertEqual(self.registry.resolve_internal if callable(self.registry.resolve_internal) else None,
-                         self.registry.resolve_internal)
+        with self.assertRaises(ProjectNotFound):
+            self.registry.resolve_internal("test:alice", self.alice.id)
 
     def test_deleted_or_repointed_project_cannot_be_resolved(self):
         folder = self.folder("Ready")
