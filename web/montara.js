@@ -148,7 +148,8 @@ function show(id) {
   if (!showNavigating) {
     const entry = {...history.state, montaraStep:id, montaraFlow:navigationFlow,
       montaraPlatform:state.platform, montaraProject:state.projectId};
-    if (id === 'home' || history.state?.montaraFlow !== navigationFlow || history.state?.montaraStep === 'home') {
+    if (id === 'home' || history.state?.montaraFlow !== navigationFlow || history.state?.montaraStep === 'home' ||
+        (history.state?.montaraStep === 'making' && ['frames','result','showReview'].includes(id))) {
       history.replaceState(entry, '', location.href);
     } else if (history.state?.montaraStep !== id) {
       history.pushState(entry, '', location.href);
