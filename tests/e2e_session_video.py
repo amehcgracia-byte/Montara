@@ -63,7 +63,19 @@ def main():
             assert page.evaluate("state.files.filter(f=>f.kind==='video').every(f=>f.small && f.original && f.projection==='equirect')")
             assert page.evaluate('state.files.filter(f=>f.preview).length')==2
             page.screenshot(path=str(out/'01-proxy-and-stems.png'),full_page=True)
+            renders=[]
+            page.on('request',lambda request:renders.append(request.url) if '/montara/session/' in request.url and request.url.endswith('/render') else None)
             page.locator('#continueFootage').click()
+            page.locator('#mix').wait_for(state='visible',timeout=600000)
+            page.wait_for_function("!document.querySelector('#useMix').disabled && mix.plan?.tracks.length===2",timeout=180000)
+            assert not page.locator('#cameras').is_visible()
+            assert not renders, 'Do not render the song before the person accepts the mixer'
+            assert page.evaluate('fullSession.data.results.length')==0
+            assert page.locator('#useMix').inner_text()=='Use this mix for the video'
+            assert not page.locator('#mixAll').is_visible()
+            page.locator('#strips .strip input[type=range]').first.evaluate("e=>{e.value=Number(e.value)-6;e.dispatchEvent(new Event('input',{bubbles:true}));}")
+            page.screenshot(path=str(out/'02-mixer-before-accept.png'),full_page=True)
+            page.locator('#useMix').click()
             page.wait_for_function("!document.querySelector('#cameras').hidden || /Could not|different songs|several songs|failed/i.test(document.querySelector('#toast:not([hidden])')?.textContent || '') || document.querySelector('#failed:not([hidden])')",timeout=600000)
             assert page.locator('#cameras').is_visible(),page.locator('#toast').inner_text()
             assert page.evaluate('fullSession.data.songs.filter(s=>s.selected).length')==1
@@ -72,6 +84,16 @@ def main():
             assert page.locator('#rangeTrack option').count()==1
             assert page.locator('#rangeTrack option').inner_text()=='Your song master'
             assert page.evaluate('!!state.mixMaster')
+            assert len(renders)==1
+            assert page.evaluate('fullSession.data.results.length')==1
+            assert page.evaluate('Object.values(fullSession.mixes[fullSession.mixSong].faders).some(db=>Math.abs(db)>.05)')
+            page.wait_for_function('range.duration>120',timeout=30000)
+            download=page.request.get(page.locator('#mixedMasterDownload').get_attribute('href'))
+            assert download.ok and 'audio/' in download.headers.get('content-type','')
+            master=out/'master.mp3';master.write_bytes(download.body())
+            raw=subprocess.check_output(['ffmpeg','-v','error','-ss','30','-i',str(master),'-t','1','-ac','1','-ar','8000','-f','f32le','-'])
+            spectrum=np.abs(np.fft.rfft(np.frombuffer(raw,dtype=np.float32)))
+            assert all(spectrum[freq]>10*np.median(spectrum[40:500]) for freq in (80,160)), 'Both musical stems must be present in the final master'
             page.wait_for_function("document.querySelector('.pano-img').style.backgroundImage !== ''",timeout=60000)
             page.locator('.pano').scroll_into_view_if_needed()
             page.locator('.pano').click(position={'x':160,'y':80})
@@ -81,7 +103,7 @@ def main():
             from PIL import Image, ImageStat
             assert max(ImageStat.Stat(Image.open(out/'panorama-visible.png')).stddev)>30, 'Panorama must be visibly drawn'
             page.screenshot(path=str(out/'02-master-before-range.png'),full_page=True)
-            summary={'passed':True,'panorama_proxy':True,'stems_mixed':2,'matched_song':song,'master_before_range':True}
+            summary={'passed':True,'panorama_proxy':True,'stems_mixed':2,'mixer_accepted':True,'saved_fader_applied':True,'downloadable_master':True,'matched_song':song,'master_before_range':True}
             (out/'summary.json').write_text(json.dumps(summary,indent=2));print(json.dumps(summary),flush=True)
             browser.close()
     finally:

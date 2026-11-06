@@ -1,6 +1,6 @@
 # Montara 0.67 — panoramas ligeros y mezcla antes del rango
 
-Base: main `4f1dceb` (incluye PR #79–83 de Fernando). Engine `cbeb811b` (descendiente del pin `bfb964c3`), Mixer `f15ff91`.
+Base: main `e66ada2` (incluye PR #79–83 de Fernando y recuperación 0.66.1). Engine `cbeb811b` (descendiente del pin `bfb964c3`), Mixer `f15ff91`.
 Motor: solo acotar la extracción del frame panorámico a la duración del clip.
 Sin cambios de exportación ni copia de ramas experimentales.
 
@@ -22,8 +22,12 @@ Sin cambios de exportación ni copia de ramas experimentales.
 - Jam larga con varias pistas y vídeos: usa las copias ligeras para detectar
   canciones y la suma de escucha existente como guía. Reutiliza la sincronía
   del motor por HTTP para identificar la canción de las cámaras. Mezcla solo
-  esa canción mediante el flujo existente (Companion o rangos en servidor).
+  esa canción mediante el flujo existente (Companion o rangos en servidor),
+  **después de abrir su mixer y esperar la aceptación de la persona**.
   Después abre las cámaras y el rango con el máster terminado.
+- El máster terminado se puede descargar desde la pantalla de rango. Con vídeos,
+  Full session no envía todos los temas a exportación; en audio solo se mantiene
+  la exportación de todas las canciones seleccionadas.
 - Vídeos de canciones distintas, sincronía dudosa o límites ambiguos requieren
   revisión; no se adivina ni se mezcla toda la jam por defecto. Una cámara sin
   sonido no permite identificación automática por esta vía.

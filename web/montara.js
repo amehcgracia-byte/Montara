@@ -350,6 +350,8 @@ function openSongRange() {
       ? state.mixMaster ? [{name: 'Your song master', path: state.mixMaster}] : []
       : audioTracks().filter((f) => audioUrl(f)) : [];
   $("#songRange").hidden = !rangeSourcesList.length;
+  $("#mixedMasterDownload").hidden = !state.mixDownload || !state.mixMaster;
+  if(state.mixDownload && state.mixMaster)$("#mixedMasterDownload").href=state.mixDownload;
   if (!rangeSourcesList.length) return;
   const select = $("#rangeTrack");
   const preferred = rangeSourcesList.findIndex((f) => /\b(ov|room|mix|master|ambi|stereo|lr)\b/i.test(f.name.replace(/[_.-]/g, " ")));
@@ -732,13 +734,14 @@ function isWholeSession() {
 
 async function registerProject({mixed = false} = {}) {
   if(work.cancelling)return toast('Wait for cancellation to finish.');
+  if(!mixed){state.mixMaster=null;state.mixDownload=null;}
   if (!mixed && state.platform === 'youtube' && videos().length && audioTracks().length >= 2 && isWholeSession()) return openFullSession(true);
   if (!mixed && videos().length && state.files.some(f => f.preview)) return toast('Some audio was sent as a light session preview. Remove it and add it again to use it in a video.', true);
   if (state.platform === 'youtube' && !videos().length && !$('#fullSessionOn').checked && isWholeSession()) {
     $('#fullSessionOn').checked = true;
     toast('This is a whole session: Montara finds the songs first, then mixes each one.');
   }
-  if (!mixed && state.platform === 'youtube' && $('#fullSessionOn').checked) return openFullSession();
+  if (!mixed && state.platform === 'youtube' && !videos().length && $('#fullSessionOn').checked) return openFullSession();
   $("#continueFootage").disabled = true;
   try {
     if (audioOnly()) { state.mixMaster = null; state.projectId = null; return await openMixer(); }
@@ -752,7 +755,7 @@ async function registerProject({mixed = false} = {}) {
     }
     if (!mixed) await api("/wizard/projects/new", {});
     const draft = await api("/wizard/draft", { name, project_id: mixed ? state.projectId : null, platform: state.platform, audio_paths: data.master ? [data.master] : [], ...data });
-    if (!mixed) state.mixMaster = null;
+    if (!mixed) {state.mixMaster = null;state.mixDownload = null;}
     state.projectId = draft.project_id;
   } finally {
     $("#continueFootage").disabled = false;
@@ -960,7 +963,8 @@ function mixLoadingScreen(sources, text) {
 }
 
 async function openMixer(sessionTracks = null) {
-  if (!sessionTracks) fullSession.active = false;
+  if (!sessionTracks) {fullSession.active = false;fullSession.forVideo = false;}
+  $("#useMix").textContent=state.platform==='youtube' && videos().length ? 'Use this mix for the video' : 'Use this mix';
   const sources = sessionTracks || audioTracks().map((f) => f.path);
   const dance = mixLoadingScreen(sources, "Mixing your tracks automatically…");
   let job;
@@ -1344,6 +1348,7 @@ $("#useMix").addEventListener("click", async () => {
     if (job.status === "failed") throw new Error(job.error || "The final mix failed");
     state.mixMaster = job.master_path;
     mix.masterPath = job.master_path;
+    state.mixDownload=`/montara/mix/${mix.job}/result?download_name=${encodeURIComponent(projectDownloadName(true))}`;
     if (audioOnly()) return showResult({ result: { audio: true, url: `/montara/mix/${mix.job}/result` } });
     // Register the finished master before presenting any song range.
     const data = inputs();

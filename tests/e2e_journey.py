@@ -128,6 +128,7 @@ def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
         page.locator('#cameras').wait_for(state='visible', timeout=300_000)
         assert page.locator('#rangeTrack option').count() == 1
         assert page.locator('#rangeTrack option').first.inner_text() == 'Your song master'
+        assert page.locator('#mixedMasterDownload').is_visible()
         page.screenshot(path=str(shots / '03d-master-range.png'), full_page=True)
         page.locator('#continueCameras').click()
     page.locator("#making").wait_for(state="visible", timeout=300_000)
