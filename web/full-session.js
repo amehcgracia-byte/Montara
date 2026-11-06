@@ -78,7 +78,8 @@ function showSessionProgress(data) {
   fullSession.busy = ['detecting', 'preparing', 'rendering'].includes(data.status);
   const now = performance.now() / 1000;
   if (sessionClock.status !== data.status) Object.assign(sessionClock, { status: data.status, started: now });
-  const [title, hint] = SESSION_STAGE[data.status] || [];
+  const [title, hint] = data.status === 'detecting' && fullSession.forVideo
+    ? ['Finding the audio in your videos', ''] : SESSION_STAGE[data.status] || [];
   $('#sessionHint').hidden = ['rendering', 'done'].includes(data.status);
   $('#sessionHint').textContent = hint || 'Review the suggested boundaries and choose the songs. Each song gets its own automatic mix; your fader moves apply on top.';
   $('#sessionCancel').hidden = !fullSession.busy;
@@ -127,7 +128,7 @@ async function openFullSession(forVideo = false) {
   $('#sessionMix').hidden = true;
   try {
     const tracks = audioTracks().map(f => f.path);
-    const job = await api('/montara/session', { tracks, track_types: TrackTypes.forFiles(tracks) });
+    const job = await api('/montara/session', { tracks, track_types: TrackTypes.forFiles(tracks), for_video:forVideo });
     fullSession.id = job.id; fullSession.mixes = {}; fullSession.mixCache = {}; fullSession.mixSong = null;
     fullSession.localProgress = {}; fullSession.localResults = [];
     try { localStorage.setItem('montara-session', job.id); $('#sessionResume').hidden = false; } catch { /* optional */ }
@@ -136,6 +137,7 @@ async function openFullSession(forVideo = false) {
     drawSessionSongs(data.songs);
     $('#sessionStatus').textContent = data.ai_review?.status === 'reviewed' ? `AI reviewed ${data.ai_review.submitted_cuts} of ${data.ai_review.total_cuts} cuts · ${data.ai_review.value.summary}` : 'Acoustic suggestions — check each song before continuing.';
   } catch (error) {
+    if (forVideo && fullSession.data?.video_excerpt) fullSession.data.songs?.forEach(song => {song.selected=false;});
     if (forVideo && fullSession.data?.songs) drawSessionSongs(fullSession.data.songs);
     if (!fullSession.cancelRequested) toast(error.message, true);
   }
@@ -160,8 +162,10 @@ async function mixSessionForVideo(data) {
     const sync = await api('/artifacts/sync');
     fullSession.videoMatching = false;
     checkSessionCancel();
-    const song = SessionVideo.songForClips(data.songs, sync.clips);
-    fullSession.data.songs = data.songs.map(s=>({...s, selected:s.id===song.id, confirmed:s.id===song.id}));
+    const song = data.video_excerpt ? SessionVideo.excerptForClips(data.duration, sync.clips)
+      : SessionVideo.songForClips(data.songs, sync.clips);
+    fullSession.data.songs = data.video_excerpt ? [song]
+      : data.songs.map(s=>({...s, selected:s.id===song.id, confirmed:s.id===song.id}));
     drawSessionSongs();
     // Let the person hear and edit all stems before rendering the song master.
     await openSongMixer(fullSession.data.songs.findIndex(s=>s.id===song.id));

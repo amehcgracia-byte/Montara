@@ -16,7 +16,7 @@ from pathlib import Path
 from flask import jsonify, request, send_file
 from mixer_adapter.session import (listen_range, original_windows, read, received_originals, register_original, save, session_listen,
                                    session_waveform, song_windows, validate_songs, window_song, original_key,
-                                   local_plan, window_key, local_mix_signature)
+                                   local_plan, window_key, local_mix_signature, listen_percent)
 from resumable_upload import preview_original
 
 ROOT = Path(__file__).resolve().parent
@@ -30,7 +30,7 @@ def launch(work, action):
 
 
 def public(data):
-    result = {k: data[k] for k in ('id', 'status', 'duration', 'songs', 'progress', 'error', 'preview_tracks', 'detection', 'ai_review') if k in data}
+    result = {k: data[k] for k in ('id', 'status', 'duration', 'songs', 'progress', 'error', 'preview_tracks', 'detection', 'ai_review', 'video_excerpt') if k in data}
     result['results'] = [{k: v for k, v in r.items() if k != 'path'} for r in data.get('results', [])]
     result['uses_previews'] = bool(data.get('previews'))
     result['track_files'] = [t['file'] for t in data.get('tracks') or []]
@@ -83,6 +83,8 @@ def register_full_session(app, data_root, fixtures):
     @app.post('/montara/session')
     def session_start():
         body = request.get_json(silent=True) or {}
+        if not isinstance(body.get('for_video', False), bool):
+            return error('Invalid video session mode.')
         paths = body.get('tracks')
         if not isinstance(paths, list) or not 1 <= len(paths) <= 128:
             return error('Add between 1 and 128 audio tracks.')
@@ -104,6 +106,7 @@ def register_full_session(app, data_root, fixtures):
                 # Never duplicate multi-GB source tracks just to register a folder.
                 (work / 'tracks' / path.name).symlink_to(path)
             data = dict(id=job_id, ai_data_root=str(Path(data_root).resolve()), status='detecting', started_at=time.time(), progress={'current_stage': 'Inspecting session', 'progress': 0})
+            data['video_excerpt'] = body.get('for_video', False)
             # Light previews from the companion: the export asks for the original song ranges.
             previews = {p.stem + '.wav': o for p in files if (o := preview_original(p))}
             if previews:
@@ -181,6 +184,8 @@ def register_full_session(app, data_root, fixtures):
                             data.update(status='failed', error='The session worker stopped. Your originals and reviewed cuts are preserved.')
                             save(work / 'session.json', data)
                 result = public(data)
+                if data.get('video_excerpt') and data['status'] == 'detecting':
+                    result['progress'] = {**result.get('progress', {}), 'progress':listen_percent(work)}
                 result['render_progress'] = {}
                 if data['status'] in {'rendering', 'done'}:
                     for path in (work / 'render_progress').glob('*.json'):

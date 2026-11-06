@@ -80,18 +80,19 @@ def main():
             assert page.locator('#cameras').is_visible(),page.locator('#toast').inner_text()
             assert page.evaluate('fullSession.data.songs.filter(s=>s.selected).length')==1
             song=page.evaluate('fullSession.data.songs.find(s=>s.selected)')
-            assert song['start']>180,song
+            session_id=page.evaluate('fullSession.id')
+            assert abs(song['start']-240)<1 and abs(song['end']-260)<1,song
             assert page.locator('#rangeTrack option').count()==1
             assert page.locator('#rangeTrack option').inner_text()=='Your song master'
             assert page.evaluate('!!state.mixMaster')
             assert len(renders)==1
             assert page.evaluate('fullSession.data.results.length')==1
             assert page.evaluate('Object.values(fullSession.mixes[fullSession.mixSong].faders).some(db=>Math.abs(db)>.05)')
-            page.wait_for_function('range.duration>120',timeout=30000)
+            page.wait_for_function('range.duration>18 && range.duration<22',timeout=30000)
             download=page.request.get(url+page.locator('#mixedMasterDownload').get_attribute('href'))
             assert download.ok and 'audio/' in download.headers.get('content-type','')
             master=out/'master.mp3';master.write_bytes(download.body())
-            raw=subprocess.check_output(['ffmpeg','-v','error','-ss','30','-i',str(master),'-t','1','-ac','1','-ar','8000','-f','f32le','-'])
+            raw=subprocess.check_output(['ffmpeg','-v','error','-ss','5','-i',str(master),'-t','1','-ac','1','-ar','8000','-f','f32le','-'])
             spectrum=np.abs(np.fft.rfft(np.frombuffer(raw,dtype=np.float32)))
             assert all(spectrum[freq]>10*np.median(spectrum[40:500]) for freq in (80,160)), 'Both musical stems must be present in the final master'
             page.wait_for_function("document.querySelector('.pano-img').style.backgroundImage !== ''",timeout=60000)
@@ -110,7 +111,14 @@ def main():
             assert page.evaluate('audioTracks().every(f=>!f.path.includes("listen-all"))')
             assert page.evaluate('!!state.mixMaster')
             page.screenshot(path=str(out/'03-source-stems-recovered.png'),full_page=True)
-            summary={'passed':True,'panorama_proxy':True,'stems_mixed':2,'mixer_accepted':True,'saved_fader_applied':True,'downloadable_master':True,'matched_song':song,'master_before_range':True}
+            session_dir=out/'data'/'Sessions'/session_id
+            assert not (session_dir/'extras.log').exists(), 'Video mode must not launch full-song detection/listening extras'
+            assert json.loads((session_dir/'waveform.json').read_text())['source']=='video-sync-guide'
+            extracted=list((session_dir/'songs'/'1'/'tracks').glob('*.wav'))
+            assert len(extracted)==2
+            for track in extracted:
+                assert 18<sf.info(track).duration<22, 'Only camera-range PCM is extracted, not the whole jam/song'
+            summary={'passed':True,'panorama_proxy':True,'stems_mixed':2,'mixer_accepted':True,'saved_fader_applied':True,'downloadable_master':True,'matched_song':song,'master_before_range':True,'session_seconds':390,'mixed_seconds':round(song['end']-song['start'],3),'all_song_detection_skipped':True}
             (out/'summary.json').write_text(json.dumps(summary,indent=2));print(json.dumps(summary),flush=True)
             browser.close()
     finally:
