@@ -31,8 +31,8 @@ const packNativeAdd=addFiles;addFiles=function(files,handles){if(packEnabled()){
 $('#pushPackOn').onchange=()=>{if(packEnabled() && state.files.every(f=>f.sample)){const first=videos()[0];state.files=first?[first]:[];}renderFiles();if(!packEnabled() && !state.files.length)loadSamples().catch(console.warn);};
 $('#pushPackURL').oninput=()=>{packUI.doc=null;renderFiles();};
 const packNativeRegister=registerProject;
-registerProject=async function(){
-  if(!packEnabled())return packNativeRegister();
+registerProject=async function(...args){
+  if(!packEnabled())return packNativeRegister(...args);
   const url=$('#pushPackURL').value.trim();if(!url && videos().length!==1)return toast('Choose one video or paste one link.',true);
   const inputKey=JSON.stringify([url || videos()[0].path,$('#reelDuration').value,reelFormat(),$('#mixShare').value]);
   if(packUI.doc && packUI.doc.status!=='failed' && packUI.inputKey===inputKey){show('pushPack');renderPack();pollPack();return;}

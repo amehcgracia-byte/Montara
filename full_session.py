@@ -133,6 +133,37 @@ def register_full_session(app, data_root, fixtures):
                 continue
         return error('No saved session.', 404)
 
+    @app.get('/montara/session/<job_id>/video-source')
+    def video_sync_source(job_id):
+        """Existing light session sum, solely as a guide for the engine's sync."""
+        try:
+            work = folder(job_id)
+            data = read(work)
+            if data.get('status') in BUSY or extras_running(work):
+                return error('The session listening copy is not ready.', 409)
+            return jsonify(master=str(session_listen(work)))
+        except ValueError as exc:
+            return error(exc)
+
+    @app.post('/montara/session/<job_id>/video-master')
+    def video_song_master(job_id):
+        """Adopt only a finished session song; never a preview or camera track."""
+        try:
+            work = folder(job_id)
+            data = read(work)
+            song_id = (request.get_json(silent=True) or {}).get('song')
+            if isinstance(song_id, bool) or not isinstance(song_id, int):
+                raise ValueError('Choose a finished song.')
+            result = next((r for r in data.get('results', []) if r['id'] == song_id), None)
+            if not result:
+                return error('The song master is not ready.', 409)
+            path = Path(result['path']).resolve()
+            if not path.is_relative_to(work.resolve()) or not path.is_file():
+                raise ValueError('The song master is unavailable.')
+            return jsonify(master=str(path), name=result['name'])
+        except ValueError as exc:
+            return error(exc)
+
     @app.get('/montara/session/<job_id>')
     def session_status(job_id):
         try:

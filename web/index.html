@@ -14,7 +14,7 @@
     <img src="mark.svg" alt="" width="34" height="28"><span>ontara</span>
   </a>
   <nav class="steps" id="steps" hidden>
-    <span data-step="footage">Footage</span><span data-step="cameras">Cameras</span><span data-step="mix">Mix</span><span data-step="making">Edit</span><span data-step="frames">Frames</span><span data-step="showReview">Review</span><span data-step="captions">Captions</span><span data-step="result">Result</span>
+    <span data-step="footage">Footage</span><span data-step="mix">Mix</span><span data-step="cameras">Cameras</span><span data-step="making">Edit</span><span data-step="frames">Frames</span><span data-step="showReview">Review</span><span data-step="captions">Captions</span><span data-step="result">Result</span>
   </nav>
   <a class="btn ghost small" id="sharePreview" href="https://montara-tau.vercel.app/" target="_blank" rel="noopener" hidden>Share Montara</a>
   <button class="btn primary" id="newVideo" data-go="mode">New video</button>
@@ -178,6 +178,7 @@
       <h3>Song</h3>
       <p class="hint">Play the song and mark where the video starts and ends. Montara edits only that part.</p>
       <div class="range-player"><select id="rangeTrack" aria-label="Track to listen to" hidden></select><audio id="rangeAudio" controls preload="metadata"></audio></div>
+      <a class="link" id="mixedMasterDownload" hidden download>Download this mix</a>
       <div class="range-bar" id="rangeBar" aria-hidden="true"><i id="rangeFill"></i><b id="rangeHead"></b></div>
       <div class="actions range-actions"><button class="btn ghost small" id="rangeStart" type="button">Start here</button><output id="rangeStartOut">0:00</output><button class="btn ghost small" id="rangeEnd" type="button">End here</button><output id="rangeEndOut">end</output><button class="link" id="rangeReset" type="button">Whole song</button></div>
     </section>
@@ -368,6 +369,7 @@
 <script src="companion.js"></script>
 <script src="track-types.js"></script>
 <script src="montara.js"></script>
+<script src="session-video.js"></script>
 <script src="full-session.js"></script>
 <script src="show-media.js"></script>
 <script src="show-editor.js"></script>

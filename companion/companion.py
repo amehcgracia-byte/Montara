@@ -27,7 +27,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-VERSION = "0.6.5"
+VERSION = "0.6.6"
 PORT = int(os.environ.get("MONTARA_COMPANION_PORT", "47820"))
 HOME = Path(os.environ.get("MONTARA_COMPANION_HOME", Path.home() / ".montara-companion"))
 CACHE = HOME / "proxies"
@@ -310,20 +310,31 @@ def plan(info: dict) -> dict:
         return {"skip": "no video stream"}
     width, height = int(video.get("width") or 0), int(video.get("height") or 0)
     spherical = any("spherical" in str(d.get("side_data_type", "")).lower() for d in video.get("side_data_list", []))
-    if spherical or (width >= 3840 and width == 2 * height):
-        return {"skip": "360 video: uploaded as it is for now"}
+    panorama = spherical or (width >= 3840 and width == 2 * height)
+    other_projection = any("spherical" in str(d.get("side_data_type", "")).lower()
+                           and d.get("projection") not in {None, "equirectangular"}
+                           for d in video.get("side_data_list", []))
+    stereo = any("stereo" in str(d.get("side_data_type", "")).lower() and d.get("type") not in {None, "2D"}
+                 for d in video.get("side_data_list", []))
+    if panorama and (width != 2 * height or stereo or other_projection):
+        return {"skip": "Unsupported 360 layout: export a stitched monoscopic 2:1 panorama first"}
     source_fps = rate(video.get("avg_frame_rate")) or rate(video.get("r_frame_rate")) or 30.0
     fps = 25 if abs(source_fps - 25) < 0.6 or abs(source_fps - 50) < 1 else 24 if abs(source_fps - 24) < 0.6 else 30
     hdr = video.get("color_transfer") in {"arib-std-b67", "smpte2084"}
     duration = float(info.get("format", {}).get("duration") or video.get("duration") or 0)
     turned = next((d["rotation"] for d in video.get("side_data_list", []) if "rotation" in d), 0)
+    if panorama and int(float(turned)) % 360:
+        return {"skip": "Rotated 360 layout: export a stitched upright 2:1 panorama first"}
     return {"fps": fps, "hdr": hdr, "duration": duration, "codec": video.get("codec_name"), "size": [width, height],
-            "pix_fmt": video.get("pix_fmt"), "rotation": int(float(turned)) % 360}
+            "pix_fmt": video.get("pix_fmt"), "rotation": int(float(turned)) % 360, "panorama": panorama}
 
 
 def proxy_command(source: Path, target: Path, p: dict, hardware: bool = False) -> list[str]:
     # Fit inside 1280x720 (landscape) or 608x1080 (portrait): the engine then uses it as is.
     fit = "w='if(gte(iw,ih),min(1280,iw),-2)':h='if(gte(iw,ih),-2,min(1080,ih))'"
+    if p.get("panorama"):
+        # Keep the full sphere, never a perspective crop. Final rendering uses originals.
+        fit = "w='min(2048,iw)':h=-2"
     head = [FFMPEG, "-hide_banner", "-nostdin", "-y"]
     if hardware:
         # The frames never leave the graphics chip, and FFmpeg does not turn them there: we do.
@@ -342,6 +353,8 @@ def proxy_command(source: Path, target: Path, p: dict, hardware: bool = False) -
         video = ["-c:v", "h264_videotoolbox", "-b:v", "2500k", "-maxrate", "4M", "-bufsize", "8M"]
     else:
         video = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "24"]
+    if p.get("panorama") and HW_H264:
+        video = ["-c:v", "h264_videotoolbox", "-b:v", "4M", "-maxrate", "6M", "-bufsize", "12M"]
     return head + ["-i", str(source), "-map", "0:v:0", "-map", "0:a:0?", "-vf", ",".join(chain),
                    "-fps_mode", "cfr", "-r", str(p["fps"]), "-g", str(p["fps"]), *video,
                    # -colorspace cannot convert frames on the chip: scale_vt has already tagged them.
@@ -403,6 +416,7 @@ def make_proxy(key: str) -> None:
                     diagnostic_tail.append(line.strip())
                     if len(diagnostic_tail) > 20:
                         diagnostic_tail.pop(0)
+            process.stdout.close()
             if process.wait() == 0:
                 break
             reason = next((line for line in reversed(diagnostic_tail) if line), "FFmpeg failed")
@@ -410,6 +424,9 @@ def make_proxy(key: str) -> None:
                 raise RuntimeError(reason)
             log(f"{source.name}: the fast way failed ({reason}); trying the software way")
             job["progress"] = 0.0
+        if p.get("panorama"):
+            from spherical_proxy import preserve_panorama
+            preserve_panorama(pending, probe)
         pending.replace(target)
         elapsed = time.monotonic() - started
         job.update(status="ready", progress=1.0, bytes=target.stat().st_size, seconds=round(elapsed, 1))

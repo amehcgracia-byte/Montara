@@ -15,6 +15,7 @@ $('#sessionResume').onclick = async () => {
     try {localStorage.setItem('montara-session',latest.id);} catch {}
     fullSession.localProgress = {}; fullSession.localResults = [];
     fullSession.active = true;
+    fullSession.forVideo = false;
     show('sessionReview'); $('#sessionSongs').hidden = false; clearSessionResults();
     const data = await waitSession(await api(`/montara/session/${fullSession.id}`));
     if (data.songs) drawSessionSongs(data.songs);
@@ -37,6 +38,10 @@ $('#sessionCancel').onclick = async () => {
   fullSession.cancelling=true;
   fullSession.cancelRequested = true;
   fullSession.mixAbort?.abort();
+  if (fullSession.videoMatching) {
+    work.cancelled = true; work.generation++;
+    await api('/wizard/cancel', {});
+  }
   $('#sessionCancel').disabled=true;$('#sessionStatus').textContent='Cancelling…';
   try {
     if(fullSession.mixPromise)try{await fullSession.mixPromise;}catch(error){if(error.name!=='AbortError')throw error;}
@@ -110,8 +115,9 @@ async function waitSession(initial) {
   return data;
 }
 
-async function openFullSession() {
+async function openFullSession(forVideo = false) {
   if(fullSession.cancelling)return;
+  fullSession.forVideo = forVideo === true;
   fullSession.cancelRequested=false;
   if (!audioTracks().length) return toast('Add the audio tracks of your session first.', true);
   fullSession.active = true;
@@ -122,13 +128,44 @@ async function openFullSession() {
   try {
     const tracks = audioTracks().map(f => f.path);
     const job = await api('/montara/session', { tracks, track_types: TrackTypes.forFiles(tracks) });
-    fullSession.id = job.id; fullSession.mixes = {};
+    fullSession.id = job.id; fullSession.mixes = {}; fullSession.mixCache = {}; fullSession.mixSong = null;
     fullSession.localProgress = {}; fullSession.localResults = [];
     try { localStorage.setItem('montara-session', job.id); $('#sessionResume').hidden = false; } catch { /* optional */ }
     const data = await waitSession(job);
+    if (forVideo) return await mixSessionForVideo(data);
     drawSessionSongs(data.songs);
     $('#sessionStatus').textContent = data.ai_review?.status === 'reviewed' ? `AI reviewed ${data.ai_review.submitted_cuts} of ${data.ai_review.total_cuts} cuts · ${data.ai_review.value.summary}` : 'Acoustic suggestions — check each song before continuing.';
-  } catch (error) { toast(error.message, true); }
+  } catch (error) {
+    if (forVideo && fullSession.data?.songs) drawSessionSongs(fullSession.data.songs);
+    if (!fullSession.cancelRequested) toast(error.message, true);
+  }
+}
+
+async function mixSessionForVideo(data) {
+  // Reuse the engine's real onset/spectral sync, not a second matching algorithm.
+  const generation = beginWork();
+  fullSession.busy = true;
+  fullSession.videoMatching = true;
+  $('#sessionStatus').textContent = 'Finding your song from the camera audio…';
+  $('#sessionWorking').hidden = false;
+  $('#sessionCancel').hidden = false;
+  try {
+    const guide = await api(`/montara/session/${fullSession.id}/video-source`);
+    const input = {master:guide.master, songs:'', videos:videos().map(f=>f.path)};
+    await api('/wizard/projects/new', {});
+    const draft = await api('/wizard/draft', {name:$('#videoName').value.trim() || todayName(), platform:'youtube', ...input, audio_paths:[guide.master]});
+    state.projectId = draft.project_id;
+    await workRequest(generation, '/wizard/prepare', {project_id:state.projectId, platform:'youtube', ...input});
+    await waitFor(s=>['waiting_choice','done'].includes(s.status), generation);
+    const sync = await api('/artifacts/sync');
+    fullSession.videoMatching = false;
+    checkSessionCancel();
+    const song = SessionVideo.songForClips(data.songs, sync.clips);
+    fullSession.data.songs = data.songs.map(s=>({...s, selected:s.id===song.id, confirmed:s.id===song.id}));
+    drawSessionSongs();
+    // Let the person hear and edit all stems before rendering the song master.
+    await openSongMixer(fullSession.data.songs.findIndex(s=>s.id===song.id));
+  } finally { fullSession.busy = false; fullSession.videoMatching = false; }
 }
 
 // ---------- song list: waveform, handles, listen, per-song mixer ----------
@@ -198,7 +235,7 @@ function drawSessionSongs(songs) {
   loadSessionWave().then(() => list.forEach((_, i) => paintSong(i)));
   warmSessionAudio();
   $('#sessionMix').hidden = false;
-  $('#sessionMix').textContent = 'Export selected songs';
+  $('#sessionMix').textContent = fullSession.forVideo ? 'Review this song’s mix' : 'Export selected songs';
 }
 
 function paintSong(i) {
@@ -369,6 +406,7 @@ function applySavedMix(changes) {
 
 async function openSongMixer(i) {
   const song = songList()[i];
+  if(fullSession.forVideo)fullSession.data.songs=fullSession.data.songs.map(s=>({...s,selected:s.id===song.id}));
   stopSongPreview();
   fullSession.mixSong = song.id;
   const cached = fullSession.mixCache[song.id];
@@ -395,9 +433,9 @@ async function openSongMixer(i) {
       $$('#strips .strip').forEach((strip, index) => { if (mix.plan.tracks[index].active === false) strip.querySelectorAll('input,button').forEach(el => { el.disabled = true; }); });
       fullSession.mixCache[song.id] = { key: songKey(song), job: mix.job, plan: mix.plan, buffers: mix.buffers, fxBuffers: mix.fxBuffers };
     }
-    $('#useMix').textContent = 'Save mix for this song';
-    $('#mixAll').hidden = false; $('#mixAll').disabled = false;
-    $('#mixStatusText').textContent = `${song.name}: ${Math.ceil(mix.plan.duration)} s from the busiest part. Changes apply to this song only; the others keep their automatic mix.`;
+    $('#useMix').textContent = fullSession.forVideo ? 'Use this mix for the video' : 'Save mix for this song';
+    $('#mixAll').hidden = fullSession.forVideo; $('#mixAll').disabled = false;
+    $('#mixStatusText').textContent = fullSession.forVideo ? 'Adjust your tracks, then use this mix as the audio for your video.' : `${song.name}: ${Math.ceil(mix.plan.duration)} s from the busiest part. Changes apply to this song only; the others keep their automatic mix.`;
   } catch (error) { toast(error.message, true); show('sessionReview'); }
 }
 
@@ -423,7 +461,12 @@ $('#sessionSongs').onclick = event => {
   drawSessionSongs(songs);
 };
 
-$('#sessionMix').onclick = () => renderFullSession();
+$('#sessionMix').onclick = () => {
+  if(!fullSession.forVideo)return renderFullSession();
+  const selected=songList().filter(song=>song.selected);
+  if(selected.length!==1)return toast('Choose one song for this video.',true);
+  return openSongMixer(songList().findIndex(song=>song.id===selected[0].id));
+};
 
 // A track detection found empty can be brought back (the excerpts are cut again).
 $('#sessionEmpty').addEventListener('click', async event => {
@@ -471,6 +514,13 @@ async function saveSongMix() {
   const songId = fullSession.mixSong, job = mix.job;
   fullSession.mixes[songId] = mixChanges();   // kept at once; the page goes straight back to the list
   $('#useMix').textContent = 'Use this mix';
+  if(fullSession.forVideo){
+    $('#useMix').disabled=true;
+    const current=await api(`/montara/mix/${job}`);
+    if(current.reference)fullSession.mixes[songId].reference=current.reference;
+    show('sessionReview');drawSessionSongs();
+    return renderFullSession(true);
+  }
   show('sessionReview');
   drawSessionSongs();
   toast('Mix saved for this song.');
@@ -478,11 +528,12 @@ async function saveSongMix() {
   api(`/montara/mix/${job}`).then(state => { if (state.reference && fullSession.mixes[songId]) fullSession.mixes[songId].reference = state.reference; }).catch(() => {});
 }
 
-async function renderFullSession() {
+async function renderFullSession(forVideo = false) {
   if(fullSession.cancelling)return;
   stopSongPreview();
   const songs = songList();
   if (!songs.some(s => s.selected)) return toast('Select at least one song.', true);
+  if(forVideo && songs.filter(s=>s.selected).length!==1)return toast('Choose one song for this video.',true);
   $('#sessionMix').hidden = true;
   fullSession.cancelRequested = false;
   fullSession.exportRun = (fullSession.exportRun || 0) + 1;
@@ -508,6 +559,16 @@ async function renderFullSession() {
     for (const song of serverSongs){checkSessionCancel();await queueSongOriginals(song);}
     const data = await waitSession(started);
     checkSessionCancel();
+    if (forVideo) {
+      const song = data.songs.find(s=>s.selected);
+      const master = await api(`/montara/session/${fullSession.id}/video-master`, {song:song.id});
+      state.mixMaster = master.master;
+      state.mixDownload=`/montara/session/${fullSession.id}/result/${song.id}?download=1`;
+      fullSession.active = false;
+      range.start = 0; range.end = null;
+      await registerProject({mixed:true});
+      return;
+    }
     $('#sessionStatus').textContent = 'Your selected songs are ready.';
     drawSessionResults(data);
   } catch (error) { if(!fullSession.cancelRequested)toast(error.message, true); }

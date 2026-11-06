@@ -1,0 +1,46 @@
+# Montara 0.67 — panoramas ligeros y mezcla antes del rango
+
+Base: main `e66ada2` (incluye PR #79–83 de Fernando y recuperación 0.66.1). Engine `4f481002` (Editor PR #60, mismo árbol que `cbeb811b`) (descendiente del pin `bfb964c3`), Mixer `f15ff91`.
+Motor: solo acotar la extracción del frame panorámico a la duración del clip.
+Sin cambios de exportación ni copia de ramas experimentales.
+
+## Correcciones
+
+- Companion 0.6.6 ya no omite las panorámicas monoscópicas cosidas 2:1.
+  Crea hasta 2048×1024, mantiene toda la esfera, audio y duración, y restaura
+  metadatos esféricos reales V1/V2 usando el injector Apache-2.0 ya empleado
+  por el Editor. Verifica con ffprobe antes de publicar el proxy. Sin otra
+  codificación al inyectar metadatos. El render local conserva el original.
+- Los formatos esféricos no compatibles (estéreo, proyección distinta o
+  panorámica rotada) fallan explícitamente: no se reinterpretan como mono.
+- El visor panorámico ya no busca siempre el segundo 30: en clips cortos
+  extrae un frame dentro de su duración (regresión real con 40 ms, 1 s y 20 s).
+- La protección de consentimiento de Fernando permanece. Un error de proxy
+  no autoriza una subida original. Installer incorpora también windows_support.
+- Stage con pistas separadas: mezcla y masteriza antes de mostrar el rango;
+  allí aparece un solo máster, no una lista de instrumentos como canciones.
+- Jam larga con varias pistas y vídeos: usa las copias ligeras para detectar
+  canciones y la suma de escucha existente como guía. Reutiliza la sincronía
+  del motor por HTTP para identificar la canción de las cámaras. Mezcla solo
+  esa canción mediante el flujo existente (Companion o rangos en servidor),
+  **después de abrir su mixer y esperar la aceptación de la persona**.
+  Después abre las cámaras y el rango con el máster terminado.
+- El máster terminado se puede descargar desde la pantalla de rango. Con vídeos,
+  Full session no envía todos los temas a exportación; en audio solo se mantiene
+  la exportación de todas las canciones seleccionadas.
+- Vídeos de canciones distintas, sincronía dudosa o límites ambiguos requieren
+  revisión; no se adivina ni se mezcla toda la jam por defecto. Una cámara sin
+  sonido no permite identificación automática por esta vía.
+
+## Validación
+
+Pruebas nuevas: proxy 4K real con audio, identidad del original, metadatos,
+encuadres distintos con v360; rechazo de metadatos inválidos; selección de
+canción con sincronía dudosa/ambigua y límites de acceso al máster terminado.
+`tests/e2e_session_video.py` añade recorrido real navegador → Companion →
+proxy panorámico → detección → sincronía → máster de una canción → rango.
+La aceptación completa y la instalación se registran al terminar CI.
+
+No actualizar/reiniciar servidor o Companion durante renders del usuario.
+
+El mixer de la canción localizada se abre antes de renderizar; aceptar conserva faders/FX y mezcla solo esa canción. La recuperación conserva pistas fuente y duración/previews, no sustituye instrumentos por el audio guía del borrador.

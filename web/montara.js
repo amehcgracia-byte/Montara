@@ -39,7 +39,7 @@ const zoomOf = (view) => ZOOMS.reduce((best, z) => (Math.abs(z[2] - view.fov) < 
 const BOX_HELP = {
   youtube: [
     ["Videos", "Every camera of the same performance: phone, camera, 360. They don't need to start at the same time; Montara syncs them by sound."],
-    ["Audio", "The master: one mixed track of the song (WAV or MP3). Separate instrument or mic tracks come with the mixer, soon."],
+    ["Audio", "A finished master, or separate instrument and mic tracks for Montara to mix."],
     ["Not here", "Photos. Use Story for those (coming soon)."],
   ],
   reel: [
@@ -110,7 +110,7 @@ function escapeHtml(text) {
   return String(text ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
-const STEP_ORDER = ["footage", "showSetup", "showStyle", "cameras", "mix", "making", "frames", "showReview", "captions", "result"];
+const STEP_ORDER = ["footage", "showSetup", "showStyle", "mix", "cameras", "making", "frames", "showReview", "captions", "result"];
 // Steps that apply to this video: no Mix step without separate tracks, no Captions outside Pulse.
 function stepApplies(step) {
   if (state.platform === "show") return ["footage", "making", "showReview", "result"].includes(step);
@@ -130,9 +130,9 @@ function rememberOpenEdit(id){
   if(!state.projectId || ['home','mode'].includes(id))return;
   try {sessionStorage.setItem('montara-open-edit',JSON.stringify({
     project:state.projectId,platform:state.platform,step:id,name:$('#videoName').value,
-    branding:state.branding,localProject:state.localProject,
+    branding:state.branding,localProject:state.localProject,mixMaster:state.mixMaster,
     nativeJob:state.nativeExport?.id || state.lastNativeJob,
-    files:state.files.filter(f=>f.path).map(({id,name,path,kind,small,original,projection})=>({id,name,path,kind,small,original,projection}))
+    files:state.files.filter(f=>f.path).map(({id,name,path,kind,small,original,projection,preview,duration,cameraType})=>({id,name,path,kind,small,original,projection,preview,duration,cameraType}))
   }));} catch {}
 }
 function show(id) {
@@ -345,8 +345,13 @@ function audioUrl(f) {
   return f.path ? `/montara/audio?path=${encodeURIComponent(f.path)}` : "";
 }
 function openSongRange() {
-  rangeSourcesList = ["youtube","reel"].includes(state.platform) ? audioTracks().filter((f) => audioUrl(f)) : [];
+  rangeSourcesList = ["youtube","reel"].includes(state.platform)
+    ? state.platform === 'youtube' && mixerMode()
+      ? state.mixMaster ? [{name: 'Your song master', path: state.mixMaster}] : []
+      : audioTracks().filter((f) => audioUrl(f)) : [];
   $("#songRange").hidden = !rangeSourcesList.length;
+  $("#mixedMasterDownload").hidden = !state.mixDownload || !state.mixMaster;
+  if(state.mixDownload && state.mixMaster){$("#mixedMasterDownload").href=state.mixDownload;$("#mixedMasterDownload").download=projectDownloadName(true);}
   if (!rangeSourcesList.length) return;
   const select = $("#rangeTrack");
   const preferred = rangeSourcesList.findIndex((f) => /\b(ov|room|mix|master|ambi|stereo|lr)\b/i.test(f.name.replace(/[_.-]/g, " ")));
@@ -469,7 +474,7 @@ async function uploadSmall(file, entry) {
   try {
     // A full session only needs light previews; the export asks for the original song ranges.
     // Big audio files in Stage are whole sessions in practice (20 min of 24-bit mono ≈ 170 MB).
-    const preview = state.platform === 'youtube' && ($('#fullSessionOn').checked || (montaraCompanion.isAudio(file) && file.size > LONG_AUDIO_BYTES && !videos().length));
+    const preview = state.platform === 'youtube' && ($('#fullSessionOn').checked || (montaraCompanion.isAudio(file) && file.size > LONG_AUDIO_BYTES));
     small = await montaraCompanion.smallVersion(file, (phase, progress) => { entry.phase = phase; entry.progress = progress; renderFiles(); }, () => entry.removed, {preview});
   } catch (error) { console.warn(error); }
   // Companion problems never trigger an automatic video-original upload.
@@ -653,6 +658,8 @@ function renderFiles() {
   if (state.platform === 'youtube' && !$('#fullSessionOn').checked && !state.uploads && longest > 20 * 60) hint = `Your audio is ${Math.round(longest / 60)} min long. If it is a whole session and you want one song, tick Full session to find the songs first, or trim the tracks to that song.`;
   // Long sessions: everything scales with how much audio comes in.
   if (state.platform === 'youtube' && longest > 30 * 60) hint = `${hint ? hint + ' ' : ''}Tip: only send what you need. If you want a few songs from a ${Math.round(longest / 60)} min session, export just that part of the tracks: uploading, finding songs and mixing all take much less time.`;
+  if (state.platform === 'youtube' && videos().length && audioTracks().length >= 2 && isWholeSession() && !state.uploads)
+    hint = 'Montara will find the song in your videos and mix its instrument tracks.';
   if (!audioOnly() && state.branding === "mine" && !state.hasLogo) { hint = "Choose your logo, or pick another option."; ready = false; }
   $("#footageHint").textContent = hint;
   $("#continueFootage").disabled = !ready;
@@ -712,7 +719,7 @@ function inputs() {
   const master = mixerMode() ? (state.mixMaster ? { path: state.mixMaster } : null) : state.files.find((f) => f.kind === "master");
   return {
     master: master?.path || "",
-    songs: state.files.find((f) => f.kind === "songs")?.path || "",
+    songs: mixerMode() ? "" : state.files.find((f) => f.kind === "songs")?.path || "",
     videos: videos().map((f) => f.path),
   };
 }
@@ -722,17 +729,20 @@ const LONG_AUDIO_BYTES = 150 * 1024 * 1024, LONG_AUDIO_SECONDS = 20 * 60;
 // analyse and download every full-length track (and previews can only be exported per song).
 function isWholeSession() {
   const audio = state.files.filter(isAudioEntry);
-  return audio.some(f => f.preview) || Math.max(0, ...audio.map(f => f.duration || 0)) > LONG_AUDIO_SECONDS;
+  return audio.some(f => f.preview || (Number(f.duration)>LONG_AUDIO_SECONDS) ||
+    (!(Number(f.duration)>0) && (f.original?.size || f.sourceBytes || f.memory?.size || 0)>LONG_AUDIO_BYTES));
 }
 
-async function registerProject() {
+async function registerProject({mixed = false} = {}) {
   if(work.cancelling)return toast('Wait for cancellation to finish.');
-  if (videos().length && state.files.some(f => f.preview)) return toast('Some audio was sent as a light session preview. Remove it and add it again to use it in a video.', true);
+  if(!mixed){state.mixMaster=null;state.mixDownload=null;}
+  if (!mixed && state.platform === 'youtube' && videos().length && audioTracks().length >= 2 && isWholeSession()) return openFullSession(true);
+  if (!mixed && videos().length && state.files.some(f => f.preview)) return toast('Some audio was sent as a light session preview. Remove it and add it again to use it in a video.', true);
   if (state.platform === 'youtube' && !videos().length && !$('#fullSessionOn').checked && isWholeSession()) {
     $('#fullSessionOn').checked = true;
     toast('This is a whole session: Montara finds the songs first, then mixes each one.');
   }
-  if (state.platform === 'youtube' && $('#fullSessionOn').checked) return openFullSession();
+  if (!mixed && state.platform === 'youtube' && !videos().length && $('#fullSessionOn').checked) return openFullSession();
   $("#continueFootage").disabled = true;
   try {
     if (audioOnly()) { state.mixMaster = null; state.projectId = null; return await openMixer(); }
@@ -744,14 +754,15 @@ async function registerProject() {
       state.localProject = await montaraCompanion.projectFolder(name, state.files.filter((f) => f.original).map((f) => f.original));
       if (state.localProject) toast(`Project folder: ${state.localProject.folder}`);
     }
-    await api("/wizard/projects/new", {});
-    const draft = await api("/wizard/draft", { name, project_id: null, platform: state.platform, audio_paths: data.master ? [data.master] : [], ...data });
-    state.mixMaster = null;
+    if (!mixed) await api("/wizard/projects/new", {});
+    const draft = await api("/wizard/draft", { name, project_id: mixed ? state.projectId : null, platform: state.platform, audio_paths: data.master ? [data.master] : [], ...data });
+    if (!mixed) {state.mixMaster = null;state.mixDownload = null;}
     state.projectId = draft.project_id;
   } finally {
     $("#continueFootage").disabled = false;
   }
   if (state.platform === "show") return makeShow();
+  if (mixerMode() && !state.mixMaster) return openMixer();
   const needsCameras = videos().length > 0 && (state.platform!=='reel' || audioTracks().length || videos().some(isSphere));
   if (!needsCameras) return afterCameras();
   renderCameras();
@@ -762,6 +773,7 @@ async function registerProject() {
 // ---------- cameras & 360 viewpoints ----------
 function cameraTypeOf(f){return f.cameraType || (isSphere(f)?'360':(state.roles[f.path] || guessRole(f))==='fixed_rear'?'fixed':'moving');}
 function renderCameras() {
+  $$('#sphereList .pano-img[data-object-url]').forEach(node=>URL.revokeObjectURL(node.dataset.objectUrl));
   $('#cameras>h2').textContent=state.platform==='reel'?'Your reel':'Your cameras';
   $('#cameras>.lead').hidden=state.platform==='reel';
   $('#cameraList').hidden=state.platform==='reel';
@@ -783,7 +795,14 @@ function setupSphere(file, root) {
   const frame = new Image();
   frame.onload = () => { pano.querySelector(".loading").hidden = true; panoImg.style.backgroundImage = `url("${frame.src}")`; place(); preview(); };
   frame.onerror = () => { pano.querySelector(".loading").textContent = "Could not load the 360 frame."; };
-  frame.src = `/api/v1/wizard/spherical-source-frame?source=${encodeURIComponent(file.path)}`;
+  // Share one local image between CSS and WebGL. A second URL fetch used to
+  // extract the same frame again and briefly leave the panorama black.
+  fetch(`/api/v1/wizard/spherical-source-frame?source=${encodeURIComponent(file.path)}`)
+    .then(response=>{if(!response.ok)throw new Error('Panorama unavailable');return response.blob();})
+    .then(blob=>{
+      if(!root.isConnected)return;
+      const url=URL.createObjectURL(blob);panoImg.dataset.objectUrl=url;frame.src=url;
+    }).catch(()=>frame.onerror());
 
   function wrap(v) { return ((v % 1) + 1) % 1; }
   new ResizeObserver(() => place()).observe(pano);
@@ -924,7 +943,7 @@ function setupSphere(file, root) {
 $("#continueCameras").addEventListener("click", () => saveCameras().then(afterCameras).catch(fail));
 
 function afterCameras() {
-  return mixerMode() ? openMixer() : make();
+  return mixerMode() && !state.mixMaster ? openMixer() : make();
 }
 
 // ---------- mixer ----------
@@ -945,7 +964,8 @@ function mixLoadingScreen(sources, text) {
 }
 
 async function openMixer(sessionTracks = null) {
-  if (!sessionTracks) fullSession.active = false;
+  if (!sessionTracks) {fullSession.active = false;fullSession.forVideo = false;}
+  $("#useMix").textContent=state.platform==='youtube' && videos().length ? 'Use this mix for the video' : 'Use this mix';
   const sources = sessionTracks || audioTracks().map((f) => f.path);
   const dance = mixLoadingScreen(sources, "Mixing your tracks automatically…");
   let job;
@@ -1309,7 +1329,7 @@ $("#referenceLinkForm").addEventListener("submit", async (event) => {
   } catch (error) { status.textContent = error.message; }
   finally { if (mix.job === jobId) { button.disabled = false; $("#pickReference").disabled = false; $("#useMix").disabled = false; } }
 });
-$("#mixBack").addEventListener("click", () => { stopMix(); $("#mixAll").hidden = true; $("#useMix").textContent = "Use this mix"; show(fullSession.active ? 'sessionReview' : videos().length > 1 || videos().some(isSphere) ? "cameras" : "footage"); });
+$("#mixBack").addEventListener("click", () => { stopMix(); $("#mixAll").hidden = true; $("#useMix").textContent = "Use this mix"; show(fullSession.active ? 'sessionReview' : 'footage'); });
 
 $("#useMix").addEventListener("click", async () => {
   try {
@@ -1329,11 +1349,14 @@ $("#useMix").addEventListener("click", async () => {
     if (job.status === "failed") throw new Error(job.error || "The final mix failed");
     state.mixMaster = job.master_path;
     mix.masterPath = job.master_path;
+    state.mixDownload=`/montara/mix/${mix.job}/result?download_name=${encodeURIComponent(projectDownloadName(true))}`;
     if (audioOnly()) return showResult({ result: { audio: true, url: `/montara/mix/${mix.job}/result` } });
-    // Register the mix as the project's master audio, then make the video.
+    // Register the finished master before presenting any song range.
     const data = inputs();
     await api("/wizard/draft", { name: $("#videoName").value.trim() || todayName(), project_id: state.projectId, platform: state.platform, audio_paths: [data.master], ...data });
-    await make();
+    renderCameras();
+    openSongRange();
+    show('cameras');
   } catch (error) {
     $("#useMix").disabled = false;
     fail(error);
@@ -2506,8 +2529,18 @@ if(savedEdit?.project){
     const project=await api('/project');
     state.projectId=current.project_path;state.platform=savedEdit.platform;
     $('#videoName').value=project.name || todayName();
+    const storedFiles=new Map((await footageMemory.list(state.platform)).filter(f=>f.path).map(f=>[f.path,f]));
+    state.files=state.files.map(f=>{const stored=storedFiles.get(f.path);return stored?{...f,preview:f.preview??stored.preview,duration:f.duration||stored.duration,sourceBytes:stored.size,original:f.original||stored.original}:f;});
     const remembered=new Map(state.files.map(f=>[f.path,f]));
-    state.files=[...(project.inputs?.videos||[]).map(f=>({...f,id:crypto.randomUUID(),name:f.path.split('/').pop(),kind:'video',path:f.path,small:/\.small\.mp4$/i.test(f.path),...remembered.get(f.path)})),...((project.inputs?.master?.path?[project.inputs.master]:project.inputs?.audio)||[]).map(f=>({id:crypto.randomUUID(),name:f.path.split('/').pop(),kind:'master',path:f.path,...remembered.get(f.path)}))];
+    const sourceAudio=state.files.filter(isAudioEntry);
+    const serverVideos=(project.inputs?.videos||[]).map(f=>({...f,id:crypto.randomUUID(),name:f.path.split('/').pop(),kind:'video',path:f.path,small:/\.small\.mp4$/i.test(f.path),...remembered.get(f.path)}));
+    const videoPaths=new Set(serverVideos.map(f=>f.path));
+    // The draft may contain only a guide/master. Keep every actual source stem
+    // from this browser, rather than replacing them with that intermediate audio.
+    const serverAudio=((project.inputs?.master?.path?[project.inputs.master]:project.inputs?.audio)||[]).map(f=>({...f,id:crypto.randomUUID(),name:f.path.split('/').pop(),kind:'master',path:f.path,...remembered.get(f.path)}));
+    state.files=[...serverVideos,...state.files.filter(f=>f.kind==='video' && !videoPaths.has(f.path)),...(sourceAudio.length?sourceAudio:serverAudio)];
+    state.mixMaster=savedEdit.mixMaster && savedEdit.mixMaster===project.inputs?.master?.path ? savedEdit.mixMaster : null;
+    state.mixDownload=state.mixMaster ? audioUrl({path:state.mixMaster}) : null;
     if(resumeFootage || savedEdit.step==='footage'){
       $('#modeLabel').textContent=MODES[state.platform];
       $('#durationRow').hidden=state.platform!=='reel';$('#formatRow').hidden=state.platform!=='reel';
