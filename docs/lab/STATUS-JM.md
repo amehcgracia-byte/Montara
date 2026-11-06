@@ -2,7 +2,7 @@
 Actualizado: 2026-11-06 · lo mantiene el equipo de Chema · 40 líneas como máximo, se sobrescribe.
 - `mixer`: rama `claude/winds-synth-bass-lowpass` (ZuckerMixer PR #8, **sin mergear en master**); Montara fija `f15ff91` (limitador suave, PR Mixer #9)
 - VM: e2-standard-8, `jm` en `127.0.0.1:8101`, `fer` en `:8102`; apagado automático (60 min sin web, 120 min sin SSH)
-- Companion 0.6.6 instalado en Mac (fuente `4e2b9c2`): proxy 360 activo, mixer `f15ff91`, renderer `bfb964c3`. Pendiente alinear renderer con engine 0.67; comprobar siempre trabajos locales antes de instalar.
+- Companion 0.6.6 instalado: fuente 515b44c, Engine 4f481002 y Mixer f15ff91. Actualizado tras comprobar que no había renders activos. La exportación anterior falló al dejar de estar disponible su original 360; diagnóstico preservado.
 ## Sesión completa (jam entera) — cómo va
 | Pieza | PR |
 |---|---|
@@ -25,7 +25,7 @@ Actualizado: 2026-11-06 · lo mantiene el equipo de Chema · 40 líneas como má
 - Con ficha propia: percusión, guitarra acústica, trompeta, trombón, flauta, violín, cuerdas, coros, voz de podcast y narración. El resto usa el rol tal cual.
 - Pendiente: detección por audio (hoy por nombre o por la elección de la persona); fichas para más instrumentos; afinarlas de oído con jams reales.
 ## Pendiente
-- **0.67 en main `515b44c` (#85), pendiente de instalar**: Mixer antes de cámaras/rango, máster único descargable y fuentes conservadas. Engine `4f481002`, mixer `f15ff91`. Linux `42208713929` cinco recorridos aprobados y capturas revisadas. VM aún 0.66.1 `e66ada2`; Chema pidió dejar terminar el render antes de actualizar.
+- **0.67 instalada JM: main ae9e38b (#85/#100)**. Mixer antes de cámaras/rango, máster descargable; Engine 4f481002, Mixer f15ff91. HTTP y navegador de producción verificados: proyecto actual conservado, cinco vídeos y máster; túnel 8101 reutilizado. FER intacto.
 - Vídeos por lote para canciones ya mezcladas y dos cámaras iguales con zoom según encuadre: revisión y aceptación pendientes en `docs/PENDIENTES_CAMARAS_Y_LOTES.md`.
 - **Mezcla en el Mac (companion 0.5.1, opcional, #59)**: `install.sh --mixer` instala el mezclador del servidor en el Mac (171 MB); cada canción se mezcla allí y solo sube el MP3. Salida idéntica bit a bit a la del servidor en el test. **Medido el 01-11 en el Mac de Chema (MacBook Pro 13" Intel i7, 4 núcleos), jam de 1h56 con 9 pistas: 12 de 12 canciones con `local: true`, 47,5 min de música en 12,4 min (entre 32 y 91 s por canción, unos 16 s por minuto), frente a la estimación de 140 min subiendo los originales al servidor.** Una canción a la vez (`MONTARA_COMPANION_MIX_SLOTS=1`); falta probar con 2 y confirmar por oído. Informe de Fer: `JUPITER_COMPANION_MAC_LOCAL_MIX_FEASIBILITY_2026-11-01.md`.
 - Licencias: Matchering (GPLv3, de terceros) solo se usa en el servidor; el mezclador del Mac no lo instala.
@@ -35,4 +35,5 @@ Actualizado: 2026-11-06 · lo mantiene el equipo de Chema · 40 líneas como má
 - Caché del companion sin límite; barras locales disponibles. FFmpeg: VM 6.1.1, Mac 8.1.2; actualización no descartada, pendiente A/B aislado con calidad/sincronía y tiempos comparables.
 - `run_history.py` ya registra reparto por cámara y segundos 360 (`5fe4880`); falta el manifest del ensayo histórico de 628,2 s, no recuperable de la fila antigua.
 - Cambiar las contraseñas web de la VM que pasaron por chat (sin confirmar).
-- **Usuarios/historial: candidato `codex/070-user-project-foundation`**: selección #86/#88/#89/#90 de FER, sin montar cuentas en app.py. 23 contratos y navegador HTTPS local pasan; corregidos formularios tras await. Linux completo pendiente; sin despliegue. No abre vídeos reales ni certifica SaaS. Detalle: `docs/USER_PROJECT_FOUNDATION.md`.
+- **Usuarios/historial: integrado #100 (ae9e38b)**, selección #86/#88/#89/#90 de FER y corrección de formularios tras await. 23 contratos + HTTPS/Chromium local y Linux pasan; cinco recorridos Linux 42247210322 y capturas revisados. Lab opt-in sin rutas de cuentas activas en app.py; edición real por usuario y #91–#99 pendientes. Detalle: docs/USER_PROJECT_FOUNDATION.md.
+- **0.68 candidato: codex/071-camera-audio-window**. Vídeos + pistas largas: índice de audio sin detectar todas las canciones; onda reutiliza esa decodificación; extraer/mezclar sólo la ventana de cámaras fiables. Audio-only Full session conserva ruta. Local: 3 pruebas nuevas + políticas Node aprobadas; aceptación real y Linux pendientes. Engine/Mixer sin cambios.

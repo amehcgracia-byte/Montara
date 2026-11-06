@@ -14,6 +14,17 @@ assert.throws(()=>choose(songs, {a:clip(50,25)}), /several songs/);
 assert.throws(()=>choose(songs, {a:clip(NaN)}), /confidently/);
 assert.throws(()=>choose(songs, {a:clip(-90)}), /confidently/);
 console.log('7 session-video matching scenarios passed');
+const excerpt = vm.runInContext('SessionVideo.excerptForClips',ctx);
+assert.deepEqual(JSON.parse(JSON.stringify(excerpt(14400,{a:clip(1800,90),b:clip(1850,120)}))),
+  {id:1,name:'Video excerpt',start:1800,end:1970,selected:true,confirmed:true});
+assert.equal(excerpt(200,{a:clip(-5,30)}).start,0);
+assert.equal(excerpt(200,{a:clip(190,30)}).end,200);
+for (const clips of [{},{a:clip(10,20,{low_confidence:true})},{a:clip(10),b:clip(100)},
+  {a:clip(10),b:clip(20,20,{unstable_sync:true})},{a:clip(-90)}, {a:clip(Infinity)}]) {
+  assert.throws(()=>excerpt(14400,clips),/locate|separate|Choose/);
+}
+assert.throws(()=>excerpt(14400,{a:clip(0,3700)}),/one hour/);
+console.log('10 camera-window safety scenarios passed');
 
 // Push's registration wrapper must preserve Stage's completed-master flag;
 // dropping it would recursively detect/mix the whole session again.

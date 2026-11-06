@@ -310,7 +310,11 @@ def session_listen(work):
         return target
     data = read(work)
     duration = float(data.get('duration') or 0)
-    rate = max(int(track['samplerate']) for track in data['tracks'])
+    # A video needs a searchable guide, never full-rate PCM for the entire jam.
+    # Final mixing still uses original ranges at their native sample rates.
+    video_excerpt = data.get('video_excerpt', False)
+    source_rate = max(int(track['samplerate']) for track in data['tracks'])
+    rate = min(LISTEN_RATE, source_rate) if video_excerpt else source_rate
     samples_at_once = rate * 10
     # WebM keeps a seek index: jumps are instant in the browser. Own name: two requests never share a file.
     pending = target.with_name(f'listen-all.{os.getpid()}-{threading.get_ident()}.part.webm')
@@ -344,12 +348,20 @@ def session_listen(work):
     watchdog.start()
     try:
         made = 0
+        peaks = []
+        per_column = int(rate * WAVE_STEP)
         with ThreadPoolExecutor(max_workers=len(decoders)) as pool, ThreadPoolExecutor(max_workers=1) as reader:
             ahead = reader.submit(mixed_block, pool, 0)  # the next block is decoded while this one is encoded
             while True:
                 block = ahead.result()
                 if not len(block):
                     break
+                if video_excerpt:
+                    # Reuse the sum we already decoded. Do not decode every mic
+                    # again when the range review asks for its waveform.
+                    values = np.abs(block)
+                    padded = np.pad(values, (0, (-len(values)) % per_column))
+                    peaks.extend(padded.reshape(-1, per_column).max(axis=1).tolist())
                 made += len(block)
                 ahead = reader.submit(mixed_block, pool, made)
                 encoder.stdin.write(block.tobytes())
@@ -360,6 +372,11 @@ def session_listen(work):
             if process.wait() != 0:
                 raise subprocess.CalledProcessError(process.returncode, process.args)
         pending.replace(target)
+        if video_excerpt:
+            levels = np.asarray(peaks, dtype='float32')
+            top = float(np.percentile(levels[levels > 0], 99.5)) if (levels > 0).any() else 1.0
+            save(work / 'waveform.json', dict(step=WAVE_STEP, duration=duration, source='video-sync-guide',
+                 peaks=np.clip(levels / max(top, 1e-6) * 255, 0, 255).astype(int).tolist()))
         return target
     except BrokenPipeError as exc:  # the encoder stopped early
         raise subprocess.CalledProcessError(encoder.wait(), encoder.args) from exc
@@ -578,6 +595,18 @@ def execute(work, action):
         # The listening copy only needs the tracks and their offsets: make it in the
         # background now, while the songs are being found; the review waits for it.
         save(work / 'session.json', data)
+        if data.get('video_excerpt'):
+            # No all-song segmentation, detection envelopes or AI boundary
+            # review. The Engine locates the cameras in this lightweight sum;
+            # only that confirmed interval will reach prepare_tracks/render.
+            progress(dict(current_stage='Locating the camera audio', progress=0))
+            session_listen(work)
+            data['songs'] = validate_songs([dict(start=0, end=data['duration'], name='Video excerpt')], data['duration'])
+            data['empty_tracks'] = []  # Inspect activity only inside the selected excerpt in the mixer.
+            data['detection'] = dict(id='camera-audio-window', needs_review=True)
+            data['status'] = 'review'
+            save(work / 'session.json', data)
+            return
         with (work / 'extras.log').open('ab') as log:
             extras = subprocess.Popen([sys.executable, '-m', 'mixer_adapter.session', str(work), 'extras'], cwd=Path(__file__).resolve().parents[1],
                                       stdout=log, stderr=log, start_new_session=True)

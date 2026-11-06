@@ -15,5 +15,23 @@ const SessionVideo = (() => {
     if (new Set(votes.map(song => song.id)).size !== 1) throw new Error('These videos belong to different songs. Make one song video at a time.');
     return votes[0];
   }
-  return {songForClips};
+  function excerptForClips(duration, clips) {
+    const items = Object.values(clips || {});
+    if (!(duration > 0) || !items.length || items.some(clip => clip.low_confidence || clip.unstable_sync || clip.error ||
+        !Number.isFinite(clip.offset_sec) || !Number.isFinite(clip.duration_sec) || !(clip.duration_sec > 0))) {
+      throw new Error('Could not confidently locate every camera in the tracks. Review the audio range before mixing.');
+    }
+    const ranges = items.map(clip => ({start:Math.max(0,clip.offset_sec), end:Math.min(duration,clip.offset_sec+clip.duration_sec)}))
+      .sort((a,b) => a.start-b.start);
+    let start=ranges[0].start, end=ranges[0].end;
+    for (const range of ranges) {
+      if (range.end-range.start<.5 || range.start>end+1) {
+        throw new Error('These cameras cover separate sections. Review the audio range before mixing.');
+      }
+      end=Math.max(end,range.end);
+    }
+    if (end-start<.5 || end-start>3600) throw new Error('Choose one camera section of up to one hour before mixing.');
+    return {id:1,name:'Video excerpt',start,end,selected:true,confirmed:true};
+  }
+  return {songForClips,excerptForClips};
 })();
