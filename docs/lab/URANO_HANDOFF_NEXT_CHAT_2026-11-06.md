@@ -1,0 +1,68 @@
+# MONTARA · Relevo de mando URANO para un nuevo chat
+
+**Fecha de corte:** 2026-11-06 · **Propósito:** reanudar el proyecto con trabajo directo vía conectores, documentación y PRs pequeñas. Este documento es **un estado inicial**, no una licencia para asumir que GitHub/Cloudflare siguen igual: verificar HEAD, ramas, CI y servicios antes de actuar.
+
+## 1. Objetivo y orden de prioridades
+
+**MONTARA**: producto de edición de vídeo/audio con tres modos: **Stage** (multicámara, música, edición y mastering), **Push** (reels), **Show** (Gamer, Influencer, Story, Podcast). Debemos llegar a **URANO v1 funcional E2E**, no a más maquetas: web existente de Chema → crear cuenta/iniciar sesión → lista de proyectos propios (incluye **antiguos**, no solo último) → crear/abrir → importar material preferentemente con Companion local → procesar con Engine/Mixer existente → editar/exportar → cerrar navegador y recuperar proyecto/receta y orígenes de medios.
+
+**Prioridades:** (a) flujo completo y seguridad; (b) validación en navegadores y Windows/Mac reales; (c) optimizar CPU/GPU/hosting/colas y costes tras medir. El Cloudflare estático es **benchmark secundario**, no la plataforma final decidida. No inventar precios/tarifas ni conectar pagos. Portabilidad entre proveedores, uso eficiente de CPU/almacenamiento y tráfico limitado. RunPod y otras GPU solo si las pruebas justifican su coste.
+
+**Política de ficheros:** originales grandes deben quedarse preferentemente en equipo local; Companion genera proxies/segmentos y puede realizar render local en modos ya implementados. Mantener la subida manual **solo como fallback explícito de laboratorio**, nunca automática ni presentada como arquitectura de producción. No eliminar funcionalidad existente ni reescribir la interfaz. No afirmar que todos los modos usan Companion igual.
+
+## 2. Fuente de verdad y colaboración
+
+Repositorio: **`amehcgracia-byte/Montara`** (GitHub de Chema; Fernando tiene push pero **no admin**). `main` pertenece a Chema/JM; **no hacer commits directos, merges ni desplegar en su nombre**. Reglas: `CLAUDE.md`, `docs/COLLABORATION.md`, `CONTRIBUTING.md`. Los submódulos `engine/` (repo zucker_videos) y `mixer/` (ZuckerMixer) **jamás se editan desde Montara** ni se mueven pins sin PR propia y evidencia.
+
+Rama documental del laboratorio FER: **`fernando/continuacion-montara`**. Documentos existentes:
+- `docs/lab/STATUS-FER.md`, `docs/lab/STATUS-JM.md` (main), `docs/lab/INVENTORY-FER.md`.
+- `docs/lab/URANO_U7_WEB_EXISTING_DEPLOYMENT_FUNCTIONAL_V1_2026-11-05.md`: objetivo web funcional, mapa Vercel/Companion, no confundir demo con cuentas.
+- `docs/lab/URANO_U8_FRONTEND_HOSTING_OPTIONS_2026-11-05.md`: comparativa Cloudflare/Vercel y laboratorio Pages.
+- `docs/lab/URANO_U9_GCP_FER_INVENTORY_SAFE_ALIGNMENT_2026-11-06.md`: inventario lectura GCP, divergencia FER checkout / main, seguridad de actualización.
+- Informes `URANO_U0...` a `U4B...` para perímetros de medios/autenticación y Companions; `PUENTE_JUPITER_URANO_PR_LEDGER_2026-11-05.md` para #79–#83.
+- `docs/lab/URANO_HANDOFF_NEXT_CHAT_2026-11-06.md`: **este documento**. Mantenerlo con cambios sustanciales; no llenarlo con cada comando/tokens/operación.
+
+**Canal de coordinación con la IA de Chema:** GitHub issue [#34](https://github.com/amehcgracia-byte/Montara/issues/34). Comentar allí SOLO hitos/consultas relevantes, no chat de progreso cotidiano. **Consulta enviada 06-11-2026:** [comentario sobre selector y reapertura de proyectos antiguos](https://github.com/amehcgracia-byte/Montara/issues/34#issuecomment-6682639303). Debe consultarse si ya respondieron **antes de duplicar un selector**. `docs/lab/STATUS-JM.md` y ramas de Chema son otras fuentes de cambios reales.
+
+## 3. Estado confirmado de GitHub (verificar en cada relevo)
+
+En `main` el 06-11 aparece **Montara 0.66.1 · Latest project recovery**. Las PR #79–#83 habían sido integradas y probadas; la revisión de U10 y U11/U12 se hizo contra `main` de ese día, pero comprobar nuevo HEAD y pins, nunca asumir SHA permanente.
+
+- **[#84](https://github.com/amehcgracia-byte/Montara/pull/84)**: rama `fernando/lab-cloudflare-static-benchmark`, DRAFT. Copia visual **estática** con CSP `connect-src 'none'`, sin API, procesamiento, Companion ni login; solo comparar estáticos/TTFB/caché. Build `python3 tools/cloudflare-static/build.py` → `dist`.
+- **[#86 U10](https://github.com/amehcgracia-byte/Montara/pull/86)**: `fernando/urano-u10-project-ownership-contract`, DRAFT, base `main`. `urano/project_catalog.py` con SQLite, proyecto UUID, `create`, `list_for`, `get`, `save_recipe` sujeto a `owner_id` ya verificado; conflictos de revisión; tests. **No login, API ni Engine aún**. Docs `docs/lab/URANO_U10_PROJECT_OWNERSHIP_CONTRACT_2026-11-06.md` en esa rama. CI específica verde.
+- **[#88 U11](https://github.com/amehcgracia-byte/Montara/pull/88)**: `fernando/urano-u11-session-http-contract`, DRAFT, base **rama U10**. `urano/session_auth.py` y `urano/http_projects.py`: sesiones opacas revocables y cookie `__Host-`, CSRF, API HTTP opt-in de proyectos, nunca confiar `owner_id` del cliente. Siete tests HTTP de laboratorio. **No montado en app existente**. CI específica verde.
+- **[#89 U12](https://github.com/amehcgracia-byte/Montara/pull/89)**: `fernando/urano-u12-local-auth-contract`, DRAFT, base **rama U11**. `urano/accounts.py` (registro/login laboratorio, scrypt y salt, contador de fallos), `urano/http_auth.py` (HTTP same-origin HTTPS), `POST /urano/v1/session/refresh` para renovar CSRF al recargar pestaña sin extender sesión; tests de alta/login/aislamiento/recuperación. **SIN verificación email, reset, controles perimetrales ni UI, prohibido exponer a usuarios reales**. Docs `docs/lab/URANO_U12_LAB_AUTH_RECOVERY_2026-11-06.md` en la rama U12. CI U10/U11/U12 + E2E general Linux **SUCCESS** en commit `36c8a1e19bc8aa26637893afab0943aac10d23da` según última consulta. No equivale a aceptación visual ni lista para producción.
+- PRs **apiladas**, orden de integración si Chema lo aprueba: **U10 → U11 → U12**, rebase/retarget y verificación antes del merge; ninguna implica automáticamente desplegar. No borrar trabajo sin decisión. **Revisar especialmente seguridad** antes de usar cuentas reales.
+
+**Verificación clave de proyectos antiguos en `main`**: `recovery.py` expone **`GET /montara/recovery/latest`** y devuelve *solo el trabajo más reciente* entre `Projects` y `Sessions`. `web/index.html` tiene `Resume latest`; `web/full-session.js` abre un proyecto por ruta conocida vía `/wizard/projects/open`. `web/montara.js` reanuda proyecto actual. **No se ha verificado selector completo con lista de trabajos anteriores en `main`**; branch `codex/069-latest-project` se centró en último. **U10 sí lista metadatos por propietario en laboratorio, pero NO conecta ni abre el proyecto real del Engine**. Pendiente respuesta Chema a issue #34. No diseñar UI duplicada antes de cotejar su respuesta.
+
+## 4. Infraestructura y conectores (cómo actuar)
+
+**Conectores conectados:**
+1. **GitHub** (mediante `functions.exec` y herramientas `mcp__GitHub__...` de `ALL_TOOLS`): `fetch_file`, `get_repo`, `get_pr_info`, `fetch_commit_workflow_runs`, `fetch_issue_comments`, `add_comment_to_issue`, `create_branch`, `create_file`, `update_file`, `create_pull_request`. Usarlos directamente, no pedir al usuario copiar archivos. Consultar descripciones/schema de métodos. `main` es vivo.
+2. **@Cloudflare** (plugin instalado, métodos `mcp__Cloudflare__whoami`, `search`, `execute`, `docs`; leer skill `skills://plugins/app-6a99ceead2c481919fb44845267235c4/cloudflare/skill.md`). **Cuenta FER** con un Pages `montara-cloudflare-lab` integrado en GitHub, rama `fernando/lab-cloudflare-static-benchmark`, URL [montara-cloudflare-lab.pages.dev](https://montara-cloudflare-lab.pages.dev/). Primera compilación y deploy **SUCCESS** el 06-11. Chema aceptó invitación correcta y tiene rol de administración Pages/Workers, no de facturación. Antiguo problema de instalación GitHub Cloudflare 8000011 **resuelto**. No tocar DNS, añadir gasto ni reemplazar web real por benchmark. No dejar información sensible de cuenta/identidades en documentación pública.
+3. **Gateway** (`mcp__Gateway__...`): servidor registrado exacto **`montara-test-gcp`**, con acceso SSH auditado, herramientas de inspección/ejecución. Google Cloud es laboratorio, **no proveedor definitivo**. **Dos usuarios Linux deliberados:** FER en `/home/fer/montara` y servicio privado loopback `8102`; JM/Chema en `/home/jm/montara` y `8101`. No tocar `/home/jm`, servicio de Chema, datos ni renders. Existe **otro servidor llamado `popi-oracle` totalmente ajeno a Montara; NUNCA operarlo**. Preferir operaciones tipadas de Gateway, `execute_command` solo cuando hagan falta, con comandos acotados y sin secretos.
+4. **Vercel existente**: [montara-tau.vercel.app](https://montara-tau.vercel.app/) es prototipo público funcional con **Vercel Sandbox por sesión**, fuente `deployment/vercel`; no es HTML estático ni cuentas SaaS permanentes. No modificar alias, despliegue, entorno o credenciales de Chema.
+5. **GitHub Actions**: pruebas sin gastar renders GCP ni cambiar servicios, prioridad para contratos aislados y E2E; comprobar run y capturas (ver `CLAUDE.md`). La VM tiene ~8 vCPU/31 GiB RAM, disco ~86% ocupado en revisión, **prohibida limpieza automática**. El checkout FER visto el 06-11 estaba en `claude/jupiter-gcp-vm`, SHA `78e9e67c335f`, con **4 archivos locales modificados sin commit**: `deploy/entry.py`, `deploy/healthcheck.py`, `deploy/restart_check.py`, `deploy/vm/user_install.sh`. **NO `git pull`, `git reset --hard`, `git clean` ni reemplazo del worktree**. Si hay que ejecutar nuevo código, evaluar checkout aislado con puertos/datos propios, costes de disco y rollback.
+
+**Secretos:** repos Montara/Engine/Mixer públicos. No subir emails privados, tokens, claves, URLs secretas, credenciales, accesos de Gateway, direcciones de servidores ni logs sensibles a GitHub. No afirmar acceso a cuenta distinta sin consultar. Los detalles de conexión residen en los conectores, no en README.
+
+## 5. Plan macro y medio plazo
+
+**P0 (hacer ahora)**: responder/coordinar issue #34 sobre **lista de proyectos antiguos y reapertura efectiva**; comprobar `main` y PRs antes de duplicar; cerrar gates de seguridad/CI de U10-U12 y elegir auth para entorno de prueba. **No basta un catálogo SQLite**: verificar separación de usuarios en API, medios, trabajos, URLs y Engine, con proceso/sandbox por proyecto/usuario o un aislamiento efectivo. La VM review tiene estado único y no es multiusuario.
+
+**P1 (siguiente)**: U12b: interfaz aislada y usable de cuenta y «Mis proyectos» (listado, recientes, antiguos, abrir, crear), sin reescribir `web/` ni contaminar la portada existente; reanudar una sesión con cookie/CSRF tras recarga. Identidad real requiere verificar correo y endurecer auth antes de Internet. Asegurar que seleccionar proyecto activa **el proyecto correcto del Engine** y recupera archivos/receta, no solo metadatos; endpoints con permisos reales.
+
+**P2**: Companion Mac/Windows, ruta local-first/proxies, reconexión de fuentes si los originales están disponibles, detectar ausentes, consentimientos; enlazar Stage, Push, Show y Mixer; E2E navegador real dos cuentas, proyecto A y B, cerrar/abrir, editar/exportar, logout y reentrada, sin fuga entre usuarios. Posible GPU/config de cómputo después de resultado funcional. Licencias FFmpeg/Companion Windows: revisión jurídica pendiente antes de distribución; no publicar binarios.
+
+**P3**: pruebas de concurrencia limitada, cola y reservas de CPU/GPU, coste por render/tráfico/snapshots, backups/retención de metadatos, dominio/email/cobro; decisión real Cloudflare/Vercel y backend GCP/Azure/Oracle/RunPod según mediciones. No asumir crédito promocional como modelo económico.
+
+## 6. Procedimiento del siguiente chat
+
+1. Leer **este documento**, `CLAUDE.md`, `docs/COLLABORATION.md`, `STATUS-JM.md` en `main`, `STATUS-FER.md` en rama FER y U7/U8/U9. **Consultar issue #34 comentario 6682639303 y respuestas**.
+2. Confirmar PRs #84/#86/#88/#89, CI/HEAD real, no confundir borrador/merge/despliegue; actualizar referencias.
+3. Resumir estado real en 6–10 líneas y ejecutar **trabajo implementable** de prioridad P0/P1 en rama nueva; pruebas CI. No atascar al usuario con formularios, menús ni copiar comandos.
+4. Documentar **solo hitos importantes y decisiones** en `fernando/continuacion-montara`; los informes técnicos de PR pueden residir en la rama de PR, siempre con enlaces claros. Mantener reglas y gates. Coordinar asuntos cruzados vía issue #34, evitando spam.
+5. Informar con claridad lo probado realmente, lo que sigue pendiente y las limitaciones. Si el contexto nuevo discrepa con este handoff, manda la verificación actual y actualiza documentación.
+
+**Relación con usuario:** español, tono natural, entusiasta («capitán», navegación espacial), pero rigor técnico; quiere que **la IA haga el trabajo** con conectores, minimice instrucciones manuales y jamás borre/rompa trabajo de Chema o FER. Ante incertidumbres no pedir reconfirmación de decisiones ya establecidas; decidir de forma reversible y justificada.
