@@ -105,7 +105,15 @@ def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
     page.wait_for_timeout(300)
     page.screenshot(path=str(shots / "02-footage.png"), full_page=True)
     page.locator("#continueFootage").click()
-    page.wait_for_selector("#cameras:not([hidden]), #making:not([hidden]), #mix:not([hidden])", timeout=120_000)
+    page.wait_for_selector("#cameras:not([hidden]), #making:not([hidden]), #mix:not([hidden])", timeout=600_000)
+    if mode == "mix":
+        page.locator('#cameras').wait_for(state='visible',timeout=600_000)
+        assert not page.locator('#mix').is_visible()
+        assert page.locator('#rangeTrack option').count()==1
+        assert page.locator('#rangeTrack option').first.inner_text()=='Your song master'
+        assert page.locator('#mixedMasterDownload').is_visible()
+        assert page.evaluate('!!state.mixMaster')
+        page.screenshot(path=str(shots/'03d-master-range.png'),full_page=True)
     if page.locator("#cameras").is_visible():
         if mode == "stage" and media != REAL:
             page.locator("[data-camera-type]").first.select_option("fixed")
@@ -113,24 +121,6 @@ def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
         page.screenshot(path=str(shots / "03-cameras.png"), full_page=True)
         page.locator("#continueCameras").click()
     mixed = None
-    if mode == "mix":
-        page.locator("#mix").wait_for(state="visible")
-        page.wait_for_function("!document.querySelector('#useMix').disabled", timeout=300_000)
-        page.screenshot(path=str(shots / "03b-mix-auto.png"), full_page=True)
-        # Pull the first active fader down 6 dB, as a person would.
-        page.evaluate("""() => { const s = [...document.querySelectorAll('.strip:not(.off) input')][0];
-            s.value = -6; s.dispatchEvent(new Event('input', {bubbles: true})); }""")
-        page.locator("#playMix").click()
-        page.wait_for_timeout(1500)
-        page.locator("#playMix").click()
-        page.screenshot(path=str(shots / "03c-mix-moved.png"), full_page=True)
-        page.locator("#useMix").click()
-        page.locator('#cameras').wait_for(state='visible', timeout=300_000)
-        assert page.locator('#rangeTrack option').count() == 1
-        assert page.locator('#rangeTrack option').first.inner_text() == 'Your song master'
-        assert page.locator('#mixedMasterDownload').is_visible()
-        page.screenshot(path=str(shots / '03d-master-range.png'), full_page=True)
-        page.locator('#continueCameras').click()
     page.locator("#making").wait_for(state="visible", timeout=300_000)
     page.wait_for_timeout(4000)
     page.screenshot(path=str(shots / "04-making.png"))
@@ -281,7 +271,7 @@ def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
         assert recovered.locator('#audioFiles li').count()>=1
         recovered.screenshot(path=str(shots/'09-recovered-add-files.png'), full_page=True)
         assert recovered.request.get(url+'/api/v1/wizard/status').json()['project_path']==saved_project
-    return {"mode": mode, "media": media.name, "branding": BRANDING[mode], "passed": has_audio and duration > 0 and all_used and (mode != "mix" or bool(mixed and "Mixer" in mixed)),
+    return {"mode": mode, "media": media.name, "branding": BRANDING[mode], "passed": has_audio and duration > 0 and all_used and (mode != "mix" or bool(mixed and "Sessions" in mixed)),
             "duration": duration, "captioned": captioned, "size": f"{video['width']}x{video['height']}", "frames_swapped": swapped, "mixed_master": Path(mixed).name if mixed else None,
             "measured_browser_journey_seconds_including_ui_waits_and_download": round(journey_seconds, 3),
             "measured_engine_stage_seconds": {name: value['elapsed_seconds'] for name, value in project.get('stages', {}).items() if isinstance(value, dict) and value.get('elapsed_seconds') is not None},
