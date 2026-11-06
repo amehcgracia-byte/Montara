@@ -78,6 +78,8 @@ def main():
             page.wait_for_function("document.querySelector('.preview img').naturalWidth>0 && !document.querySelector('.preview img').hidden",timeout=30000)
             page.evaluate('()=>new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done)))')
             page.locator('.pano').screenshot(path=str(out/'panorama-visible.png'))
+            from PIL import Image, ImageStat
+            assert max(ImageStat.Stat(Image.open(out/'panorama-visible.png')).stddev)>30, 'Panorama must be visibly drawn'
             page.screenshot(path=str(out/'02-master-before-range.png'),full_page=True)
             summary={'passed':True,'panorama_proxy':True,'stems_mixed':2,'matched_song':song,'master_before_range':True}
             (out/'summary.json').write_text(json.dumps(summary,indent=2));print(json.dumps(summary),flush=True)

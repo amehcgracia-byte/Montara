@@ -768,6 +768,7 @@ async function registerProject({mixed = false} = {}) {
 // ---------- cameras & 360 viewpoints ----------
 function cameraTypeOf(f){return f.cameraType || (isSphere(f)?'360':(state.roles[f.path] || guessRole(f))==='fixed_rear'?'fixed':'moving');}
 function renderCameras() {
+  $$('#sphereList .pano-img[data-object-url]').forEach(node=>URL.revokeObjectURL(node.dataset.objectUrl));
   $('#cameras>h2').textContent=state.platform==='reel'?'Your reel':'Your cameras';
   $('#cameras>.lead').hidden=state.platform==='reel';
   $('#cameraList').hidden=state.platform==='reel';
@@ -789,7 +790,14 @@ function setupSphere(file, root) {
   const frame = new Image();
   frame.onload = () => { pano.querySelector(".loading").hidden = true; panoImg.style.backgroundImage = `url("${frame.src}")`; place(); preview(); };
   frame.onerror = () => { pano.querySelector(".loading").textContent = "Could not load the 360 frame."; };
-  frame.src = `/api/v1/wizard/spherical-source-frame?source=${encodeURIComponent(file.path)}`;
+  // Share one local image between CSS and WebGL. A second URL fetch used to
+  // extract the same frame again and briefly leave the panorama black.
+  fetch(`/api/v1/wizard/spherical-source-frame?source=${encodeURIComponent(file.path)}`)
+    .then(response=>{if(!response.ok)throw new Error('Panorama unavailable');return response.blob();})
+    .then(blob=>{
+      if(!root.isConnected)return;
+      const url=URL.createObjectURL(blob);panoImg.dataset.objectUrl=url;frame.src=url;
+    }).catch(()=>frame.onerror());
 
   function wrap(v) { return ((v % 1) + 1) % 1; }
   new ResizeObserver(() => place()).observe(pano);
