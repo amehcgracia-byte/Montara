@@ -88,7 +88,7 @@ def main():
             assert page.evaluate('fullSession.data.results.length')==1
             assert page.evaluate('Object.values(fullSession.mixes[fullSession.mixSong].faders).some(db=>Math.abs(db)>.05)')
             page.wait_for_function('range.duration>120',timeout=30000)
-            download=page.request.get(page.locator('#mixedMasterDownload').get_attribute('href'))
+            download=page.request.get(url+page.locator('#mixedMasterDownload').get_attribute('href'))
             assert download.ok and 'audio/' in download.headers.get('content-type','')
             master=out/'master.mp3';master.write_bytes(download.body())
             raw=subprocess.check_output(['ffmpeg','-v','error','-ss','30','-i',str(master),'-t','1','-ac','1','-ar','8000','-f','f32le','-'])
