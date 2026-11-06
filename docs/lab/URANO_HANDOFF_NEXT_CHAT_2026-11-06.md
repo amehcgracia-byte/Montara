@@ -58,6 +58,10 @@ En `main` el 06-11 aparece **Montara 0.66.1 · Latest project recovery**. Las PR
 
 **Secretos:** repos Montara/Engine/Mixer públicos. No subir emails privados, tokens, claves, URLs secretas, credenciales, accesos de Gateway, direcciones de servidores ni logs sensibles a GitHub. No afirmar acceso a cuenta distinta sin consultar. Los detalles de conexión residen en los conectores, no en README.
 
+## Decisión de arquitectura y capacidad — 06-11-2026
+
+**Aclaración expresa del usuario:** NO construir una **cola global FIFO de renders entre propietarios** como comportamiento predeterminado. URANO debe permitir trabajos simultáneos entre usuarios en runtimes independientes, conservando las protecciones **por runtime/proyecto** U13B/U13D para no cambiar proyecto mientras su propio proceso está ocupado. El Companion distribuye parte de la carga hacia los equipos locales; hay que medir la contribución real y no asumir que toda operación ocurre en el servidor. Plan de benchmark experimental con **1, 2, 4, 8, 10 y 25 usuarios concurrentes**, distintas mezclas Stage/Push/Show, uso de RAM/CPU, tiempos, errores, congestión y resultados, sin afirmar anticipadamente que el servidor soporta esas cifras. Si la capacidad se agota, decidir límites/admisión/escalado basados en mediciones (no confundir con cola obligatoria entre todos). El primer despliegue de Chema sigue condicionado a aislamiento, seguridad y E2E de apertura/edición/export reales; la arquitectura no debe avanzar acumulando PR sin revisar viabilidad de integración.
+
 ## 5. Plan macro y medio plazo
 
 **P0 (hacer ahora)**: responder/coordinar issue #34 sobre **lista de proyectos antiguos y reapertura efectiva**; comprobar `main` y PRs antes de duplicar; cerrar gates de seguridad/CI de U10-U12 y elegir auth para entorno de prueba. **No basta un catálogo SQLite**: verificar separación de usuarios en API, medios, trabajos, URLs y Engine, con proceso/sandbox por proyecto/usuario o un aislamiento efectivo. La VM review tiene estado único y no es multiusuario.
