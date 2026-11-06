@@ -42,7 +42,7 @@ SAMPLE_SETS = {
 }
 DEFAULT_DATA = Path.home() / "MontaraData"
 # Shown at the bottom of every page, so it is obvious which build is running.
-MONTARA_VERSION = "0.67 · 2026-11-06 · Panorama proxies and song-first mixing"
+MONTARA_VERSION = "0.67 · 2026-11-06 · Mix your song before framing"
 
 
 def _build_label() -> str:
@@ -137,6 +137,8 @@ def create_montara_app(data_root: Path = DEFAULT_DATA, samples: bool = True):
     register_show_samples(app, FIXTURES, samples, data_root)
     from push_pack import register_push_pack
     register_push_pack(app, data_root, FIXTURES)
+    from recovery import register_recovery
+    register_recovery(app, data_root)
     from full_session import register_full_session
     register_full_session(app, data_root, FIXTURES)
     from resumable_upload import register_resumable_upload
