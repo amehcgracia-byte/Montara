@@ -70,6 +70,12 @@ jobs:
       - name: Montara regression tests
         if: matrix.mode == 'session'
         run: python -m pytest tests -q
+      - name: Session video matching policy
+        if: matrix.mode == 'session'
+        run: node tests/test_session_video.cjs
+      - name: Panorama proxy and session stems to one video master
+        if: matrix.mode == 'session'
+        run: python tests/e2e_session_video.py --output e2e-output/session-video
       - name: Engine lighting, framing and preview parity
         if: matrix.mode == 'session'
         run: cd engine && python -m pytest tests/test_shot_quality.py tests/test_shot_quality_speed.py tests/test_color_calibration.py tests/test_stage_performers.py tests/test_video_light.py tests/test_flat_framing.py tests/test_review_previews.py tests/test_review_hardware_decode.py tests/test_export_encoder_platform.py tests/test_branding.py tests/test_branding_within_content.py -q

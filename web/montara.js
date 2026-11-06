@@ -344,7 +344,10 @@ function audioUrl(f) {
   return f.path ? `/montara/audio?path=${encodeURIComponent(f.path)}` : "";
 }
 function openSongRange() {
-  rangeSourcesList = ["youtube","reel"].includes(state.platform) ? audioTracks().filter((f) => audioUrl(f)) : [];
+  rangeSourcesList = ["youtube","reel"].includes(state.platform)
+    ? state.platform === 'youtube' && mixerMode()
+      ? state.mixMaster ? [{name: 'Your song master', path: state.mixMaster}] : []
+      : audioTracks().filter((f) => audioUrl(f)) : [];
   $("#songRange").hidden = !rangeSourcesList.length;
   if (!rangeSourcesList.length) return;
   const select = $("#rangeTrack");
@@ -468,7 +471,7 @@ async function uploadSmall(file, entry) {
   try {
     // A full session only needs light previews; the export asks for the original song ranges.
     // Big audio files in Stage are whole sessions in practice (20 min of 24-bit mono ≈ 170 MB).
-    const preview = state.platform === 'youtube' && ($('#fullSessionOn').checked || (montaraCompanion.isAudio(file) && file.size > LONG_AUDIO_BYTES && !videos().length));
+    const preview = state.platform === 'youtube' && ($('#fullSessionOn').checked || (montaraCompanion.isAudio(file) && file.size > LONG_AUDIO_BYTES));
     small = await montaraCompanion.smallVersion(file, (phase, progress) => { entry.phase = phase; entry.progress = progress; renderFiles(); }, () => entry.removed, {preview});
   } catch (error) { console.warn(error); }
   // Companion problems never trigger an automatic video-original upload.
@@ -711,7 +714,7 @@ function inputs() {
   const master = mixerMode() ? (state.mixMaster ? { path: state.mixMaster } : null) : state.files.find((f) => f.kind === "master");
   return {
     master: master?.path || "",
-    songs: state.files.find((f) => f.kind === "songs")?.path || "",
+    songs: mixerMode() ? "" : state.files.find((f) => f.kind === "songs")?.path || "",
     videos: videos().map((f) => f.path),
   };
 }
@@ -724,14 +727,15 @@ function isWholeSession() {
   return audio.some(f => f.preview) || Math.max(0, ...audio.map(f => f.duration || 0)) > LONG_AUDIO_SECONDS;
 }
 
-async function registerProject() {
+async function registerProject({mixed = false} = {}) {
   if(work.cancelling)return toast('Wait for cancellation to finish.');
-  if (videos().length && state.files.some(f => f.preview)) return toast('Some audio was sent as a light session preview. Remove it and add it again to use it in a video.', true);
+  if (!mixed && state.platform === 'youtube' && videos().length && audioTracks().length >= 2 && isWholeSession()) return openFullSession(true);
+  if (!mixed && videos().length && state.files.some(f => f.preview)) return toast('Some audio was sent as a light session preview. Remove it and add it again to use it in a video.', true);
   if (state.platform === 'youtube' && !videos().length && !$('#fullSessionOn').checked && isWholeSession()) {
     $('#fullSessionOn').checked = true;
     toast('This is a whole session: Montara finds the songs first, then mixes each one.');
   }
-  if (state.platform === 'youtube' && $('#fullSessionOn').checked) return openFullSession();
+  if (!mixed && state.platform === 'youtube' && $('#fullSessionOn').checked) return openFullSession();
   $("#continueFootage").disabled = true;
   try {
     if (audioOnly()) { state.mixMaster = null; state.projectId = null; return await openMixer(); }
@@ -745,12 +749,13 @@ async function registerProject() {
     }
     await api("/wizard/projects/new", {});
     const draft = await api("/wizard/draft", { name, project_id: null, platform: state.platform, audio_paths: data.master ? [data.master] : [], ...data });
-    state.mixMaster = null;
+    if (!mixed) state.mixMaster = null;
     state.projectId = draft.project_id;
   } finally {
     $("#continueFootage").disabled = false;
   }
   if (state.platform === "show") return makeShow();
+  if (mixerMode() && !state.mixMaster) return openMixer();
   const needsCameras = videos().length > 0 && (state.platform!=='reel' || audioTracks().length || videos().some(isSphere));
   if (!needsCameras) return afterCameras();
   renderCameras();
@@ -923,7 +928,7 @@ function setupSphere(file, root) {
 $("#continueCameras").addEventListener("click", () => saveCameras().then(afterCameras).catch(fail));
 
 function afterCameras() {
-  return mixerMode() ? openMixer() : make();
+  return mixerMode() && !state.mixMaster ? openMixer() : make();
 }
 
 // ---------- mixer ----------
@@ -1308,7 +1313,7 @@ $("#referenceLinkForm").addEventListener("submit", async (event) => {
   } catch (error) { status.textContent = error.message; }
   finally { if (mix.job === jobId) { button.disabled = false; $("#pickReference").disabled = false; $("#useMix").disabled = false; } }
 });
-$("#mixBack").addEventListener("click", () => { stopMix(); $("#mixAll").hidden = true; $("#useMix").textContent = "Use this mix"; show(fullSession.active ? 'sessionReview' : videos().length > 1 || videos().some(isSphere) ? "cameras" : "footage"); });
+$("#mixBack").addEventListener("click", () => { stopMix(); $("#mixAll").hidden = true; $("#useMix").textContent = "Use this mix"; show(fullSession.active ? 'sessionReview' : 'footage'); });
 
 $("#useMix").addEventListener("click", async () => {
   try {
@@ -1329,10 +1334,12 @@ $("#useMix").addEventListener("click", async () => {
     state.mixMaster = job.master_path;
     mix.masterPath = job.master_path;
     if (audioOnly()) return showResult({ result: { audio: true, url: `/montara/mix/${mix.job}/result` } });
-    // Register the mix as the project's master audio, then make the video.
+    // Register the finished master before presenting any song range.
     const data = inputs();
     await api("/wizard/draft", { name: $("#videoName").value.trim() || todayName(), project_id: state.projectId, platform: state.platform, audio_paths: [data.master], ...data });
-    await make();
+    renderCameras();
+    openSongRange();
+    show('cameras');
   } catch (error) {
     $("#useMix").disabled = false;
     fail(error);

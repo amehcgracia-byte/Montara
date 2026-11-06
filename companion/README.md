@@ -21,7 +21,7 @@ starts it. Next time, open Terminal and type `montara-companion`. Ctrl+C stops i
   hardware encoder when FFmpeg has VideoToolbox, and tone-maps HDR.
 - Montara uploads only that small version. The engine uses it as it is, with no conversion
   on the server.
-- 360 videos are still uploaded as they are (their projection metadata must survive).
+- Stitched monoscopic 2:1 360 videos become panoramas up to 2048×1024. The complete sphere and real spherical metadata survive, so the editor can still reframe them; original-quality local exports use the original. Other spherical layouts require a stitched 2:1 export first. Proxy failures never authorize uploading an original silently.
 
 ## Audio and final export
 - WAV/AIFF tracks (16/24/32-bit integer) are sent as lossless FLAC (`name.wav.flac`), usually

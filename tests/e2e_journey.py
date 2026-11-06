@@ -105,7 +105,7 @@ def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
     page.wait_for_timeout(300)
     page.screenshot(path=str(shots / "02-footage.png"), full_page=True)
     page.locator("#continueFootage").click()
-    page.wait_for_selector("#cameras:not([hidden]), #making:not([hidden])", timeout=120_000)
+    page.wait_for_selector("#cameras:not([hidden]), #making:not([hidden]), #mix:not([hidden])", timeout=120_000)
     if page.locator("#cameras").is_visible():
         if mode == "stage" and media != REAL:
             page.locator("[data-camera-type]").first.select_option("fixed")
@@ -125,6 +125,11 @@ def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
         page.locator("#playMix").click()
         page.screenshot(path=str(shots / "03c-mix-moved.png"), full_page=True)
         page.locator("#useMix").click()
+        page.locator('#cameras').wait_for(state='visible', timeout=300_000)
+        assert page.locator('#rangeTrack option').count() == 1
+        assert page.locator('#rangeTrack option').first.inner_text() == 'Your song master'
+        page.screenshot(path=str(shots / '03d-master-range.png'), full_page=True)
+        page.locator('#continueCameras').click()
     page.locator("#making").wait_for(state="visible", timeout=300_000)
     page.wait_for_timeout(4000)
     page.screenshot(path=str(shots / "04-making.png"))

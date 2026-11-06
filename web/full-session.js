@@ -30,6 +30,10 @@ $('#sessionCancel').onclick = async () => {
   fullSession.cancelling=true;
   fullSession.cancelRequested = true;
   fullSession.mixAbort?.abort();
+  if (fullSession.videoMatching) {
+    work.cancelled = true; work.generation++;
+    await api('/wizard/cancel', {});
+  }
   $('#sessionCancel').disabled=true;$('#sessionStatus').textContent='Cancelling…';
   try {
     if(fullSession.mixPromise)try{await fullSession.mixPromise;}catch(error){if(error.name!=='AbortError')throw error;}
@@ -103,7 +107,7 @@ async function waitSession(initial) {
   return data;
 }
 
-async function openFullSession() {
+async function openFullSession(forVideo = false) {
   if(fullSession.cancelling)return;
   fullSession.cancelRequested=false;
   if (!audioTracks().length) return toast('Add the audio tracks of your session first.', true);
@@ -119,9 +123,39 @@ async function openFullSession() {
     fullSession.localProgress = {}; fullSession.localResults = [];
     try { localStorage.setItem('montara-session', job.id); $('#sessionResume').hidden = false; } catch { /* optional */ }
     const data = await waitSession(job);
+    if (forVideo) return await mixSessionForVideo(data);
     drawSessionSongs(data.songs);
     $('#sessionStatus').textContent = data.ai_review?.status === 'reviewed' ? `AI reviewed ${data.ai_review.submitted_cuts} of ${data.ai_review.total_cuts} cuts · ${data.ai_review.value.summary}` : 'Acoustic suggestions — check each song before continuing.';
-  } catch (error) { toast(error.message, true); }
+  } catch (error) {
+    if (forVideo && fullSession.data?.songs) drawSessionSongs(fullSession.data.songs);
+    if (!fullSession.cancelRequested) toast(error.message, true);
+  }
+}
+
+async function mixSessionForVideo(data) {
+  // Reuse the engine's real onset/spectral sync, not a second matching algorithm.
+  const generation = beginWork();
+  fullSession.busy = true;
+  fullSession.videoMatching = true;
+  $('#sessionStatus').textContent = 'Finding your song from the camera audio…';
+  $('#sessionWorking').hidden = false;
+  $('#sessionCancel').hidden = false;
+  try {
+    const guide = await api(`/montara/session/${fullSession.id}/video-source`);
+    const input = {master:guide.master, songs:'', videos:videos().map(f=>f.path)};
+    await api('/wizard/projects/new', {});
+    const draft = await api('/wizard/draft', {name:$('#videoName').value.trim() || todayName(), platform:'youtube', ...input, audio_paths:[guide.master]});
+    state.projectId = draft.project_id;
+    await workRequest(generation, '/wizard/prepare', {project_id:state.projectId, platform:'youtube', ...input});
+    await waitFor(s=>['waiting_choice','done'].includes(s.status), generation);
+    const sync = await api('/artifacts/sync');
+    fullSession.videoMatching = false;
+    checkSessionCancel();
+    const song = SessionVideo.songForClips(data.songs, sync.clips);
+    fullSession.data.songs = data.songs.map(s=>({...s, selected:s.id===song.id, confirmed:s.id===song.id}));
+    drawSessionSongs();
+    await renderFullSession(true);
+  } finally { fullSession.busy = false; fullSession.videoMatching = false; }
 }
 
 // ---------- song list: waveform, handles, listen, per-song mixer ----------
@@ -471,7 +505,7 @@ async function saveSongMix() {
   api(`/montara/mix/${job}`).then(state => { if (state.reference && fullSession.mixes[songId]) fullSession.mixes[songId].reference = state.reference; }).catch(() => {});
 }
 
-async function renderFullSession() {
+async function renderFullSession(forVideo = false) {
   if(fullSession.cancelling)return;
   stopSongPreview();
   const songs = songList();
@@ -501,6 +535,15 @@ async function renderFullSession() {
     for (const song of serverSongs){checkSessionCancel();await queueSongOriginals(song);}
     const data = await waitSession(started);
     checkSessionCancel();
+    if (forVideo) {
+      const song = data.songs.find(s=>s.selected);
+      const master = await api(`/montara/session/${fullSession.id}/video-master`, {song:song.id});
+      state.mixMaster = master.master;
+      fullSession.active = false;
+      range.start = 0; range.end = null;
+      await registerProject({mixed:true});
+      return;
+    }
     $('#sessionStatus').textContent = 'Your selected songs are ready.';
     drawSessionResults(data);
   } catch (error) { if(!fullSession.cancelRequested)toast(error.message, true); }

@@ -42,7 +42,11 @@ if command -v lsof >/dev/null 2>&1; then
   done
 fi
 mkdir -p "$DIR/bin"
-for f in video_recipe.py video_jobs.py; do
+for f in video_recipe.py video_jobs.py windows_support.py; do
+  curl -fsSL "$RAW/$f" -o "$DIR/$f.new" && mv "$DIR/$f.new" "$DIR/$f"
+done
+for f in spherical_proxy.py spatialmedia/__init__.py spatialmedia/metadata_utils.py spatialmedia/LICENSE spatialmedia/mpeg/__init__.py spatialmedia/mpeg/box.py spatialmedia/mpeg/constants.py spatialmedia/mpeg/container.py spatialmedia/mpeg/mpeg4_container.py spatialmedia/mpeg/sa3d.py spatialmedia/mpeg/sv3d.py; do
+  mkdir -p "$DIR/$(dirname "$f")"
   curl -fsSL "$RAW/$f" -o "$DIR/$f.new" && mv "$DIR/$f.new" "$DIR/$f"
 done
 curl -fsSL "$RAW/companion.py" -o "$DIR/companion.py.new" && mv "$DIR/companion.py.new" "$DIR/companion.py"
