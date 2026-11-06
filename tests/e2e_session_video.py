@@ -103,6 +103,13 @@ def main():
             from PIL import Image, ImageStat
             assert max(ImageStat.Stat(Image.open(out/'panorama-visible.png')).stddev)>30, 'Panorama must be visibly drawn'
             page.screenshot(path=str(out/'02-master-before-range.png'),full_page=True)
+            # Recovering the draft must not replace the two stems with its guide/master.
+            page.goto(url+'/?resume=footage');page.locator('#footage').wait_for(state='visible')
+            assert page.locator('#audioFiles li').count()==2
+            assert page.locator('#videoFiles li').count()==1
+            assert page.evaluate('audioTracks().every(f=>!f.path.includes("listen-all"))')
+            assert page.evaluate('!!state.mixMaster')
+            page.screenshot(path=str(out/'03-source-stems-recovered.png'),full_page=True)
             summary={'passed':True,'panorama_proxy':True,'stems_mixed':2,'mixer_accepted':True,'saved_fader_applied':True,'downloadable_master':True,'matched_song':song,'master_before_range':True}
             (out/'summary.json').write_text(json.dumps(summary,indent=2));print(json.dumps(summary),flush=True)
             browser.close()

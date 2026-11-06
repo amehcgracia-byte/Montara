@@ -130,9 +130,9 @@ function rememberOpenEdit(id){
   if(!state.projectId || ['home','mode'].includes(id))return;
   try {sessionStorage.setItem('montara-open-edit',JSON.stringify({
     project:state.projectId,platform:state.platform,step:id,name:$('#videoName').value,
-    branding:state.branding,localProject:state.localProject,
+    branding:state.branding,localProject:state.localProject,mixMaster:state.mixMaster,
     nativeJob:state.nativeExport?.id || state.lastNativeJob,
-    files:state.files.filter(f=>f.path).map(({id,name,path,kind,small,original,projection})=>({id,name,path,kind,small,original,projection}))
+    files:state.files.filter(f=>f.path).map(({id,name,path,kind,small,original,projection,preview,duration,cameraType})=>({id,name,path,kind,small,original,projection,preview,duration,cameraType}))
   }));} catch {}
 }
 function show(id) {
@@ -2529,7 +2529,15 @@ if(savedEdit?.project){
     state.projectId=current.project_path;state.platform=savedEdit.platform;
     $('#videoName').value=project.name || todayName();
     const remembered=new Map(state.files.map(f=>[f.path,f]));
-    state.files=[...(project.inputs?.videos||[]).map(f=>({...f,id:crypto.randomUUID(),name:f.path.split('/').pop(),kind:'video',path:f.path,small:/\.small\.mp4$/i.test(f.path),...remembered.get(f.path)})),...((project.inputs?.master?.path?[project.inputs.master]:project.inputs?.audio)||[]).map(f=>({id:crypto.randomUUID(),name:f.path.split('/').pop(),kind:'master',path:f.path,...remembered.get(f.path)}))];
+    const sourceAudio=state.files.filter(isAudioEntry);
+    const serverVideos=(project.inputs?.videos||[]).map(f=>({...f,id:crypto.randomUUID(),name:f.path.split('/').pop(),kind:'video',path:f.path,small:/\.small\.mp4$/i.test(f.path),...remembered.get(f.path)}));
+    const videoPaths=new Set(serverVideos.map(f=>f.path));
+    // The draft may contain only a guide/master. Keep every actual source stem
+    // from this browser, rather than replacing them with that intermediate audio.
+    const serverAudio=((project.inputs?.master?.path?[project.inputs.master]:project.inputs?.audio)||[]).map(f=>({...f,id:crypto.randomUUID(),name:f.path.split('/').pop(),kind:'master',path:f.path,...remembered.get(f.path)}));
+    state.files=[...serverVideos,...state.files.filter(f=>f.kind==='video' && !videoPaths.has(f.path)),...(sourceAudio.length?sourceAudio:serverAudio)];
+    state.mixMaster=savedEdit.mixMaster && savedEdit.mixMaster===project.inputs?.master?.path ? savedEdit.mixMaster : null;
+    state.mixDownload=state.mixMaster ? audioUrl({path:state.mixMaster}) : null;
     if(resumeFootage || savedEdit.step==='footage'){
       $('#modeLabel').textContent=MODES[state.platform];
       $('#durationRow').hidden=state.platform!=='reel';$('#formatRow').hidden=state.platform!=='reel';
