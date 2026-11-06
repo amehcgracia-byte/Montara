@@ -91,6 +91,25 @@ class UranoLabAuthContract(unittest.TestCase):
             self.assertEqual(r.status_code, 403)
         self.assertEqual(self.a.get("/urano/v1/projects").status_code, 401)
 
+    def test_session_refresh_restores_csrf_after_page_reload(self):
+        registered = self.register(self.a, "alice@example.com")
+        csrf_old = registered.json["csrf"]
+        self.assertEqual(registered.status_code, 201)
+        before = self.a.get("/urano/v1/projects")
+        self.assertEqual(before.status_code, 200)
+        refreshed = self.a.post("/urano/v1/session/refresh", headers=self.ORIGIN)
+        self.assertEqual(refreshed.status_code, 200)
+        csrf_new = refreshed.json["csrf"]
+        self.assertNotEqual(csrf_new, csrf_old)
+        self.assertEqual(refreshed.headers["Cache-Control"], "no-store")
+        self.assertEqual(self.a.post("/urano/v1/projects", json={"title": "Outdated"},
+                         headers={"X-Urano-CSRF": csrf_old}).status_code, 403)
+        self.assertEqual(self.a.post("/urano/v1/projects", json={"title": "Restored"},
+                         headers={"X-Urano-CSRF": csrf_new}).status_code, 201)
+        self.assertEqual(self.a.post("/urano/v1/session/refresh",
+                         headers={"Origin": "https://attacker.example"}).status_code, 403)
+        self.assertEqual(self.b.post("/urano/v1/session/refresh", headers=self.ORIGIN).status_code, 401)
+
     def test_invalid_registration_rejected(self):
         self.assertEqual(self.register(self.a, "bad-email").status_code, 400)
         self.assertEqual(self.register(self.a, "bad@example.com", "short").status_code, 400)
