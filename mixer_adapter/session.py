@@ -602,6 +602,9 @@ def execute(work, action):
             progress(dict(current_stage='Locating the camera audio', progress=0))
             session_listen(work)
             data['songs'] = validate_songs([dict(start=0, end=data['duration'], name='Video excerpt')], data['duration'])
+            # This is an index extent, not an accepted export window. A reload
+            # during matching must not select the whole jam for export.
+            data['songs'][0]['selected'] = False
             data['empty_tracks'] = []  # Inspect activity only inside the selected excerpt in the mixer.
             data['detection'] = dict(id='camera-audio-window', needs_review=True)
             data['status'] = 'review'

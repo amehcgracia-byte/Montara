@@ -53,6 +53,7 @@ def test_video_guide_reuses_decode_for_waveform_and_skips_all_song_detection(tmp
     assert result['status']=='review' and result['duration']==8
     assert [t['offset'] for t in result['tracks']]==[0,2]
     assert result['detection']['id']=='camera-audio-window'
+    assert not result['songs'][0]['selected']
     assert not (work/'extras.log').exists() and not (work/'songs').exists()
     assert (work/'listen-all.webm').stat().st_size>0
     waveform=json.loads((work/'waveform.json').read_text())
