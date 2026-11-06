@@ -93,6 +93,18 @@ class SessionStore:
             return None
         return VerifiedSession(row["owner_id"], row["csrf_hash"], row["expires_at"])
 
+    def rotate_csrf(self, token: str | None, *, now: int | None = None) -> str | None:
+        """Refresh CSRF after a page reload without extending session lifetime."""
+        if not isinstance(token, str) or not _TOKEN_RE.fullmatch(token):
+            return None
+        timestamp = int(time.time()) if now is None else now
+        csrf = secrets.token_hex(32)
+        with self._connect() as db:
+            result = db.execute("""UPDATE urano_auth_sessions SET csrf_hash=?
+                    WHERE token_hash=? AND expires_at>?""",
+                    (_digest(csrf), _digest(token), timestamp))
+        return csrf if result.rowcount == 1 else None
+
     def revoke(self, token: str | None) -> None:
         if not isinstance(token, str) or not _TOKEN_RE.fullmatch(token):
             return
