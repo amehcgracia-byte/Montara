@@ -153,6 +153,25 @@ class RuntimeActivationGuard:
             db.execute("UPDATE urano_runtime_slots SET state='ready' WHERE runtime_id=?",
                        (runtime_id,))
 
+    def invalidate_after_worker_exit(self, owner_id: str, runtime_id: str,
+                                     expected_generation: int) -> None:
+        """Trusted supervisor only, AFTER reaping the entire isolated worker.
+
+        Prevent a dead worker's previously-ready project from remaining usable.
+        A newer generation cannot be invalidated by an old supervisor.
+        """
+        if type(expected_generation) is not int:
+            raise ValueError("Invalid generation")
+        with self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            slot = self._slot(db, owner_id, runtime_id)
+            if slot["generation"] != expected_generation:
+                raise StaleActivation("Worker generation changed")
+            db.execute("""UPDATE urano_runtime_slots
+                          SET state='idle',project_id=NULL,generation=generation+1
+                          WHERE runtime_id=? AND owner_id=?""",
+                       (runtime_id, owner_id))
+
     def get_state(self, owner_id: str, runtime_id: str) -> tuple[str, str | None, int]:
         with self._connect() as db:
             slot = self._slot(db, owner_id, runtime_id)
