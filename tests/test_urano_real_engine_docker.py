@@ -54,13 +54,13 @@ def _make_project(image: str, workspace: Path, name: str) -> None:
           image, "python", "-c", generator])
 
 
-@unittest.skipUnless(os.name == "posix" and os.environ.get(IMAGE_ENV),
+@unittest.skipUnless(os.name == "posix" and os.environ.get(IMAGE_ENV) and os.environ.get("GITHUB_ACTIONS") == "true",
                      "Opt-in Docker real Engine integration only")
 class RealEngineDockerBridge(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="urano-u13d2d-")
-        self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
+        self.addCleanup(self._cleanup)
         self.image = os.environ[IMAGE_ENV]
         self.catalog = ProjectCatalog(self.root / "catalog.sqlite3")
         self.guard = None
@@ -99,6 +99,18 @@ class RealEngineDockerBridge(unittest.TestCase):
             )
             info["guard"] = guard
             info["runtime"] = guard.register_trusted(f"fixture:{owner}")
+
+    def _cleanup(self):
+        # On disposable GitHub runners only: project folders are written by
+        # container UID 10001, not the runner user. Reclaim ownership before
+        # TemporaryDirectory removes the synthetic data. Never do this on a
+        # real host or user media workspace.
+        reclaim = subprocess.run(
+            ["sudo", "chown", "-R", f"{os.getuid()}:{os.getgid()}", str(self.root)],
+            capture_output=True, text=True, timeout=20)
+        if reclaim.returncode:
+            raise AssertionError("Could not reclaim CI-only synthetic files")
+        self.temp.cleanup()
 
     def bridge(self, owner):
         info = self.owners[owner]
