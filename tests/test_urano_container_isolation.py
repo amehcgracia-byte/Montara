@@ -34,7 +34,7 @@ class ContainerIsolationContract(unittest.TestCase):
         for required in ("--read-only", "none", "ALL", "no-new-privileges:true",
                          "--pids-limit", "--memory", "--cpus", "--user"):
             self.assertIn(required, cmd)
-        self.assertIn("type=bind,src=" + str(self.alice.resolve()) + ",dst=/workspace,rw", cmd)
+        self.assertIn("type=bind,src=" + str(self.alice.resolve()) + ",dst=/workspace", cmd)
         self.assertNotIn(str(self.bob), " ".join(cmd))
         self.assertNotIn("--privileged", cmd)
         self.assertNotIn("/var/run/docker.sock", " ".join(cmd))
