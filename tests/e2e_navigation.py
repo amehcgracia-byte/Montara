@@ -37,6 +37,10 @@ def main():
                 page.go_forward(); page.locator('#footage').wait_for(state='visible')
                 assert page.locator('#videoName').input_value() == 'Keep my Stage take'
                 assert page.locator('#videoFiles li, #audioFiles li').count() == 12
+                # Navigation-only journey uses the finished master. The separate
+                # Mix journey covers stems -> master -> camera/range ordering.
+                page.locator('#switchSample').click()
+                page.wait_for_function("document.querySelectorAll('#videoFiles li, #audioFiles li').length===4")
                 page.locator('#continueFootage').click()
                 page.locator('#cameras').wait_for(state='visible', timeout=120_000)
                 page.go_back(); page.locator('#footage').wait_for(state='visible')

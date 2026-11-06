@@ -39,7 +39,7 @@ def main():
            subprocess.Popen([sys.executable,str(ROOT/'companion/companion.py')],cwd=ROOT,env=env,stdout=logs[1],stderr=subprocess.STDOUT)]
     try:
         for endpoint in (url+'/montara/version',base+'/health'):
-            for _ in range(100):
+            for _ in range(300):
                 try:
                     with urlopen(endpoint,timeout=2):break
                 except Exception:
