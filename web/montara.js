@@ -729,7 +729,8 @@ const LONG_AUDIO_BYTES = 150 * 1024 * 1024, LONG_AUDIO_SECONDS = 20 * 60;
 // analyse and download every full-length track (and previews can only be exported per song).
 function isWholeSession() {
   const audio = state.files.filter(isAudioEntry);
-  return audio.some(f => f.preview) || Math.max(0, ...audio.map(f => f.duration || 0)) > LONG_AUDIO_SECONDS;
+  return audio.some(f => f.preview || (Number(f.duration)>LONG_AUDIO_SECONDS) ||
+    (!(Number(f.duration)>0) && (f.original?.size || f.sourceBytes || f.memory?.size || 0)>LONG_AUDIO_BYTES));
 }
 
 async function registerProject({mixed = false} = {}) {
@@ -2528,6 +2529,8 @@ if(savedEdit?.project){
     const project=await api('/project');
     state.projectId=current.project_path;state.platform=savedEdit.platform;
     $('#videoName').value=project.name || todayName();
+    const storedFiles=new Map((await footageMemory.list(state.platform)).filter(f=>f.path).map(f=>[f.path,f]));
+    state.files=state.files.map(f=>{const stored=storedFiles.get(f.path);return stored?{...f,preview:f.preview??stored.preview,duration:f.duration||stored.duration,sourceBytes:stored.size,original:f.original||stored.original}:f;});
     const remembered=new Map(state.files.map(f=>[f.path,f]));
     const sourceAudio=state.files.filter(isAudioEntry);
     const serverVideos=(project.inputs?.videos||[]).map(f=>({...f,id:crypto.randomUUID(),name:f.path.split('/').pop(),kind:'video',path:f.path,small:/\.small\.mp4$/i.test(f.path),...remembered.get(f.path)}));

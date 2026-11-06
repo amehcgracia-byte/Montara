@@ -26,3 +26,17 @@ bridge.registerProject({mixed:true}).then(()=>{
   assert.equal(calls.length,1);assert.equal(calls[0].mixed,true);
   console.log('Push wrapper preserves Stage master completion');
 });
+
+// An older saved edit may lack duration, but the original fingerprint retains its size.
+const main = fs.readFileSync(require('node:path').join(__dirname,'../web/montara.js'),'utf8');
+const whole = main.slice(main.indexOf('function isWholeSession()'),main.indexOf('async function registerProject'));
+const restored = vm.createContext({state:{files:[]},isAudioEntry:()=>true,LONG_AUDIO_BYTES:150*1024*1024,LONG_AUDIO_SECONDS:1200});
+vm.runInContext(whole,restored);
+for(const [files,expected] of [
+  [[{preview:true}],true],
+  [[{original:{size:2*1024**3},duration:0}],true],
+  [[{original:{size:2*1024**3},duration:300}],false],
+  [[{duration:1800}],true],
+  [[{duration:60}],false],
+]){restored.state.files=files;assert.equal(restored.isWholeSession(),expected);}
+console.log('5 restored-session routing scenarios passed');

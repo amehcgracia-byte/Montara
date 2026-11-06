@@ -1,6 +1,6 @@
 # Montara 0.67 — panoramas ligeros y mezcla antes del rango
 
-Base: main `e66ada2` (incluye PR #79–83 de Fernando y recuperación 0.66.1). Engine `cbeb811b` (descendiente del pin `bfb964c3`), Mixer `f15ff91`.
+Base: main `e66ada2` (incluye PR #79–83 de Fernando y recuperación 0.66.1). Engine `4f481002` (Editor PR #60, mismo árbol que `cbeb811b`) (descendiente del pin `bfb964c3`), Mixer `f15ff91`.
 Motor: solo acotar la extracción del frame panorámico a la duración del clip.
 Sin cambios de exportación ni copia de ramas experimentales.
 
@@ -42,3 +42,5 @@ proxy panorámico → detección → sincronía → máster de una canción → 
 La aceptación completa y la instalación se registran al terminar CI.
 
 No actualizar/reiniciar servidor o Companion durante renders del usuario.
+
+El mixer de la canción localizada se abre antes de renderizar; aceptar conserva faders/FX y mezcla solo esa canción. La recuperación conserva pistas fuente y duración/previews, no sustituye instrumentos por el audio guía del borrador.
