@@ -20,9 +20,10 @@ En `zucker_videos/server/api.py`, `create_app(project_path=None, dev=False)` cre
 1. **No existe todavía un coordinador confiable que arranque y mantenga** un proceso dedicado por propietario, gestione permisos UID/cgroups o contenedores, aislamiento de archivos/secretos, límites de CPU/RAM, limpieza de procesos ni recuperación tras caídas. Múltiples procesos Python bajo un mismo usuario NO garantizan confidencialidad.
 2. El protocolo STDIN/STDOUT **no es una API de navegador** y no debe exponerse directamente; el futuro coordinador debe resolver `owner_id` verificado y proyecto por U10/U13A, obtener reserva U13B y enviar únicamente el nombre resuelto internamente. Evitar que el navegador envíe `folder` o `owner_id` a una ruta pública.
 3. **La suite de U13C utiliza FakeEngine** y carpetas inventadas; aún falta ensayo end-to-end del submódulo Engine real con un proyecto sintético, inspección humana de apertura/edición/exportación, dos procesos aislados y fallo de worker.
-4. No hay enlace desde U12b a Engine, ni relink de medios, ni editor funcional, ni validación de fronteras de upload/preview/export/companion.
-5. No usar para almacenar medios personales ni cuentas reales. No poner contraseñas de demostración previsibles o usuarios vacíos; provisionar identidades temporales únicas, acceso con HTTPS y protección privada cuando existan gates.
-6. Issue #34 pendiente de respuesta de IA de Chema sobre navegabilidad histórica. Chema solicita acceso a una URL de beta; **no hay URL de U13C para compartir todavía**. La URL existente de Cloudflare es una copia HTML estática, no la beta de proyectos.
+4. Hay además una prueba CI adicional `tests/urano_real_engine_smoke.py` con un **proceso separado y el submódulo Engine realmente fijado en el repositorio**, que abre dos proyectos sintéticos en secuencia y rechaza `../untrusted`. **Pendiente confirmar su resultado en GitHub Actions**; no contiene edición/render.
+5. No hay enlace desde U12b a Engine, ni relink de medios, ni editor funcional, ni validación de fronteras de upload/preview/export/companion.
+6. No usar para almacenar medios personales ni cuentas reales. No poner contraseñas de demostración previsibles o usuarios vacíos; provisionar identidades temporales únicas, acceso con HTTPS y protección privada cuando existan gates.
+7. Issue #34 pendiente de respuesta de IA de Chema sobre navegabilidad histórica. Chema solicita acceso a una URL de beta; **no hay URL de U13C para compartir todavía**. La URL existente de Cloudflare es una copia HTML estática, no la beta de proyectos.
 
 ## Próximos gates
 
