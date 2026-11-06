@@ -110,7 +110,7 @@ function escapeHtml(text) {
   return String(text ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
-const STEP_ORDER = ["footage", "showSetup", "showStyle", "cameras", "mix", "making", "frames", "showReview", "captions", "result"];
+const STEP_ORDER = ["footage", "showSetup", "showStyle", "mix", "cameras", "making", "frames", "showReview", "captions", "result"];
 // Steps that apply to this video: no Mix step without separate tracks, no Captions outside Pulse.
 function stepApplies(step) {
   if (state.platform === "show") return ["footage", "making", "showReview", "result"].includes(step);
@@ -351,7 +351,7 @@ function openSongRange() {
       : audioTracks().filter((f) => audioUrl(f)) : [];
   $("#songRange").hidden = !rangeSourcesList.length;
   $("#mixedMasterDownload").hidden = !state.mixDownload || !state.mixMaster;
-  if(state.mixDownload && state.mixMaster)$("#mixedMasterDownload").href=state.mixDownload;
+  if(state.mixDownload && state.mixMaster){$("#mixedMasterDownload").href=state.mixDownload;$("#mixedMasterDownload").download=projectDownloadName(true);}
   if (!rangeSourcesList.length) return;
   const select = $("#rangeTrack");
   const preferred = rangeSourcesList.findIndex((f) => /\b(ov|room|mix|master|ambi|stereo|lr)\b/i.test(f.name.replace(/[_.-]/g, " ")));
