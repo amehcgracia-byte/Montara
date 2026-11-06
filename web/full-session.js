@@ -1,9 +1,16 @@
 /* Optional Stage session flow; the single-song journey stays unchanged. */
 const fullSession = { id: null, active: false, data: null, busy: false };
-if(typeof api==='function')api('/montara/session/latest').then(()=>{$('#sessionResume').hidden=false;}).catch(()=>{});
+if(typeof api==='function')api('/montara/recovery/latest').then(()=>{$('#sessionResume').hidden=false;}).catch(()=>{});
 $('#sessionResume').onclick = async () => {
   try {
-    const latest=await api('/montara/session/latest');
+    const recent=await api('/montara/recovery/latest');
+    if(recent.kind==='project'){
+      const current=await status();
+      if(['running','cancelling'].includes(current.status))return toast('A video is still being made.');
+      await api('/wizard/projects/open',{path:recent.path});
+      location.assign('/?resume=footage');return;
+    }
+    const latest=recent;
     fullSession.id=latest.id;
     try {localStorage.setItem('montara-session',latest.id);} catch {}
     fullSession.localProgress = {}; fullSession.localResults = [];

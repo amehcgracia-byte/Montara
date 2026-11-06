@@ -236,6 +236,38 @@ def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
     # Stage must use every camera (the sync found all of them); Push may pick.
     # (the engine may rename a camera to a cached proxy, so count cameras, not names)
     all_used = mode == "push" or (len([k for k, n in used.items() if n]) >= len(cameras) and not result.get("excluded_clips"))
+    if mode == 'stage':
+        # Real recovery after a render, in a fresh tab without browser edit memory.
+        recovered = page.context.new_page()
+        recovered.route('http://127.0.0.1:47820/**', lambda route: route.abort())
+        recovered.on('dialog', lambda dialog: dialog.accept() if dialog.type=='confirm' and 'upload the ORIGINAL video' in dialog.message else dialog.dismiss())
+        recovered.goto(url)
+        recovered.locator('#mode').wait_for(state='visible')
+        recovered.locator('.mode[data-platform="youtube"]').click()
+        recovered.locator('#sessionResume').wait_for(state='visible')
+        recovered.locator('#sessionResume').click()
+        recovered.wait_for_url('**/?resume=footage')
+        recovered.locator('#footage').wait_for(state='visible')
+        assert recovered.locator('#videoName').input_value()==project['name']
+        assert recovered.locator('#videoFiles li').count()==len(project['inputs']['videos'])
+        assert recovered.locator('#audioFiles li').count()>=1
+        recovered.reload()
+        recovered.locator('#footage').wait_for(state='visible')
+        assert recovered.locator('#videoFiles li').count()==len(project['inputs']['videos'])
+        recovered.goto(url+'/?resume=frames')
+        recovered.locator('#frames').wait_for(state='visible', timeout=120_000)
+        recovered.go_back()
+        recovered.locator('#footage').wait_for(state='visible')
+        before=recovered.locator('#videoFiles li').count()
+        added=out/'additional-camera.mp4'
+        shutil.copyfile(files[0], added)
+        recovered.locator('[data-drop="video"] input').set_input_files(str(added))
+        recovered.wait_for_function(f"document.querySelectorAll('#videoFiles li').length==={before+1} && !document.querySelector('#continueFootage').disabled", timeout=120_000)
+        assert recovered.locator('#videoName').input_value()==project['name']
+        assert recovered.locator('#audioFiles li').count()>=1
+        recovered.screenshot(path=str(shots/'09-recovered-add-files.png'), full_page=True)
+        assert recovered.request.get(url+'/api/v1/wizard/status').json()['project_path']==saved_project
+        recovered.close()
     return {"mode": mode, "media": media.name, "branding": BRANDING[mode], "passed": has_audio and duration > 0 and all_used and (mode != "mix" or bool(mixed and "Mixer" in mixed)),
             "duration": duration, "captioned": captioned, "size": f"{video['width']}x{video['height']}", "frames_swapped": swapped, "mixed_master": Path(mixed).name if mixed else None,
             "measured_browser_journey_seconds_including_ui_waits_and_download": round(journey_seconds, 3),

@@ -127,7 +127,7 @@ function finishIntro() {
   if (!$("#home").hidden) { resetFlow(); show("mode"); }
 }
 function rememberOpenEdit(id){
-  if(!state.projectId || ['home','mode','footage'].includes(id))return;
+  if(!state.projectId || ['home','mode'].includes(id))return;
   try {sessionStorage.setItem('montara-open-edit',JSON.stringify({
     project:state.projectId,platform:state.platform,step:id,name:$('#videoName').value,
     branding:state.branding,localProject:state.localProject,
@@ -2472,14 +2472,16 @@ loadBranding();
 api("/montara/version").then((v) => { $("#version").textContent = `Montara ${v.version}`; }).catch(() => {});
 let savedEdit=null;
 try {savedEdit=JSON.parse(sessionStorage.getItem('montara-open-edit'));} catch {}
-const resumeFrames=new URLSearchParams(location.search).get('resume')==='frames';
-if(resumeFrames){
+const resumeTarget=new URLSearchParams(location.search).get('resume');
+const resumeFrames=resumeTarget==='frames';
+const resumeFootage=resumeTarget==='footage';
+if(resumeFrames || resumeFootage){
   clearTimeout(introTimer);show('making');setProgress(0,'Opening your edit…','');
   try {
     const current=await status();
     if(current.project_path){
       const project=await api('/project');
-      savedEdit={project:current.project_path,platform:project.settings?.wizard?.platform || 'youtube',step:'frames'};
+      savedEdit={...(savedEdit?.project===current.project_path?savedEdit:{}),project:current.project_path,platform:project.settings?.wizard?.platform || 'youtube',step:resumeFootage?'footage':'frames'};
     }
   } catch(error){toast(error.message,true);}
 }
@@ -2492,7 +2494,7 @@ if(savedEdit?.project){
     state.files=savedEdit.files || [];
     state.branding=savedEdit.branding || state.branding;
     $('#videoName').value=savedEdit.name || todayName();
-    if(savedEdit.nativeJob && ['making','result'].includes(savedEdit.step)){
+    if(!resumeFootage && savedEdit.nativeJob && ['making','result'].includes(savedEdit.step)){
       await montaraCompanion.detect();
       if(!montaraCompanion.info?.local_video)throw new Error('Open your Montara companion to resume this local video.');
       const job={id:savedEdit.nativeJob,cancelled:false};state.nativeExport=job;
@@ -2504,7 +2506,15 @@ if(savedEdit?.project){
     state.projectId=current.project_path;state.platform=savedEdit.platform;
     $('#videoName').value=project.name || todayName();
     const remembered=new Map(state.files.map(f=>[f.path,f]));
-    state.files=[...(project.inputs?.videos||[]).map(f=>({id:crypto.randomUUID(),name:f.path.split('/').pop(),kind:'video',path:f.path,small:/\.small\.mp4$/i.test(f.path),...remembered.get(f.path)})),...((project.inputs?.master?.path?[project.inputs.master]:project.inputs?.audio)||[]).map(f=>({id:crypto.randomUUID(),name:f.path.split('/').pop(),kind:'master',path:f.path,...remembered.get(f.path)}))];
+    state.files=[...(project.inputs?.videos||[]).map(f=>({...f,id:crypto.randomUUID(),name:f.path.split('/').pop(),kind:'video',path:f.path,small:/\.small\.mp4$/i.test(f.path),...remembered.get(f.path)})),...((project.inputs?.master?.path?[project.inputs.master]:project.inputs?.audio)||[]).map(f=>({id:crypto.randomUUID(),name:f.path.split('/').pop(),kind:'master',path:f.path,...remembered.get(f.path)}))];
+    if(resumeFootage || savedEdit.step==='footage'){
+      $('#modeLabel').textContent=MODES[state.platform];
+      $('#durationRow').hidden=state.platform!=='reel';$('#formatRow').hidden=state.platform!=='reel';
+      $('#sampleNote').hidden=true;$('#restoreNote').hidden=true;
+      show('footage');renderFiles();watchCompanion();return;
+    }
+    // A recovered edit needs a real Footage entry for browser Back.
+    show('footage');renderFiles();
     if(resumeFrames && ['waiting_review','done','completed'].includes(current.status)){await openFrames();return;}
     if(['done','completed'].includes(current.status)){showResult(current);return;}
     if(current.status==='waiting_review'){await openFrames();return;}
