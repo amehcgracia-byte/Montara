@@ -133,6 +133,17 @@ def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
     if page.locator("#frames").is_visible():
         page.wait_for_function("!document.querySelector('#framesHint').textContent.includes('Preparing')", timeout=300_000)
         page.screenshot(path=str(shots / "05-frames.png"), full_page=True)
+        if mode == 'stage':
+            # Browser Back from a restored ready edit must retain its sources.
+            page.reload()
+            page.locator('#frames').wait_for(state='visible', timeout=120_000)
+            page.go_back()
+            page.locator('#footage').wait_for(state='visible')
+            assert page.locator('#videoFiles li').count()==len([f for f in files if f.suffix=='.mp4'])
+            assert page.locator('#audioFiles li').count()>=1
+            page.go_forward()
+            page.locator('#frames').wait_for(state='visible', timeout=120_000)
+
         if mode == 'push':
             assert page.locator('#songRange').evaluate('e=>!e.hidden')
             assert page.locator('#cameraList').evaluate('e=>e.hidden')
@@ -255,10 +266,6 @@ def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
         recovered.reload()
         recovered.locator('#footage').wait_for(state='visible')
         assert recovered.locator('#videoFiles li').count()==len(project['inputs']['videos'])
-        recovered.goto(url+'/?resume=frames')
-        recovered.locator('#frames').wait_for(state='visible', timeout=120_000)
-        recovered.go_back()
-        recovered.locator('#footage').wait_for(state='visible')
         before=recovered.locator('#videoFiles li').count()
         added=out/'additional-camera.mp4'
         shutil.copyfile(files[0], added)

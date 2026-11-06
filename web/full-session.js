@@ -7,7 +7,7 @@ $('#sessionResume').onclick = async () => {
     if(recent.kind==='project'){
       const current=await status();
       if(['running','cancelling'].includes(current.status))return toast('A video is still being made.');
-      await api('/wizard/projects/open',{path:recent.path});
+      if(current.project_path!==recent.path)await api('/wizard/projects/open',{path:recent.path});
       location.assign('/?resume=footage');return;
     }
     const latest=recent;
