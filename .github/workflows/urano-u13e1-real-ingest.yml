@@ -1,0 +1,48 @@
+name: URANO U13E1 real media ingest inside private Engine Docker
+
+on:
+  push:
+    branches:
+      - fernando/urano-u13e1-real-media-ingest
+  pull_request:
+    paths:
+      - 'urano/**'
+      - 'tests/test_urano_*.py'
+      - 'tests/urano_engine_ingest_in_container.py'
+      - 'tests/urano_real_ingest_docker_gate.py'
+      - '.github/workflows/urano-u13e1-real-ingest.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install 'Flask>=3.0,<4'
+      - run: python -m unittest discover -s tests -p 'test_urano_*.py' -v
+
+  real-media-ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Build pinned Engine image without deploying it
+        run: docker build -t urano-e1-media:ci .
+      - name: Pin image to immutable local ID
+        run: |
+          image=$(docker image inspect urano-e1-media:ci --format '{{.Id}}')
+          case "$image" in sha256:*) ;; *) exit 1 ;; esac
+          echo "URANO_TEST_IMAGE_ID=$image" >> "$GITHUB_ENV"
+      - name: Generate camera/audio in Docker and run actual Engine ingest
+        run: PYTHONPATH=. python tests/urano_real_ingest_docker_gate.py
