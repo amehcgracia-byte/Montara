@@ -29,3 +29,19 @@ jobs:
         run: |
           python -m py_compile urano/engine_worker_process.py
           node --check urano/lab_ui/lab.js
+
+  real-engine-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install pinned Engine dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Open synthetic old and new projects with real Engine in worker subprocess
+        run: python tests/urano_real_engine_smoke.py
