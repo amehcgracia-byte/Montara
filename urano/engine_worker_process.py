@@ -71,9 +71,12 @@ def run(stdin, stdout, *, engine_dir: Path, data_root: Path, make_client=make_en
             # IMPORTANT: verify the *loaded* project through the Engine rather
             # than blindly trusting an HTTP 200 or a global last_project_path.
             inspected = client.get("/api/v1/project")
-            payload = inspected.get_json(silent=True) or {}
-            loaded = payload.get("folder") or payload.get("project_path")
-            if (inspected.status_code != 200 or not isinstance(loaded, str) or
+            # The public snapshot is ONLY project.json and does not include
+            # its folder. The private Flask state is the authoritative source.
+            state = client.application.config.get("ZUCKER_STATE")
+            active = getattr(state, "project", None)
+            loaded = getattr(active, "folder", None)
+            if (inspected.status_code != 200 or not isinstance(loaded, (Path, str)) or
                 Path(loaded).resolve() != folder.resolve()):
                 emit({"ok": False, "error": "Engine active project unverified"})
                 continue
