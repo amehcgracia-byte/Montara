@@ -30,7 +30,7 @@ def upload_recovery(page, url, media, output):
     audio = (.03 * np.sin(2 * np.pi * 330 * np.arange(sr * 30) / sr)).astype('float32')
     sf.write(original, np.column_stack((audio, audio)), sr, subtype='FLOAT')
     assert original.stat().st_size > 8 * 1024**2
-    page.goto(url); page.locator('#mode').wait_for(state='visible'); page.locator('[data-platform="youtube"]').click()
+    page.goto(url); page.locator('#mode').wait_for(state='visible'); page.locator('[data-intent=video]').click(); page.locator('[data-platform="youtube"]').click()
 
     def interrupt(route):
         if route.request.method == 'PUT' and int(route.request.headers.get('upload-offset', '0')) >= 4 * 1024**2:
@@ -44,7 +44,7 @@ def upload_recovery(page, url, media, output):
     page.unroute('**/montara/uploads/*', interrupt)
     offsets = []
     page.on('request', lambda request: offsets.append(int(request.headers.get('upload-offset', '0'))) if request.method == 'PUT' else None)
-    page.reload(); page.locator('#mode').wait_for(state='visible'); page.locator('[data-platform="youtube"]').click()
+    page.reload(); page.locator('#mode').wait_for(state='visible'); page.locator('[data-intent=video]').click(); page.locator('[data-platform="youtube"]').click()
     page.locator('[data-drop="audio"] input').set_input_files(str(original))
     page.wait_for_function("state.files.some(f=>f.kind==='master'||f.kind==='songs')", timeout=30_000)
     path = Path(page.evaluate("state.files.find(f=>f.kind==='master'||f.kind==='songs').path"))
@@ -86,6 +86,7 @@ def run(output):
                 upload_recovery(page, url, media, output)
                 page.goto(url)
                 page.locator('#mode').wait_for(state='visible')
+                if page.locator('[data-intent=video]').is_visible(): page.locator('[data-intent=video]').click()
                 page.locator('[data-platform="youtube"]').click()
                 page.locator('#stageAudioOnly').check()
                 page.locator('#fullSessionOn').check()

@@ -50,3 +50,14 @@ def test_worker_lock_prevents_cleanup(tmp_path):
         fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
         assert collect(tmp_path,used_limit=60,usage=lambda _:Usage(100,80,20))==[]
     assert old.exists()
+
+
+def test_master_retention_keeps_latest_and_running_work(tmp_path):
+    for name,stamp,status in [('old',1,'done'),('working',2,'running'),('latest',3,'done')]:
+        folder=tmp_path/'Mastering'/name;folder.mkdir(parents=True)
+        record=folder/'job.json';record.write_text(json.dumps({'status':status}));os.utime(record,(stamp,stamp))
+        (folder/'master.mp3').write_bytes(b'mp3')
+    deleted=collect(tmp_path,used_limit=60,usage=lambda _:Usage(100,80,20),now=lambda:10000)
+    assert deleted==['Mastering/old']
+    assert (tmp_path/'Mastering'/'working'/'master.mp3').is_file()
+    assert (tmp_path/'Mastering'/'latest'/'master.mp3').is_file()

@@ -54,6 +54,7 @@ def main():
             # Any original-video fallback must fail this journey rather than authorize it.
             page.on('dialog',lambda d:(_ for _ in ()).throw(AssertionError(d.message)))
             page.goto(url);page.locator('#mode').wait_for(state='visible',timeout=30000)
+            if page.locator('[data-intent=video]').is_visible(): page.locator('[data-intent=video]').click()
             page.locator('[data-platform="youtube"]').click();page.locator('#videoName').fill('Session camera song')
             page.locator('#fullSessionOn').check()
             page.wait_for_function('montaraCompanion.info !== null',timeout=10000)

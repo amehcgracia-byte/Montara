@@ -20,7 +20,7 @@ const packApi=(path,body,method)=>{
 function packInput(){
   packOption.hidden=state.platform!=='reel';const on=packEnabled();$('#pushPackLink').hidden=!on;$('#pushPackResume').hidden=!sessionStorage.getItem('montara-push-pack');
   if(on && state.files.length && state.files.every(f=>f.sample)){const next=$('#pushPackURL').value.trim()?[]:[videos()[0]].filter(Boolean);if(state.files.length!==next.length){state.files=next;$('#sampleNote').hidden=!next.length;packNativeFiles();}}
-  $('[data-drop="audio"]').closest('.box').hidden=on;$('#footage .branding').hidden=on;
+  $('[data-drop="audio"]').closest('.box').hidden=on;$('#footage .branding').hidden=on || !!state.audioTask;
   nativeVideoDrop.querySelector('strong').textContent=on?'Drop one music video':'Drop your videos';
   nativeVideoDrop.querySelector('span').textContent=on?'One video, with the song in its audio track.':'Every camera of the performance: phone, camera, 360. They don’t need to start together.';
   if(on){const ready=!!$('#pushPackURL').value.trim() || videos().length===1;$('#continueFootage').disabled=state.uploads>0 || !ready;$('#pushPackInputStatus').textContent=state.uploads?'Uploading your video…':videos().length>1?'Choose a single video for the four-reel pack.':'';}

@@ -17,7 +17,7 @@
     <span data-step="footage">Footage</span><span data-step="mix">Mix</span><span data-step="cameras">Cameras</span><span data-step="making">Edit</span><span data-step="frames">Frames</span><span data-step="showReview">Review</span><span data-step="captions">Captions</span><span data-step="result">Result</span>
   </nav>
   <a class="btn ghost small" id="sharePreview" href="https://montara-tau.vercel.app/" target="_blank" rel="noopener" hidden>Share Montara</a>
-  <button class="btn primary" id="newVideo" data-go="mode">New video</button>
+  <button class="btn primary" id="newVideo" data-go="mode">New project</button>
 </header>
 
 <main>
@@ -34,18 +34,22 @@
 
   <!-- Step 1: mode -->
   <section class="screen" id="mode" hidden>
-    <h2>How</h2>
-    <div class="modes">
-      <button class="mode" data-platform="youtube">
-        <h3>Stage</h3><small class="mode-hint">Mix your music. Cut your video.</small>
-      </button>
-      <button class="mode" data-platform="reel">
-        <h3>Push</h3><small class="mode-hint">Create reels from your videos.</small>
-      </button>
-      <button class="mode" data-platform="show">
-        <h3>Show</h3><small class="mode-hint">Creators, stories and podcasts.</small>
-      </button>
+    <h2 id="modeQuestion">What would you like to make?</h2>
+    <div class="modes" id="intentChoices">
+      <button class="mode" data-intent="music"><h3>Music</h3><small class="mode-hint">Mix tracks or master a finished song.</small></button>
+      <button class="mode" data-intent="video"><h3>Video</h3><small class="mode-hint">Music videos, reels, stories and podcasts.</small></button>
     </div>
+    <div class="modes" id="musicChoices" hidden>
+      <button class="mode" data-audio-task="song"><h3>Mix a song</h3><small class="mode-hint">Separate instruments. One balanced mix.</small></button>
+      <button class="mode" data-audio-task="session"><h3>Mix a full session</h3><small class="mode-hint">Find the songs. Mix and download each one.</small></button>
+      <button class="mode" data-audio-task="master"><h3>Master a mix</h3><small class="mode-hint">One finished mix. Adjust loudness and peaks.</small></button>
+    </div>
+    <div class="modes" id="videoChoices" hidden>
+      <button class="mode" data-platform="youtube"><h3>Stage</h3><small class="mode-hint">Your cameras and song, as one music video.</small></button>
+      <button class="mode" data-platform="reel"><h3>Push</h3><small class="mode-hint">Short vertical reels from your videos.</small></button>
+      <button class="mode" data-platform="show"><h3>Show</h3><small class="mode-hint">Edit a story, creator video or podcast.</small></button>
+    </div>
+    <div class="actions"><button id="modeQuestionBack" class="btn ghost" type="button" hidden>Back</button></div>
   </section>
 
   <nav id="showNavigation" class="actions" aria-label="Show steps" hidden><button class="btn ghost small" data-show-step="showSetup">1 · Videos</button><button class="btn ghost small" data-show-step="showStyle">2 · Edit type</button><button class="btn ghost small" data-show-step="showReview" disabled>3 · Review</button></nav>
@@ -95,7 +99,8 @@
 
   <!-- Step 2: footage -->
   <section class="screen" id="footage" hidden>
-    <h2><span id="modeLabel">Stage</span> · Add your footage</h2>
+    <h2><span id="modeLabel">Stage</span> · Add your files</h2>
+    <p class="lead small" id="taskHelp"></p>
     <div id="stageSessionOptions" class="actions" hidden><label><input id="stageAudioOnly" type="checkbox"> Audio only</label><label><input id="fullSessionOn" type="checkbox"> Full session · audio</label><button id="sessionResume" class="btn ghost small" type="button" hidden>Resume latest</button></div>
     <p class="hint" id="sampleNote" hidden>Sample material from a real jam is loaded so you can try Montara right away. <button class="link" id="clearSamples">Use my own files instead</button><span id="variantRow"> · <button class="link" id="switchSample"></button></span></p>
     <p class="hint" id="companionNote" hidden>Companion connected: your videos stay on your computer and only small versions are uploaded. In this test the final video is made from those small versions.</p>
@@ -125,7 +130,7 @@
     </div>
     <p class="hint small-note">Photos are not used here (Story, coming soon, will take them).</p>
     <div class="form">
-      <label>Video name <input id="videoName" type="text" maxlength="80"></label>
+      <label>Project name <input id="videoName" type="text" maxlength="80"></label>
       <div id="formatRow" class="formats" hidden>
         <span class="label">Format</span>
         <div class="formatgrid">
@@ -318,7 +323,7 @@
     <div id="resultMusicCredits" hidden><button class="btn ghost small" id="resultMusicCreditsOpen" type="button">Music attribution</button></div>
     <div class="actions">
       <a class="btn primary" id="download" href="/api/v1/wizard/result" download>Download</a>
-      <button class="btn ghost" data-go="mode">New video</button>
+      <button class="btn ghost" data-go="mode">New project</button>
     </div>
   </section>
 
@@ -368,6 +373,7 @@
 <script src="footage-memory.js"></script>
 <script src="companion.js"></script>
 <script src="track-types.js"></script>
+<script src="sync-selection.js"></script>
 <script src="montara.js"></script>
 <script src="session-video.js"></script>
 <script src="full-session.js"></script>
