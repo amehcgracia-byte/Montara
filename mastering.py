@@ -160,4 +160,6 @@ def register_mastering(app, data_root: Path, fixtures: Path):
         ready = jobs.get(key, {}).get('status') == 'done' or (record.is_file() and json.loads(record.read_text()).get('status') == 'done')
         if not ready:
             return jsonify(error={'message': 'The master is not ready'}), 409
+        if not (folder / 'master.mp3').is_file():
+            return jsonify(error={'message': 'This older master has been cleared. Master your finished mix again.'}), 404
         return send_file(folder / 'master.mp3', mimetype='audio/mpeg', conditional=True)

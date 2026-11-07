@@ -46,6 +46,8 @@ def test_stereo_finished_mix_preserves_balance_duration_and_checks_encoded_peaks
     assert not {'title','artist','album','track'}.intersection(k.lower() for k in tags)
     assert not list((tmp_path/'data'/'Mastering').glob('*/master.wav'))
     assert source.is_file()
+    (tmp_path/'data'/'Mastering'/job['id']/'master.mp3').unlink()
+    assert client.get(f"/montara/master/{job['id']}/result").status_code==404
 
 
 def test_mastering_rejects_separate_stems_and_foreign_remote_paths(tmp_path, monkeypatch):
