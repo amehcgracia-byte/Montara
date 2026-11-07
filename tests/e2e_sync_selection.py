@@ -40,17 +40,20 @@ def main():
             page.locator('[data-drop=audio] input').set_input_files(str(media/'master.wav'))
             page.wait_for_function('state.files.length===4 && !state.uploads && state.files.every(f=>f.path)',timeout=120000)
             page.locator('input[name=branding][value=none]').check()
+            # Only the explicit filler is retained without audio evidence.
+            page.evaluate("""() => {
+              const file=state.files.find(f=>f.name==='silent.mp4');
+              file.usage='filler';
+            }""")
             page.locator('#continueFootage').click();page.locator('#cameras').wait_for(state='visible',timeout=120000)
             page.locator('#continueCameras').click()
-            dialog=page.locator('dialog.cut-dialog');dialog.wait_for(state='visible',timeout=180000)
-            assert 'other-song.mp4' in dialog.inner_text()
-            assert 'silent.mp4' not in dialog.inner_text()
-            page.screenshot(path=str(out/'01-review-before-render.png'),full_page=True)
-            dialog.get_by_role('button',name='Use these sources',exact=True).click()
+            page.screenshot(path=str(out/'01-auto-source-selection.png'),full_page=True)
+            assert page.locator('dialog.cut-dialog').count()==0
             page.wait_for_selector('#frames:not([hidden]),#failed:not([hidden])',timeout=300000)
             assert page.locator('#frames').is_visible(),page.locator('#errorText').inner_text()
             assert page.evaluate("state.files.some(f=>f.name==='silent.mp4' && f.usage==='filler')")
             assert page.evaluate("[...state.syncExcluded].some(p=>p.endsWith('other-song.mp4'))")
+            assert not page.evaluate("[...state.syncExcluded].some(p=>p.endsWith('silent.mp4'))")
             project=page.request.get(url+'/api/v1/project').json()
             assert len(project['inputs']['videos'])==2
             # Source review preserves the uploaded unrelated camera in the UI,
