@@ -152,7 +152,7 @@ function show(id) {
   $$("[data-show-step]").forEach(b=>b.classList.toggle('on',b.dataset.showStep===id));
   if (!showNavigating) {
     const entry = {...history.state, montaraStep:id, montaraFlow:navigationFlow,
-      montaraPlatform:state.platform, montaraProject:state.projectId};
+      montaraPlatform:state.platform, montaraProject:state.projectId, montaraQuestion:modeQuestion};
     if (id === 'home' || history.state?.montaraFlow !== navigationFlow || history.state?.montaraStep === 'home' ||
         (history.state?.montaraStep === 'making' && ['frames','result','showReview'].includes(id))) {
       history.replaceState(entry, '', location.href);
@@ -2769,7 +2769,7 @@ window.addEventListener('popstate',event=>{
   if(!stale && entry.montaraPlatform)state.platform=entry.montaraPlatform;
   if(step==='showReview' && !showEdit.scenes.length)step='showSetup';
   showNavigating=true;
-  if(step==='mode')chooseQuestion(entry?.montaraQuestion || 'root',false);
+  if(step==='mode')chooseQuestion(stale?'root':entry?.montaraQuestion || 'root',false);
   try {show(step);} finally {showNavigating=false;}
   if(stale)history.replaceState({...history.state,montaraStep:step,montaraFlow:navigationFlow,
     montaraPlatform:state.platform,montaraProject:state.projectId},'',location.href);
