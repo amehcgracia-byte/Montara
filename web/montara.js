@@ -1587,57 +1587,30 @@ async function saveFillerRoles(input) {
   await api('/settings/fillers', {fillers, cutaways:fillers});
 }
 
-function chooseSyncSources(review, generation) {
-  return new Promise(resolve => {
-    const dialog=document.createElement('dialog');dialog.className='cut-dialog';
-    const title=document.createElement('h3');title.textContent='Some videos could not be synced';
-    const text=document.createElement('p');text.textContent='Keep matching cameras, or use the other images as filler without syncing. Your uploaded files are kept.';
-    const choices=[];
-    dialog.append(title,text);
-    for(const file of review.uncertain){
-      const label=document.createElement('label');label.className='sync-source-choice';
-      const name=document.createElement('span');name.textContent=file.name;
-      const select=document.createElement('select');select.setAttribute('aria-label',`Use for ${file.name}`);
-      for(const [value,text] of [['skip','Not in this song'],...(!isSphere(file)?[['filler','Use as filler']]:[])]){
-        const option=document.createElement('option');option.value=value;option.textContent=text;select.append(option);
-      }
-      label.append(name,select);dialog.append(label);choices.push({file,select});
-    }
-    const actions=document.createElement('div');actions.className='actions';
-    const back=document.createElement('button');back.textContent='Back to footage';back.className='btn';
-    const next=document.createElement('button');next.textContent='Use these sources';next.className='btn primary';
-    next.disabled=!review.ready.length;
-    if(!review.ready.length){const note=document.createElement('p');note.textContent='No camera could be matched to this audio. Choose the matching song or another camera.';dialog.append(note);}
-    const finish=value=>{dialog.close();dialog.remove();resolve(value);};
-    back.onclick=()=>finish(null);next.onclick=()=>finish(choices.map(({file,select})=>({file,usage:select.value})));
-    dialog.oncancel=event=>{event.preventDefault();finish(null);};
-    actions.append(back,next);dialog.append(actions);document.body.append(dialog);dialog.showModal();
-  });
-}
-
 async function prepareStageSources(generation, input, name) {
+  // The editor decides from audio evidence, not from filenames or manual searching.
+  // Only explicitly selected fillers may appear without an audio match.
   await saveFillerRoles(input);
   await workRequest(generation,'/wizard/prepare',{name,platform:'youtube',project_id:state.projectId,...input});
   await waitFor(s=>['waiting_choice','done'].includes(s.status),generation);
   let sync=await api('/artifacts/sync');checkWork(generation);
   const selected=videos().filter(f=>input.videos.includes(f.path));
   const review=SyncSelection.review(selected,sync.clips,{end:sync.master_duration_sec || Infinity});
-  // Stage's silent flat footage is B-roll, never an invented audio anchor.
-  const silent=review.silent.filter(f=>!isSphere(f));
-  review.uncertain.push(...review.silent.filter(isSphere));
-  const choices=review.uncertain.length || !review.ready.length ? await chooseSyncSources(review,generation) : [];
-  checkWork(generation);
-  if(choices===null){show('footage');renderFiles();throw new WorkCancelled();}
-  for(const file of silent){file.usage='filler';remember(file);}
-  for(const {file,usage} of choices){if(usage==='filler')file.usage='filler';else state.syncExcluded.add(file.path);}
-  if(silent.length || choices.length){
+  const rejected=[...review.uncertain,...review.silent];
+  // Keep the original uploads in the project library; only the current render
+  // excludes unrelated or unprovable footage. Never promote silence to filler.
+  for(const file of rejected)state.syncExcluded.add(file.path);
+  if(!review.ready.length){
+    throw new Error('No camera audio matched this song. Select a video containing the music, or choose a different master audio.');
+  }
+  if(rejected.length){
     input={...input,videos:input.videos.filter(path=>!state.syncExcluded.has(path))};
     await workRequest(generation,'/wizard/draft',{name,project_id:state.projectId,platform:'youtube',audio_paths:[input.master],...input});
     await saveFillerRoles(input);
     await workRequest(generation,'/wizard/prepare',{name,platform:'youtube',project_id:state.projectId,...input});
     await waitFor(s=>['waiting_choice','done'].includes(s.status),generation);
     sync=await api('/artifacts/sync');checkWork(generation);
-    if(silent.length)toast(`${silent.length} silent video${silent.length===1?'':'s'} used as filler.`);
+    toast(`Matched ${review.ready.length} camera${review.ready.length===1?'':'s'}; skipped ${rejected.length} unrelated video${rejected.length===1?'':'s'}.`);
   }
   return {input,sync};
 }
