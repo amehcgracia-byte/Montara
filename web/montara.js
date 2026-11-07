@@ -51,6 +51,7 @@ const BOX_HELP = {
 
 const state = {
   platform: null,
+  audioTask: null,
   files: [],          // {id, name, kind: video|master|songs|ignored|uploading|error, path, progress, sample, projection}
   uploads: 0,
   projectId: null,
@@ -61,6 +62,7 @@ const state = {
   roles: {},          // path -> fixed_rear | handheld
   branding: "montara",
   hasLogo: false,
+  syncExcluded: new Set(),
 };
 
 const $ = (sel) => document.querySelector(sel);
@@ -113,6 +115,7 @@ function escapeHtml(text) {
 const STEP_ORDER = ["footage", "showSetup", "showStyle", "mix", "cameras", "making", "frames", "showReview", "captions", "result"];
 // Steps that apply to this video: no Mix step without separate tracks, no Captions outside Pulse.
 function stepApplies(step) {
+  if(state.audioTask)return (state.audioTask==='master'?['footage','making','result']:['footage','mix','result']).includes(step);
   if (state.platform === "show") return ["footage", "making", "showReview", "result"].includes(step);
   if (step === "showReview") return false;
   if (step === "cameras") return !state.files.length || videos().length > 0;
@@ -130,12 +133,13 @@ function rememberOpenEdit(id){
   if(!state.projectId || ['home','mode'].includes(id))return;
   try {sessionStorage.setItem('montara-open-edit',JSON.stringify({
     project:state.projectId,platform:state.platform,step:id,name:$('#videoName').value,
-    branding:state.branding,localProject:state.localProject,mixMaster:state.mixMaster,
+    audioTask:state.audioTask,branding:state.branding,localProject:state.localProject,mixMaster:state.mixMaster,
     nativeJob:state.nativeExport?.id || state.lastNativeJob,
-    files:state.files.filter(f=>f.path).map(({id,name,path,kind,small,original,projection,preview,duration,cameraType})=>({id,name,path,kind,small,original,projection,preview,duration,cameraType}))
+    files:state.files.filter(f=>f.path).map(({id,name,path,kind,small,original,projection,preview,duration,cameraType,usage})=>({id,name,path,kind,small,original,projection,preview,duration,cameraType,usage}))
   }));} catch {}
 }
 function show(id) {
+  if (id !== 'footage' && trackAudition.audio) stopTrackAudition();
   rememberOpenEdit(id);
   clearTimeout(introTimer);
   stopFrameHover();
@@ -144,10 +148,12 @@ function show(id) {
   if(state.platform==='show' && id!=='showReview'){$('#showSceneVideo').pause();clearTimeout(showEdit.previewTimer);showEdit.previewToken++;$('#showPreviewPart').disabled=false;showSmoothRequest++;$('#showLivePlay').disabled=false;if(['showSetup','showStyle'].includes(id))stopPolling();}
   const showStep=state.platform==='show' && ['showSetup','showStyle','making','showReview','result'].includes(id);
   $("#showNavigation").hidden=!showStep;
+  $('#steps [data-step=footage]').textContent=state.audioTask?'Audio':'Footage';
+  $('#steps [data-step=making]').textContent=state.audioTask==='master'?'Master':'Edit';
   $$("[data-show-step]").forEach(b=>b.classList.toggle('on',b.dataset.showStep===id));
   if (!showNavigating) {
     const entry = {...history.state, montaraStep:id, montaraFlow:navigationFlow,
-      montaraPlatform:state.platform, montaraProject:state.projectId};
+      montaraPlatform:state.platform, montaraProject:state.projectId, montaraQuestion:modeQuestion, montaraMaster:state.audioTask==='master'?state.masterId:null};
     if (id === 'home' || history.state?.montaraFlow !== navigationFlow || history.state?.montaraStep === 'home' ||
         (history.state?.montaraStep === 'making' && ['frames','result','showReview'].includes(id))) {
       history.replaceState(entry, '', location.href);
@@ -192,21 +198,60 @@ document.addEventListener("click", (event) => {
   if (!go) return;
   event.preventDefault();
   const target = go.dataset.go === "footage" && state.platform === "show" ? "showSetup" : go.dataset.go;
-  if ((target === "mode" || target === "home") && state.polling) return toast("A video is still being made.");
+  if ((target === "mode" || target === "home") && (state.polling || state.masterJob || state.masterStart)) return toast("A task is still running. Continue or cancel it first.");
   if (target === "mode") resetFlow();
   show(target);
 });
 
+const AUDIO_TASKS = {
+  song: ['Mix a song', 'Add one track per instrument or microphone from the same song. You can adjust the mix before downloading.'],
+  session: ['Mix a full session', 'Add the instrument or microphone tracks for the whole session. Montara finds the songs first. Several hours of audio take longer to prepare; progress is shown per track.'],
+  master: ['Master a mix', 'Add one finished mix. Montara measures loudness and peaks, then checks the final master. The instrument balance stays yours.'],
+};
+let modeQuestion='root';
+function chooseQuestion(value, push=true){
+  modeQuestion=['music','video'].includes(value)?value:'root';
+  $('#intentChoices').hidden=modeQuestion!=='root';$('#musicChoices').hidden=modeQuestion!=='music';$('#videoChoices').hidden=modeQuestion!=='video';
+  $('#modeQuestionBack').hidden=modeQuestion==='root';
+  $('#modeQuestion').textContent=modeQuestion==='root'?'What would you like to make?':modeQuestion==='music'?'What does your music need?':'What kind of video?';
+  if(push)history.pushState({...history.state,montaraQuestion:modeQuestion},'',location.href);
+}
+$$('[data-intent]').forEach(button=>button.onclick=()=>chooseQuestion(button.dataset.intent));
+$('#modeQuestionBack').onclick=()=>history.back();
+function resumeMasterTask(){
+  if(!state.masterJob && !state.masterStart)return false;
+  if(work.cancelling){toast('Wait for cancellation to finish.');return true;}
+  toast('Finish or cancel your current master before starting another task.');
+  show('making');const generation=beginWork();
+  Promise.resolve(state.masterStart || {id:state.masterJob}).then(job=>watchMasterOnly(generation,job.id)).catch(fail);
+  return true;
+}
+$$('[data-audio-task]').forEach(button=>button.onclick=()=>{
+  if(resumeMasterTask())return;
+  if(state.audioTask===button.dataset.audioTask && state.files.length){show('footage');return;}
+  resetFlow();state.platform='youtube';state.audioTask=button.dataset.audioTask;
+  chooseQuestion('music',false);
+  history.replaceState({...history.state,montaraStep:'mode',montaraFlow:navigationFlow,montaraQuestion:'music',montaraProject:null,montaraPlatform:'youtube'},'',location.href);
+  $('#stageAudioOnly').checked=true;$('#fullSessionOn').checked=state.audioTask==='session';
+  $('#videoName').value=todayName();$('#modeLabel').textContent=AUDIO_TASKS[state.audioTask][0];
+  $('#durationRow').hidden=true;$('#formatRow').hidden=true;
+  renderFiles();show('footage');
+  loadSamples(state.audioTask==='master'?'master':'').catch(console.warn);
+  offerRestore().catch(console.warn);watchCompanion();
+});
+
 $$(".mode[data-platform]").forEach((card) => card.addEventListener("click", () => {
-  if (state.platform === card.dataset.platform && state.files.length) {
+  if(resumeMasterTask())return;
+  if (!state.audioTask && state.platform === card.dataset.platform && state.files.length) {
     show(state.platform === 'show' ? 'showSetup' : 'footage');
     return;
   }
-  if (state.platform && state.platform !== card.dataset.platform) {
-    resetFlow();
-    history.replaceState({...history.state,montaraStep:'mode',montaraFlow:navigationFlow,
+  if (state.audioTask || state.platform && state.platform !== card.dataset.platform) {
+    resetFlow();chooseQuestion('video',false);
+    history.replaceState({...history.state,montaraStep:'mode',montaraFlow:navigationFlow,montaraQuestion:'video',
       montaraPlatform:null,montaraProject:null},'',location.href);
   }
+  state.audioTask=null;$("#stageAudioOnly").checked=false;$("#fullSessionOn").checked=false;
   state.platform = card.dataset.platform;
   if (state.platform === "show") { openShowSetup().catch(fail); return; }
   $("#modeLabel").textContent = MODES[state.platform];
@@ -219,20 +264,25 @@ $$(".mode[data-platform]").forEach((card) => card.addEventListener("click", () =
   state.files = state.files.filter((f) => !f.sample);
   renderFiles();
   show("footage");
-  loadSamples().catch((error) => console.warn("Samples unavailable", error));
+  loadSamples(state.platform === "youtube" ? "master" : "").catch((error) => console.warn("Samples unavailable", error));
   offerRestore().catch((error) => console.warn("Footage memory", error));
   watchCompanion();
 }));
 
 function resetFlow() {
+  stopTrackAudition();
+  const nextURL=new URL(location.href);
+  for(const key of ['resume','mode','push_pack','session'])nextURL.searchParams.delete(key);
+  history.replaceState(history.state,'',nextURL.pathname+nextURL.search+nextURL.hash);
   navigationFlow = crypto.randomUUID();
-  try {sessionStorage.removeItem('montara-open-edit');} catch {}
+  try {sessionStorage.removeItem('montara-open-edit');sessionStorage.removeItem('montara-last-master');} catch {}
   stopPolling();
-  state.localProject = null;
+  state.localProject = null;state.masterId=null;state.masterJob=null;state.masterStart=null;
   state.lastNativeJob=null;
   state.savedLocally = false;
   range.start = 0; range.end = null;
-  state.platform = null;
+  state.platform = null;state.audioTask=null;state.syncExcluded.clear();
+  $('#stageAudioOnly').checked=false;$('#fullSessionOn').checked=false;chooseQuestion('root',false);
   state.files = [];
   state.projectId = null;
   state.captioned = false;
@@ -265,6 +315,7 @@ async function loadSamples(variant = "") {
       state.files.push({ id: crypto.randomUUID(), name: kind === "master" && state.platform === "reel" ? "Song master · Much to Me" : item.path.split("/").pop(), kind, path: item.path, projection: item.projection, sample: true, showSource: state.platform === "show", ...(data.example ? {name:data.example.title,exampleDuration:data.example.duration}: {}) });
     }
   }
+  if(state.audioTask)state.files=state.files.filter(f=>f.kind!=='video');
   for (const [path, slots] of Object.entries(data.viewpoints || {})) state.viewpoints[path] = structuredClone(slots);
   $("#sampleNote").hidden = false;
   state.sampleVariant = variant;
@@ -316,7 +367,7 @@ function addFiles(list, handles = []) {
   for (const file of list) {
     const handle = unused.splice(unused.findIndex((h) => h.name === file.name) >>> 0, 1)[0];
     const entry = { id: crypto.randomUUID(), name: file.name, kind: "uploading", progress: 0, localFile: file,
-      memory: { platform: state.platform, size: file.size, lastModified: file.lastModified, handle: handle?.name === file.name ? handle : undefined } };
+      memory: { platform: state.platform, task: state.audioTask || 'video', size: file.size, lastModified: file.lastModified, handle: handle?.name === file.name ? handle : undefined } };
     state.files.push(entry);
     remember(entry);
     upload(file, entry);
@@ -329,7 +380,7 @@ let lastRealInput=0,lastActivitySent=0;
 ['pointerdown','keydown','wheel','touchstart'].forEach(name=>addEventListener(name,()=>{lastRealInput=Date.now();},{passive:true}));
 setInterval(()=>{
   const now=Date.now();
-  const busy=state.polling || state.uploads || state.nativeExport ||
+  const busy=state.polling || state.uploads || state.nativeExport || state.masterJob ||
     (typeof fullSession!=='undefined' && (fullSession.busy || fullSession.sending));
   if(now-lastActivitySent<30000 || (!busy && now-lastRealInput>30000))return;
   lastActivitySent=now;
@@ -420,17 +471,17 @@ async function watchCompanion() {
 // ---------- footage memory: survive a reload ----------
 function remember(entry) {
   if (!entry.memory) return;
-  const { id, name, kind, path, reason, projection, duration, uploadId, small, preview, original } = entry;
-  footageMemory.save({ id, name, kind: kind === "error" ? "uploading" : kind, path, reason, projection, duration, uploadId, small, preview, original, ...entry.memory });
+  const { id, name, kind, path, reason, projection, duration, uploadId, small, preview, original, usage } = entry;
+  footageMemory.save({ id, name, kind: kind === "error" ? "uploading" : kind, path, reason, projection, duration, uploadId, small, preview, original, usage, ...entry.memory });
 }
 async function offerRestore() {
-  const records = (await footageMemory.list(state.platform)).filter((r) => !state.files.some((f) => f.id === r.id));
+  const records = (await footageMemory.list(state.platform)).filter(r=>(r.task || 'video')===(state.audioTask || 'video')).filter((r) => !state.files.some((f) => f.id === r.id));
   state.restorable = records;
   const done = records.filter((r) => r.path).length;
   $("#restoreText").textContent = `${records.length} file${records.length === 1 ? "" : "s"} from your last visit` + (done < records.length ? ` (${records.length - done} still to upload).` : ".");
   $("#restoreNote").hidden = !records.length || state.files.some((f) => !f.sample);
 }
-$("#restoreForget").addEventListener("click", async () => { await footageMemory.clear(state.platform); state.restorable = []; $("#restoreNote").hidden = true; });
+$("#restoreForget").addEventListener("click", async () => { await Promise.all((state.restorable || []).map(record=>footageMemory.forget(record.id))); state.restorable = []; $("#restoreNote").hidden = true; });
 $("#restoreFiles").addEventListener("click", async () => {
   const records = state.restorable || [];
   $("#restoreNote").hidden = true;
@@ -438,8 +489,8 @@ $("#restoreFiles").addEventListener("click", async () => {
   $("#sampleNote").hidden = true;
   for (const record of records) {
     const entry = { id: record.id, name: record.name, kind: record.kind, path: record.path, reason: record.reason, projection: record.projection,
-      duration: record.duration, uploadId: record.uploadId, small: record.small, preview: record.preview, original: record.original, progress: 0,
-      memory: { platform: record.platform, size: record.size, lastModified: record.lastModified, handle: record.handle } };
+      usage: record.usage, duration: record.duration, uploadId: record.uploadId, small: record.small, preview: record.preview, original: record.original, progress: 0,
+      memory: { platform: record.platform, task: record.task, size: record.size, lastModified: record.lastModified, handle: record.handle } };
     state.files.push(entry);
     if (record.path) continue;
     let file = null;
@@ -474,7 +525,7 @@ async function uploadSmall(file, entry) {
   try {
     // A full session only needs light previews; the export asks for the original song ranges.
     // Big audio files in Stage are whole sessions in practice (20 min of 24-bit mono ≈ 170 MB).
-    const preview = state.platform === 'youtube' && ($('#fullSessionOn').checked || (montaraCompanion.isAudio(file) && file.size > LONG_AUDIO_BYTES));
+    const preview = !['master','song'].includes(state.audioTask) && state.platform === 'youtube' && ($('#fullSessionOn').checked || (montaraCompanion.isAudio(file) && file.size > LONG_AUDIO_BYTES));
     small = await montaraCompanion.smallVersion(file, (phase, progress) => { entry.phase = phase; entry.progress = progress; renderFiles(); }, () => entry.removed, {preview});
   } catch (error) { console.warn(error); }
   // Companion problems never trigger an automatic video-original upload.
@@ -582,10 +633,67 @@ async function uploadInParts(file, entry) {
 const KIND_LABEL = { video: "VIDEO", master: "AUDIO", songs: "SONGS", ignored: "SKIPPED", uploading: "UPLOAD", error: "ERROR" };
 const isAudioEntry = (f) => f.kind === "master" || f.kind === "songs" || (f.kind !== "video" && /\.(wav|mp3|m4a|aiff?|flac|ogg)$/i.test(f.name));
 function fileLabel(f) {
-  if (f.kind === "video") return isSphere(f) ? "360" : "VIDEO";
+  if (f.kind === "video") return f.usage === "filler" ? "FILLER" : isSphere(f) ? "360" : "VIDEO";
+  if(state.audioTask==='master' && f.kind==='master')return 'MIX';
   if (f.kind === "master" || f.kind === "songs") return mixerMode() ? "TRACK" : "MASTER";
   return KIND_LABEL[f.kind] || f.kind.toUpperCase();
 }
+// One bounded listening preview per uploaded audio track. Never changes the mix or classification.
+const trackAudition = { audio: null, id: null, window: 0, start: 0, token: 0 };
+function stopTrackAudition() {
+  trackAudition.token++;
+  const a=trackAudition.audio;
+  if(a){a.pause();a.removeAttribute('src');a.load();}
+  trackAudition.audio=null;trackAudition.id=null;
+  document.querySelectorAll('[data-audition]').forEach(button => {
+    button.textContent='▶ Listen 12 s';button.setAttribute('aria-pressed','false');
+  });
+}
+async function playTrackAudition(file, next=false) {
+  if(!file?.path && !file?.localFile)return;
+  if(trackAudition.id===file.id && !next){stopTrackAudition();return;}
+  const windowIndex=trackAudition.id===file.id && next ? (trackAudition.window+1)%3 : 0;
+  stopTrackAudition();
+  const token=trackAudition.token;
+  const audio=new Audio();
+  Object.assign(trackAudition,{audio,id:file.id,window:windowIndex,start:0});
+  audio.preload='metadata';audio.src=audioUrl(file);
+  const button=[...document.querySelectorAll('[data-audition]')].find(b=>b.dataset.audition===file.id);
+  if(button){button.textContent='Loading…';button.setAttribute('aria-pressed','true');}
+  const finish=()=>{if(trackAudition.token===token)stopTrackAudition();};
+  audio.addEventListener('error',()=>{if(trackAudition.token===token){finish();toast('Could not play this audio track.',true);}});
+  audio.addEventListener('timeupdate',()=>{
+    if(trackAudition.token!==token)return;
+    if(audio.currentTime-trackAudition.start>=12)finish();
+  });
+  audio.addEventListener('ended',finish);
+  try {
+    await new Promise((resolve,reject)=>{
+      if(audio.readyState>=1){resolve();return;}
+      audio.addEventListener('loadedmetadata',resolve,{once:true});
+      audio.addEventListener('error',()=>reject(new Error('Audio metadata unavailable')),{once:true});
+    });
+    if(trackAudition.token!==token)return;
+    const duration=Number.isFinite(audio.duration)?audio.duration:Number(file.duration)||0;
+    const room=Math.max(0,duration-12);
+    const start=room ? Math.min(room,room*[.25,.5,.75][windowIndex]) : 0;
+    trackAudition.start=start;
+    if(start>0)audio.currentTime=start;
+    await audio.play();
+    if(trackAudition.token===token && button)button.textContent='❚❚ Stop';
+  }catch(error){
+    if(trackAudition.token===token){finish();toast('Cannot play this track. Try another audio format.',true);}
+  }
+}
+document.addEventListener('click',event=>{
+  const play=event.target.closest('[data-audition]');
+  const another=event.target.closest('[data-audition-next]');
+  const button=play||another;
+  if(!button)return;
+  const file=state.files.find(f=>f.id===(play?.dataset.audition||another?.dataset.auditionNext));
+  if(file)playTrackAudition(file,Boolean(another));
+});
+
 // Minutes left for one file, from its own pace (restarts when its phase changes).
 function uploadEta(f) {
   const now = performance.now() / 1000;
@@ -603,6 +711,8 @@ function fileRow(f, typed = false) {
       <span class="state">${f.kind === "uploading" ? (f.phase ? escapeHtml(f.phase) + " " : "") + Math.round(f.progress * 100) + "%" + uploadEta(f) : f.small && f.kind === "video" ? "Ready · small version" : f.preview ? "Ready · preview" : f.small ? "Ready · lossless" : f.kind === "error" ? escapeHtml(f.error) : f.kind === "ignored" ? escapeHtml(f.reason || "not used") : "Ready"}</span>
       <button class="remove" data-remove-file="${f.id}" type="button" aria-label="Remove ${escapeHtml(f.name)}" title="Remove">×</button>
       ${f.wholeFile && f.kind === "error" ? `<button class="link whole" data-upload-whole="${f.id}" type="button">Upload the whole file (${(f.wholeFile.size / 1e9).toFixed(1)} GB)</button>` : ""}
+      ${state.platform === 'youtube' && f.kind === 'video' && !isSphere(f) ? `<label class="track-type">Use as <select data-video-usage="${f.id}" aria-label="Use for ${escapeHtml(f.name)}"><option value="camera" ${f.usage !== 'filler' ? 'selected' : ''}>Camera</option><option value="filler" ${f.usage === 'filler' ? 'selected' : ''}>Filler · no sync</option></select></label>` : ''}
+      ${f.path && (f.kind === "master" || f.kind === "songs") && state.audioTask !== 'master' ? `<span class="track-audition"><button type="button" data-audition="${f.id}" aria-pressed="false" aria-label="Listen to ${escapeHtml(f.name)} for 12 seconds">▶ Listen 12 s</button><button type="button" data-audition-next="${f.id}" aria-label="Listen to another part of ${escapeHtml(f.name)}">Another part</button></span>` : ""}
       ${typed && (f.kind === "master" || f.kind === "songs") ? TrackTypes.controls(f.name) : ""}
       ${f.kind === "uploading" ? `<span class="bar"><i style="width:${Math.round(f.progress * 100)}%"></i></span>` : ""}
     </li>`;
@@ -617,6 +727,16 @@ document.addEventListener('click', event => {
   renderFiles();
 });
 
+document.addEventListener('change', event => {
+  const select = event.target.closest('[data-video-usage]');
+  const file = select && state.files.find(f => f.id === select.dataset.videoUsage);
+  if (!file) return;
+  file.usage = select.value;remember(file);
+  state.syncExcluded.delete(file.path);
+  rememberOpenEdit('footage');
+  renderFiles();
+});
+
 // Every file row can be removed, also while it uploads: the upload stops and
 // an unfinished server copy is discarded. Finished files simply leave this project.
 document.addEventListener('click', event => {
@@ -624,6 +744,7 @@ document.addEventListener('click', event => {
   if (!button) return;
   const entry = state.files.find(f => f.id === button.dataset.removeFile);
   if (!entry) return;
+  if(trackAudition.id===entry.id)stopTrackAudition();
   entry.removed = true;
   footageMemory.forget(entry.id);
   if (entry.xhr && entry.kind === 'uploading') entry.xhr.abort();
@@ -635,7 +756,14 @@ document.addEventListener('click', event => {
   renderFiles();
 });
 function renderFiles() {
-  $('#stageSessionOptions').hidden = state.platform !== 'youtube';
+  $('#stageSessionOptions').hidden = state.platform !== 'youtube' || !!state.audioTask && state.audioTask!=='session';
+  $('#stageAudioOptions').hidden=!!state.audioTask;
+  $('#taskHelp').textContent=state.audioTask ? AUDIO_TASKS[state.audioTask][1] : state.platform==='youtube' ? 'Add the cameras and a finished mix of the same performance. A 360 video lets you turn the view inside the picture; use a stitched MP4.' : 'Choose your clips, then the part you want to turn into a reel.';
+  $('#footage .branding').hidden=!!state.audioTask;$('#footage .small-note').hidden=!!state.audioTask;
+  $('#audioSub').textContent=state.audioTask==='master'?'One finished mix, in full quality.':state.audioTask?'One track per instrument or microphone.':state.platform==='youtube'?'A finished song master, or separate tracks for an automatic mix.':'Optional: the song for your reel.';
+  $('[data-drop=audio] strong').textContent=state.audioTask==='master'?'Drop your finished mix':'Drop your audio tracks';
+  $('[data-drop=audio] input').multiple=state.audioTask!=='master';
+  $('#footage .boxes').classList.toggle('audio-only',!!state.audioTask);
   $('[data-drop="video"]').closest('.box').hidden = state.platform === 'youtube' && $('#stageAudioOnly').checked;
   // Several tracks of one recording: each one says what it is (pre-filled from its name).
   const typed = state.platform === "youtube" && audioTracks().length >= 2;
@@ -660,6 +788,7 @@ function renderFiles() {
   if (state.platform === 'youtube' && longest > 30 * 60) hint = `${hint ? hint + ' ' : ''}Tip: only send what you need. If you want a few songs from a ${Math.round(longest / 60)} min session, export just that part of the tracks: uploading, finding songs and mixing all take much less time.`;
   if (state.platform === 'youtube' && videos().length && (audioTracks().length >= 2 || state.files.some(f=>f.preview)) && !state.uploads)
     hint = 'Montara will find, mix and master the song in your videos.';
+  if(state.audioTask==='master'){hint=audioTracks().length>1?'Choose one finished mix for mastering.':'';ready=audioTracks().length===1 && state.uploads===0;}
   if (!audioOnly() && state.branding === "mine" && !state.hasLogo) { hint = "Choose your logo, or pick another option."; ready = false; }
   $("#footageHint").textContent = hint;
   $("#continueFootage").disabled = !ready;
@@ -720,7 +849,7 @@ function inputs() {
   return {
     master: master?.path || "",
     songs: mixerMode() ? "" : state.files.find((f) => f.kind === "songs")?.path || "",
-    videos: videos().map((f) => f.path),
+    videos: videos().filter(f => !state.syncExcluded.has(f.path)).map((f) => f.path),
   };
 }
 
@@ -734,11 +863,12 @@ function isWholeSession() {
 }
 
 async function registerProject({mixed = false} = {}) {
+  if(state.audioTask==='master')return runMasterOnly().catch(fail);
   if(work.cancelling)return toast('Wait for cancellation to finish.');
-  if(!mixed){state.mixMaster=null;state.mixDownload=null;}
+  if(!mixed){state.mixMaster=null;state.mixDownload=null;state.syncExcluded.clear();}
   if (!mixed && state.platform === 'youtube' && videos().length && (audioTracks().length >= 2 || state.files.some(f=>f.preview))) return openFullSession(true);
   if (!mixed && videos().length && state.files.some(f => f.preview)) return toast('Some audio was sent as a light session preview. Remove it and add it again to use it in a video.', true);
-  if (state.platform === 'youtube' && !videos().length && !$('#fullSessionOn').checked && isWholeSession()) {
+  if (!state.audioTask && state.platform === 'youtube' && !videos().length && !$('#fullSessionOn').checked && isWholeSession()) {
     $('#fullSessionOn').checked = true;
     toast('This is a whole session: Montara finds the songs first, then mixes each one.');
   }
@@ -777,7 +907,7 @@ function renderCameras() {
   $('#cameras>h2').textContent=state.platform==='reel'?'Your reel':'Your cameras';
   $('#cameras>.lead').hidden=state.platform==='reel';
   $('#cameraList').hidden=state.platform==='reel';
-  $('#cameraList').innerHTML=videos().map((f,index)=>`<div class="cam"><span class="kind video">${String(index+1).padStart(2,'0')}</span><span class="name">${escapeHtml(f.name)}</span><span class="camsel"><label>Camera type<select data-camera-type="${escapeHtml(f.path)}" aria-label="Camera type for ${escapeHtml(f.name)}">${[['360','360'],['fixed','Fixed camera'],['moving','Moving camera']].map(([value,label])=>`<option value="${value}" ${cameraTypeOf(f)===value?'selected':''}>${label}</option>`).join('')}</select></label></span></div>`).join('');
+  $('#cameraList').innerHTML=videos().filter(f=>f.usage!=='filler' && !state.syncExcluded.has(f.path)).map((f,index)=>`<div class="cam"><span class="kind video">${String(index+1).padStart(2,'0')}</span><span class="name">${escapeHtml(f.name)}</span><span class="camsel"><label>Camera type<select data-camera-type="${escapeHtml(f.path)}" aria-label="Camera type for ${escapeHtml(f.name)}">${[['360','360'],['fixed','Fixed camera'],['moving','Moving camera']].map(([value,label])=>`<option value="${value}" ${cameraTypeOf(f)===value?'selected':''}>${label}</option>`).join('')}</select></label></span></div>`).join('');
   $$('[data-camera-type]').forEach(select=>select.onchange=()=>{const f=videos().find(v=>v.path===select.dataset.cameraType);f.cameraType=select.value;if(select.value!=='360')state.roles[f.path]=select.value==='fixed'?'fixed_rear':'handheld';renderCameras();});
   const spheres=videos().filter(isSphere);
   $('#sphereList').innerHTML=spheres.map((f,index)=>`<div class="sphere" data-sphere="${index}"><h3><span class="kind video">360</span> ${escapeHtml(f.name)}</h3><p class="hint">Choose a viewpoint, click where it should look, and give it a name.</p><div class="sphere-body"><ul class="slots"></ul><div class="pano-wrap"><div class="pano"><div class="pano-img"></div><span class="loading">Loading 360 frame…</span></div><p class="hint tiny">Drag to turn · click to place the viewpoint</p><div class="preview"><div class="pv"><img alt="" hidden draggable="false"></div><span class="hint">Drag to aim, scroll to zoom.</span></div></div></div></div>`).join('');
@@ -963,9 +1093,45 @@ function mixLoadingScreen(sources, text) {
   return startFaderDance();
 }
 
+async function runMasterOnly(){
+  const generation=beginWork();
+  if(state.masterStart || state.masterJob){
+    show('making');const existing=await Promise.resolve(state.masterStart || {id:state.masterJob});
+    checkWork(generation);return watchMasterOnly(generation,existing.id);
+  }
+  if(audioTracks().length!==1)throw new Error('Choose one finished mix.');
+  show('making');setProgress(0,'Measuring your finished mix…','');
+  state.masterStart=api('/montara/master',{tracks:[audioTracks()[0].path]});
+  let started;
+  try {started=await state.masterStart;}catch(error){state.masterStart=null;throw error;}
+  state.masterJob=started.id;state.masterId=started.id;
+  try {sessionStorage.setItem('montara-last-master',JSON.stringify({id:started.id,name:$('#videoName').value}));}catch{}
+  checkWork(generation);
+  return watchMasterOnly(generation,started.id);
+}
+async function watchMasterOnly(generation,id){
+  state.masterJob=id;state.masterId=id;
+  if(history.state?.montaraStep==='making')history.replaceState({...history.state,montaraMaster:id},'',location.href);
+  for(;;){
+    const job=await api(`/montara/master/${id}`);checkWork(generation);
+    if(job.status==='failed' || job.status==='cancelled'){state.masterJob=null;state.masterStart=null;throw new Error(job.error || 'Mastering stopped.');}
+    if(job.status==='done'){
+      state.masterJob=null;state.masterStart=null;
+      showResult({result:{audio:true,url:`/montara/master/${job.id}/result`}});
+      $('#resultInfo').textContent=`${job.before.lufs.toFixed(1)} → ${job.after.lufs.toFixed(1)} LUFS · final true peak ${job.after.true_peak_db.toFixed(1)} dBTP`;
+      return;
+    }
+    setProgress(0,job.phase,'');await new Promise(resolve=>setTimeout(resolve,750));
+  }
+}
+
 async function openMixer(sessionTracks = null) {
   if (!sessionTracks) {fullSession.active = false;fullSession.forVideo = false;}
   $("#useMix").textContent=state.platform==='youtube' && videos().length ? 'Use this mix for the video' : 'Use this mix';
+  if(state.audioTask){
+    $('#mix>.lead').textContent='Montara balanced your tracks automatically. Press play and adjust any fader. When it sounds right, make and download the master.';
+    $('#useMix').textContent='Make the master';
+  }else $('#mix>.lead').textContent='Montara mixed your tracks automatically. Press play and move any fader: you hear the change at once. When it sounds right, use this mix for your video or download the mastered audio.';
   const sources = sessionTracks || audioTracks().map((f) => f.path);
   const dance = mixLoadingScreen(sources, "Mixing your tracks automatically…");
   let job;
@@ -1366,7 +1532,7 @@ $("#useMix").addEventListener("click", async () => {
 async function saveCameras() {
   if(state.platform==='youtube')await api("/settings/video-light",{project_id:state.projectId,enabled:true});
   await api("/settings/camera-types",{project_id:state.projectId,camera_types:Object.fromEntries(videos().map(f=>[f.path,cameraTypeOf(f)]))});
-  const flat = videos().filter((f) => !isSphere(f));
+  const flat = videos().filter((f) => !isSphere(f) && f.usage !== "filler" && !state.syncExcluded.has(f.path));
   const subjects = Object.fromEntries(flat.map((f) => [f.path, state.subjects[f.path] || "general"]));
   if (flat.length) await api("/settings/camera-subjects", { camera_subjects: subjects });
   const roles = Object.fromEntries(flat.map((f) => [f.path, state.roles[f.path] || guessRole(f)]));
@@ -1404,16 +1570,75 @@ async function workRequest(generation,path,body) {
   catch(error){checkWork(generation);throw error;}
   finally {work.pending.delete(request);}
 }
+async function saveFillerRoles(input) {
+  const fillers = videos().filter(f=>f.usage==='filler' && input.videos.includes(f.path)).map(f=>f.path);
+  await api('/settings/fillers', {fillers, cutaways:fillers});
+}
+
+function chooseSyncSources(review, generation) {
+  return new Promise(resolve => {
+    const dialog=document.createElement('dialog');dialog.className='cut-dialog';
+    const title=document.createElement('h3');title.textContent='Some videos could not be synced';
+    const text=document.createElement('p');text.textContent='Keep matching cameras, or use the other images as filler without syncing. Your uploaded files are kept.';
+    const choices=[];
+    dialog.append(title,text);
+    for(const file of review.uncertain){
+      const label=document.createElement('label');label.className='sync-source-choice';
+      const name=document.createElement('span');name.textContent=file.name;
+      const select=document.createElement('select');select.setAttribute('aria-label',`Use for ${file.name}`);
+      for(const [value,text] of [['skip','Not in this song'],...(!isSphere(file)?[['filler','Use as filler']]:[])]){
+        const option=document.createElement('option');option.value=value;option.textContent=text;select.append(option);
+      }
+      label.append(name,select);dialog.append(label);choices.push({file,select});
+    }
+    const actions=document.createElement('div');actions.className='actions';
+    const back=document.createElement('button');back.textContent='Back to footage';back.className='btn';
+    const next=document.createElement('button');next.textContent='Use these sources';next.className='btn primary';
+    next.disabled=!review.ready.length;
+    if(!review.ready.length){const note=document.createElement('p');note.textContent='No camera could be matched to this audio. Choose the matching song or another camera.';dialog.append(note);}
+    const finish=value=>{dialog.close();dialog.remove();resolve(value);};
+    back.onclick=()=>finish(null);next.onclick=()=>finish(choices.map(({file,select})=>({file,usage:select.value})));
+    dialog.oncancel=event=>{event.preventDefault();finish(null);};
+    actions.append(back,next);dialog.append(actions);document.body.append(dialog);dialog.showModal();
+  });
+}
+
+async function prepareStageSources(generation, input, name) {
+  await saveFillerRoles(input);
+  await workRequest(generation,'/wizard/prepare',{name,platform:'youtube',project_id:state.projectId,...input});
+  await waitFor(s=>['waiting_choice','done'].includes(s.status),generation);
+  let sync=await api('/artifacts/sync');checkWork(generation);
+  const selected=videos().filter(f=>input.videos.includes(f.path));
+  const review=SyncSelection.review(selected,sync.clips,{end:sync.master_duration_sec || Infinity});
+  // Stage's silent flat footage is B-roll, never an invented audio anchor.
+  const silent=review.silent.filter(f=>!isSphere(f));
+  review.uncertain.push(...review.silent.filter(isSphere));
+  const choices=review.uncertain.length || !review.ready.length ? await chooseSyncSources(review,generation) : [];
+  checkWork(generation);
+  if(choices===null){show('footage');renderFiles();throw new WorkCancelled();}
+  for(const file of silent){file.usage='filler';remember(file);}
+  for(const {file,usage} of choices){if(usage==='filler')file.usage='filler';else state.syncExcluded.add(file.path);}
+  if(silent.length || choices.length){
+    input={...input,videos:input.videos.filter(path=>!state.syncExcluded.has(path))};
+    await workRequest(generation,'/wizard/draft',{name,project_id:state.projectId,platform:'youtube',audio_paths:[input.master],...input});
+    await saveFillerRoles(input);
+    await workRequest(generation,'/wizard/prepare',{name,platform:'youtube',project_id:state.projectId,...input});
+    await waitFor(s=>['waiting_choice','done'].includes(s.status),generation);
+    sync=await api('/artifacts/sync');checkWork(generation);
+    if(silent.length)toast(`${silent.length} silent video${silent.length===1?'':'s'} used as filler.`);
+  }
+  return {input,sync};
+}
+
 async function make() {
   const generation=beginWork();
   const name = $("#videoName").value.trim() || todayName();
   const platform = state.platform;
-  const data = inputs();
+  let data = inputs();
   setProgress(0, "Getting your footage ready…", "");
   show("making");
   if (platform === "youtube") {
-    await workRequest(generation,"/wizard/prepare", { name, platform, project_id: state.projectId, ...data });
-    await waitFor((s) => ["waiting_choice", "done"].includes(s.status),generation);
+    ({input:data}=await prepareStageSources(generation,data,name));
   }
   if (platform === 'youtube') {
     const evidence = state.mixMaster && state.mixMaster === mix.masterPath ? mix.plan?.instrument_activity : null;
@@ -1549,7 +1774,13 @@ $("#cancel").addEventListener("click", async () => {
   button.disabled=true;setProgress(0,'Cancelling…','');
   if(native)native.cancelled=true;
   try {
-    if(native){
+    if(state.masterStart || state.masterJob){
+      const started=state.masterStart ? await state.masterStart : {id:state.masterJob};
+      const response=await fetch(`/montara/master/${started.id}`,{method:'DELETE'});
+      if(!response.ok)throw new Error('Could not stop mastering.');
+      while(['queued','running'].includes((await api(`/montara/master/${started.id}`)).status))await new Promise(resolve=>setTimeout(resolve,250));
+      state.masterJob=null;state.masterStart=null;
+    } else if(native){
       if(native.startRequest)try{native.id=await native.startRequest;}catch(error){if(![400,404,409].includes(error.status))throw error;}
       if(native.id)await montaraCompanion.cancelVideo(native.id);
       state.nativeExport=null;
@@ -2467,6 +2698,7 @@ function showResult(s) {
       .then((saved) => toast(`Saved on your computer: ${saved}`)).catch((error) => toast(error.message, true));
   }
   const url = result.url || `/api/v1/wizard/result?t=${Date.now()}`;
+  $("#playerWrap").hidden = Boolean(result.audio);
   $("#resultVideo").hidden = Boolean(result.audio);
   $("#resultAudio").hidden = !result.audio;
   $("#resultAudio").src = result.audio ? url : "";
@@ -2497,6 +2729,14 @@ api("/montara/version").then((v) => { $("#version").textContent = `Montara ${v.v
 let savedEdit=null;
 try {savedEdit=JSON.parse(sessionStorage.getItem('montara-open-edit'));} catch {}
 const resumeTarget=new URLSearchParams(location.search).get('resume');
+let lastMaster=null;
+try {lastMaster=JSON.parse(sessionStorage.getItem('montara-last-master'));}catch{}
+if(lastMaster?.id && !savedEdit?.project && !resumeTarget){
+  state.platform='youtube';state.audioTask='master';$('#stageAudioOnly').checked=true;$('#videoName').value=lastMaster.name || todayName();
+  $('#modeLabel').textContent=AUDIO_TASKS.master[0];renderFiles();offerRestore().catch(console.warn);
+  const generation=beginWork();show('making');
+  watchMasterOnly(generation,lastMaster.id).catch(fail);return;
+}
 const resumeFrames=resumeTarget==='frames';
 const resumeFootage=resumeTarget==='footage';
 if(resumeFrames || resumeFootage){
@@ -2533,11 +2773,13 @@ if(savedEdit?.project){
     state.files=state.files.map(f=>{const stored=storedFiles.get(f.path);return stored?{...f,preview:f.preview??stored.preview,duration:f.duration||stored.duration,sourceBytes:stored.size,original:f.original||stored.original}:f;});
     const remembered=new Map(state.files.map(f=>[f.path,f]));
     const sourceAudio=state.files.filter(isAudioEntry);
+    state.audioTask=savedEdit.audioTask || null;$('#stageAudioOnly').checked=!!state.audioTask;$('#fullSessionOn').checked=state.audioTask==='session';
     const serverVideos=(project.inputs?.videos||[]).map(f=>({...f,id:crypto.randomUUID(),name:f.path.split('/').pop(),kind:'video',path:f.path,small:/\.small\.mp4$/i.test(f.path),...remembered.get(f.path)}));
     const videoPaths=new Set(serverVideos.map(f=>f.path));
     // The draft may contain only a guide/master. Keep every actual source stem
     // from this browser, rather than replacing them with that intermediate audio.
     const serverAudio=((project.inputs?.master?.path?[project.inputs.master]:project.inputs?.audio)||[]).map(f=>({...f,id:crypto.randomUUID(),name:f.path.split('/').pop(),kind:'master',path:f.path,...remembered.get(f.path)}));
+    for(const file of serverVideos)if(project.settings?.edit?.fillers?.includes(file.path))file.usage='filler';
     state.files=[...serverVideos,...state.files.filter(f=>f.kind==='video' && !videoPaths.has(f.path)),...(sourceAudio.length?sourceAudio:serverAudio)];
     state.mixMaster=savedEdit.mixMaster && savedEdit.mixMaster===project.inputs?.master?.path ? savedEdit.mixMaster : null;
     state.mixDownload=state.mixMaster ? audioUrl({path:state.mixMaster}) : null;
@@ -2601,11 +2843,13 @@ window.addEventListener('popstate',event=>{
     (entry.montaraProject && entry.montaraProject!==state.projectId);
   if(stale || !document.getElementById(step)?.classList.contains('screen'))step='mode';
   stopPolling();
+  if(state.audioTask==='master')++work.generation;
   stopMix();
   $$('video, audio').forEach(media=>media.pause());
   if(!stale && entry.montaraPlatform)state.platform=entry.montaraPlatform;
   if(step==='showReview' && !showEdit.scenes.length)step='showSetup';
   showNavigating=true;
+  if(step==='mode')chooseQuestion(stale?'root':entry?.montaraQuestion || 'root',false);
   try {show(step);} finally {showNavigating=false;}
   if(stale)history.replaceState({...history.state,montaraStep:step,montaraFlow:navigationFlow,
     montaraPlatform:state.platform,montaraProject:state.projectId},'',location.href);
@@ -2614,7 +2858,11 @@ window.addEventListener('popstate',event=>{
     refreshFrames(true).catch(fail);
     pollFrames();
   }
-  if(step==='making' && !state.nativeExport)startPolling();
+  const masterId=entry?.montaraMaster || (state.audioTask==='master' && state.masterId);
+  if(['making','result'].includes(step) && masterId){
+    state.platform='youtube';state.audioTask='master';state.masterId=masterId;
+    watchMasterOnly(beginWork(),masterId).catch(fail);
+  }else if(step==='making' && !state.nativeExport)startPolling();
 });
 
 function rejectRaw360(files) {

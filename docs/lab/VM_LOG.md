@@ -86,3 +86,5 @@ Una línea por acción de administrador (`sudo`). Sin contraseñas, tokens ni ll
 | 2026-11-05 | Codex/JM | Chema: verificar proyecto y acceso móvil | `sudo -u jm`: HTTP autenticado verifica 0.66/2a3104c, engine bfb964c3, mixer f15ff91, proyecto con dos vídeos y máster; Cloudflare responde 200 autenticado y conserva 401 sin acceso. Companion 0.6.5 al mismo motor; FER intacto. |
 
 | 2026-11-06 | Codex/JM | Chema: diagnosticar cargas lentas y errores de audio | `sudo -H -u jm`: sólo lectura, últimas sesiones y logs acotados; primer intento sin ejecución por sintaxis y reintento correcto. HTTP autenticado de versión/estado sin imprimir credenciales. VM 0.67, wizard waiting_review; sin reinicio, cancelación ni cambios en FER. |
+
+| 2026-11-07 | Codex/JM | Chema: diagnosticar carga de cuatro horas y errores de exportación | `sudo -H -u jm`: lecturas acotadas de registros de subidas/journal, metadatos y sync_map; agregados por fase y matriz máster/cámara. Sin alterar fuentes, sincronía, proyecto activo ni FER. VM encontrada apagada; encendida para continuar el diagnóstico autorizado. |

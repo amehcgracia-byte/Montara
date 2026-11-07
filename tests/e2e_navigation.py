@@ -30,16 +30,16 @@ def main():
                 page = browser.new_page(viewport={'width':1440, 'height':960})
                 errors = []; page.on('pageerror', lambda e: (errors.append(str(e)), print('PAGE_ERROR', str(e), flush=True)))
                 page.goto(url); page.locator('#mode').wait_for(state='visible')
+                if page.locator('[data-intent=video]').is_visible(): page.locator('[data-intent=video]').click()
                 page.locator('.mode[data-platform="youtube"]').click()
-                page.wait_for_function("document.querySelectorAll('#videoFiles li, #audioFiles li').length===12")
+                page.wait_for_function("document.querySelectorAll('#videoFiles li, #audioFiles li').length===4")
                 page.locator('#videoName').fill('Keep my Stage take')
                 page.go_back(); page.locator('#mode').wait_for(state='visible')
                 page.go_forward(); page.locator('#footage').wait_for(state='visible')
                 assert page.locator('#videoName').input_value() == 'Keep my Stage take'
-                assert page.locator('#videoFiles li, #audioFiles li').count() == 12
+                assert page.locator('#videoFiles li, #audioFiles li').count() == 4
                 # Navigation-only journey uses the finished master. The separate
                 # Mix journey covers stems -> master -> camera/range ordering.
-                page.locator('#switchSample').click()
                 page.wait_for_function("document.querySelectorAll('#videoFiles li, #audioFiles li').length===4")
                 page.locator('#continueFootage').click()
                 page.locator('#cameras').wait_for(state='visible', timeout=120_000)
@@ -47,6 +47,7 @@ def main():
                 page.go_forward(); page.locator('#cameras').wait_for(state='visible')
                 page.screenshot(path=str(out/'stage-forward.png'), full_page=True)
                 page.go_back(); page.go_back(); page.locator('#mode').wait_for(state='visible')
+                if page.locator('[data-intent=video]').is_visible(): page.locator('[data-intent=video]').click()
                 page.locator('.mode[data-platform="reel"]').click()
                 page.locator('#footage').wait_for(state='visible')
                 page.locator('#videoName').fill('Keep my reel')
@@ -56,6 +57,7 @@ def main():
                 assert page.locator('#formatRow').is_visible()
                 page.screenshot(path=str(out/'push-forward.png'), full_page=True)
                 page.go_back(); page.locator('#mode').wait_for(state='visible')
+                if page.locator('[data-intent=video]').is_visible(): page.locator('[data-intent=video]').click()
                 page.locator('.mode[data-platform="show"]').click()
                 page.locator('#showSetup').wait_for(state='visible')
                 page.wait_for_function("document.querySelector('#showInputStatus').textContent.includes('Example')")

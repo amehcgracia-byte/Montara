@@ -43,6 +43,7 @@ def main():
             page.route('**/companion.js',lambda route:route.fulfill(body=(ROOT/'web/companion.js').read_text().replace('http://127.0.0.1:47820',base),content_type='application/javascript'))
             page.route(base+'/projects',lambda route:route.fulfill(json={'id':project_id,'folder':str(chosen)},headers={'Access-Control-Allow-Origin':url}))
             page.goto(url);page.locator('#mode').wait_for(state='visible',timeout=30000)
+            if page.locator('[data-intent=video]').is_visible(): page.locator('[data-intent=video]').click()
             page.locator('.mode[data-platform="youtube"]').click()
             page.locator('#videoName').fill('Native acceptance')
             page.locator('[data-drop=video] input').set_input_files([str(media/f'camera-{i}.mp4') for i in range(2)]+[str(master)])

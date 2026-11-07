@@ -10,7 +10,7 @@ import time
 from pathlib import Path
 
 LOG = logging.getLogger(__name__)
-BUSY = {'running', 'cancelling', 'detecting', 'preparing', 'rendering'}
+BUSY = {'running', 'cancelling', 'detecting', 'preparing', 'rendering', 'queued'}
 
 
 def _json(path):
@@ -55,7 +55,7 @@ def collect(root, *, used_limit, active_project=None, busy=lambda: False, usage=
         entries = []
         keep = {Path(active_project).resolve()} if active_project else set()
         uploads = (root/'Uploads').resolve()
-        for kind, metadata in [('Sessions','session.json'),('Projects','project.json')]:
+        for kind, metadata in [('Sessions','session.json'),('Projects','project.json'),('Mastering','job.json')]:
             group = []
             for path in (root/kind).glob('*/'+metadata):
                 work = path.parent
@@ -105,7 +105,7 @@ def collect(root, *, used_limit, active_project=None, busy=lambda: False, usage=
                 for artifact in (work/'artifacts').glob('*.json'):
                     candidates |= _references(_json(artifact), uploads)
                 # Do not follow directory links or ever touch paths outside this data root.
-                if work.resolve().parent not in {root/'Sessions',root/'Projects'}:
+                if work.resolve().parent not in {root/'Sessions',root/'Projects',root/'Mastering'}:
                     continue
                 shutil.rmtree(work)
                 deleted.append(str(work.relative_to(root)))
@@ -130,6 +130,8 @@ def start(app, root):
         return
     state = app.config['ZUCKER_STATE']
     def busy():
+        if any(job.get('status') in {'queued','running'} for job in app.extensions.get('montara_mastering_jobs',{}).values()):
+            return True
         if state.wizard.status().get('status') in BUSY:
             return True
         # A session can work in a separate Python process between FFmpeg calls.
