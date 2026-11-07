@@ -227,7 +227,7 @@ def create_montara_app(data_root: Path = DEFAULT_DATA, samples: bool = True):
         except (OSError, ValueError):
             abort(404)
         allowed = path.is_relative_to(data_root) or path.is_relative_to(FIXTURES.resolve())
-        if not allowed or not path.is_file() or path.suffix.lower() not in {".wav", ".mp3", ".m4a", ".aif", ".aiff", ".flac", ".ogg"}:
+        if not allowed or not path.is_file() or path.suffix.lower() not in {".wav", ".mp3", ".m4a", ".aif", ".aiff", ".flac", ".ogg", ".opus"}:
             abort(404)
         return send_file(path, conditional=True)
 
