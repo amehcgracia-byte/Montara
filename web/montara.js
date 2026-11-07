@@ -269,6 +269,9 @@ $$(".mode[data-platform]").forEach((card) => card.addEventListener("click", () =
 }));
 
 function resetFlow() {
+  const nextURL=new URL(location.href);
+  for(const key of ['resume','mode','push_pack','session'])nextURL.searchParams.delete(key);
+  history.replaceState(history.state,'',nextURL.pathname+nextURL.search+nextURL.hash);
   navigationFlow = crypto.randomUUID();
   try {sessionStorage.removeItem('montara-open-edit');sessionStorage.removeItem('montara-last-master');} catch {}
   stopPolling();
@@ -1515,7 +1518,7 @@ async function saveFillerRoles(input) {
 function chooseSyncSources(review, generation) {
   return new Promise(resolve => {
     const dialog=document.createElement('dialog');dialog.className='cut-dialog';
-    const title=document.createElement('h3');title.textContent='Some videos do not match this song';
+    const title=document.createElement('h3');title.textContent='Some videos could not be synced';
     const text=document.createElement('p');text.textContent='Keep matching cameras, or use the other images as filler without syncing. Your uploaded files are kept.';
     const choices=[];
     dialog.append(title,text);

@@ -30,7 +30,9 @@ def main():
             page.locator('[data-intent=music]').click();page.screenshot(path=str(out/'02-music-tasks.png'),full_page=True)
             page.go_back();assert page.locator('#intentChoices').is_visible()
             page.go_forward();assert page.locator('#musicChoices').is_visible()
+            page.evaluate("history.replaceState(history.state,'','?resume=footage')")
             page.locator('[data-audio-task=master]').click()
+            assert 'resume=' not in page.url
             assert not page.locator('[data-drop=video]').is_visible()
             assert not page.locator('#footage .branding').is_visible()
             assert 'one finished mix' in page.locator('#taskHelp').inner_text().lower()
