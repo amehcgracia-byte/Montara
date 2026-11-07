@@ -684,7 +684,7 @@ document.addEventListener('click', event => {
 });
 function renderFiles() {
   $('#stageSessionOptions').hidden = state.platform !== 'youtube' || !!state.audioTask && state.audioTask!=='session';
-  $$('#stageSessionOptions>label').forEach(label=>label.hidden=!!state.audioTask);
+  $('#stageAudioOptions').hidden=!!state.audioTask;
   $('#taskHelp').textContent=state.audioTask ? AUDIO_TASKS[state.audioTask][1] : state.platform==='youtube' ? 'Add the cameras and a finished mix of the same performance. A 360 video lets you turn the view inside the picture; use a stitched MP4.' : 'Choose your clips, then the part you want to turn into a reel.';
   $('#footage .branding').hidden=!!state.audioTask;$('#footage .small-note').hidden=!!state.audioTask;
   $('#audioSub').textContent=state.audioTask==='master'?'One finished mix, in full quality.':state.audioTask?'One track per instrument or microphone.':state.platform==='youtube'?'A finished song master, or separate tracks for an automatic mix.':'Optional: the song for your reel.';
