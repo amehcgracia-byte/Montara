@@ -1,5 +1,5 @@
 """Real Stage: unrelated camera review + silent B-roll + final video export."""
-import argparse,json,subprocess,sys,time
+import argparse,json,subprocess,sys,time,shutil
 from pathlib import Path
 from urllib.request import urlopen
 from playwright.sync_api import sync_playwright
@@ -59,9 +59,29 @@ def main():
             page.locator('#renderFrames').click()
             page.wait_for_selector('#result:not([hidden]),#failed:not([hidden])',timeout=600000)
             assert page.locator('#result').is_visible(),page.locator('#errorText').inner_text()
-            page.locator('#playerWrap .icon-btn').first.click()
-            page.wait_for_function('document.querySelector("#resultVideo").currentTime>.2',timeout=30000)
-            page.locator('#resultVideo').evaluate('video=>video.pause()')
+            # Headless Chromium on Linux does not ship an H.264 decoder.
+            # Test the actual downloaded output end-to-end with ffprobe and ffmpeg;
+            # when the browser advertises AVC support, test HTML5 playback too.
+            video=page.locator('#resultVideo')
+            source=video.get_attribute('src')
+            assert source, 'Exported video must have a playable/downloadable URL'
+            from urllib.parse import urljoin
+            result=out/'render.mp4'
+            with urlopen(urljoin(url,source),timeout=180) as incoming, result.open('wb') as dst:
+                assert incoming.status==200
+                shutil.copyfileobj(incoming,dst,1024*1024)
+            probe=json.loads(run(['ffprobe','-v','error','-show_streams','-show_format','-of','json',str(result)]))
+            assert any(stream['codec_type']=='video' for stream in probe['streams'])
+            assert any(stream['codec_type']=='audio' for stream in probe['streams'])
+            assert float(probe['format']['duration'])>1
+            run(['ffmpeg','-v','error','-i',str(result),'-f','null','-'])
+            can_play=video.evaluate("v=>v.canPlayType('video/mp4; codecs=\\\"avc1.42E01E\\\"') !== ''")
+            if can_play:
+                page.locator('#playerWrap .icon-btn').first.click()
+                page.wait_for_function('document.querySelector("#resultVideo").currentTime>.2',timeout=30000)
+                video.evaluate('v=>v.pause()')
+            else:
+                print('Headless Chromium cannot decode H.264; checked complete downloaded MP4 with ffmpeg instead.')
             page.screenshot(path=str(out/'03-exported.png'),full_page=True)
             status=page.request.get(url+'/api/v1/wizard/status').json()
             artifact=Path(status['project_path'])/'artifacts'/'edit_plan.json'
