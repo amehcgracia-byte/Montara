@@ -139,6 +139,7 @@ function rememberOpenEdit(id){
   }));} catch {}
 }
 function show(id) {
+  if (id !== 'footage' && trackAudition.audio) stopTrackAudition();
   rememberOpenEdit(id);
   clearTimeout(introTimer);
   stopFrameHover();
@@ -269,6 +270,7 @@ $$(".mode[data-platform]").forEach((card) => card.addEventListener("click", () =
 }));
 
 function resetFlow() {
+  stopTrackAudition();
   const nextURL=new URL(location.href);
   for(const key of ['resume','mode','push_pack','session'])nextURL.searchParams.delete(key);
   history.replaceState(history.state,'',nextURL.pathname+nextURL.search+nextURL.hash);
