@@ -636,6 +636,62 @@ function fileLabel(f) {
   if (f.kind === "master" || f.kind === "songs") return mixerMode() ? "TRACK" : "MASTER";
   return KIND_LABEL[f.kind] || f.kind.toUpperCase();
 }
+// One bounded listening preview per uploaded audio track. Never changes the mix or classification.
+const trackAudition = { audio: null, id: null, window: 0, start: 0, token: 0 };
+function stopTrackAudition() {
+  trackAudition.token++;
+  const a=trackAudition.audio;
+  if(a){a.pause();a.removeAttribute('src');a.load();}
+  trackAudition.audio=null;trackAudition.id=null;
+  document.querySelectorAll('[data-audition]').forEach(button => {
+    button.textContent='▶ Listen 12 s';button.setAttribute('aria-pressed','false');
+  });
+}
+async function playTrackAudition(file, next=false) {
+  if(!file?.path && !file?.localFile)return;
+  if(trackAudition.id===file.id && !next){stopTrackAudition();return;}
+  const windowIndex=trackAudition.id===file.id && next ? (trackAudition.window+1)%3 : 0;
+  stopTrackAudition();
+  const token=trackAudition.token;
+  const audio=new Audio();
+  Object.assign(trackAudition,{audio,id:file.id,window:windowIndex,start:0});
+  audio.preload='metadata';audio.src=audioUrl(file);
+  const button=[...document.querySelectorAll('[data-audition]')].find(b=>b.dataset.audition===file.id);
+  if(button){button.textContent='Loading…';button.setAttribute('aria-pressed','true');}
+  const finish=()=>{if(trackAudition.token===token)stopTrackAudition();};
+  audio.addEventListener('error',()=>{if(trackAudition.token===token){finish();toast('Could not play this audio track.',true);}});
+  audio.addEventListener('timeupdate',()=>{
+    if(trackAudition.token!==token)return;
+    if(audio.currentTime-trackAudition.start>=12)finish();
+  });
+  audio.addEventListener('ended',finish);
+  try {
+    await new Promise((resolve,reject)=>{
+      if(audio.readyState>=1){resolve();return;}
+      audio.addEventListener('loadedmetadata',resolve,{once:true});
+      audio.addEventListener('error',()=>reject(new Error('Audio metadata unavailable')),{once:true});
+    });
+    if(trackAudition.token!==token)return;
+    const duration=Number.isFinite(audio.duration)?audio.duration:Number(file.duration)||0;
+    const room=Math.max(0,duration-12);
+    const start=room ? Math.min(room,room*[.25,.5,.75][windowIndex]) : 0;
+    trackAudition.start=start;
+    if(start>0)audio.currentTime=start;
+    await audio.play();
+    if(trackAudition.token===token && button)button.textContent='❚❚ Stop';
+  }catch(error){
+    if(trackAudition.token===token){finish();toast('Cannot play this track. Try another audio format.',true);}
+  }
+}
+document.addEventListener('click',event=>{
+  const play=event.target.closest('[data-audition]');
+  const another=event.target.closest('[data-audition-next]');
+  const button=play||another;
+  if(!button)return;
+  const file=state.files.find(f=>f.id===(play?.dataset.audition||another?.dataset.auditionNext));
+  if(file)playTrackAudition(file,Boolean(another));
+});
+
 // Minutes left for one file, from its own pace (restarts when its phase changes).
 function uploadEta(f) {
   const now = performance.now() / 1000;
@@ -654,6 +710,7 @@ function fileRow(f, typed = false) {
       <button class="remove" data-remove-file="${f.id}" type="button" aria-label="Remove ${escapeHtml(f.name)}" title="Remove">×</button>
       ${f.wholeFile && f.kind === "error" ? `<button class="link whole" data-upload-whole="${f.id}" type="button">Upload the whole file (${(f.wholeFile.size / 1e9).toFixed(1)} GB)</button>` : ""}
       ${state.platform === 'youtube' && f.kind === 'video' && !isSphere(f) ? `<label class="track-type">Use as <select data-video-usage="${f.id}" aria-label="Use for ${escapeHtml(f.name)}"><option value="camera" ${f.usage !== 'filler' ? 'selected' : ''}>Camera</option><option value="filler" ${f.usage === 'filler' ? 'selected' : ''}>Filler · no sync</option></select></label>` : ''}
+      ${f.path && (f.kind === "master" || f.kind === "songs") && state.audioTask !== 'master' ? `<span class="track-audition"><button type="button" data-audition="${f.id}" aria-pressed="false" aria-label="Listen to ${escapeHtml(f.name)} for 12 seconds">▶ Listen 12 s</button><button type="button" data-audition-next="${f.id}" aria-label="Listen to another part of ${escapeHtml(f.name)}">Another part</button></span>` : ""}
       ${typed && (f.kind === "master" || f.kind === "songs") ? TrackTypes.controls(f.name) : ""}
       ${f.kind === "uploading" ? `<span class="bar"><i style="width:${Math.round(f.progress * 100)}%"></i></span>` : ""}
     </li>`;
@@ -685,6 +742,7 @@ document.addEventListener('click', event => {
   if (!button) return;
   const entry = state.files.find(f => f.id === button.dataset.removeFile);
   if (!entry) return;
+  if(trackAudition.id===entry.id)stopTrackAudition();
   entry.removed = true;
   footageMemory.forget(entry.id);
   if (entry.xhr && entry.kind === 'uploading') entry.xhr.abort();
