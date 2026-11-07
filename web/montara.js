@@ -351,7 +351,7 @@ function addFiles(list, handles = []) {
   for (const file of list) {
     const handle = unused.splice(unused.findIndex((h) => h.name === file.name) >>> 0, 1)[0];
     const entry = { id: crypto.randomUUID(), name: file.name, kind: "uploading", progress: 0, localFile: file,
-      memory: { platform: state.platform, size: file.size, lastModified: file.lastModified, handle: handle?.name === file.name ? handle : undefined } };
+      memory: { platform: state.platform, task: state.audioTask || 'video', size: file.size, lastModified: file.lastModified, handle: handle?.name === file.name ? handle : undefined } };
     state.files.push(entry);
     remember(entry);
     upload(file, entry);
@@ -455,17 +455,17 @@ async function watchCompanion() {
 // ---------- footage memory: survive a reload ----------
 function remember(entry) {
   if (!entry.memory) return;
-  const { id, name, kind, path, reason, projection, duration, uploadId, small, preview, original } = entry;
-  footageMemory.save({ id, name, kind: kind === "error" ? "uploading" : kind, path, reason, projection, duration, uploadId, small, preview, original, ...entry.memory });
+  const { id, name, kind, path, reason, projection, duration, uploadId, small, preview, original, usage } = entry;
+  footageMemory.save({ id, name, kind: kind === "error" ? "uploading" : kind, path, reason, projection, duration, uploadId, small, preview, original, usage, ...entry.memory });
 }
 async function offerRestore() {
-  const records = (await footageMemory.list(state.platform)).filter((r) => !state.files.some((f) => f.id === r.id));
+  const records = (await footageMemory.list(state.platform)).filter(r=>(r.task || 'video')===(state.audioTask || 'video')).filter((r) => !state.files.some((f) => f.id === r.id));
   state.restorable = records;
   const done = records.filter((r) => r.path).length;
   $("#restoreText").textContent = `${records.length} file${records.length === 1 ? "" : "s"} from your last visit` + (done < records.length ? ` (${records.length - done} still to upload).` : ".");
   $("#restoreNote").hidden = !records.length || state.files.some((f) => !f.sample);
 }
-$("#restoreForget").addEventListener("click", async () => { await footageMemory.clear(state.platform); state.restorable = []; $("#restoreNote").hidden = true; });
+$("#restoreForget").addEventListener("click", async () => { await Promise.all((state.restorable || []).map(record=>footageMemory.forget(record.id))); state.restorable = []; $("#restoreNote").hidden = true; });
 $("#restoreFiles").addEventListener("click", async () => {
   const records = state.restorable || [];
   $("#restoreNote").hidden = true;
@@ -473,8 +473,8 @@ $("#restoreFiles").addEventListener("click", async () => {
   $("#sampleNote").hidden = true;
   for (const record of records) {
     const entry = { id: record.id, name: record.name, kind: record.kind, path: record.path, reason: record.reason, projection: record.projection,
-      duration: record.duration, uploadId: record.uploadId, small: record.small, preview: record.preview, original: record.original, progress: 0,
-      memory: { platform: record.platform, size: record.size, lastModified: record.lastModified, handle: record.handle } };
+      usage: record.usage, duration: record.duration, uploadId: record.uploadId, small: record.small, preview: record.preview, original: record.original, progress: 0,
+      memory: { platform: record.platform, task: record.task, size: record.size, lastModified: record.lastModified, handle: record.handle } };
     state.files.push(entry);
     if (record.path) continue;
     let file = null;
@@ -618,6 +618,7 @@ const KIND_LABEL = { video: "VIDEO", master: "AUDIO", songs: "SONGS", ignored: "
 const isAudioEntry = (f) => f.kind === "master" || f.kind === "songs" || (f.kind !== "video" && /\.(wav|mp3|m4a|aiff?|flac|ogg)$/i.test(f.name));
 function fileLabel(f) {
   if (f.kind === "video") return f.usage === "filler" ? "FILLER" : isSphere(f) ? "360" : "VIDEO";
+  if(state.audioTask==='master' && f.kind==='master')return 'MIX';
   if (f.kind === "master" || f.kind === "songs") return mixerMode() ? "TRACK" : "MASTER";
   return KIND_LABEL[f.kind] || f.kind.toUpperCase();
 }
@@ -657,7 +658,7 @@ document.addEventListener('change', event => {
   const select = event.target.closest('[data-video-usage]');
   const file = select && state.files.find(f => f.id === select.dataset.videoUsage);
   if (!file) return;
-  file.usage = select.value;
+  file.usage = select.value;remember(file);
   state.syncExcluded.delete(file.path);
   rememberOpenEdit('footage');
   renderFiles();
@@ -1048,6 +1049,10 @@ async function watchMasterOnly(generation,id){
 async function openMixer(sessionTracks = null) {
   if (!sessionTracks) {fullSession.active = false;fullSession.forVideo = false;}
   $("#useMix").textContent=state.platform==='youtube' && videos().length ? 'Use this mix for the video' : 'Use this mix';
+  if(state.audioTask){
+    $('#mix>.lead').textContent='Montara balanced your tracks automatically. Press play and adjust any fader. When it sounds right, make and download the master.';
+    $('#useMix').textContent='Make the master';
+  }else $('#mix>.lead').textContent='Montara mixed your tracks automatically. Press play and move any fader: you hear the change at once. When it sounds right, use this mix for your video or download the mastered audio.';
   const sources = sessionTracks || audioTracks().map((f) => f.path);
   const dance = mixLoadingScreen(sources, "Mixing your tracks automatically…");
   let job;
@@ -1532,7 +1537,7 @@ async function prepareStageSources(generation, input, name) {
   const choices=review.uncertain.length ? await chooseSyncSources(review,generation) : [];
   checkWork(generation);
   if(choices===null){show('footage');renderFiles();throw new WorkCancelled();}
-  for(const file of silent)file.usage='filler';
+  for(const file of silent){file.usage='filler';remember(file);}
   for(const {file,usage} of choices){if(usage==='filler')file.usage='filler';else state.syncExcluded.add(file.path);}
   if(silent.length || choices.length){
     input={...input,videos:input.videos.filter(path=>!state.syncExcluded.has(path))};
