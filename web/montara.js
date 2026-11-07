@@ -218,6 +218,7 @@ function chooseQuestion(value, push=true){
 $$('[data-intent]').forEach(button=>button.onclick=()=>chooseQuestion(button.dataset.intent));
 $('#modeQuestionBack').onclick=()=>history.back();
 $$('[data-audio-task]').forEach(button=>button.onclick=()=>{
+  if(state.audioTask===button.dataset.audioTask && state.files.length){show('footage');return;}
   resetFlow();state.platform='youtube';state.audioTask=button.dataset.audioTask;
   chooseQuestion('music',false);
   history.replaceState({...history.state,montaraStep:'mode',montaraFlow:navigationFlow,montaraQuestion:'music',montaraProject:null,montaraPlatform:'youtube'},'',location.href);
@@ -230,13 +231,13 @@ $$('[data-audio-task]').forEach(button=>button.onclick=()=>{
 });
 
 $$(".mode[data-platform]").forEach((card) => card.addEventListener("click", () => {
-  if (state.platform === card.dataset.platform && state.files.length) {
+  if (!state.audioTask && state.platform === card.dataset.platform && state.files.length) {
     show(state.platform === 'show' ? 'showSetup' : 'footage');
     return;
   }
-  if (state.platform && state.platform !== card.dataset.platform) {
-    resetFlow();
-    history.replaceState({...history.state,montaraStep:'mode',montaraFlow:navigationFlow,
+  if (state.audioTask || state.platform && state.platform !== card.dataset.platform) {
+    resetFlow();chooseQuestion('video',false);
+    history.replaceState({...history.state,montaraStep:'mode',montaraFlow:navigationFlow,montaraQuestion:'video',
       montaraPlatform:null,montaraProject:null},'',location.href);
   }
   state.audioTask=null;$("#stageAudioOnly").checked=false;$("#fullSessionOn").checked=false;

@@ -7,7 +7,7 @@ Music opens only the audio box and describes the required inputs. The session ch
 
 Master a mix accepts exactly one full-quality finished mix. It uses FFmpeg two-pass loudness processing (-15 LUFS target, -1.5 dBTP processing target), without invoking the stem mixer, instrument EQ, panning or FX. Encode at 320 kbit/s MP3; measure the decoded result, lower the gain and re-encode from the intermediate float WAV if needed. Release only if the final measured true peak is <= -1 dBTP. Display measured input/output LUFS and final dBTP. This does not reconstruct distortion already present in the source or promise identical loudness when the peak constraint limits gain.
 
-Cancellation terminates the active FFmpeg process. Temporary float WAV is removed on every outcome. Final outcomes survive restart; interrupted in-memory jobs become failed/retry. Master outputs participate in existing retention, preserving the newest and live work. No public accounts or billing changes.
+Cancellation terminates the active FFmpeg process. Temporary float WAV is removed on every outcome. Final outcomes survive restart; interrupted in-memory jobs become failed/retry. Master outputs participate in existing retention, preserving the newest and live work. Companion 0.6.7 must be installed with the new pinned Engine before original-quality local video export; the mixer pin is unchanged. No public accounts or billing changes.
 
 ## Stage cameras and filler
 Each flat video can be Camera or Filler (no sync). Silent flat footage discovered during preparation becomes explicit B-roll and retains the song audio. Engine support is implemented in owner repository ZuckerVideos PR #61, commit 25a89485, not patched inside Montara.
