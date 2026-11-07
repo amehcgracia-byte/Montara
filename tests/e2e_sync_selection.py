@@ -53,6 +53,15 @@ def main():
             assert page.evaluate("[...state.syncExcluded].some(p=>p.endsWith('other-song.mp4'))")
             project=page.request.get(url+'/api/v1/project').json()
             assert len(project['inputs']['videos'])==2
+            # Source review preserves the uploaded unrelated camera in the UI,
+            # while the draft registers only the selected camera and silent B-roll.
+            assert page.evaluate("state.files.some(f=>f.name==='other-song.mp4')")
+            page.evaluate("async () => await saveCameras()")
+            saved=page.request.get(url+'/api/v1/project').json()
+            types=saved['settings']['edit']['camera_types']
+            assert len(types)==2
+            assert all(v['path'] in types for v in saved['inputs']['videos'])
+            assert not any(k.endswith('other-song.mp4') for k in types)
             assert project['settings']['edit']['filler_cutaways']
             page.wait_for_function("!document.querySelector('#framesHint').textContent.includes('Preparing')",timeout=180000)
             page.screenshot(path=str(out/'02-cameras-and-silent-filler.png'),full_page=True)
