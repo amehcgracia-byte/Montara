@@ -66,7 +66,7 @@ def validate(recipe):
     result=[];total=0
     for s in segments:
         if not isinstance(s,dict) or isinstance(s.get('source'),bool) or s.get('source') not in keys:raise ValueError('Unknown video source')
-        item={'source':s['source'],'clip_start_sec':bounded(s.get('clip_start_sec',0),0,86400),'duration_sec':bounded(s.get('duration_sec'),1/60,21600),'master_start_sec':bounded(s.get('master_start_sec'),0,86400)}
+        item={'source':s['source'],'clip_start_sec':bounded(s.get('clip_start_sec',0),0,86400),'duration_sec':bounded(s.get('duration_sec'),1/60,21600),'master_start_sec':bounded(s.get('master_start_sec'),0,86400),'playback_speed':bounded(s.get('playback_speed',1.0),0.5,2.0)}
         for k in ('spherical_shot','motion','flat_framing','video_light','projection','manual_view','insv_fov','reel_framing'):
             if k in s:item[k]=controls(k,s[k])
         result.append(item);total+=item['duration_sec']
