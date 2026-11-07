@@ -1550,7 +1550,7 @@ async function prepareStageSources(generation, input, name) {
   // Stage's silent flat footage is B-roll, never an invented audio anchor.
   const silent=review.silent.filter(f=>!isSphere(f));
   review.uncertain.push(...review.silent.filter(isSphere));
-  const choices=review.uncertain.length ? await chooseSyncSources(review,generation) : [];
+  const choices=review.uncertain.length || !review.ready.length ? await chooseSyncSources(review,generation) : [];
   checkWork(generation);
   if(choices===null){show('footage');renderFiles();throw new WorkCancelled();}
   for(const file of silent){file.usage='filler';remember(file);}
