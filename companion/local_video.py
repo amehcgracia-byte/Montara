@@ -16,6 +16,9 @@ def run(manifest):
     from core.project import create_project,file_record,atomic_write_json
     from core.ffmpeg import ffprobe
     from core.media_validation import validate_camera_video_metadata
+    # The native Mac output uses a higher-resolution 360 intermediate than
+    # the lightweight server preview; cache profiles are keyed separately.
+    os.environ['MONTARA_360_EXPORT_QUALITY']='high'
     from core.stages.export import ExportStage
     progress=Path(body['progress']);started=time.monotonic();progress_lock=threading.Lock();last_progress_write=0.
     tasks={f'segment-{i+1}':{'id':f'segment-{i+1}','label':f'Shot {i+1}/{len(recipe["segments"])}','percent':0} for i in range(len(recipe['segments']))}
@@ -42,7 +45,7 @@ def run(manifest):
     p.data['settings']['export'].update(segment_workers=2)
     brand=Path(__file__).parent/'brand'
     state=root/'state';state.mkdir(exist_ok=True)
-    config={'branding':{'mode':'none' if body['branding']=='none' else 'custom' if body['branding']=='mine' else 'default','logo_path':str(brand/'montara-logo.png'),'watermark_path':str(brand/'montara-watermark.png'),'intro_card':False,'bookends':'within-content'}}
+    config={'branding':{'mode':'none' if body['branding']=='none' else 'custom' if body['branding']=='mine' else 'default','logo_path':str(brand/'montara-logo.png'),'watermark_path':str(brand/'montara-watermark.png'),'intro_card':False,'bookends':'separate'}}
     if body.get('personal_logo'):config['personal_logo_path']=body['personal_logo']
     atomic_write_json(state/'config.json',config)
     segments=[]
@@ -52,7 +55,7 @@ def run(manifest):
         s.update(clip_path=path,source_path=path,probe=r['probe'])
         from core.stages.edit import _camera_id_from_render_path
         s['camera_id']=_camera_id_from_render_path(s)
-        if s['clip_start_sec']+s['duration_sec']>float(r['probe']['duration'])+.15:raise ValueError('The original does not cover this shot')
+        if s['clip_start_sec']+s['duration_sec']*s.get('playback_speed',1.0)>float(r['probe']['duration'])+.15:raise ValueError('The original does not cover the shot at this playback speed')
         segments.append(s)
     p.save();atomic_write_json(p.artifacts_dir/'edit_plan.json',{'platform':'youtube','segments':segments})
     atomic_write_json(p.artifacts_dir/'coverage.json',{'platform':'youtube','sources':[],'segments':segments})
