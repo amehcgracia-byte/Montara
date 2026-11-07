@@ -3,7 +3,7 @@
 ## Entry
 After the Montara animation, ask Music or Video. Music offers Mix a song, Mix a full session, and Master a mix. Video leads to Stage (music video), Push (vertical reels) and Show (creator/story/podcast). Descriptions stay visible on desktop and mobile. Browser Back/Forward traverses the questions.
 
-Music opens only the audio box and describes the required inputs. The session choice retains song detection, per-song mixers and exports. The one-song choice does not silently switch to full-session detection. Existing camera-plus-stems automatic mastering remains available in Stage for compatibility; it is a separate flow from standalone mastering.
+Music opens only the audio box and describes the required inputs. The session choice retains song detection, per-song mixers and exports. The one-song choice does not silently switch to full-session detection. Stage loads its finished-master example by default, keeping the Video path focused on video. Existing camera-plus-stems automatic mastering remains available through the explicit separate-track example for compatibility; it is a separate flow from standalone mastering.
 
 Master a mix accepts exactly one full-quality finished mix. It uses FFmpeg two-pass loudness processing (-15 LUFS target, -1.5 dBTP processing target), without invoking the stem mixer, instrument EQ, panning or FX. Encode at 320 kbit/s MP3; measure the decoded result, lower the gain and re-encode from the intermediate float WAV if needed. Release only if the final measured true peak is <= -1 dBTP. Display measured input/output LUFS and final dBTP. This does not reconstruct distortion already present in the source or promise identical loudness when the peak constraint limits gain.
 

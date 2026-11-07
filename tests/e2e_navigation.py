@@ -32,15 +32,14 @@ def main():
                 page.goto(url); page.locator('#mode').wait_for(state='visible')
                 if page.locator('[data-intent=video]').is_visible(): page.locator('[data-intent=video]').click()
                 page.locator('.mode[data-platform="youtube"]').click()
-                page.wait_for_function("document.querySelectorAll('#videoFiles li, #audioFiles li').length===12")
+                page.wait_for_function("document.querySelectorAll('#videoFiles li, #audioFiles li').length===4")
                 page.locator('#videoName').fill('Keep my Stage take')
                 page.go_back(); page.locator('#mode').wait_for(state='visible')
                 page.go_forward(); page.locator('#footage').wait_for(state='visible')
                 assert page.locator('#videoName').input_value() == 'Keep my Stage take'
-                assert page.locator('#videoFiles li, #audioFiles li').count() == 12
+                assert page.locator('#videoFiles li, #audioFiles li').count() == 4
                 # Navigation-only journey uses the finished master. The separate
                 # Mix journey covers stems -> master -> camera/range ordering.
-                page.locator('#switchSample').click()
                 page.wait_for_function("document.querySelectorAll('#videoFiles li, #audioFiles li').length===4")
                 page.locator('#continueFootage').click()
                 page.locator('#cameras').wait_for(state='visible', timeout=120_000)

@@ -75,12 +75,12 @@ def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
     files = media_files(media)
     rows = "document.querySelectorAll('#videoFiles li, #audioFiles li').length"
     if mode == "mix" and media == REAL:
-        # Default Stage sample: three cameras + the song as 9 separate tracks -> the mixer makes the master.
+        # Explicitly opt into the compatibility camera-plus-stems example.
+        page.wait_for_function(f"{rows} === 4", timeout=30_000)
+        page.locator("#switchSample").click()
         page.wait_for_function(f"{rows} === 12", timeout=30_000)
     elif mode == "stage" and media == REAL:
-        # Same cameras with the finished master (the "Use the finished master instead" link).
-        page.wait_for_function(f"{rows} === 12", timeout=30_000)
-        page.locator("#switchSample").click()
+        # Video starts with its finished mix; Music handles separate instruments.
         page.wait_for_function(f"{rows} === {len(files)}", timeout=30_000)
     else:
         # Push E2E intentionally tests the legacy server path without Companion.

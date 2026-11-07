@@ -252,7 +252,7 @@ $$(".mode[data-platform]").forEach((card) => card.addEventListener("click", () =
   state.files = state.files.filter((f) => !f.sample);
   renderFiles();
   show("footage");
-  loadSamples().catch((error) => console.warn("Samples unavailable", error));
+  loadSamples(state.platform === "youtube" ? "master" : "").catch((error) => console.warn("Samples unavailable", error));
   offerRestore().catch((error) => console.warn("Footage memory", error));
   watchCompanion();
 }));
