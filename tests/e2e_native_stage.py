@@ -10,22 +10,45 @@ from playwright.sync_api import sync_playwright
 from e2e_journey import ROOT,free_port,run
 from test_local_video import install_layout
 
+from native_real_media_input import validate_real_sources, hash_streamed
+
 
 def main():
-    parser=argparse.ArgumentParser();parser.add_argument('--output',type=Path,required=True);args=parser.parse_args()
+    parser=argparse.ArgumentParser()
+    parser.add_argument('--output',type=Path,required=True)
+    parser.add_argument('--real-camera',action='append',default=[],
+                        help='existing local video, specify exactly twice')
+    parser.add_argument('--real-master',type=str,
+                        help='existing local audio master; NEVER uploaded to GitHub')
+    args=parser.parse_args()
+    real_mode=bool(args.real_camera or args.real_master)
+    if real_mode:
+        if len(args.real_camera)!=2 or not args.real_master:
+            parser.error('Real footage requires two --real-camera arguments and --real-master')
+        try:
+            cameras,master=validate_real_sources(args.real_camera,args.real_master,args.output)
+        except ValueError as exc:
+            parser.error(str(exc))
+        media=None  # originals remain in their existing private directories
+    else:
+        media=args.output.resolve()/'fixtures'
+        cameras=[media/f'camera-{i}.mp4' for i in range(2)]
+        master=media/'master.wav'
     out=args.output.resolve();out.mkdir(parents=True,exist_ok=True)
-    media=out/'fixtures';media.mkdir(exist_ok=True)
-    master=media/'master.wav'
-    run(['ffmpeg','-v','error','-y','-f','lavfi','-i','anoisesrc=color=pink:seed=9876:amplitude=.2:duration=20','-ar','48000',str(master)])
-    for i in range(2):
-        run(['ffmpeg','-v','error','-y','-f','lavfi','-i','testsrc2=size=1920x1080:rate=30:duration=20','-i',str(master),'-vf',f'eq=brightness={-.1+i*.04}','-c:v','libx264','-preset','ultrafast','-threads','2','-c:a','aac','-shortest',str(media/f'camera-{i}.mp4')])
+    if not real_mode:
+        media.mkdir(exist_ok=True)
+        run(['ffmpeg','-v','error','-y','-f','lavfi','-i','anoisesrc=color=pink:seed=9876:amplitude=.2:duration=20','-ar','48000',str(master)])
+        for i in range(2):
+            run(['ffmpeg','-v','error','-y','-f','lavfi','-i','testsrc2=size=1920x1080:rate=30:duration=20','-i',str(master),'-vf',f'eq=brightness={-.1+i*.04}','-c:v','libx264','-preset','ultrafast','-threads','2','-c:a','aac','-shortest',str(cameras[i])])
     home=out/'companion';home.mkdir(exist_ok=True)
     install_layout(home)
     for name in ('companion.py','video_jobs.py','video_recipe.py'):shutil.copy2(ROOT/'companion'/name,home/name)
     chosen=out/'chosen-folder';chosen.mkdir(exist_ok=True)
     project_id='b'*16;(home/'projects.json').write_text(json.dumps({project_id:str(chosen)}))
     port,helper_port=free_port(),free_port();url=f'http://127.0.0.1:{port}';base=f'http://127.0.0.1:{helper_port}'
-    env={**os.environ,'MONTARA_COMPANION_HOME':str(home),'MONTARA_COMPANION_ROOTS':str(media),'MONTARA_COMPANION_PORT':str(helper_port),'PYTHONUNBUFFERED':'1'}
+    # Selected real sources are only whitelisted locally in this isolated Companion process.
+    roots=sorted({str(p.parent) for p in [*cameras,master]}) if real_mode else [str(media)]
+    env={**os.environ,'MONTARA_COMPANION_HOME':str(home),'MONTARA_COMPANION_ROOTS':os.pathsep.join(roots),'MONTARA_COMPANION_PORT':str(helper_port),'PYTHONUNBUFFERED':'1'}
     logs=[(out/'server.log').open('w'),(out/'companion.log').open('w')]
     processes=[subprocess.Popen([sys.executable,str(ROOT/'app.py'),'--port',str(port),'--data',str(out/'data')],stdout=logs[0],stderr=subprocess.STDOUT,env=env),subprocess.Popen([sys.executable,str(home/'companion.py')],stdout=logs[1],stderr=subprocess.STDOUT,env=env)]
     try:
@@ -46,10 +69,12 @@ def main():
             if page.locator('[data-intent=video]').is_visible(): page.locator('[data-intent=video]').click()
             page.locator('.mode[data-platform="youtube"]').click()
             page.locator('#videoName').fill('Native acceptance')
-            page.locator('[data-drop=video] input').set_input_files([str(media/f'camera-{i}.mp4') for i in range(2)]+[str(master)])
+            page.locator('[data-drop=video] input').set_input_files([str(p) for p in cameras]+[str(master)])
             page.wait_for_function("!document.querySelector('#continueFootage').disabled",timeout=180000)
             page.locator('input[name=branding][value="none"]').check()
             page.locator('#continueFootage').click();page.locator('#cameras').wait_for(state='visible',timeout=180000)
+            # Stage now selects only proven audio-matched sources (main #107).
+            # A set of existing recordings does not establish that they match the master.
             page.locator('#continueCameras').click();page.wait_for_selector('#frames:not([hidden]), #failed:not([hidden])',timeout=600000)
             assert not page.locator('#failed').is_visible(),page.locator('#errorText').inner_text()
             page.wait_for_function("!document.querySelector('#framesHint').textContent.includes('Preparing')",timeout=180000)
@@ -101,16 +126,23 @@ def main():
             status=page.request.get(url+'/api/v1/wizard/status').json();assert not status.get('result')
             jobs=list((chosen/'.montara-renders').glob('*/render.json'));assert len(jobs)==1
             recipe=json.loads(jobs[0].read_text())
+            originals_by_name={p.name:p for p in cameras}
             for value in recipe['source_files'].values():
-                original=Path(value);expected=media/original.name
-                assert expected.is_file() and '.small.' not in original.name
-                assert hashlib.sha256(original.read_bytes()).digest()==hashlib.sha256(expected.read_bytes()).digest()
+                original=Path(value)
+                expected=originals_by_name.get(original.name)
+                assert expected is not None and expected.is_file() and '.small.' not in original.name
+                assert hash_streamed(original)==hash_streamed(expected)
             assert any(s.get('flat_framing',{}).get('zoom')==3.4 for s in recipe['recipe']['segments'])
             assert any(s.get('video_light',{}).get('auto') is True for s in recipe['recipe']['segments'])
             info=json.loads(run(['ffprobe','-v','error','-show_streams','-of','json',str(final)]))
-            video=next(s for s in info['streams'] if s['codec_type']=='video');assert (video['width'],video['height'])==(1920,1080)
+            video=next(s for s in info['streams'] if s['codec_type']=='video')
+            if not real_mode:
+                assert (video['width'],video['height'])==(1920,1080)
+            else:
+                assert video['width']>0 and video['height']>0
+                assert any(s['codec_type']=='audio' for s in info['streams'])
             run(['ffmpeg','-v','error','-i',str(final),'-f','null','-'])
-            browser.close();(out/'summary.json').write_text(json.dumps({'passed':True,'size':'1920x1080','original_sources':len(recipe['source_files']),'native_render':True,'server_export_skipped':True},indent=2));print((out/'summary.json').read_text())
+            browser.close();(out/'summary.json').write_text(json.dumps({'passed':True,'size':f"{video['width']}x{video['height']}",'original_sources':len(recipe['source_files']),'native_render':True,'server_export_skipped':True,'real_footage':real_mode,'architecture':'Companion local original render, Engine remote recipe in isolated local test'},indent=2));print((out/'summary.json').read_text())
     except Exception:
         try:print('NATIVE_VIDEO_STATE',page.locator('#resultVideo').evaluate('v=>({ready:v.readyState,network:v.networkState,error:v.error?.message,duration:v.duration,seeking:v.seeking})'),flush=True)
         except Exception:pass
