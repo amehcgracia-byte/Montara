@@ -586,3 +586,9 @@ body.is-intro .top,body.is-intro footer,body.is-intro #version{visibility:hidden
 @media(max-width:600px){#intentChoices{grid-template-columns:1fr}}
 
 #mode .mode{justify-content:center;align-items:center;text-align:center;gap:14px}#mode .mode h3{font-size:clamp(26px,3vw,34px);line-height:1.14;margin:0}#mode .mode .mode-hint{position:static;max-width:95%;line-height:1.4;margin:0;opacity:1;transform:none}#mode>h2{font-size:clamp(34px,5vw,64px)}
+
+/* Lightweight track-audition buttons before mixing. */
+.track-audition{display:flex;gap:7px;flex-wrap:wrap;align-items:center;grid-column:1/-1;padding:3px 0}
+.track-audition button{font:inherit;font-size:12px;padding:7px 10px;min-height:32px;border-radius:7px;background:transparent;color:var(--text,#f5f3ef);border:1px solid var(--line,#555);cursor:pointer}
+.track-audition button[aria-pressed="true"]{border-color:#ff795b}
+.track-audition button:focus-visible{outline:2px solid #ff795b;outline-offset:2px}
