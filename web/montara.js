@@ -152,7 +152,7 @@ function show(id) {
   $$("[data-show-step]").forEach(b=>b.classList.toggle('on',b.dataset.showStep===id));
   if (!showNavigating) {
     const entry = {...history.state, montaraStep:id, montaraFlow:navigationFlow,
-      montaraPlatform:state.platform, montaraProject:state.projectId, montaraQuestion:modeQuestion};
+      montaraPlatform:state.platform, montaraProject:state.projectId, montaraQuestion:modeQuestion, montaraMaster:state.audioTask==='master'?state.masterId:null};
     if (id === 'home' || history.state?.montaraFlow !== navigationFlow || history.state?.montaraStep === 'home' ||
         (history.state?.montaraStep === 'making' && ['frames','result','showReview'].includes(id))) {
       history.replaceState(entry, '', location.href);
@@ -197,7 +197,7 @@ document.addEventListener("click", (event) => {
   if (!go) return;
   event.preventDefault();
   const target = go.dataset.go === "footage" && state.platform === "show" ? "showSetup" : go.dataset.go;
-  if ((target === "mode" || target === "home") && state.polling) return toast("A video is still being made.");
+  if ((target === "mode" || target === "home") && (state.polling || state.masterJob || state.masterStart)) return toast("A task is still running. Continue or cancel it first.");
   if (target === "mode") resetFlow();
   show(target);
 });
@@ -217,7 +217,16 @@ function chooseQuestion(value, push=true){
 }
 $$('[data-intent]').forEach(button=>button.onclick=()=>chooseQuestion(button.dataset.intent));
 $('#modeQuestionBack').onclick=()=>history.back();
+function resumeMasterTask(){
+  if(!state.masterJob && !state.masterStart)return false;
+  if(work.cancelling){toast('Wait for cancellation to finish.');return true;}
+  toast('Finish or cancel your current master before starting another task.');
+  show('making');const generation=beginWork();
+  Promise.resolve(state.masterStart || {id:state.masterJob}).then(job=>watchMasterOnly(generation,job.id)).catch(fail);
+  return true;
+}
 $$('[data-audio-task]').forEach(button=>button.onclick=()=>{
+  if(resumeMasterTask())return;
   if(state.audioTask===button.dataset.audioTask && state.files.length){show('footage');return;}
   resetFlow();state.platform='youtube';state.audioTask=button.dataset.audioTask;
   chooseQuestion('music',false);
@@ -231,6 +240,7 @@ $$('[data-audio-task]').forEach(button=>button.onclick=()=>{
 });
 
 $$(".mode[data-platform]").forEach((card) => card.addEventListener("click", () => {
+  if(resumeMasterTask())return;
   if (!state.audioTask && state.platform === card.dataset.platform && state.files.length) {
     show(state.platform === 'show' ? 'showSetup' : 'footage');
     return;
@@ -262,7 +272,7 @@ function resetFlow() {
   navigationFlow = crypto.randomUUID();
   try {sessionStorage.removeItem('montara-open-edit');sessionStorage.removeItem('montara-last-master');} catch {}
   stopPolling();
-  state.localProject = null;
+  state.localProject = null;state.masterId=null;state.masterJob=null;state.masterStart=null;
   state.lastNativeJob=null;
   state.savedLocally = false;
   range.start = 0; range.end = null;
@@ -1022,18 +1032,23 @@ function mixLoadingScreen(sources, text) {
 
 async function runMasterOnly(){
   const generation=beginWork();
+  if(state.masterStart || state.masterJob){
+    show('making');const existing=await Promise.resolve(state.masterStart || {id:state.masterJob});
+    checkWork(generation);return watchMasterOnly(generation,existing.id);
+  }
   if(audioTracks().length!==1)throw new Error('Choose one finished mix.');
   show('making');setProgress(0,'Measuring your finished mix…','');
   state.masterStart=api('/montara/master',{tracks:[audioTracks()[0].path]});
   let started;
   try {started=await state.masterStart;}catch(error){state.masterStart=null;throw error;}
-  state.masterJob=started.id;
+  state.masterJob=started.id;state.masterId=started.id;
   try {sessionStorage.setItem('montara-last-master',JSON.stringify({id:started.id,name:$('#videoName').value}));}catch{}
   checkWork(generation);
   return watchMasterOnly(generation,started.id);
 }
 async function watchMasterOnly(generation,id){
-  state.masterJob=id;
+  state.masterJob=id;state.masterId=id;
+  if(history.state?.montaraStep==='making')history.replaceState({...history.state,montaraMaster:id},'',location.href);
   for(;;){
     const job=await api(`/montara/master/${id}`);checkWork(generation);
     if(job.status==='failed' || job.status==='cancelled'){state.masterJob=null;state.masterStart=null;throw new Error(job.error || 'Mastering stopped.');}
@@ -2655,6 +2670,7 @@ let lastMaster=null;
 try {lastMaster=JSON.parse(sessionStorage.getItem('montara-last-master'));}catch{}
 if(lastMaster?.id && !savedEdit?.project && !resumeTarget){
   state.platform='youtube';state.audioTask='master';$('#stageAudioOnly').checked=true;$('#videoName').value=lastMaster.name || todayName();
+  $('#modeLabel').textContent=AUDIO_TASKS.master[0];renderFiles();offerRestore().catch(console.warn);
   const generation=beginWork();show('making');
   watchMasterOnly(generation,lastMaster.id).catch(fail);return;
 }
@@ -2764,6 +2780,7 @@ window.addEventListener('popstate',event=>{
     (entry.montaraProject && entry.montaraProject!==state.projectId);
   if(stale || !document.getElementById(step)?.classList.contains('screen'))step='mode';
   stopPolling();
+  if(state.audioTask==='master')++work.generation;
   stopMix();
   $$('video, audio').forEach(media=>media.pause());
   if(!stale && entry.montaraPlatform)state.platform=entry.montaraPlatform;
@@ -2778,7 +2795,11 @@ window.addEventListener('popstate',event=>{
     refreshFrames(true).catch(fail);
     pollFrames();
   }
-  if(step==='making' && !state.nativeExport)startPolling();
+  const masterId=entry?.montaraMaster || (state.audioTask==='master' && state.masterId);
+  if(['making','result'].includes(step) && masterId){
+    state.platform='youtube';state.audioTask='master';state.masterId=masterId;
+    watchMasterOnly(beginWork(),masterId).catch(fail);
+  }else if(step==='making' && !state.nativeExport)startPolling();
 });
 
 function rejectRaw360(files) {

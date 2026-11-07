@@ -37,8 +37,27 @@ def main():
             page.locator('[data-drop=audio] input').set_input_files(str(mix))
             page.wait_for_function('!state.uploads && state.files.length===1 && !document.querySelector("#continueFootage").disabled')
             page.screenshot(path=str(out/'03-finished-mix.png'),full_page=True)
+            held=[];master_posts=[]
+            def hold_first_status(route):
+                if route.request.method=='GET' and not route.request.url.endswith('/result') and not held:
+                    held.append(route)
+                else:route.continue_()
+            page.route('**/montara/master/*',hold_first_status)
+            page.on('request',lambda request:master_posts.append(request.url) if request.method=='POST' and request.url.endswith('/montara/master') else None)
+            page.locator('#continueFootage').click()
+            for _ in range(100):
+                page.wait_for_timeout(50)
+                if held:break
+            assert held
+            page.go_back();page.locator('#footage').wait_for(state='visible')
+            held[0].fulfill(response=held[0].fetch())
+            page.wait_for_timeout(300)
+            assert page.locator('#footage').is_visible(), 'Late status must not jump out of browser Back'
             page.locator('#continueFootage').click()
             page.wait_for_selector('#result:not([hidden]),#failed:not([hidden])',timeout=120000)
+            assert len(master_posts)==1, 'Resume must not start another master'
+            page.go_back();page.locator('#footage').wait_for(state='visible')
+            page.go_forward();page.locator('#result').wait_for(state='visible',timeout=30000)
             assert page.locator('#result').is_visible(),page.locator('#errorText').inner_text()
             assert 'dBTP' in page.locator('#resultInfo').inner_text()
             assert page.locator('#resultAudio').is_visible()
