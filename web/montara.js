@@ -1535,14 +1535,21 @@ $("#useMix").addEventListener("click", async () => {
 });
 
 async function saveCameras() {
+  // A source review may leave rejected cameras in the upload list even though
+  // the current draft registers only the accepted cameras. The engine correctly
+  // refuses settings for sources absent from project.inputs.videos.
+  const project = await api("/project");
+  const registered = new Set((project.inputs?.videos || []).map(item => typeof item === "string" ? item : item.path));
+  const cameras = videos().filter(f => registered.has(f.path) && !state.syncExcluded.has(f.path));
+  if (!cameras.length && videos().length) throw new Error("No registered cameras remain in this song. Return to Footage and select the matching cameras.");
   if(state.platform==='youtube')await api("/settings/video-light",{project_id:state.projectId,enabled:true});
-  await api("/settings/camera-types",{project_id:state.projectId,camera_types:Object.fromEntries(videos().map(f=>[f.path,cameraTypeOf(f)]))});
-  const flat = videos().filter((f) => !isSphere(f) && f.usage !== "filler" && !state.syncExcluded.has(f.path));
+  await api("/settings/camera-types",{project_id:state.projectId,camera_types:Object.fromEntries(cameras.map(f=>[f.path,cameraTypeOf(f)]))});
+  const flat = cameras.filter((f) => !isSphere(f) && f.usage !== "filler");
   const subjects = Object.fromEntries(flat.map((f) => [f.path, state.subjects[f.path] || "general"]));
   if (flat.length) await api("/settings/camera-subjects", { camera_subjects: subjects });
   const roles = Object.fromEntries(flat.map((f) => [f.path, state.roles[f.path] || guessRole(f)]));
   if (flat.length) await api("/settings/camera-roles", { camera_roles: roles });
-  for (const file of videos().filter(isSphere)) {
+  for (const file of cameras.filter(isSphere)) {
     const views = state.viewpoints[file.path] || {};
     if (!Object.keys(views).length) continue;
     // The engine identifies people by subject; the free name stays in Montara (frames, pins).
