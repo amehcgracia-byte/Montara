@@ -118,7 +118,7 @@ def test_native_http_ranges_and_origin_boundaries(tmp_path,monkeypatch):
     finally:server.shutdown();server.server_close();thread.join(timeout=3)
 
 
-def test_personal_transparent_logo_renders_locally_without_extra_seconds(tmp_path):
+def test_personal_transparent_logo_gets_separate_fading_bookends(tmp_path):
     from PIL import Image
     home=tmp_path/'companion';target,sha=install_layout(home)
     folder=tmp_path/'project';folder.mkdir()
@@ -137,12 +137,16 @@ def test_personal_transparent_logo_renders_locally_without_extra_seconds(tmp_pat
     assert manager.status(token)['status']=='ready',(manager.status(token),(folder/'.montara-renders'/token/'render.log').read_text()[-2000:])
     output=manager.output(token)
     info=json.loads(subprocess.check_output(['ffprobe','-v','error','-show_format','-of','json',str(output)]))
-    assert abs(float(info['format']['duration'])-4)<.08
+    assert abs(float(info['format']['duration'])-(4+10.0+10.2))<.12
     reopened=VideoJobs(home)
     assert reopened.status(token)['status']=='ready' and reopened.output(token)==output
-    raw=subprocess.check_output(['ffmpeg','-v','error','-ss','0.1','-i',str(output),'-frames:v','1','-vf','scale=192:108','-f','rawvideo','-pix_fmt','rgb24','-'])
-    frame=np.frombuffer(raw,np.uint8).reshape(108,192,3)
-    assert frame[10,10,2]>150 and frame[54,96,0]>150
+    def frame_at(second):
+        raw=subprocess.check_output(['ffmpeg','-v','error','-ss',str(second),'-i',str(output),'-frames:v','1','-vf','scale=192:108','-f','rawvideo','-pix_fmt','rgb24','-'])
+        return np.frombuffer(raw,np.uint8).reshape(108,192,3)
+    assert frame_at(.1).mean()<16  # starts from black
+    assert frame_at(5.0)[54,96,0]>110  # transparent red logo on black
+    assert frame_at(12.0)[10,10,2]>100  # original blue camera video
+    assert frame_at(24.05).mean()<16  # fades back to black
 
 
 def test_native_recipe_accepts_deep_flat_crop_but_keeps_motion_limits():
@@ -153,4 +157,20 @@ def test_native_recipe_accepts_deep_flat_crop_but_keeps_motion_limits():
     with pytest.raises(ValueError):validate(data)
     data['segments'][0]['flat_framing']['zoom']=5.4
     data['segments'][0]['motion']={'type':'ken_burns','zoom_start':5.4}
+    with pytest.raises(ValueError):validate(data)
+
+
+@pytest.mark.parametrize('speed',[0.5,1.0,1.5,2.0])
+def test_native_recipe_keeps_independent_shot_speed(speed):
+    data=recipe('a'*40)
+    data['segments'][0]['playback_speed']=speed
+    checked=validate(data)
+    assert checked['segments'][0]['playback_speed']==speed
+    assert checked['segments'][0]['duration_sec']==4.0
+
+
+@pytest.mark.parametrize('invalid',[0,0.49,2.01,float('nan'),'setpts=2',True])
+def test_native_recipe_rejects_invalid_speed(invalid):
+    data=recipe('a'*40)
+    data['segments'][0]['playback_speed']=invalid
     with pytest.raises(ValueError):validate(data)
