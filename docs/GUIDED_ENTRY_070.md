@@ -10,9 +10,9 @@ Master a mix accepts exactly one full-quality finished mix. It uses FFmpeg two-p
 Cancellation terminates the active FFmpeg process. Temporary float WAV is removed on every outcome. Final outcomes survive restart; interrupted in-memory jobs become failed/retry. Master outputs participate in existing retention, preserving the newest and live work. Companion 0.6.7 must be installed with the new pinned Engine before original-quality local video export; the mixer pin is unchanged. No public accounts or billing changes.
 
 ## Stage cameras and filler
-Each flat video can be Camera or Filler (no sync). Silent flat footage discovered during preparation becomes explicit B-roll and retains the song audio. Engine support is implemented in owner repository ZuckerVideos PR #61, commit 25a89485, not patched inside Montara.
+Each flat video can be Camera or Filler (no sync). Silent flat footage discovered during preparation becomes explicit B-roll and retains the song audio. Engine support is implemented in owner repository ZuckerVideos PR #61, commit 841f4ed5, not patched inside Montara.
 
-User-selected B-roll bypasses semantic scene screening; it is not claimed to match the performance. Bounded windows avoid a full-file scene scan. Short cutaways may appear between covered camera shots, with opening/ending and at least 90% performance footage retained; existing screened gap-fillers keep their behavior. Spherical footage is not automatically treated as flat B-roll.
+User-selected B-roll bypasses semantic scene screening; it is not claimed to match the performance. Bounded windows avoid a full-file scene scan; the bank and edit cache key also skip scene-model initialization when only authored cutaways are present. Short cutaways may appear between covered camera shots, with opening/ending and at least 90% performance footage retained; existing screened gap-fillers keep their behavior. Spherical footage is not automatically treated as flat B-roll.
 
 Stage checks real sync artifacts before starting the edit/export. A high peak confidence does not override instability. For questionable/nonoverlapping cameras, show a source review: leave this video out of this song, explicitly choose flat B-roll, or return to Footage. Uploads remain intact. No guessed offsets or weakened export coverage guard. The approved project registers only sources selected for that song plus fillers.
 
@@ -22,7 +22,7 @@ Read-only saved artifacts in 0.69 showed two different masters: 480.731429 s fro
 No original media, credentials, full private paths or raw production logs are published. Production project/source selection was not modified during diagnosis.
 
 ## Validation status
-- Engine focused tests: 117 passed locally, including API validation, no-inference B-roll, timeline coverage and existing sync/guard behavior.
+- Engine focused tests: 118 passed locally, including API validation, no-inference B-roll, timeline coverage and existing sync/guard behavior.
 - Mastering: four real FFmpeg tests passed (stereo ratio/duration, final MP3 peak/loudness, metadata, cancellation, silent-input and remote-path rejection).
 - JS source-selection policy and existing session-window policies pass.
 - Local synthetic Stage journey passed, including export, frame editing and restoration.
