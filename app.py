@@ -42,7 +42,7 @@ SAMPLE_SETS = {
 }
 DEFAULT_DATA = Path.home() / "MontaraData"
 # Shown at the bottom of every page, so it is obvious which build is running.
-MONTARA_VERSION = "0.69 · 2026-11-06 · Automatic song master from camera and tracks"
+MONTARA_VERSION = "0.70 · 2026-11-07 · Music or video, one clear task"
 
 
 def _build_label() -> str:
@@ -141,6 +141,8 @@ def create_montara_app(data_root: Path = DEFAULT_DATA, samples: bool = True):
     register_recovery(app, data_root)
     from full_session import register_full_session
     register_full_session(app, data_root, FIXTURES)
+    from mastering import register_mastering
+    register_mastering(app, data_root, FIXTURES)
     from resumable_upload import register_resumable_upload
     register_resumable_upload(app, data_root, classify_paths)
     from montara_ai import AIService
@@ -225,7 +227,7 @@ def create_montara_app(data_root: Path = DEFAULT_DATA, samples: bool = True):
         except (OSError, ValueError):
             abort(404)
         allowed = path.is_relative_to(data_root) or path.is_relative_to(FIXTURES.resolve())
-        if not allowed or not path.is_file() or path.suffix.lower() not in {".wav", ".mp3", ".m4a", ".aif", ".aiff", ".flac", ".ogg"}:
+        if not allowed or not path.is_file() or path.suffix.lower() not in {".wav", ".mp3", ".m4a", ".aif", ".aiff", ".flac", ".ogg", ".opus"}:
             abort(404)
         return send_file(path, conditional=True)
 

@@ -1,6 +1,5 @@
 # STATUS — laboratorio de Chema (main · claude/* · codex/*)
-Actualizado: 2026-11-06 · lo mantiene el equipo de Chema · 40 líneas como máximo, se sobrescribe.
-- `mixer`: rama `claude/winds-synth-bass-lowpass` (ZuckerMixer PR #8, **sin mergear en master**); Montara fija `f15ff91` (limitador suave, PR Mixer #9)
+Actualizado: 2026-11-07 · lo mantiene el equipo de Chema · 40 líneas como máximo, se sobrescribe.
 - VM: e2-standard-8, `jm` en `127.0.0.1:8101`, `fer` en `:8102`; apagado automático (60 min sin web, 120 min sin SSH)
 - Companion 0.6.6 instalado: fuente 515b44c, Engine 4f481002 y Mixer f15ff91. Actualizado tras comprobar que no había renders activos. La exportación anterior falló al dejar de estar disponible su original 360; diagnóstico preservado.
 ## Sesión completa (jam entera) — cómo va
@@ -37,4 +36,5 @@ Actualizado: 2026-11-06 · lo mantiene el equipo de Chema · 40 líneas como má
 - Cambiar las contraseñas web de la VM que pasaron por chat (sin confirmar).
 - **Usuarios/historial: integrado #100 (ae9e38b)**, selección #86/#88/#89/#90 de FER y corrección de formularios tras await. 23 contratos + HTTPS/Chromium local y Linux pasan; cinco recorridos Linux 42247210322 y capturas revisados. Lab opt-in sin rutas de cuentas activas en app.py; edición real por usuario y #91–#99 pendientes. Detalle: docs/USER_PROJECT_FOUNDATION.md.
 - **0.68 en main 0780433 (#101)**; VM conserva 0.67/ae9e38b. Sólo ventana de cámaras; cinco recorridos Linux 42254637548 aprobados y capturas revisadas. Engine/Mixer sin cambios.
-- **0.69 candidata #103**: vídeos+pistas → máster automático → rango, sin mixer web intermedio; nuevas previews con vídeo quedan en Opus sin expansión completa. BWF con reloj original y tipos/estéreo conservados; audio-only Full session mantiene su ruta. Local: aceptación real 390 s → 20,096 s y 46 contratos; Linux en curso. No instalada. Petición Google/lab de cuentas enviada a FER en #34 (6694605277).
+- **0.69 instalada JM c98282f (#103)**: máster automático de vídeos+pistas y nuevas previews conservan Opus. Cinco recorridos Linux 42288640038 aprobados; HTTP y navegador producción verificados. Companion 0.6.6, Engine 4f481002 y Mixer f15ff91; FER intacto.
+- **0.70 en desarrollo, no instalada**: preguntas Música/Vídeo; máster independiente; revisión de sincronía y B-roll silencioso. Engine PR #61 (841f4ed5), pruebas focales 118 pasan. Detalle y límites: docs/GUIDED_ENTRY_070.md. Misión cuatro horas enviada a FER: #34/6706086844.

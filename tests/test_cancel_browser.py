@@ -36,6 +36,7 @@ def test_cancel_fences_late_start_responses(site,operation,path,late_status):
         browser=p.chromium.launch();page=browser.new_page()
         page.goto(site);page.locator('#mode').wait_for(state='visible')
         held=[];starts=[];cancel=[]
+        page.route('**/api/v1/settings/fillers',lambda route:route.fulfill(json={'fillers':[]}))
         page.route('**/api/v1/wizard/status*',lambda route:route.fulfill(json={'status':'cancelled'}))
         page.route('**/api/v1/wizard/start',lambda route:(starts.append(route.request.post_data),route.fulfill(json={})))
         page.route('**/api/v1/wizard/cancel',lambda route:(cancel.append(json.loads(route.request.post_data)),route.fulfill(json={})))

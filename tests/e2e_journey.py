@@ -69,23 +69,24 @@ def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
     page.screenshot(path=str(shots / "01-home.png"), full_page=True)
     # The current splash automatically leads to How; there is no visible New video step.
     page.locator("#mode").wait_for(state="visible", timeout=30_000)
+    if page.locator('[data-intent=video]').is_visible(): page.locator('[data-intent=video]').click()
     page.locator(f'.mode[data-platform="{MODES[mode]}"]').click()
     page.locator("#videoName").fill(f"E2E {mode}")
     files = media_files(media)
     rows = "document.querySelectorAll('#videoFiles li, #audioFiles li').length"
     if mode == "mix" and media == REAL:
-        # Default Stage sample: three cameras + the song as 9 separate tracks -> the mixer makes the master.
+        # Explicitly opt into the compatibility camera-plus-stems example.
+        page.wait_for_function(f"{rows} === 4", timeout=30_000)
+        page.locator("#switchSample").click()
         page.wait_for_function(f"{rows} === 12", timeout=30_000)
     elif mode == "stage" and media == REAL:
-        # Same cameras with the finished master (the "Use the finished master instead" link).
-        page.wait_for_function(f"{rows} === 12", timeout=30_000)
-        page.locator("#switchSample").click()
+        # Video starts with its finished mix; Music handles separate instruments.
         page.wait_for_function(f"{rows} === {len(files)}", timeout=30_000)
     else:
         # Push E2E intentionally tests the legacy server path without Companion.
         # Under U3C, original video upload requires explicit per-file consent;
         # the test itself supplies that consent rather than bypassing the guard.
-        if mode == "push":
+        if mode in {"push", "stage"}:
             accepted_originals = []
 
             def approve_test_original(dialog):
@@ -97,7 +98,7 @@ def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
 
             page.on("dialog", approve_test_original)
         page.locator("[data-drop=video] input").set_input_files([str(f) for f in files])
-        if mode == "push":
+        if mode in {"push", "stage"}:
             page.wait_for_function("document.querySelectorAll('#videoFiles li').length > 0", timeout=30_000)
             assert accepted_originals, "Push test expected explicit original-upload consent"
     page.locator(f'input[name=branding][value="{BRANDING[mode]}"]').check()
@@ -251,6 +252,7 @@ def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
         recovered.on('dialog', lambda dialog: dialog.accept() if dialog.type=='confirm' and 'upload the ORIGINAL video' in dialog.message else dialog.dismiss())
         recovered.goto(url)
         recovered.locator('#mode').wait_for(state='visible')
+        if recovered.locator('[data-intent=video]').is_visible(): recovered.locator('[data-intent=video]').click()
         recovered.locator('.mode[data-platform="youtube"]').click()
         recovered.locator('#sessionResume').wait_for(state='visible')
         recovered.locator('#sessionResume').click()

@@ -160,13 +160,13 @@ async function mixSessionForVideo(data) {
   $('#sessionCancel').hidden = false;
   try {
     const guide = await api(`/montara/session/${fullSession.id}/video-source`);
-    const input = {master:guide.master, songs:'', videos:videos().map(f=>f.path)};
+    let input = {master:guide.master, songs:'', videos:inputs().videos};
     await api('/wizard/projects/new', {});
     const draft = await api('/wizard/draft', {name:$('#videoName').value.trim() || todayName(), platform:'youtube', ...input, audio_paths:[guide.master]});
     state.projectId = draft.project_id;
-    await workRequest(generation, '/wizard/prepare', {project_id:state.projectId, platform:'youtube', ...input});
-    await waitFor(s=>['waiting_choice','done'].includes(s.status), generation);
-    const sync = await api('/artifacts/sync');
+    const prepared = await prepareStageSources(generation,input,$('#videoName').value.trim() || todayName());
+    input=prepared.input;
+    const sync=prepared.sync;
     fullSession.videoMatching = false;
     checkSessionCancel();
     const song = data.video_excerpt ? SessionVideo.excerptForClips(data.duration, sync.clips)
