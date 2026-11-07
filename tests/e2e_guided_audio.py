@@ -80,6 +80,21 @@ def main():
             bass=out/'Bass.wav';sf.write(bass,.1*np.sin(2*np.pi*110*t),sr)
             page.locator('[data-drop=audio] input').set_input_files([str(mix),str(bass)])
             page.wait_for_function('audioTracks().length===2 && !state.uploads')
+            # Every stem can be auditioned before classification/mixing; only one plays.
+            buttons=page.locator('[data-audition]')
+            assert buttons.count()==2
+            buttons.first.click()
+            page.wait_for_function('trackAudition.audio && trackAudition.audio.currentTime > .1',timeout=30000)
+            first_id=page.evaluate('trackAudition.id')
+            page.locator('[data-audition-next]').first.click()
+            page.wait_for_function('trackAudition.audio && trackAudition.audio.currentTime > .1',timeout=30000)
+            assert page.evaluate('trackAudition.window')==1
+            buttons.last.click()
+            page.wait_for_function('trackAudition.audio && trackAudition.audio.currentTime > .1',timeout=30000)
+            assert page.evaluate('trackAudition.id')!=first_id
+            buttons.last.click()
+            assert page.evaluate('trackAudition.audio===null')
+            page.screenshot(path=str(out/'05a-track-audition.png'),full_page=True)
             page.locator('#continueFootage').click()
             page.locator('#mix').wait_for(state='visible',timeout=120000)
             page.wait_for_function('!document.querySelector("#useMix").disabled',timeout=120000)
