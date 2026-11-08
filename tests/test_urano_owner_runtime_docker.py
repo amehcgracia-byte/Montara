@@ -177,8 +177,18 @@ class OwnerSessionToRealEngine(unittest.TestCase):
             started = [pool.submit(self._stage_post,person,self.project_ids[person])
                        for person in ("alice","bob")]
             submissions = [f.result(timeout=100) for f in started]
-        self.assertEqual([r.status_code for r in submissions],[202,202],
-                         [r.get_data(as_text=True) for r in submissions])
+        diagnostics = {}
+        for person in ("alice", "bob"):
+            project_file = (self.root / person / "Projects" /
+                            ("Owned" + person.title()) / "project.json")
+            saved = json.loads(project_file.read_text())
+            diagnostics[person] = {
+                "video_records": len(saved.get("inputs", {}).get("videos") or []),
+                "master_record": bool(saved.get("inputs", {}).get("master")),
+                "stage_state": saved.get("stages", {}).get("ingest", {}).get("status"),
+                "engine_http_reject": self.bridges[person].last_ingest_failure_code,
+            }
+        self.assertEqual([r.status_code for r in submissions],[202,202],diagnostics)
         self.assertEqual([r.json["stage"] for r in submissions],["ingest","ingest"])
         deadline = time.monotonic()+210
         done = set()
