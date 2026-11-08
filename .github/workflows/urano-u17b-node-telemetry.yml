@@ -1,0 +1,31 @@
+name: URANO U17B distributed-hybrid telemetry contracts
+
+on:
+  push:
+    branches:
+      - fernando/urano-u17b-distributed-metrics-contract
+  pull_request:
+    paths:
+      - 'tests/urano_hybrid_node_meter.py'
+      - 'tests/urano_hybrid_merge_reports.py'
+      - 'tests/test_urano_hybrid_node_telemetry.py'
+      - '.github/workflows/urano-u17b-node-telemetry.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  conservative-distributed-instrumentation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install lightweight local meter only
+        run: python -m pip install 'psutil>=5.9,<8'
+      - name: Validate honest topology and safe process sampling
+        run: python -m unittest discover -s tests -p 'test_urano_hybrid_node_telemetry.py' -v
+      - name: Check cross-platform source syntax
+        run: python -m py_compile tests/urano_hybrid_node_meter.py tests/urano_hybrid_merge_reports.py
