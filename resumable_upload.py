@@ -177,13 +177,37 @@ def register_resumable_upload(app, data_root, classify):
             return failure(f'This environment accepts files up to {limit / 1024**2:.0f} MiB.', 413)
         if not isinstance(fingerprint, str) or not re.fullmatch('[a-f0-9]{64}', fingerprint):
             return failure('Invalid file fingerprint.')
+        record = dict(name=name, size=size, fingerprint=fingerprint, complete=False)
+        video_preview = body.get('video_preview', False)
+        if not isinstance(video_preview, bool):
+            return failure('Invalid video preview mode.')
+        if video_preview and not name.lower().endswith('.small.mp4'):
+            return failure('A video preview must be a Companion small MP4.')
+        if name.lower().endswith(PREVIEW) or video_preview:
+            original = body.get('original')
+            if (not isinstance(original, dict) or not isinstance(original.get('name'), str)
+                    or not original['name'] or len(original['name']) > 200
+                    or Path(original['name']).name != original['name'] or '\\' in original['name']
+                    or isinstance(original.get('size'), bool) or not isinstance(original.get('size'), int) or original['size'] <= 0
+                    or not re.fullmatch('[a-f0-9]{64}', str(original.get('fingerprint')))):
+                return failure('A preview must name its original.')
+            record['preview_of'] = dict(name=original['name'], size=original['size'], fingerprint=original['fingerprint'])
+            if video_preview:
+                record['video_preview'] = True
+            else:
+                if not isinstance(body.get('compact_preview', False), bool):
+                    return failure('Invalid preview mode.')
+                record['compact_preview'] = body.get('compact_preview', False)
         root.mkdir(parents=True, exist_ok=True)
         with (root / 'allocation.lock').open('a') as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
             reserved = 0
             for path in root.glob('*/upload.json'):
                 item = load(path.parent)
-                if item['name'] == name and item['size'] == size and item['fingerprint'] == fingerprint:
+                if (item['name'] == name and item['size'] == size and item['fingerprint'] == fingerprint
+                        and item.get('preview_of') == record.get('preview_of')
+                        and item.get('video_preview', False) == record.get('video_preview', False)
+                        and item.get('compact_preview', False) == record.get('compact_preview', False)):
                     return jsonify(public(path.parent, item))
                 if not item.get('complete'):
                     reserved += max(0, item['size'] - public(path.parent, item)['received'])
@@ -191,17 +215,6 @@ def register_resumable_upload(app, data_root, classify):
                 return failure('Not enough storage for this file. Remove an unfinished upload or use a smaller file.', 507)
             work = root / uuid.uuid4().hex
             work.mkdir()
-            record = dict(name=name, size=size, fingerprint=fingerprint, complete=False)
-            original = body.get('original')
-            if name.lower().endswith(PREVIEW):
-                if (not isinstance(original, dict) or not isinstance(original.get('name'), str) or Path(original['name']).name != original['name']
-                        or isinstance(original.get('size'), bool) or not isinstance(original.get('size'), int)
-                        or not re.fullmatch('[a-f0-9]{64}', str(original.get('fingerprint')))):
-                    return failure('A preview must name its original.')
-                if not isinstance(body.get('compact_preview', False), bool):
-                    return failure('Invalid preview mode.')
-                record['compact_preview'] = body.get('compact_preview', False)
-                record['preview_of'] = dict(name=original['name'], size=original['size'], fingerprint=original['fingerprint'])
             save(work / 'upload.json', record)
             (work / 'source.part').touch()
             return jsonify(public(work, load(work))), 201
