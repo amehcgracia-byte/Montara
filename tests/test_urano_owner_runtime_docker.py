@@ -7,6 +7,8 @@ Only disposable GitHub Actions Linux with Docker may run this test.
 from __future__ import annotations
 
 import os
+import json
+import time
 import subprocess
 import tempfile
 import unittest
@@ -49,7 +51,7 @@ class OwnerSessionToRealEngine(unittest.TestCase):
         allowed = frozenset({"alice@example.test", "bob@example.test"})
         app = Flask("u19-real-engine")
         app.register_blueprint(owner_runtime_blueprint(
-            self.controller, self.sessions, https_origin=ORIGIN))
+            self.controller, self.sessions, https_origin=ORIGIN, catalog=self.catalog))
         self.app = app
         for person in ("alice", "bob"):
             signed.sub, signed.email = "fake-google-sub-" + person, person + "@example.test"
@@ -141,6 +143,90 @@ class OwnerSessionToRealEngine(unittest.TestCase):
         self.assertEqual(self.close("bob").status_code,200)
         for bridge in self.bridges.values():
             self.assertIsNone(bridge.cid)
+
+
+    def _stage_post(self, who, project_id):
+        client, session = self.clients[who]
+        return client.post(f"/urano/v1/runtime/projects/{project_id}/ingest",
+                           base_url=ORIGIN, headers={
+                               "Origin":ORIGIN, "X-Urano-CSRF":session.csrf})
+
+    def test_real_stage_ingest_from_owner_session_and_safe_handoff(self):
+        # Trusted CI-only fixture provisioning, never a browser upload/path.
+        for person in ("alice", "bob"):
+            owner_workspace = self.root / person
+            cmd = ["docker","run","--rm","--network","none",
+                   "--user","10001:10001","--mount",
+                   f"type=bind,src={owner_workspace},dst=/workspace",
+                   "--workdir","/app/engine",os.environ["URANO_TEST_IMAGE_ID"],
+                   "python","/app/tests/urano_u20_prepare_stage_inputs.py",
+                   "Owned"+person.title()]
+            provision = subprocess.run(cmd,capture_output=True,text=True,timeout=130)
+            self.assertEqual(provision.returncode,0,provision.stderr[-1400:])
+            self.assertIn('"fixture_prepared": true',provision.stdout)
+
+        # Unowned Stage requests are denied before any worker starts.
+        alien = self._stage_post("alice",self.project_ids["bob"])
+        self.assertEqual(alien.status_code,404)
+        self.assertIsNone(self.bridges["alice"].process)
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            opened = [pool.submit(self.activate, person,self.project_ids[person])
+                      for person in ("alice","bob")]
+            self.assertTrue(all(f.result(timeout=180).status_code==200 for f in opened))
+            started = [pool.submit(self._stage_post,person,self.project_ids[person])
+                       for person in ("alice","bob")]
+            submissions = [f.result(timeout=100) for f in started]
+        self.assertEqual([r.status_code for r in submissions],[202,202],
+                         [r.get_data(as_text=True) for r in submissions])
+        self.assertEqual([r.json["stage"] for r in submissions],["ingest","ingest"])
+        deadline = time.monotonic()+210
+        done = set()
+        last = {}
+        while len(done)!=2 and time.monotonic()<deadline:
+            for person in ("alice","bob"):
+                if person in done: continue
+                client,_=self.clients[person]
+                response=client.get(
+                    f"/urano/v1/runtime/projects/{self.project_ids[person]}/ingest",
+                    base_url=ORIGIN)
+                self.assertEqual(response.status_code,200,response.get_data(as_text=True))
+                status=response.json["status"]
+                last[person]=status
+                self.assertNotIn(status,("failed","blocked"))
+                if status=="done":done.add(person)
+            time.sleep(.35)
+        self.assertEqual(done,{"alice","bob"},last)
+        for person in ("alice","bob"):
+            bridge=self.bridges[person]
+            self.assertEqual(bridge.guard.get_state(
+                bridge.owner_id,bridge.runtime_id)[0],"ready")
+
+            # No paths or source files are handed to Companion. Edits are
+            # deliberately not render-ready without local original matching.
+            saved=self.catalog.get(bridge.owner_id,self.project_ids[person])
+            self.catalog.save_recipe(
+                bridge.owner_id,self.project_ids[person],
+                {"urano_edits_v1":{"cuts":[
+                    {"source_slot":0,"start_ms":500,"end_ms":1200}]}},
+                expected_revision=saved.revision)
+            client,_=self.clients[person]
+            response=client.get(
+                f"/urano/v1/runtime/projects/{self.project_ids[person]}/companion-handoff",
+                base_url=ORIGIN)
+            self.assertEqual(response.status_code,200,response.get_data(as_text=True))
+            plan=response.json["plan"]
+            self.assertFalse(plan["render_ready"])
+            self.assertFalse(plan["local_source_resolution_verified"])
+            self.assertEqual(plan["cuts"][0]["end_ms"],1200)
+            self.assertNotIn("/workspace",response.get_data(as_text=True))
+            self.assertNotIn("source_files",response.get_data(as_text=True))
+        client,_=self.clients["alice"]
+        self.assertEqual(client.get(
+            f"/urano/v1/runtime/projects/{self.project_ids['bob']}/companion-handoff",
+            base_url=ORIGIN).status_code,404)
+        self.assertEqual(self.close("alice").status_code,200)
+        self.assertEqual(self.close("bob").status_code,200)
 
 
 if __name__ == "__main__":
