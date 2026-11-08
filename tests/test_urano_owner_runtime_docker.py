@@ -235,6 +235,16 @@ class OwnerSessionToRealEngine(unittest.TestCase):
             self.assertEqual(plan["cuts"][0]["end_ms"],1200)
             self.assertNotIn("/workspace",response.get_data(as_text=True))
             self.assertNotIn("source_files",response.get_data(as_text=True))
+            # Optional U22 single-runner handoff: emit ONLY the owner-authorized
+            # JSON descriptor after the real Engine Ingest reached DONE.
+            # Never emit input videos, project file, cookie, source path or JWT.
+            archive = os.environ.get("URANO_U22_HANDOFF_DIR")
+            if archive:
+                destination = Path(archive)
+                if not destination.is_dir() or destination.is_symlink():
+                    raise AssertionError("U22 scratch directory must exist")
+                (destination / (person+".json")).open("x",encoding="utf-8").write(
+                    json.dumps({"owner": person, "plan": plan})+"\n")
         client,_=self.clients["alice"]
         self.assertEqual(client.get(
             f"/urano/v1/runtime/projects/{self.project_ids['bob']}/companion-handoff",
