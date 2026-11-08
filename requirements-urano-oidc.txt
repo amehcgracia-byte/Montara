@@ -1,0 +1,2 @@
+# Optional, isolated URANO Google OIDC verification dependency. Not required by main Montara app.
+cryptography>=43,<49
