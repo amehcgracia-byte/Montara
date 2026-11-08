@@ -1,0 +1,45 @@
+name: URANO U15C Google simulated HTTPS browser login
+
+on:
+  push:
+    branches:
+      - fernando/urano-u15c-google-browser-lab
+  pull_request:
+    paths:
+      - 'urano/google_flow.py'
+      - 'urano/google_lab_app.py'
+      - 'urano/google_lab_ui/**'
+      - 'tests/e2e_urano_google_browser.py'
+      - '.github/workflows/urano-u15c-google-browser.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-google-browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install isolated browser contracts
+        run: |
+          python -m pip install 'Flask>=3,<4' 'playwright==1.56.0' -r requirements-urano-oidc.txt
+          python -m playwright install --with-deps chromium
+      - name: Signed fake provider HTTP contracts
+        run: python -m unittest discover -s tests -p 'test_google_*contract.py' -v
+      - name: Isolated Google HTTPS Chromium two-user browser acceptance
+        run: python tests/e2e_urano_google_browser.py --output e2e-output/google-lab
+      - name: Check JavaScript syntax
+        run: node --check urano/google_lab_ui/lab.js
+      - uses: actions/upload-artifact@v4
+        if: always()
+        continue-on-error: true
+        with:
+          name: urano-google-lab-browser
+          retention-days: 3
+          path: |
+            e2e-output/google-lab/*.png
+            e2e-output/google-lab/summary.json
