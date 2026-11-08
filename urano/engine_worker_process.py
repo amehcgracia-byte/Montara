@@ -77,7 +77,8 @@ def run(stdin, stdout, *, engine_dir: Path, data_root: Path, make_client=make_en
                 if packet["op"] == "ingest_start":
                     launched = client.post("/api/v1/stages/ingest/run")
                     if launched.status_code != 202:
-                        emit({"ok": False, "type": "ingest_start_rejected"})
+                        emit({"ok": False, "type": "ingest_start_rejected",
+                              "http_status": launched.status_code})
                         continue
                     emit({"ok": True, "type": "ingest_started"})
                     continue
