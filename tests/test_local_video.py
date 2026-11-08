@@ -174,3 +174,25 @@ def test_native_recipe_rejects_invalid_speed(invalid):
     data=recipe('a'*40)
     data['segments'][0]['playback_speed']=invalid
     with pytest.raises(ValueError):validate(data)
+
+
+@pytest.mark.parametrize('bad',[
+    {'placeholder':'black','source':0}, {'placeholder':'movie=/etc/passwd'},
+    {'placeholder':'black','motion':{}}, {'placeholder':'black','playback_speed':2},
+    {'placeholder':'black','clip_start_sec':3},
+])
+def test_neutral_intervals_are_strict_data_only(bad):
+    r=recipe('a'*40)
+    r['segments']=[{'duration_sec':1,'master_start_sec':0,**bad}]
+    with pytest.raises(ValueError):validate(r)
+
+
+def test_neutral_interval_needs_no_original_and_retains_diagnostic():
+    r=recipe('a'*40);r['sources']=[]
+    r['segments']=[{'placeholder':'black','duration_sec':1,'master_start_sec':3}]
+    r['diagnostics']=[{'shot':1,'source':0,'replacement':None,'placeholder':'black','status':'omitted','name':'logo.mp4'}]
+    clean=validate(r)
+    assert clean['sources']==[] and clean['diagnostics']==r['diagnostics']
+    assert validate(clean)==clean
+    r['diagnostics'][0]['replacement']=0
+    with pytest.raises(ValueError):validate(r)

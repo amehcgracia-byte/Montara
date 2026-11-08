@@ -69,6 +69,8 @@ jobs:
           node --test tests/test_preview_runtime.mjs
       - name: Montara regression tests
         if: matrix.mode == 'session'
+        env:
+          MONTARA_CONTINUITY_PROOF: e2e-output/optional-continuity
         run: python -m pytest tests -q
       - name: Session video matching policy
         if: matrix.mode == 'session'

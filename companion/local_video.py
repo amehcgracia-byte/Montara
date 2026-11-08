@@ -56,6 +56,8 @@ def run(manifest):
     atomic_write_json(state/'config.json',config)
     segments=[]
     for raw in recipe['segments']:
+        if raw.get('placeholder')=='black':
+            segments.append(dict(raw));continue
         key=raw['source'];path=str(sources[key]);r=next(r for r in records if r['path']==path)
         s={k:v for k,v in raw.items() if k!='source'}
         s.update(clip_path=path,source_path=path,probe=r['probe'])

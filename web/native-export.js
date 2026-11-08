@@ -16,16 +16,30 @@ const NativeExport = (() => {
       const alternative = source?.optional === true && (recipe.fallbacks?.[index] || []).find(c =>
         !missing.has(c.source) && byKey.has(c.source) && byKey.get(c.source).optional !== true &&
         c.master_start_sec === s.master_start_sec && c.duration_sec === s.duration_sec);
-      if (!alternative) {
-        diagnostics.push({shot:index + 1, source:s.source, status:'required', name:source?.original?.name || source?.path?.split('/').pop(), reason:source?.optional ? 'No synchronized camera covers this optional insert.' : !source?.original && /\.small\.mp4$/i.test(source?.path || '') ? 'Original association unavailable or ambiguous. Reimport with Companion and prepare this edit again from Footage.' : 'This shot needs its original.'});
+      if (!alternative && source?.optional !== true) {
+        diagnostics.push({shot:index + 1, source:s.source, status:'required', name:source?.original?.name || source?.path?.split('/').pop(), reason:!source?.original && /\.small\.mp4$/i.test(source?.path || '') ? 'Original association unavailable or ambiguous. Locate the original in Footage; the saved edit can be retained.' : 'This shot needs its original.'});
         return s;
       }
-      diagnostics.push({shot:index + 1, source:s.source, replacement:alternative.source, status:'omitted', name:source.original?.name || source.path?.split('/').pop(), reason:'Optional insert unavailable; synchronized camera retained for the same interval.'});
-      return alternative;
+      diagnostics.push({shot:index + 1, source:s.source, replacement:alternative?.source ?? null, placeholder:alternative ? undefined : 'black', status:'omitted', name:source.original?.name || source.path?.split('/').pop(), reason:alternative ? 'Optional insert unavailable; synchronized camera retained for the same interval.' : 'Optional insert unavailable; black interval preserves duration and master audio.'});
+      return alternative || {placeholder:'black', master_start_sec:s.master_start_sec, duration_sec:s.duration_sec, clip_start_sec:0, playback_speed:1};
     });
     const used = new Set(segments.map(s => s.source));
     return {recipe:{...recipe, segments, sources:recipe.sources.filter(s => used.has(s.key)), diagnostics, fallbacks:undefined}, diagnostics, blocked:diagnostics.some(d => d.status === 'required')};
   }
-  return {originalFor, plan};
+  function warnings(diagnostics) {
+    const groups = new Map();
+    for (const row of diagnostics || []) {
+      const key = `${row.status}:${row.source}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(row);
+    }
+    return [...groups.values()].map(rows => {
+      const row = rows[0];
+      if (row.status === 'required') return `${row.name || 'Camera'}: ${rows.length} shot(s) need this original. ${row.reason || 'Locate it in Footage.'}`;
+      const black = rows.filter(r => r.placeholder === 'black').length;
+      return `${row.name || 'Optional insert'} omitted in ${rows.length} shot(s). ${black ? `${black} interval(s) use black. ` : ''}${rows.length > black ? 'Verified synchronized cameras cover the other intervals. ' : ''}Duration and master audio are unchanged.`;
+    });
+  }
+  return {originalFor, plan, warnings};
 })();
 if (typeof module !== 'undefined') module.exports = NativeExport;
