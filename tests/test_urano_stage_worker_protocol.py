@@ -84,7 +84,7 @@ class WorkerStageProtocol(unittest.TestCase):
             {"op":"stop"}],accept=False)
         self.assertEqual(responses[1]["ok"],False)
         self.assertEqual(responses[3]["ok"],False)
-        self.assertEqual(responses[4],{"ok":False,"type":"ingest_start_rejected"})
+        self.assertEqual(responses[4],{"ok":False,"type":"ingest_start_rejected","http_status":400})
         self.assertNotIn("/Users",json.dumps(responses))
 
     def test_stale_project_folder_cannot_run_ingest(self):
