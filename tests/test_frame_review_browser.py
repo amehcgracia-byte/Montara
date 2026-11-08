@@ -73,7 +73,7 @@ def test_extra_360_viewpoint_has_its_own_tile_name_and_pose():
     class StaticHandler(BaseHTTPRequestHandler):
         def log_message(self,*_): pass
         def do_GET(self):
-            name=urlsplit(self.path).path.lstrip('/')
+            name=urlsplit(self.path).path.lstrip('/') or 'index.html'
             path=WEB/name
             if path.is_file() and path.resolve().is_relative_to(WEB):
                 raw=path.read_bytes()
