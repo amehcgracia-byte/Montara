@@ -53,6 +53,12 @@ const montaraCompanion = (() => {
       if (!response.ok) throw new Error('The companion could not save the video.');
       return (await response.json()).saved;
     },
+    async locateOriginal(original) {
+      const response = await call('/locate', json(original));
+      if (response.status === 404) return false;
+      if (!response.ok) throw new Error('Could not check the original: ' + original.name);
+      return true;
+    },
     async startVideo(body) {
       const response=await call('/video-renders',json(body));const data=await response.json();
       if(!response.ok){const error=new Error(data.error || 'Could not start original-quality export');error.status=response.status;throw error;}return data.id;

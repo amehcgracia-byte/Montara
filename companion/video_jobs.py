@@ -39,12 +39,13 @@ class VideoJobs:
                 path=Path(row['path'])
                 if path.is_file() and path.stat().st_size>0:
                     self.jobs[token]={'status':'ready','progress':1.,'path':path,'work':Path(row['work']),
-                                      'snapshot':Path(row['snapshot']),'download_name':row['download_name']}
+                                      'snapshot':Path(row['snapshot']),'download_name':row['download_name'],'diagnostics':row.get('diagnostics',[])}
         except (OSError,ValueError,KeyError,TypeError):pass
 
     def _save_completed(self):
         rows={token:{k:str(job[k]) for k in ('path','work','snapshot','download_name')}
               for token,job in self.jobs.items() if job['status']=='ready'}
+        for token,row in rows.items():row['diagnostics']=self.jobs[token].get('diagnostics',[])
         self.home.mkdir(parents=True,exist_ok=True)
         temporary=self.home/'completed-jobs.tmp'
         temporary.write_text(json.dumps(dict(list(rows.items())[-30:])))
@@ -70,7 +71,7 @@ class VideoJobs:
         if not master.is_file() or not 0<master.stat().st_size<=1024**3:raise ValueError('Send the master audio before rendering')
         mapping=body.get('originals')
         if not isinstance(mapping,list) or len(mapping)!=len(recipe['sources']):raise ValueError('Locate every original video')
-        source_files={}
+        source_files={};verified={}
         for item in mapping:
             key=item.get('source') if isinstance(item,dict) else None
             if isinstance(key,bool) or not isinstance(key,int) or key in source_files or key not in [s['key'] for s in recipe['sources']]:raise ValueError('Invalid original source mapping')
@@ -83,13 +84,14 @@ class VideoJobs:
                     path=Path(path)
                     with path.open('rb') as handle:
                         first=handle.read(65536);handle.seek(max(0,path.stat().st_size-65536));last=handle.read(65536)
-                    if path.stat().st_size!=original['size'] or hashlib.sha256(first+last).hexdigest()!=original['fingerprint']:raise ValueError('An original video changed. Add it again before exporting.')
+                    if path.stat().st_size!=original['size'] or hashlib.sha256(first+last).hexdigest()!=original['fingerprint']:raise ValueError('Source '+str(key)+' · '+original['name']+': original changed. Reconnect it before exporting.')
             else:
                 name=item.get('asset')
                 if not isinstance(name,str) or not re.fullmatch(r'montara-render-source-[a-f0-9]{32}\.(mp4|mov|mkv|webm|mts)',name):raise ValueError('Invalid source asset')
                 path=folder/name
-            if not path or not Path(path).is_file() or Path(path).suffix.lower() not in {'.mp4','.mov','.m4v','.mts','.mkv','.avi','.webm'}:raise ValueError('An original video is unavailable. Reconnect its drive and retry.')
+            if not path or not Path(path).is_file() or Path(path).suffix.lower() not in {'.mp4','.mov','.m4v','.mts','.mkv','.avi','.webm'}:raise ValueError('Source '+str(key)+' · '+str((item.get('original') or {}).get('name') or item.get('asset') or 'video')+': original unavailable. Reconnect its drive and retry.')
             source_files[key]=str(Path(path).resolve())
+            if item.get('original'):verified[key]=item['original']
         branding=body.get('branding','none')
         if branding not in ('none','montara','mine'):raise ValueError('Choose a logo option')
         personal_logo=None
@@ -114,10 +116,10 @@ class VideoJobs:
             while output.exists() or output in reserved:
                 output=folder/(name+f' ({suffix}).mp4');suffix+=1
             progress=work/'progress.json'
-            manifest={'personal_logo':personal_logo,'recipe':recipe,'source_files':source_files,'master':str(master),'branding':branding,'work':str(work),'output':str(output),'progress':str(progress)}
+            manifest={'verified_originals':verified,'personal_logo':personal_logo,'recipe':recipe,'source_files':source_files,'master':str(master),'branding':branding,'work':str(work),'output':str(output),'progress':str(progress)}
             (work/'render.json').write_text(json.dumps(manifest))
             for key in [k for k,j in self.jobs.items() if j['status'] in ('ready','failed','cancelled')][:-30]:self.jobs.pop(key)
-            self.jobs[token]={'status':'queued','progress':0,'path':output,'work':work,'snapshot':progress,'download_name':name+'.mp4',
+            self.jobs[token]={'diagnostics':recipe.get('diagnostics',[]),'status':'queued','progress':0,'path':output,'work':work,'snapshot':progress,'download_name':name+'.mp4',
                               'tasks':[{'id':f'segment-{i+1}','label':f'Shot {i+1}/{len(recipe["segments"])}','percent':0} for i in range(len(recipe['segments']))]}
         threading.Thread(target=self._run,args=(token,),daemon=True).start()
         return token
@@ -161,7 +163,7 @@ class VideoJobs:
     def status(self,token):
         job=self.jobs.get(token)
         if not job:return None
-        result={k:job[k] for k in ('status','progress','error','tasks') if k in job}
+        result={k:job[k] for k in ('status','progress','error','tasks','diagnostics') if k in job}
         if job['status']=='rendering':
             try:
                 snap=json.loads(job['snapshot'].read_text())

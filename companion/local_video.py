@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Render a reviewed Stage plan with verified local originals, in isolation."""
-import json,os,shutil,sys,time,threading
+import hashlib,json,os,shutil,sys,time,threading
 from pathlib import Path
 
 
@@ -36,6 +36,12 @@ def run(manifest):
     sources={int(k):Path(v) for k,v in body['source_files'].items()}
     records=[]
     for key,path in sources.items():
+        expected=body.get('verified_originals',{}).get(str(key))
+        if expected:
+            with path.open('rb') as handle:
+                first=handle.read(65536);handle.seek(max(0,path.stat().st_size-65536));last=handle.read(65536)
+            if path.stat().st_size!=expected['size'] or hashlib.sha256(first+last).hexdigest()!=expected['fingerprint']:
+                raise ValueError('Original changed while queued: '+expected['name'])
         r=file_record(str(path));r['probe']=validate_camera_video_metadata(ffprobe(str(path))).summary
         r['camera_role']='handheld';r['camera_id']=str(key);records.append(r)
     p.data['inputs']['videos']=records

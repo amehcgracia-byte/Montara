@@ -133,8 +133,55 @@ def preview_original(path) -> dict | None:
         data = json.loads((Path(path).parent / 'upload.json').read_text())
     except (OSError, ValueError):
         return None
-    return data.get('preview_of') if data.get('restored') == Path(path).name else None
+    return data.get('preview_of') if (data.get('complete') or data.get('restored')) and data.get('restored', data.get('name')) == Path(path).name else None
 
+
+
+def reconnect_preview_original(path, uploads_root) -> dict | None:
+    """Recover legacy associations only from one byte-identical uploaded proxy.
+
+    Never identify an original by basename or by a lossy visual/audio similarity.
+    Multiple original identities producing the same proxy remain ambiguous.
+    """
+    direct = preview_original(path)
+    if direct:
+        return direct
+    path = Path(path)
+    if not path.name.lower().endswith('.small.mp4') or not path.is_file():
+        return None
+    records = list(Path(uploads_root).glob('*/upload.json'))
+    if len(records) > 5000:
+        return None
+    size = path.stat().st_size
+    if size > 512 * 1024**2:
+        return None
+    with path.open('rb') as handle:
+        first=handle.read(65536);handle.seek(max(0,size-65536));last=handle.read(65536)
+    edge = hashlib.sha256(first+last).hexdigest()
+    def digest(target):
+        hasher=hashlib.sha256()
+        with target.open('rb') as handle:
+            for block in iter(lambda:handle.read(1024*1024),b''):
+                hasher.update(block)
+        return hasher.hexdigest()
+    matches={}; full=None
+    for record in records:
+        try:
+            data=json.loads(record.read_text())
+            if not data.get('complete') or not data.get('video_preview') or data.get('size')!=size or data.get('fingerprint')!=edge:
+                continue
+            target=record.parent/str(data.get('name') or '')
+            if target.resolve().parent != record.parent.resolve():
+                continue
+            original=preview_original(target)
+            if not original or not target.is_file() or target.stat().st_size!=size:
+                continue
+            full=full or digest(path)
+            if digest(target)==full:
+                matches[json.dumps(original,sort_keys=True)]=original
+        except (OSError,ValueError,TypeError):
+            continue
+    return next(iter(matches.values())) if len(matches)==1 else None
 
 def register_resumable_upload(app, data_root, classify):
     root = Path(data_root).resolve() / 'Uploads'
@@ -177,13 +224,37 @@ def register_resumable_upload(app, data_root, classify):
             return failure(f'This environment accepts files up to {limit / 1024**2:.0f} MiB.', 413)
         if not isinstance(fingerprint, str) or not re.fullmatch('[a-f0-9]{64}', fingerprint):
             return failure('Invalid file fingerprint.')
+        record = dict(name=name, size=size, fingerprint=fingerprint, complete=False)
+        video_preview = body.get('video_preview', False)
+        if not isinstance(video_preview, bool):
+            return failure('Invalid video preview mode.')
+        if video_preview and not name.lower().endswith('.small.mp4'):
+            return failure('A video preview must be a Companion small MP4.')
+        if name.lower().endswith(PREVIEW) or video_preview:
+            original = body.get('original')
+            if (not isinstance(original, dict) or not isinstance(original.get('name'), str)
+                    or not original['name'] or len(original['name']) > 200
+                    or Path(original['name']).name != original['name'] or '\\' in original['name']
+                    or isinstance(original.get('size'), bool) or not isinstance(original.get('size'), int) or original['size'] <= 0
+                    or not re.fullmatch('[a-f0-9]{64}', str(original.get('fingerprint')))):
+                return failure('A preview must name its original.')
+            record['preview_of'] = dict(name=original['name'], size=original['size'], fingerprint=original['fingerprint'])
+            if video_preview:
+                record['video_preview'] = True
+            else:
+                if not isinstance(body.get('compact_preview', False), bool):
+                    return failure('Invalid preview mode.')
+                record['compact_preview'] = body.get('compact_preview', False)
         root.mkdir(parents=True, exist_ok=True)
         with (root / 'allocation.lock').open('a') as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
             reserved = 0
             for path in root.glob('*/upload.json'):
                 item = load(path.parent)
-                if item['name'] == name and item['size'] == size and item['fingerprint'] == fingerprint:
+                if (item['name'] == name and item['size'] == size and item['fingerprint'] == fingerprint
+                        and item.get('preview_of') == record.get('preview_of')
+                        and item.get('video_preview', False) == record.get('video_preview', False)
+                        and item.get('compact_preview', False) == record.get('compact_preview', False)):
                     return jsonify(public(path.parent, item))
                 if not item.get('complete'):
                     reserved += max(0, item['size'] - public(path.parent, item)['received'])
@@ -191,17 +262,6 @@ def register_resumable_upload(app, data_root, classify):
                 return failure('Not enough storage for this file. Remove an unfinished upload or use a smaller file.', 507)
             work = root / uuid.uuid4().hex
             work.mkdir()
-            record = dict(name=name, size=size, fingerprint=fingerprint, complete=False)
-            original = body.get('original')
-            if name.lower().endswith(PREVIEW):
-                if (not isinstance(original, dict) or not isinstance(original.get('name'), str) or Path(original['name']).name != original['name']
-                        or isinstance(original.get('size'), bool) or not isinstance(original.get('size'), int)
-                        or not re.fullmatch('[a-f0-9]{64}', str(original.get('fingerprint')))):
-                    return failure('A preview must name its original.')
-                if not isinstance(body.get('compact_preview', False), bool):
-                    return failure('Invalid preview mode.')
-                record['compact_preview'] = body.get('compact_preview', False)
-                record['preview_of'] = dict(name=original['name'], size=original['size'], fingerprint=original['fingerprint'])
             save(work / 'upload.json', record)
             (work / 'source.part').touch()
             return jsonify(public(work, load(work))), 201

@@ -185,7 +185,7 @@ function todayName() {
   return `Session ${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-const videos = () => state.platform === 'youtube' && $('#stageAudioOnly').checked ? [] : state.files.filter((f) => f.kind === "video");
+const videos = () => state.platform === 'youtube' && $('#stageAudioOnly').checked ? [] : state.files.filter((f) => f.kind === "video" && f.usage !== "asset");
 const audioTracks = () => state.files.filter((f) => f.kind === "master" || f.kind === "songs");
 // Several audio files on Stage = separate instrument/mic tracks -> the mixer makes the master.
 const audioOnly = () => state.platform === "youtube" && videos().length === 0 && audioTracks().length > 0;
@@ -574,7 +574,7 @@ function upload(file, entry) {
   }
   if (montaraCompanion.info && !entry.viaCompanion && montaraCompanion.helps(file)) return uploadSmall(file, entry);
   // A lossless copy must reach the server through the resumable path, which restores the WAV.
-  if (file.size > 8 * 1024 * 1024 || /\.(wav|aiff?)\.(flac|opus|wv)$/i.test(file.name)) return uploadInParts(file, entry);
+  if (isCompanionProxy || file.size > 8 * 1024 * 1024 || /\.(wav|aiff?)\.(flac|opus|wv)$/i.test(file.name)) return uploadInParts(file, entry);
   state.uploads += 1;
   const xhr = new XMLHttpRequest();
   entry.xhr = xhr;
@@ -613,7 +613,7 @@ function upload(file, entry) {
 async function uploadInParts(file, entry) {
   state.uploads += 1;
   try {
-    const extra = /\.opus$/i.test(file.name) && entry.original ? {original: {name: entry.original.name, size: entry.original.size, fingerprint: entry.original.fingerprint}, compact_preview:state.platform==='youtube' && state.files.some(f=>f.kind==='video'||/\.(mp4|mov|mkv|mts|m2ts|webm|avi|m4v)$/i.test(f.name))} : {};
+    const extra = entry.small && entry.original && montaraCompanion.isVideo(file) ? {video_preview:true,original:{name:entry.original.name,size:entry.original.size,fingerprint:entry.original.fingerprint}} : /\.opus$/i.test(file.name) && entry.original ? {original: {name: entry.original.name, size: entry.original.size, fingerprint: entry.original.fingerprint}, compact_preview:state.platform==='youtube' && state.files.some(f=>f.kind==='video'||/\.(mp4|mov|mkv|mts|m2ts|webm|avi|m4v)$/i.test(f.name))} : {};
     const data = await sendResumableUpload(file, (progress, phase) => { entry.progress = progress; if(phase)entry.phase=phase; renderFiles(); }, id => {entry.uploadId = id; remember(entry);}, () => entry.removed, extra);
     const found = ['videos', 'master', 'songs', 'ignored'].map(kind => [kind, (data[kind] || [])[0]]).find(([, item]) => item);
     if (!found) throw new Error('Not a usable media file');
@@ -633,7 +633,8 @@ async function uploadInParts(file, entry) {
 const KIND_LABEL = { video: "VIDEO", master: "AUDIO", songs: "SONGS", ignored: "SKIPPED", uploading: "UPLOAD", error: "ERROR" };
 const isAudioEntry = (f) => f.kind === "master" || f.kind === "songs" || (f.kind !== "video" && /\.(wav|mp3|m4a|aiff?|flac|ogg)$/i.test(f.name));
 function fileLabel(f) {
-  if (f.kind === "video") return f.usage === "filler" ? "FILLER" : isSphere(f) ? "360" : "VIDEO";
+  if (f.kind === "video" && f.usage === "asset") return "ASSET";
+  if (f.kind === "video") return f.usage === "filler" ? "INSERT" : isSphere(f) ? "360" : "VIDEO";
   if(state.audioTask==='master' && f.kind==='master')return 'MIX';
   if (f.kind === "master" || f.kind === "songs") return mixerMode() ? "TRACK" : "MASTER";
   return KIND_LABEL[f.kind] || f.kind.toUpperCase();
@@ -708,10 +709,11 @@ function fileRow(f, typed = false) {
     <li>
       <span class="kind ${f.kind}">${fileLabel(f)}</span>
       <span class="name" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}</span>
-      <span class="state">${f.kind === "uploading" ? (f.phase ? escapeHtml(f.phase) + " " : "") + Math.round(f.progress * 100) + "%" + uploadEta(f) : f.small && f.kind === "video" ? "Ready · small version" : f.preview ? "Ready · preview" : f.small ? "Ready · lossless" : f.kind === "error" ? escapeHtml(f.error) : f.kind === "ignored" ? escapeHtml(f.reason || "not used") : "Ready"}</span>
+      <span class="state">${f.kind === "uploading" ? (f.phase ? escapeHtml(f.phase) + " " : "") + Math.round(f.progress * 100) + "%" + uploadEta(f) : state.syncExcluded.has(f.path) ? "No sync" : f.usage === "asset" ? "Ready" : f.small && f.kind === "video" ? "Ready · small version" : f.preview ? "Ready · preview" : f.small ? "Ready · lossless" : f.kind === "error" ? escapeHtml(f.error) : f.kind === "ignored" ? escapeHtml(f.reason || "not used") : "Ready"}</span>
       <button class="remove" data-remove-file="${f.id}" type="button" aria-label="Remove ${escapeHtml(f.name)}" title="Remove">×</button>
       ${f.wholeFile && f.kind === "error" ? `<button class="link whole" data-upload-whole="${f.id}" type="button">Upload the whole file (${(f.wholeFile.size / 1e9).toFixed(1)} GB)</button>` : ""}
-      ${state.platform === 'youtube' && f.kind === 'video' && !isSphere(f) ? `<label class="track-type">Use as <select data-video-usage="${f.id}" aria-label="Use for ${escapeHtml(f.name)}"><option value="camera" ${f.usage !== 'filler' ? 'selected' : ''}>Camera</option><option value="filler" ${f.usage === 'filler' ? 'selected' : ''}>Filler · no sync</option></select></label>` : ''}
+      ${state.platform === 'youtube' && f.kind === 'video' && !isSphere(f) ? `<label class="track-type">Use as <select data-video-usage="${f.id}" aria-label="Use for ${escapeHtml(f.name)}"><option value="camera" ${!['filler','asset'].includes(f.usage) ? 'selected' : ''}>Camera</option><option value="filler" ${f.usage === 'filler' ? 'selected' : ''}>Insert · optional, no sync</option><option value="asset" ${f.usage === 'asset' ? 'selected' : ''}>Asset / logo · keep out of montage</option></select></label>` : ''}
+      ${state.syncExcluded.has(f.path) ? '<span class="source-note">Not used in this song: no reliable audio match. Kept in your library.</span>' : ''}
       ${f.path && (f.kind === "master" || f.kind === "songs") && state.audioTask !== 'master' ? `<span class="track-audition"><button type="button" data-audition="${f.id}" aria-pressed="false" aria-label="Listen to ${escapeHtml(f.name)} for 12 seconds">▶ Listen 12 s</button><button type="button" data-audition-next="${f.id}" aria-label="Listen to another part of ${escapeHtml(f.name)}">Another part</button></span>` : ""}
       ${typed && (f.kind === "master" || f.kind === "songs") ? TrackTypes.controls(f.name) : ""}
       ${f.kind === "uploading" ? `<span class="bar"><i style="width:${Math.round(f.progress * 100)}%"></i></span>` : ""}
@@ -1622,7 +1624,7 @@ async function prepareStageSources(generation, input, name) {
     await workRequest(generation,'/wizard/prepare',{name,platform:'youtube',project_id:state.projectId,...input});
     await waitFor(s=>['waiting_choice','done'].includes(s.status),generation);
     sync=await api('/artifacts/sync');checkWork(generation);
-    toast(`Matched ${review.ready.length} camera${review.ready.length===1?'':'s'}; skipped ${rejected.length} unrelated video${rejected.length===1?'':'s'}.`);
+    toast(`Matched ${review.ready.length} camera${review.ready.length===1?'':'s'}. Kept outside this song: ${rejected.map(f=>f.name + (review.silent.includes(f) ? ' (no audio)' : ' (sync not proven)')).join('; ')}.`);
   }
   return {input,sync};
 }
@@ -2006,7 +2008,7 @@ async function swap(index) {
 $("#renderFrames").addEventListener("click", async () => {
   try {
     clearInterval(state.framesPoll);
-    if(state.platform==='youtube' && state.files.some(f=>f.kind==='video' && f.small))return await finishOriginalVideo({result:{}});
+    if(state.platform==='youtube' && videos().some(f=>f.small && !state.syncExcluded.has(f.path)))return await finishOriginalVideo({result:{}});
     const generation=beginWork();
     setProgress(0, "Rendering your video…", "");
     show("making");
@@ -2610,40 +2612,52 @@ $("#showExport").addEventListener("click", async () => {
 
 async function finishOriginalVideo(s) {
   if(state.nativeExport)return;
-  beginWork();
+  const generation=beginWork();
   const job={cancelled:false,id:null};state.nativeExport=job;stopPolling();show('making');setProgress(0,'Preparing original-quality video…','');
   try {
+    let recipe=await api('/edit/native-recipe?project_id='+encodeURIComponent(state.projectId));
+    if(job.cancelled)return;
+    const usedKeys=new Set(recipe.segments.map(shot=>shot.source));
+    if (!recipe.sources.some(source=>usedKeys.has(source.key) && (source.preview || /\.small\.mp4$/i.test(source.path) || state.files.some(f=>f.path===source.path && f.small)))) {
+      state.nativeExport=null;
+      if (s.serverRendered) return showResult({...s,result:{...s.result,originalQuality:true}});
+      setProgress(0,'Rendering your video…','');
+      await workRequest(generation,'/wizard/review/render',{});
+      startPolling();return;
+    }
     await montaraCompanion.detect();
     if(job.cancelled)return;
     if(!montaraCompanion.info?.local_video)throw new Error('Update the Montara companion with the video renderer to export from your originals.');
-    const recipe=await api('/edit/native-recipe?project_id='+encodeURIComponent(state.projectId));
-    if(job.cancelled)return;
     renderShotBars({tasks:recipe.segments.map((_,i)=>({id:`segment-${i+1}`,label:`Shot ${i+1}/${recipe.segments.length}`,percent:0}))});
     if(recipe.engine!==montaraCompanion.info.local_video.engine)throw new Error('The companion needs the same editor version as this page. Update it before exporting.');
     if(!state.localProject)state.localProject=await montaraCompanion.projectFolder($('#videoName').value.trim()||todayName(),state.files.filter(f=>f.original).map(f=>f.original));
     if(job.cancelled)return;
     if(!state.localProject)throw new Error('Choose a project folder to save the original-quality video.');
-    // A restored Stage edit can still refer to its original server proxy path
-    // even after the person imported the exact camera file again. Reimporting
-    // creates a fresh upload path, so matching the old path alone is incorrect.
-    // Only relink when the proxy stem identifies exactly ONE verified original.
     const savedOriginals = await footageMemory.list(state.platform).catch(()=>[]);
-    const candidates = [...state.files, ...savedOriginals].filter(f=>f.original?.name && f.original?.fingerprint);
-    const originalFor = source => {
-      const exact = state.files.find(f=>f.path===source.path && f.original);
-      if(exact)return exact.original;
-      if(!/\.small\.mp4$/i.test(source.path))return null;
-      const stem = source.path.split('/').pop().replace(/\.small\.mp4$/i,'').toLowerCase();
-      const matching = candidates.map(f=>f.original).filter(original=>
-        original.name.replace(/\.[^.]+$/,'').toLowerCase()===stem);
-      const unique = [...new Map(matching.map(original=>[
-        [original.name,original.size,original.fingerprint].join('|'),original
-      ])).values()];
-      return unique.length===1 ? unique[0] : null;
-    };
+    const candidates = [...state.files, ...savedOriginals];
+    const identities = new Map();
+    const unavailable = [];
+    for (const source of recipe.sources) {
+      const original = NativeExport.originalFor(source, candidates);
+      identities.set(source.key, original);
+      if (original) {
+        if (!await montaraCompanion.locateOriginal(original)) unavailable.push(source.key);
+      } else if (source.preview || /\.small\.mp4$/i.test(source.path) || state.files.some(f=>f.path===source.path && f.small)) unavailable.push(source.key);
+      else {
+        const checked = await fetch('/api/v1/edit/native-source/'+source.key+'?'+new URLSearchParams({revision:recipe.revision,project_id:state.projectId}), {method:'HEAD'});
+        if ([400,404,410].includes(checked.status)) unavailable.push(source.key);
+        else if (!checked.ok) throw new Error('Could not check this edit’s originals. Reopen the edit and retry.');
+      }
+      if (job.cancelled) return;
+    }
+    const planned = NativeExport.plan(recipe, unavailable);
+    if (planned.blocked) throw new Error(planned.diagnostics.filter(d=>d.status==='required').map(d=>`Shot ${d.shot} · ${d.name}: ${d.reason} Reconnect its original in Footage.`).join('\n'));
+    recipe = planned.recipe;
+    job.diagnostics = planned.diagnostics;
+    if (planned.diagnostics.length) toast(planned.diagnostics.map(d=>`Shot ${d.shot} · ${d.name}: ${d.reason}`).join(' '), true);
     const sources=[];
     for(const source of recipe.sources){
-      const original = originalFor(source);
+      const original = identities.get(source.key);
       const file=state.files.find(f=>f.path===source.path);
       if(original)sources.push({source:source.key,original});
       else {
@@ -2681,6 +2695,7 @@ async function watchNativeVideo(job,s={}) {
     for(;;){
       if(job.cancelled){await montaraCompanion.cancelVideo(job.id);return;}
       const status=await montaraCompanion.videoStatus(job.id);
+      if (!job.diagnostics && status.diagnostics) job.diagnostics=status.diagnostics;
       if(job.cancelled)return;
       if(status.status==='failed')throw new Error(status.error || 'The original-quality export failed.');
       if(status.status==='cancelled')return;
@@ -2692,7 +2707,7 @@ async function watchNativeVideo(job,s={}) {
     if(job.cancelled)return;
     renderShotBars({status:'done'});
     state.nativeExport=null;state.lastNativeJob=job.id;
-    showResult({...s,result:{...s.result,native:true,url:montaraCompanion.videoUrl(job.id)}});
+    showResult({...s,result:{...s.result,native:true,export_diagnostics:job.diagnostics,url:montaraCompanion.videoUrl(job.id)}});
     $('#download').href=montaraCompanion.videoUrl(job.id,true);
 }
 
@@ -2705,7 +2720,7 @@ function projectDownloadName(audio=false) {
 }
 function showResult(s) {
   const result = s.result || {};
-  if(state.platform==='youtube' && !result.audio && !result.native && state.files.some(f=>f.kind==='video' && f.small))return finishOriginalVideo(s);
+  if(state.platform==='youtube' && !result.audio && !result.native && !result.originalQuality && videos().some(f=>f.small && !state.syncExcluded.has(f.path)))return finishOriginalVideo({...s,serverRendered:true});
   if(result.native){state.savedLocally=true;$('#resultVideo').crossOrigin='anonymous';}
   else $('#resultVideo').removeAttribute('crossorigin');
   footageMemory.clear(state.platform);  // the video is made; next visit starts clean
@@ -2728,6 +2743,8 @@ function showResult(s) {
   $("#download").href = `${url}${url.includes("?") ? "&" : "?"}download_name=${encodeURIComponent(downloadName)}`;
   $("#download").setAttribute("download", downloadName);
   const bits = [];
+  if (!result.native && result.warnings?.length) bits.push(result.warnings.join('; '));
+  if (result.export_diagnostics?.length) bits.push(result.export_diagnostics.map(d=>`Shot ${d.shot}: optional ${d.name || 'insert'} omitted; synchronized camera used`).join('; '));
   if (result.cut_count) bits.push(`${result.cut_count} cuts`);
   if (result.camera_usage) bits.push(`${Object.keys(result.camera_usage).length} camera${Object.keys(result.camera_usage).length === 1 ? "" : "s"}`);
   $("#resultInfo").textContent = result.audio ? "Your mastered audio is ready." : bits.join(" · ");

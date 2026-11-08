@@ -75,7 +75,10 @@ async function scenario(mode) {
       setRequestHeader() {}
       send(file) { uploads.push({ route: this.url, file }); }
     },
-    sendResumableUpload: async () => { throw Error("Unexpected resumable transfer"); },
+    sendResumableUpload: async (file,progress,registered,cancelled,extra) => {
+      uploads.push({route:"/montara/uploads",file,extra});
+      return {videos:[{path:"/lab/camera.small.mp4",duration:1}]};
+    },
     renderFiles: () => {}, remember: () => {},
     $: () => ({ checked: false }), videos: () => [], LONG_AUDIO_BYTES: 150000000,
   });
@@ -84,6 +87,7 @@ async function scenario(mode) {
   const companion = vm.runInContext("montaraCompanion", ctx);
   assert.ok(await companion.detect(), "Companion detection");
   await vm.runInContext("upload", ctx)(original, entry);
+  await new Promise(resolve=>setImmediate(resolve));
 
   assert.ok(calls.includes("/locate"), mode + " locate called");
   assert.equal(calls.filter(p => p === "/locate").length, 1);
@@ -93,7 +97,10 @@ async function scenario(mode) {
       "/proxies/" + proxyKey, "/proxies/" + proxyKey + "/file",
     ]);
     assert.equal(uploads.length, 1, "Only one network transfer to server");
-    assert.equal(uploads[0].route, "/api/v1/wizard/upload");
+    assert.equal(uploads[0].route, "/montara/uploads");
+    assert.equal(uploads[0].extra.video_preview,true);
+    assert.equal(uploads[0].extra.original.fingerprint,expectedFinger);
+    assert.equal(uploads[0].extra.original.name,original.name);
     assert.equal(uploads[0].file.name, "camera.small.mp4");
     assert.equal(uploads[0].file.size, proxyData.length);
     assert.notEqual(uploads[0].file, original, "Original never uploaded");

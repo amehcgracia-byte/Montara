@@ -27,7 +27,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-VERSION = "0.6.7"
+VERSION = "0.6.8"
 PORT = int(os.environ.get("MONTARA_COMPANION_PORT", "47820"))
 HOME = Path(os.environ.get("MONTARA_COMPANION_HOME", Path.home() / ".montara-companion"))
 CACHE = HOME / "proxies"
@@ -221,12 +221,27 @@ def valid_original(original) -> bool:
 
 def find_original(original: dict) -> Path | None:
     source_id = hashlib.sha256(f"{original['name']}|{original['size']}|{original['fingerprint']}".encode()).hexdigest()[:24]
-    if source_id not in sources:
-        path = locate(original["name"], original["size"], original["fingerprint"])
-        if not path:
-            return None
+    cached = sources.get(source_id)
+    if cached:
+        try:
+            if cached.is_file() and cached.stat().st_size == original['size'] and fingerprint(cached) == original['fingerprint']:
+                return cached
+        except OSError:
+            pass
+        sources.pop(source_id, None)
+    # A reimport can register the same bytes under a new name. Reuse only a
+    # verified content identity, never basename, mtime, or a previous cache hit.
+    for path in list(sources.values()):
+        try:
+            if path.is_file() and path.stat().st_size == original['size'] and fingerprint(path) == original['fingerprint']:
+                sources[source_id] = path
+                return path
+        except OSError:
+            continue
+    path = locate(original['name'], original['size'], original['fingerprint'])
+    if path:
         sources[source_id] = path
-    return sources[source_id]
+    return path
 
 
 def locate(name: str, size: int, print_: str) -> Path | None:
@@ -601,13 +616,9 @@ class Handler(BaseHTTPRequestHandler):
                     or not isinstance(size, int) or not isinstance(print_, str) or not re.fullmatch(r"[a-f0-9]{64}", print_)):
                 return self.reply(400, {"error": "invalid file description"})
             source_id = hashlib.sha256(f"{name}|{size}|{print_}".encode()).hexdigest()[:24]
-            if source_id not in sources:
-                path = locate(name, size, print_)
-                if not path:
-                    log(f"not found on this computer: {name}")
-                    return self.reply(404, {"error": "not found on this computer"})
-                sources[source_id] = path
-                log(f"found {name}")
+            path = find_original({'name':name,'size':size,'fingerprint':print_})
+            if not path:
+                return self.reply(404, {'error':'not found on this computer'})
             return self.reply(200, {"id": source_id})
         if self.path == "/mix-song":
             return self.mix_song(body)

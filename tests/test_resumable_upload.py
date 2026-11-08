@@ -193,3 +193,46 @@ def test_camera_preview_keeps_opus_without_full_pcm_and_preserves_recorder_clock
     assert compact_preview_metadata(path)==dict(samplerate=44100,offset=2.0)
     assert preview_original(path)==original
     assert c.post(url+'/finish',json={}).json==response.json
+
+
+def test_video_proxy_upload_keeps_original_identity_and_does_not_merge_distinct_originals(tmp_path):
+    from resumable_upload import preview_original
+    c=make_client(tmp_path)
+    payload=b'identical small proxy bytes'
+    original={'name':'camera.mov','size':1000,'fingerprint':'a'*64}
+    body=dict(name='camera.small.mp4',size=len(payload),fingerprint=fingerprint(payload),video_preview=True,original=original)
+    first=c.post('/montara/uploads',json=body)
+    assert first.status_code==201
+    url='/montara/uploads/'+first.json['id']
+    assert c.put(url,data=payload,headers={'Upload-Offset':'0'}).status_code==200
+    result=c.post(url+'/finish',json={})
+    assert result.status_code==200
+    assert preview_original(result.json['videos'][0]['path'])==original
+    assert c.post('/montara/uploads',json=body).json['id']==first.json['id']
+    different={**body,'original':{**original,'fingerprint':'b'*64}}
+    second=c.post('/montara/uploads',json=different)
+    assert second.status_code==201 and second.json['id']!=first.json['id']
+    assert c.post('/montara/uploads',json={**body,'original':{'name':'../bad.mov'}}).status_code==400
+
+
+def test_legacy_proxy_reconnect_uses_complete_bytes_and_refuses_ambiguity(tmp_path):
+    from resumable_upload import reconnect_preview_original
+    payload=b'A'*200000
+    c=make_client(tmp_path/'data')
+    original={'name':'renamed-camera.mov','size':1000000,'fingerprint':'a'*64}
+    body=dict(name='renamed-camera.small.mp4',size=len(payload),fingerprint=fingerprint(payload),video_preview=True,original=original)
+    def upload(value):
+        job=c.post('/montara/uploads',json=value).json
+        url='/montara/uploads/'+job['id']
+        assert c.put(url,data=payload,headers={'Upload-Offset':'0'}).status_code==200
+        assert c.post(url+'/finish',json={}).status_code==200
+    upload(body)
+    legacy=tmp_path/'old-name.small.mp4';legacy.write_bytes(payload)
+    root=tmp_path/'data'/'Uploads'
+    assert reconnect_preview_original(legacy,root)==original
+    # Equal size and identical first/last edges are insufficient for migration.
+    legacy.write_bytes(payload[:100000]+b'B'+payload[100001:])
+    assert reconnect_preview_original(legacy,root) is None
+    legacy.write_bytes(payload)
+    upload({**body,'original':{**original,'fingerprint':'b'*64}})
+    assert reconnect_preview_original(legacy,root) is None

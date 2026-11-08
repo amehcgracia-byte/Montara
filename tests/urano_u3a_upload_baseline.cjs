@@ -51,8 +51,8 @@ async function scenario(name, config) {
   const ctx = vm.createContext({
     state, montaraCompanion:companion, XMLHttpRequest:FakeXHR,
     window:{confirm:message=>{prompts.push(message);return Boolean(config.approveOriginal);}},
-    sendResumableUpload:async payload=>{
-      recorded.push({route:"/montara/uploads",name:payload.name,size:payload.size});
+    sendResumableUpload:async (payload,progress,registered,cancelled,extra)=>{
+      recorded.push({route:"/montara/uploads",name:payload.name,size:payload.size,extra});
       return {videos:[{path:"/lab/"+payload.name,duration:1}]};
     },
     renderFiles:()=>{}, remember:()=>{}, $:()=>({checked:false}),
@@ -73,6 +73,9 @@ async function scenario(name, config) {
   if (expected==="proxy") {
     assert.equal(sent.name,"original.small.mp4",name+" proxy name");
     assert.equal(sent.size,2*1024*1024,name+" proxy size");
+    assert.equal(sent.extra.video_preview,true,name+" proxy metadata mode");
+    assert.equal(sent.extra.original.name,file.name,name+" original identity");
+    assert.equal(sent.extra.original.fingerprint,"mock",name+" original fingerprint");
   }
   if (config.route) assert.equal(sent.route,config.route,name+" path");
   if (expected==="none") assert.equal(entry.kind,"error",name+" blocking error");
@@ -89,7 +92,7 @@ async function scenario(name, config) {
   await scenario("companion_missing_300MiB",{companion:true,mb:300,result:"missing",expected:"none"});
   await scenario("companion_failed_300MiB",{companion:true,mb:300,result:"null",expected:"none"});
   await scenario("companion_ffmpeg_throws_300MiB",{companion:true,mb:300,result:"throw",expected:"none"});
-  await scenario("companion_success_300MiB",{companion:true,mb:300,result:"proxy",expected:"proxy",route:"/api/v1/wizard/upload"});
+  await scenario("companion_success_300MiB",{companion:true,mb:300,result:"proxy",expected:"proxy",route:"/montara/uploads"});
   // A restored FileSystemFileHandle returns the ORIGINAL, but a persisted
   // entry.small=true only indicates an interrupted earlier proxy transfer.
   await scenario("restored_small_no_companion_10MiB",{companion:false,restoredSmall:true,mb:10,expectedPrompt:1,expected:"none"});
