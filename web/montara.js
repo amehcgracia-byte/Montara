@@ -139,6 +139,8 @@ function rememberOpenEdit(id){
   }));} catch {}
 }
 function show(id) {
+  // Stop Stage's waiting-room audio when leaving the processing screen.
+  if (id !== 'making' && !$('#making').hidden && state.platform === 'youtube') $('#rangeAudio').pause();
   if (id !== 'footage' && trackAudition.audio) stopTrackAudition();
   rememberOpenEdit(id);
   clearTimeout(introTimer);
@@ -445,7 +447,7 @@ musicLoopControl.setAttribute("aria-label", "Play your song while Montara works"
 document.querySelector("#making")?.append(musicLoopControl);
 
 function musicLoopBounds(audio) {
-  const duration = Number.isFinite(audio.duration) ? audio.duration : Infinity;
+  const duration = Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : Infinity;
   const start = Math.max(0, Math.min(range.start || 0, duration));
   const end = Math.max(start, Math.min(range.end ?? duration, duration));
   return {start, end};
