@@ -3,7 +3,7 @@ name: URANO U13E2D real sources contract on latest main
 on:
   push:
     branches:
-      - fernando/urano-u13e2d-stage-current-native-real
+      - fernando/urano-u13e2d-main-companion-real-e2e
   pull_request:
     paths:
       - 'tests/e2e_native_stage.py'
