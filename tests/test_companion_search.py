@@ -130,3 +130,33 @@ def test_the_hardware_way_gives_the_same_picture_as_the_software_way(tmp_path, r
     assert sizes[0]['color_space'] == 'bt709' and sizes[0]['pix_fmt'] == 'yuv420p'
     report = subprocess.run(['ffmpeg', '-hide_banner', '-i', str(fast), '-i', str(safe), '-lavfi', 'psnr', '-f', 'null', '-'], capture_output=True, text=True).stderr
     assert float(report.rsplit('average:', 1)[1].split()[0]) > 15   # right way up about 24 dB here, the wrong way up about 5
+
+
+def test_software_proxy_fallback_really_uses_cpu_decode_and_encode(monkeypatch,tmp_path):
+    monkeypatch.setattr(companion,'HW_H264',True)
+    command=companion.proxy_command(tmp_path/'source.mp4',tmp_path/'proxy.mp4',PLAN,hardware=False)
+    assert '-hwaccel' not in command and 'h264_videotoolbox' not in command
+    assert 'libx264' in command
+
+
+def test_successful_hardware_exit_with_wrong_picture_retries_cpu(tmp_path,monkeypatch):
+    import io
+    source=tmp_path/'source.mp4';source.write_bytes(b'source');key='f'*24
+    monkeypatch.setattr(companion,'CACHE',tmp_path)
+    monkeypatch.setitem(companion.sources,key,source);monkeypatch.setitem(companion.jobs,key,{'status':'working'})
+    monkeypatch.setattr(companion,'probe',lambda p:{})
+    monkeypatch.setattr(companion,'plan',lambda info:PLAN)
+    monkeypatch.setattr(companion,'proxy_commands',lambda *a:[['ffmpeg','h264_videotoolbox'],['ffmpeg','libx264']])
+    monkeypatch.setattr(companion,'proxy_picture_error',lambda *a:.5)
+    calls=[]
+    class Process:
+        def __init__(self,command,**kwargs):
+            calls.append(command);self.stdout=io.StringIO('out_time_us=1000000\n');companion.output_path(key,pending=True).write_bytes(b'encoded')
+        def wait(self):return 0
+    monkeypatch.setattr(companion.subprocess,'Popen',Process)
+    companion.make_proxy(key)
+    assert len(calls)==2 and 'libx264' in calls[-1]
+    assert companion.jobs[key]['status']=='ready'
+    assert companion.proxy_cache_valid(key,companion.output_path(key))
+    companion.output_path(key).with_suffix('.quality.json').unlink()
+    assert not companion.proxy_cache_valid(key,companion.output_path(key))
