@@ -244,7 +244,7 @@ class OwnerSessionToRealEngine(unittest.TestCase):
                 if not destination.is_dir() or destination.is_symlink():
                     raise AssertionError("U22 scratch directory must exist")
                 (destination / (person+".json")).open("x",encoding="utf-8").write(
-                    json.dumps({"owner": person, "plan": plan})+"\\n")
+                    json.dumps({"owner": person, "plan": plan})+"\n")
         client,_=self.clients["alice"]
         self.assertEqual(client.get(
             f"/urano/v1/runtime/projects/{self.project_ids['bob']}/companion-handoff",
