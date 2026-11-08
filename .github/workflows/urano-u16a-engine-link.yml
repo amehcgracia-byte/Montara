@@ -30,3 +30,29 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_google_*contract.py' -v
       - name: Compile optional lab-only Engine integration
         run: python -m py_compile urano/engine_bindings.py urano/http_engine_status.py urano/google_lab_app.py
+
+  chrome-owner-engine-link:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install opt-in HTTPS browser requirements
+        run: |
+          python -m pip install 'Flask>=3,<4' 'playwright==1.56.0' -r requirements-urano-oidc.txt
+          python -m playwright install --with-deps chromium
+      - name: Google fake two-user browser with real Engine folder bindings
+        run: python tests/e2e_urano_google_browser.py --output e2e-output/owner-engine
+      - name: JavaScript syntax
+        run: node --check urano/google_lab_ui/lab.js
+      - uses: actions/upload-artifact@v4
+        if: always()
+        continue-on-error: true
+        with:
+          name: urano-u16a-owner-engine-browser
+          retention-days: 3
+          path: |
+            e2e-output/owner-engine/*.png
+            e2e-output/owner-engine/summary.json
