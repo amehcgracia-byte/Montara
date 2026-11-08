@@ -84,12 +84,12 @@ class VideoJobs:
                     path=Path(path)
                     with path.open('rb') as handle:
                         first=handle.read(65536);handle.seek(max(0,path.stat().st_size-65536));last=handle.read(65536)
-                    if path.stat().st_size!=original['size'] or hashlib.sha256(first+last).hexdigest()!=original['fingerprint']:raise ValueError('An original video changed. Add it again before exporting.')
+                    if path.stat().st_size!=original['size'] or hashlib.sha256(first+last).hexdigest()!=original['fingerprint']:raise ValueError('Source '+str(key)+' · '+original['name']+': original changed. Reconnect it before exporting.')
             else:
                 name=item.get('asset')
                 if not isinstance(name,str) or not re.fullmatch(r'montara-render-source-[a-f0-9]{32}\.(mp4|mov|mkv|webm|mts)',name):raise ValueError('Invalid source asset')
                 path=folder/name
-            if not path or not Path(path).is_file() or Path(path).suffix.lower() not in {'.mp4','.mov','.m4v','.mts','.mkv','.avi','.webm'}:raise ValueError('An original video is unavailable. Reconnect its drive and retry.')
+            if not path or not Path(path).is_file() or Path(path).suffix.lower() not in {'.mp4','.mov','.m4v','.mts','.mkv','.avi','.webm'}:raise ValueError('Source '+str(key)+' · '+str((item.get('original') or {}).get('name') or item.get('asset') or 'video')+': original unavailable. Reconnect its drive and retry.')
             source_files[key]=str(Path(path).resolve())
             if item.get('original'):verified[key]=item['original']
         branding=body.get('branding','none')
