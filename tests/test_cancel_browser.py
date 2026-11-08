@@ -62,9 +62,10 @@ def test_result_download_uses_project_not_internal_filename(site):
     with sync_playwright() as p:
         browser=p.chromium.launch();page=browser.new_page()
         page.goto(site);page.locator('#mode').wait_for(state='visible')
-        page.evaluate("state.files=[];state.localProject=null;state.platform='show';document.querySelector('#videoName').value='Montara.Notetaker';showResult({result:{url:'/missing.mp4',filename:'job-a849ce59-0001.mp4'}})")
+        page.evaluate("state.files=[];state.localProject=null;state.platform='show';document.querySelector('#videoName').value='Montara.Notetaker';showResult({result:{url:'/missing.mp4',filename:'job-a849ce59-0001.mp4',warnings:['Shot 2: optional logo omitted']}})")
         assert page.locator('#download').get_attribute('download')=='Montara.Notetaker.mp4'
         assert 'download_name=Montara.Notetaker.mp4' in page.locator('#download').get_attribute('href')
+        assert 'Shot 2: optional logo omitted' in page.locator('#resultInfo').inner_text()
         browser.close()
 
 

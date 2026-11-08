@@ -2743,6 +2743,7 @@ function showResult(s) {
   $("#download").href = `${url}${url.includes("?") ? "&" : "?"}download_name=${encodeURIComponent(downloadName)}`;
   $("#download").setAttribute("download", downloadName);
   const bits = [];
+  if (!result.native && result.warnings?.length) bits.push(result.warnings.join('; '));
   if (result.export_diagnostics?.length) bits.push(result.export_diagnostics.map(d=>`Shot ${d.shot}: optional ${d.name || 'insert'} omitted; synchronized camera used`).join('; '));
   if (result.cut_count) bits.push(`${result.cut_count} cuts`);
   if (result.camera_usage) bits.push(`${Object.keys(result.camera_usage).length} camera${Object.keys(result.camera_usage).length === 1 ? "" : "s"}`);

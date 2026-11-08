@@ -20,11 +20,13 @@ or ambiguous legacy records need a fresh source association.
 
 The engine proposes a deterministic fallback for an optional insert only when a
 current completed sync stage proves coverage for the entire slot. It uses an
-already authored static flat camera view, rejects uncertain/unstable/silent/error
+already selected flat camera and its saved base framing (holding automatic Ken Burns still only in the fallback slot), rejects uncertain/unstable/silent/error
 sync, and preserves the master start, duration, and 1x synchronized camera timing.
 No safe fallback means a named shot-level reconnection diagnostic. Required camera
-shots are never silently omitted. Spherical/moving fallbacks are deliberately not
-inferred. No proxy is downloaded as an original.
+shots are never silently omitted. Spherical or unsupported manually moving views are deliberately not inferred.
+Server exports apply the same policy to missing optional uploads, ignore unused
+library media when checking required sources, and save a separate effective recipe
+next to each export. The authored edit stays intact, and Result displays warnings. No proxy is downloaded as an original.
 
 The final recipe retains omission decisions and source keys in the render manifest.
 Completed jobs retain diagnostics across Companion restarts, and the result displays

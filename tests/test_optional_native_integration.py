@@ -39,7 +39,7 @@ def test_missing_insert_renders_camera_without_cutting_or_shifting_master(tmp_pa
     lo,hi=int(.8*48000),min(n,int(1.2*48000))
     assert np.corrcoef(expected[lo:hi],actual[lo:hi])[0,1]>.99
     manifest=json.loads((folder/'.montara-renders'/token/'render.json').read_text())
-    assert manifest['recipe']['diagnostics']==[{'shot':2,'source':0,'replacement':1,'status':'omitted'}]
+    assert manifest['recipe']['diagnostics']==[{'shot':2,'source':0,'replacement':1,'status':'omitted','name':'missing-logo.small.mp4'}]
     assert set(manifest['source_files'])=={'1'}
     restored=VideoJobs(home)
     assert restored.status(token)['diagnostics']==manifest['recipe']['diagnostics']
