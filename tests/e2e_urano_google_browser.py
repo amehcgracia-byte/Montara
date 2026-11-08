@@ -24,6 +24,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from test_google_flow_contract import SignedFakeGoogle, CLIENT
 from urano.google_flow import OIDCSettings
 from urano.google_lab_app import create_google_lab_app
+from urano.engine_bindings import EngineProjectRegistry
+from urano.google_owner import GoogleOwnerStore
+from urano.project_catalog import ProjectCatalog
 
 
 class BrowserGoogle(SignedFakeGoogle):
@@ -59,7 +62,19 @@ def main():
         provider = BrowserGoogle()
         settings = OIDCSettings(CLIENT, "lab-fake-only", origin + "/urano/v1/google/callback",
                                 frozenset({"alpha@example.test", "beta@example.test"}))
-        app = create_google_lab_app(root, settings=settings, provider=provider)
+        engine_root = root / "engine-test-data"
+        projects_root = engine_root / "Projects"
+        projects_root.mkdir(parents=True)
+        for folder in ("test-stage-A.zuckervid", "test-stage-B.zuckervid"):
+            location = projects_root / folder
+            location.mkdir()
+            (location / "project.json").write_text('{"test_only":true}', encoding="utf-8")
+        app = create_google_lab_app(root, settings=settings, provider=provider,
+                                    engine_data_root=engine_root)
+        catalog = ProjectCatalog(root / "projects.sqlite3")
+        registry = EngineProjectRegistry(root / "engine_bindings.sqlite3", engine_root, catalog)
+        owners = GoogleOwnerStore(root / "owners.sqlite3")
+        allowlist = settings.allowed_emails
         server = make_server("127.0.0.1", port, app, ssl_context=(str(cert), str(key)), threaded=True)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
@@ -115,6 +130,21 @@ def main():
                 expect(a.locator("#notice")).to_have_text("Cambios guardados.")
                 create(a, "Segundo proyecto de A")
                 assert a.locator(".project").count() == 2
+                owner_a = owners.resolve_beta_owner(
+                    __import__("urano.google_oidc", fromlist=["GoogleIdentity"]).GoogleIdentity(
+                        "alpha-google-sub", "alpha@example.test"), allowed_emails=allowlist)
+                project_a = next(p for p in catalog.list_for(owner_a) if p.title == "Primer proyecto de A")
+                registry.bind_trusted(owner_a, project_a.id, "test-stage-A.zuckervid")
+                a.locator(".project").filter(has_text="Primer proyecto de A").click()
+                expect(a.locator("#engineStatus")).to_have_text(
+                    "Workspace vinculado (aún sin activar ni render)")
+                response = a.evaluate("""async id => {
+                  const r = await fetch('/urano/v1/projects/' + id + '/engine');
+                  return { status:r.status, body:await r.json() };
+                }""", project_a.id)
+                assert response["status"] == 200
+                assert response["body"] == {"linked": True, "status":"linked_not_activated",
+                                            "engine_access":False, "render_access":False}
                 a.reload()
                 expect(a.locator("#signedIn")).to_be_visible()
                 a.locator(".project").filter(has_text="Primer proyecto de A").click()
@@ -125,6 +155,21 @@ def main():
                 assert b.locator(".project").count() == 0
                 create(b, "Privado de B")
                 assert b.locator(".project").count() == 1
+                owner_b = owners.resolve_beta_owner(
+                    __import__("urano.google_oidc", fromlist=["GoogleIdentity"]).GoogleIdentity(
+                        "beta-google-sub", "beta@example.test"), allowed_emails=allowlist)
+                project_b = next(p for p in catalog.list_for(owner_b) if p.title == "Privado de B")
+                registry.bind_trusted(owner_b, project_b.id, "test-stage-B.zuckervid")
+                b.locator(".project").filter(has_text="Privado de B").click()
+                expect(b.locator("#engineStatus")).to_have_text(
+                    "Workspace vinculado (aún sin activar ni render)")
+                for foreign_page, foreign_id in ((a, project_b.id), (b, project_a.id)):
+                    result = foreign_page.evaluate("""async id => {
+                      const response = await fetch('/urano/v1/projects/' + id + '/engine');
+                      return {status: response.status, body: await response.json()};
+                    }""", foreign_id)
+                    assert result["status"] == 404, result
+                    assert "test-stage-" not in str(result["body"])
                 assert a.locator(".project").count() == 2
                 b.screenshot(path=str(out / "02-beta-isolated.png"), full_page=True)
 
@@ -144,6 +189,7 @@ def main():
                 "oauth_code_pkce_callback": True, "two_isolated_owners": True,
                 "project_history_after_logout": True, "editor_connected": False,
                 "engine_or_companion_connected": False, "real_google_credentials": False,
+                "owner_engine_link_readonly": True, "cross_owner_engine_link_denied": True,
             }
             (out / "summary.json").write_text(json.dumps(summary, indent=2))
             print(json.dumps(summary))
