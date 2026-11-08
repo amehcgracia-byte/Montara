@@ -1,0 +1,28 @@
+name: URANO U18 safe remote hybrid preflight contracts
+
+on:
+  push:
+    branches:
+      - fernando/urano-u18-remote-hybrid-preflight
+  pull_request:
+    paths:
+      - 'tests/urano_remote_hybrid_preflight.py'
+      - 'tests/test_urano_remote_hybrid_preflight.py'
+      - '.github/workflows/urano-u18-remote-preflight.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  offline-connection-contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run mocked HTTPS server and local Companion, never a live endpoint
+        run: |
+          python -m unittest discover -s tests -p 'test_urano_remote_hybrid_preflight.py' -v
+          python -m py_compile tests/urano_remote_hybrid_preflight.py tests/test_urano_remote_hybrid_preflight.py
