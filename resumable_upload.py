@@ -133,7 +133,7 @@ def preview_original(path) -> dict | None:
         data = json.loads((Path(path).parent / 'upload.json').read_text())
     except (OSError, ValueError):
         return None
-    return data.get('preview_of') if data.get('complete') and data.get('restored', data.get('name')) == Path(path).name else None
+    return data.get('preview_of') if (data.get('complete') or data.get('restored')) and data.get('restored', data.get('name')) == Path(path).name else None
 
 
 def register_resumable_upload(app, data_root, classify):

@@ -29,3 +29,10 @@ def test_companion_revalidates_stale_cache_and_reconnects_registered_renamed_byt
     assert helper.find_original(original)==fresh
     fresh.unlink()
     assert helper.find_original(original) is None
+
+
+def test_legacy_restored_audio_identity_keeps_recorder_offset_metadata(tmp_path):
+    path=tmp_path/'Bass.wav';path.write_bytes(b'original samples')
+    original={'name':'Bass.wav','size':123,'fingerprint':'a'*64}
+    (tmp_path/'upload.json').write_text(json.dumps({'restored':path.name,'preview_of':original}))
+    assert preview_original(path)==original

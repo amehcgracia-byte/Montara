@@ -2007,7 +2007,7 @@ async function swap(index) {
 $("#renderFrames").addEventListener("click", async () => {
   try {
     clearInterval(state.framesPoll);
-    if(state.platform==='youtube' && state.files.some(f=>f.kind==='video' && f.small))return await finishOriginalVideo({result:{}});
+    if(state.platform==='youtube' && videos().some(f=>f.small && !state.syncExcluded.has(f.path)))return await finishOriginalVideo({result:{}});
     const generation=beginWork();
     setProgress(0, "Rendering your video…", "");
     show("making");
@@ -2611,7 +2611,7 @@ $("#showExport").addEventListener("click", async () => {
 
 async function finishOriginalVideo(s) {
   if(state.nativeExport)return;
-  beginWork();
+  const generation=beginWork();
   const job={cancelled:false,id:null};state.nativeExport=job;stopPolling();show('making');setProgress(0,'Preparing original-quality video…','');
   try {
     let recipe=await api('/edit/native-recipe?project_id='+encodeURIComponent(state.projectId));
@@ -2619,7 +2619,10 @@ async function finishOriginalVideo(s) {
     const usedKeys=new Set(recipe.segments.map(shot=>shot.source));
     if (!recipe.sources.some(source=>usedKeys.has(source.key) && (source.preview || /\.small\.mp4$/i.test(source.path) || state.files.some(f=>f.path===source.path && f.small)))) {
       state.nativeExport=null;
-      return showResult({...s,result:{...s.result,originalQuality:true}});
+      if (s.serverRendered) return showResult({...s,result:{...s.result,originalQuality:true}});
+      setProgress(0,'Rendering your video…','');
+      await workRequest(generation,'/wizard/review/render',{});
+      startPolling();return;
     }
     await montaraCompanion.detect();
     if(job.cancelled)return;
@@ -2716,7 +2719,7 @@ function projectDownloadName(audio=false) {
 }
 function showResult(s) {
   const result = s.result || {};
-  if(state.platform==='youtube' && !result.audio && !result.native && !result.originalQuality && videos().some(f=>f.small && !state.syncExcluded.has(f.path)))return finishOriginalVideo(s);
+  if(state.platform==='youtube' && !result.audio && !result.native && !result.originalQuality && videos().some(f=>f.small && !state.syncExcluded.has(f.path)))return finishOriginalVideo({...s,serverRendered:true});
   if(result.native){state.savedLocally=true;$('#resultVideo').crossOrigin='anonymous';}
   else $('#resultVideo').removeAttribute('crossorigin');
   footageMemory.clear(state.platform);  // the video is made; next visit starts clean

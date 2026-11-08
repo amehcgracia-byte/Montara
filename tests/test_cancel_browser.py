@@ -144,3 +144,61 @@ def test_unused_small_assets_do_not_require_companion(site,usage):
         page.locator('#result').wait_for(state='visible')
         assert page.locator('#failed').is_hidden()
         browser.close()
+
+
+@pytest.mark.parametrize('optional',[True,False])
+def test_native_missing_insert_preflight_preserves_slot_and_warns(site,optional):
+    original={'name':'camera.mov','size':123,'fingerprint':'a'*64}
+    logo={'name':'logo.mov','size':12,'fingerprint':'b'*64}
+    slot={'source':0,'master_start_sec':1,'clip_start_sec':0,'duration_sec':1}
+    fallback={**slot,'source':1,'clip_start_sec':1,'playback_speed':1}
+    recipe={'version':1,'platform':'youtube','engine':'a'*40,'revision':'reviewed',
+            'sources':[{'key':0,'path':'/old/logo.small.mp4','original':logo,'optional':optional},
+                       {'key':1,'path':'/old/camera.small.mp4','original':original,'optional':False}],
+            'segments':[slot],'fallbacks':{'0':[fallback]}}
+    with sync_playwright() as p:
+        browser=p.chromium.launch();page=browser.new_page()
+        page.route('http://127.0.0.1:47820/health',lambda route:route.fulfill(headers={'Access-Control-Allow-Origin':'*'},json={'app':'montara-companion','ffmpeg':True,'local_video':{'engine':'a'*40}}))
+        page.route('**/api/v1/edit/native-recipe*',lambda route:route.fulfill(json=recipe))
+        page.route('**/api/v1/edit/native-master*',lambda route:route.fulfill(body=b'master'))
+        page.goto(site);page.locator('#mode').wait_for(state='visible')
+        page.evaluate("""() => {
+          state.platform='youtube';state.projectId='test';state.localProject={id:'test'};
+          state.files=[{kind:'video',path:'/reimport/camera.small.mp4',small:true}];
+          montaraCompanion.locateOriginal=async o=>o.name==='camera.mov';
+          montaraCompanion.saveInProject=async()=>{};
+          window.startedNative=[];
+          montaraCompanion.startVideo=async body=>{startedNative.push(body);return 'test';};
+          montaraCompanion.videoStatus=async()=>({status:'ready'});
+          void finishOriginalVideo({result:{}});
+        }""")
+        page.locator('#result' if optional else '#failed').wait_for(state='visible')
+        starts=page.evaluate('startedNative')
+        if optional:
+            assert starts[0]['recipe']['segments']==[fallback]
+            assert starts[0]['originals']==[{'source':1,'original':original}]
+            assert 'logo.mov omitted' in page.locator('#resultInfo').inner_text()
+        else:
+            assert starts==[]
+            assert 'Shot 1' in page.locator('#errorText').inner_text()
+            assert 'logo.mov' in page.locator('#errorText').inner_text()
+        browser.close()
+
+
+def test_unused_proxy_on_render_still_starts_real_server_render(site):
+    with sync_playwright() as p:
+        browser=p.chromium.launch();page=browser.new_page();renders=[]
+        page.route('**/api/v1/edit/native-recipe*',lambda route:route.fulfill(json={'engine':'a'*40,'revision':'test','sources':[{'key':1,'path':'full-camera.mp4'}],'segments':[{'source':1}]}))
+        page.route('**/api/v1/wizard/review/render',lambda route:renders.append(route))
+        page.route('**/api/v1/wizard/status*',lambda route:route.fulfill(json={'status':'running'}))
+        page.goto(site);page.locator('#mode').wait_for(state='visible')
+        page.evaluate("""() => {
+          state.platform='youtube';state.projectId='test';state.localProject=null;
+          state.files=[{kind:'video',path:'unused.small.mp4',small:true}];
+          show('frames');document.querySelector('#renderFrames').click();
+        }""")
+        page.wait_for_timeout(500)
+        assert len(renders)==1
+        assert page.locator('#result').is_hidden()
+        renders[0].fulfill(json={})
+        browser.close()
