@@ -15,7 +15,10 @@ import statistics
 import time
 from pathlib import Path
 
-import psutil
+try:
+    import psutil
+except ImportError:  # Optional unless the passive meter is invoked.
+    psutil = None
 
 _LABEL = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$")
 _ROLES = ("client_companion", "client_browser", "server")
@@ -54,6 +57,8 @@ def _snapshot(root: psutil.Process) -> dict:
 def sample_process_tree(pid: int, *, interval: float = 0.5,
                         duration: float = 30.0, limit_samples: int = 10000,
                         clock=time.monotonic, sleeper=time.sleep) -> dict:
+    if psutil is None:
+        raise RuntimeError("Install psutil to use the optional telemetry meter")
     if not isinstance(pid, int) or pid < 1:
         raise ValueError("A positive existing PID is required")
     if not 0.1 <= interval <= 10 or not 0.1 <= duration <= 3600:
