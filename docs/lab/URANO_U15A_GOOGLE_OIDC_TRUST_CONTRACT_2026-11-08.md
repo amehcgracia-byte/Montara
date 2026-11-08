@@ -29,9 +29,13 @@ El objetivo inmediato es evitar un login «simulado» por email que daría acces
 
 ## Pruebas y ejecución
 
-- `python -m unittest discover -s tests -p 'test_urano_google_oidc.py' -v` usando `requirements-urano-oidc.txt`; todos los tokens, claves RSA, emails y propietarios son **ficticios**.
+- `python -m unittest discover -s tests -p 'test_google_oidc_contract.py' -v` usando `requirements-urano-oidc.txt`; todos los tokens, claves RSA, emails y propietarios son **ficticios**.
 - GitHub Actions `.github/workflows/urano-u15-google-oidc.yml` instala `cryptography` solo en el job de tests.
 - Biblioteca de criptografía no estaba presente en el venv FER de la GCP; no se modificó ni se instaló ningún paquete global. La CI de GitHub ejecuta el contrato en aislamiento.
 - No se han tocado medios originales, servicios de JM, FER, GCP/red ni secretos.
 
 **No publicar un acceso beta hasta validar el flujo completo de OAuth/OIDC y la autorización efectiva de proyecto y media.**
+
+## Aislamiento CI corregido
+
+Las suites antiguas U10–U12b usan el patrón global `test_urano_*.py` e instalan únicamente Flask. El primer nombre del test OIDC coincidía con ese patrón y provocó fallos por ausencia de la dependencia opcional `cryptography`. Se corrigió sin tocar esos workflows: el test se renombró `test_google_oidc_contract.py`, la CI dedicada lo ejecuta con `cryptography` instalado y su import queda protegido para que un `pytest tests` general sin dependencia pueda omitirlo explícitamente (nunca en el job dedicado). Los fallos iniciales no eran regresiones del catálogo ni del login U12b.
