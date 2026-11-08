@@ -11,6 +11,7 @@ from e2e_journey import ROOT,free_port,run
 from test_local_video import install_layout
 
 from native_real_media_input import validate_real_sources, hash_streamed
+from urano_browser_transfer import BrowserTransferMeter
 
 
 def main():
@@ -62,6 +63,8 @@ def main():
             channel=os.environ.get('MONTARA_TEST_BROWSER_CHANNEL')
             browser=pw.chromium.launch(**({'executable_path':os.environ['MONTARA_TEST_BROWSER_BINARY']} if os.environ.get('MONTARA_TEST_BROWSER_BINARY') else {'channel':channel} if channel else {}));page=browser.new_page(viewport={'width':1440,'height':1000})
             assert page.evaluate('!!document.createElement("video").canPlayType(\'video/mp4;codecs="avc1.42E01E"\')'), 'Native playback acceptance needs H.264 (set MONTARA_TEST_BROWSER_CHANNEL=chrome or MONTARA_TEST_BROWSER_BINARY)'
+            transfer_meter = BrowserTransferMeter(
+                server_origin=url, companion_origin=base).attach(page)
             page.on('console',lambda message:print('BROWSER_ERROR',message.text,flush=True) if message.type=='error' else None)
             page.route('**/companion.js',lambda route:route.fulfill(body=(ROOT/'web/companion.js').read_text().replace('http://127.0.0.1:47820',base),content_type='application/javascript'))
             page.route(base+'/projects',lambda route:route.fulfill(json={'id':project_id,'folder':str(chosen)},headers={'Access-Control-Allow-Origin':url}))
@@ -142,6 +145,10 @@ def main():
                 assert video['width']>0 and video['height']>0
                 assert any(s['codec_type']=='audio' for s in info['streams'])
             run(['ffmpeg','-v','error','-i',str(final),'-f','null','-'])
+            transfer_report = transfer_meter.report(
+                originals_sizes=[p.stat().st_size for p in [*cameras, master]])
+            (out/'browser-transfer.json').write_text(
+                json.dumps(transfer_report, indent=2))
             browser.close();(out/'summary.json').write_text(json.dumps({'passed':True,'size':f"{video['width']}x{video['height']}",'original_sources':len(recipe['source_files']),'native_render':True,'server_export_skipped':True,'real_footage':real_mode,'architecture':'Companion local original render, Engine remote recipe in isolated local test'},indent=2));print((out/'summary.json').read_text())
     except Exception:
         try:print('NATIVE_VIDEO_STATE',page.locator('#resultVideo').evaluate('v=>({ready:v.readyState,network:v.networkState,error:v.error?.message,duration:v.duration,seeking:v.seeking})'),flush=True)
