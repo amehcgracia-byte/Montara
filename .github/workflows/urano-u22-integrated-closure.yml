@@ -1,0 +1,125 @@
+name: URANO U22 integrated same-run acceptance gate
+
+on:
+  push:
+    branches:
+      - fernando/urano-u22-integrated-closure-gate
+  pull_request:
+    paths:
+      - 'tests/test_urano_owner_runtime_docker.py'
+      - 'tests/urano_u21_render_client.py'
+      - 'docs/lab/URANO_U22_CLOSURE_REPORT_2026-11-08.md'
+      - '.github/workflows/urano-u22-integrated-closure.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  actual-private-stage-to-local-companion:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install synthetic local-render dependencies
+        run: |
+          python -m pip install -r requirements.txt -r requirements-urano-oidc.txt
+      - name: Ensure FFmpeg/ffprobe available on disposable runner
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
+            sources_file="$RUNNER_TEMP/montara-ubuntu-sources.list"
+            echo 'deb [signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] https://archive.ubuntu.com/ubuntu noble main universe' > "$sources_file"
+            echo 'deb [signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] https://archive.ubuntu.com/ubuntu noble-updates main universe' >> "$sources_file"
+            opts=(-o "Dir::Etc::sourcelist=$sources_file" -o 'Dir::Etc::sourceparts=-' -o Acquire::Retries=2 -o Acquire::https::Timeout=20)
+            sudo apt-get "${opts[@]}" update
+            sudo apt-get "${opts[@]}" install -y --no-install-recommends ffmpeg fonts-dejavu-core
+          fi
+          ffprobe -version
+      - name: Build real pinned Engine on temporary worker
+        run: docker build --tag urano-u22-stage:local .
+      - name: Resolve immutable Engine image
+        run: |
+          image=$(docker image inspect urano-u22-stage:local --format '{{.Id}}')
+          case "$image" in sha256:*) ;; *) exit 1 ;; esac
+          echo "URANO_TEST_IMAGE_ID=$image" >> "$GITHUB_ENV"
+      - name: Real signed owners + Stage Ingest DONE + private HTTP descriptors
+        env:
+          PYTHONPATH: .:tests
+          URANO_U22_HANDOFF_DIR: e2e-output/u22/handoffs
+        run: |
+          mkdir -p "$URANO_U22_HANDOFF_DIR"
+          python -m unittest discover -s tests -p 'test_urano_owner_runtime_docker.py' -v
+      - name: Verify stage-issued plans are owner-isolated and pathless
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path("e2e-output/u22/handoffs")
+          rows={name:json.loads((root/(name+".json")).read_text())
+                for name in ("alice","bob")}
+          assert {row["owner"] for row in rows.values()}=={"alice","bob"}
+          assert rows["alice"]["plan"]["project_id"]!=rows["bob"]["plan"]["project_id"]
+          for person,row in rows.items():
+              plan=row["plan"]
+              assert plan["render_ready"] is False
+              assert plan["requires_local_originals"] is True
+              assert len(plan["cuts"])==1
+              payload=json.dumps(row)
+              assert "source_files" not in payload and "/workspace/" not in payload
+              assert "/Users/" not in payload and "access_token" not in payload
+              assert "master.wav" not in payload and "camera-a.mp4" not in payload
+          print("Owner-private post-Stage descriptors PASS")
+          PY
+      - name: Render two local Companions from those same actual Stage descriptors
+        env:
+          PYTHONPATH: .:tests
+        run: |
+          set -euo pipefail
+          python tests/urano_u21_render_client.py --owner alice \
+            --u22-handoff e2e-output/u22/handoffs/alice.json \
+            --output e2e-output/u22/client-alice > e2e-output/u22/alice.log 2>&1 &
+          alice=$!
+          python tests/urano_u21_render_client.py --owner bob \
+            --u22-handoff e2e-output/u22/handoffs/bob.json \
+            --output e2e-output/u22/client-bob > e2e-output/u22/bob.log 2>&1 &
+          bob=$!
+          failed=0
+          wait "$alice" || failed=1
+          wait "$bob" || failed=1
+          if [ "$failed" -ne 0 ]; then
+            for log in e2e-output/u22/alice.log e2e-output/u22/bob.log; do
+              echo "=== $log ==="; tail -n 55 "$log"
+            done
+            exit 1
+          fi
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path("e2e-output/u22")
+          rows=[json.loads((root/("client-"+person)/"summary.json").read_text())
+                for person in ("alice","bob")]
+          assert all(r["passed"] and r["handoff_from_actual_stage"]
+                     and r["native_mp4_bytes"]>10000 for r in rows), rows
+          assert all(r["used_verified_local_original"]
+                     and r["foreign_origin_rejected"]
+                     and r["wrong_fingerprint_rejected"] for r in rows)
+          assert all(not r["server_remote"]
+                     and not r["separate_physical_clients"] for r in rows)
+          print("U22 integrated same-run Stage→local Companion→MP4 PASS:",
+                [r["native_mp4_bytes"] for r in rows])
+          PY
+      - name: Clean artifact export - summaries only (no videos/originals)
+        uses: actions/upload-artifact@v4
+        if: always()
+        continue-on-error: true
+        with:
+          name: urano-u22-closure-lab-summaries
+          retention-days: 3
+          path: |
+            e2e-output/u22/client-*/summary.json
