@@ -915,13 +915,25 @@ function renderCameras() {
   $('#cameraList').innerHTML=videos().filter(f=>f.usage!=='filler' && !state.syncExcluded.has(f.path)).map((f,index)=>`<div class="cam"><span class="kind video">${String(index+1).padStart(2,'0')}</span><span class="name">${escapeHtml(f.name)}</span><span class="camsel"><label>Camera type<select data-camera-type="${escapeHtml(f.path)}" aria-label="Camera type for ${escapeHtml(f.name)}">${[['360','360'],['fixed','Fixed camera'],['moving','Moving camera']].map(([value,label])=>`<option value="${value}" ${cameraTypeOf(f)===value?'selected':''}>${label}</option>`).join('')}</select></label></span></div>`).join('');
   $$('[data-camera-type]').forEach(select=>select.onchange=()=>{const f=videos().find(v=>v.path===select.dataset.cameraType);f.cameraType=select.value;if(select.value!=='360')state.roles[f.path]=select.value==='fixed'?'fixed_rear':'handheld';renderCameras();});
   const spheres=videos().filter(isSphere);
-  $('#sphereList').innerHTML=spheres.map((f,index)=>`<div class="sphere" data-sphere="${index}"><h3><span class="kind video">360</span> ${escapeHtml(f.name)}</h3><p class="hint">Choose a viewpoint, click where it should look, and give it a name.</p><div class="sphere-body"><ul class="slots"></ul><div class="pano-wrap"><div class="pano"><div class="pano-img"></div><span class="loading">Loading 360 frame…</span></div><p class="hint tiny">Drag to turn · click to place the viewpoint</p><div class="preview"><div class="pv"><img alt="" hidden draggable="false"></div><span class="hint">Drag to aim, scroll to zoom.</span></div></div></div></div>`).join('');
+  $('#sphereList').innerHTML=spheres.map((f,index)=>`<div class="sphere" data-sphere="${index}"><h3><span class="kind video">360</span> ${escapeHtml(f.name)}</h3><p class="hint">Choose a viewpoint, click where it should look, and give it a name.</p><div class="sphere-body"><div class="sphere-slots"><ul class="slots"></ul><button type="button" class="btn ghost small add-point-of-view">+ Add Point of View</button></div><div class="pano-wrap"><div class="pano"><div class="pano-img"></div><span class="loading">Loading 360 frame…</span></div><p class="hint tiny">Drag to turn · click to place the viewpoint</p><div class="preview"><div class="pv"><img alt="" hidden draggable="false"></div><span class="hint">Drag to aim, scroll to zoom.</span></div></div></div></div>`).join('');
   spheres.forEach((f,index)=>setupSphere(f,$(`[data-sphere="${index}"]`)));
 }
 
 function setupSphere(file, root) {
   const views = state.viewpoints[file.path] ||= {};
+  const slotEntries = () => [...VIEW_SLOTS, ...Object.keys(views).filter(key => /^custom_([1-9]|1[0-6])$/.test(key)).sort((a,b) => Number(a.slice(7))-Number(b.slice(7))).map(key => [key, views[key]?.subject || "New viewpoint"])];
   let active = Object.keys(views).find((slot) => views[slot].enabled) || "full_stage";
+  root.querySelector(".add-point-of-view").onclick = () => {
+    const key = Array.from({length:16}, (_,i)=>`custom_${i+1}`).find(key => !views[key]);
+    if (!key) return toast("Maximum of 16 extra viewpoints for this camera.");
+    const base = views[active] || views.full_stage || {};
+    views[key] = {yaw:base.yaw ?? 0,pitch:base.pitch ?? 0,fov:base.fov ?? 110,
+      projection_preset:base.projection_preset || "linear",subject:`View ${key.slice(7)}`,who:"general",enabled:false};
+    active=key;renderSlots();drawMarkers();preview();
+    const input=root.querySelector(`.slot[data-slot="${key}"] input[type=text]`);
+    input?.focus();input?.select();
+    toast("Name your view, then click on the 360 panorama to aim it.");
+  };
   const pano = root.querySelector(".pano");
   const panoImg = pano.querySelector(".pano-img");
   // The panorama scrolls sideways (it wraps around); start with the stage in the middle.
@@ -949,7 +961,7 @@ function setupSphere(file, root) {
   }
 
   function renderSlots() {
-    root.querySelector(".slots").innerHTML = VIEW_SLOTS.map(([slot, fallback]) => {
+    root.querySelector(".slots").innerHTML = slotEntries().map(([slot, fallback]) => {
       const view = views[slot];
       const zoom = view ? zoomOf(view)[0] : "normal";
       return `<li class="slot ${slot === active ? "on" : ""} ${view?.enabled ? "set" : ""}" data-slot="${slot}">
@@ -1034,7 +1046,7 @@ function setupSphere(file, root) {
     const rect = pano.getBoundingClientRect();
     const x = wrap((e.clientX - rect.left) / rect.width - offset);
     const y = Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height));
-    const label = VIEW_SLOTS.find(([slot]) => slot === active)[1];
+    const label = slotEntries().find(([slot]) => slot === active)?.[1] || "Custom view";
     const previous = views[active];
     views[active] = {
       yaw: Math.round((x * 360 - 180) * 10) / 10,
@@ -1555,7 +1567,7 @@ async function saveCameras() {
     // The engine identifies people by subject; the free name stays in Montara (frames, pins).
     const landmarks = Object.fromEntries(Object.entries(views).map(([slot, view]) => {
       const { who, ...rest } = view;
-      return [slot, { ...rest, subject: whoOf(slot, view) }];
+      return [slot, { ...rest, subject: whoOf(slot, view), label: view.subject || slot }];
     }));
     for (const slot of [...VIEW_SLOTS.map(([key]) => key), "audience_stage_wide", "planet"]) {
       if (!landmarks[slot]) landmarks[slot] = { yaw: 0, pitch: 0, enabled: false, weight: 0 };
