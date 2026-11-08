@@ -140,8 +140,16 @@ def _summarize(root: Path, processes, starts, observations):
         success = (proc.returncode == 0 and summary.get("native_render") is True
                    and summary.get("server_export_skipped") is True
                    and video_file.is_file() and video_file.stat().st_size > 0)
+        transfer_path = folder / "browser-transfer.json"
+        transfer = (json.loads(transfer_path.read_text()) if transfer_path.is_file()
+                    else None)
+        if transfer is not None and transfer.get("schema") != "urano-browser-http-transfer-v1":
+            raise ValueError("Unexpected browser transfer report schema")
+        # This remains localhost traffic: even measured bytes cannot be
+        # interpreted as remote WAN usage without a real split-host trial.
         per_client.append({
             "client_id": name,
+            "browser_transfer": transfer,
             "success": success,
             "returncode": proc.returncode,
             "wall_seconds": round((observations[name].get("completed_monotonic")
@@ -172,6 +180,14 @@ def _summarize(root: Path, processes, starts, observations):
         "max_client_wall_seconds": round(max(times), 3) if times else None,
         "p50_client_wall_seconds": round(statistics.median(times), 3) if times else None,
         "network_bytes_to_server": None,
+        "browser_localhost_server_upload_body_bytes_observed": (
+            sum((c["browser_transfer"] or {}).get(
+                "server_upload_browser_body_bytes_observed", 0) for c in per_client)
+            if all(c["browser_transfer"] is not None for c in per_client) else None),
+        "browser_localhost_companion_final_body_bytes_observed": (
+            sum((c["browser_transfer"] or {}).get(
+                "companion_final_video_download_body_bytes_observed", 0) for c in per_client)
+            if all(c["browser_transfer"] is not None for c in per_client) else None),
         "network_bytes_to_companion": None,
         "hardware": {"cpu_count_logical": os.cpu_count(), "os": platform.system()},
         "clients": per_client,
