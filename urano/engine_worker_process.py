@@ -51,6 +51,9 @@ def run(stdin, stdout, *, engine_dir: Path, data_root: Path, make_client=make_en
         stdout.write(json.dumps(value, separators=(",", ":")) + "\n")
         stdout.flush()
     emit({"type": "ready", "worker_pid": os.getpid()})
+    active_folder = None
+    allowed_stage_statuses = {"pending", "idle", "queued", "running",
+                              "done", "failed", "blocked", "not_started"}
     for raw in stdin:
         try:
             if len(raw) > 8192:
@@ -61,7 +64,36 @@ def run(stdin, stdout, *, engine_dir: Path, data_root: Path, make_client=make_en
             if packet.get("op") == "stop":
                 emit({"ok": True, "type": "stopped"})
                 return
-            if packet.get("op") != "open":
+            if packet.get("op") in ("ingest_start", "ingest_status"):
+                # Strict fixed operations. No user-supplied paths, media IDs,
+                # filenames, URLs or request bodies; Engine uses inputs that
+                # were already provisioned by trusted infrastructure.
+                if set(packet) != {"op"} or active_folder is None:
+                    raise ValueError("stage command requires an opened project")
+                state = client.application.config.get("ZUCKER_STATE")
+                loaded = getattr(getattr(state, "project", None), "folder", None)
+                if not isinstance(loaded, (str, Path)) or Path(loaded).resolve() != active_folder:
+                    raise ValueError("active project changed")
+                if packet["op"] == "ingest_start":
+                    launched = client.post("/api/v1/stages/ingest/run")
+                    if launched.status_code != 202:
+                        emit({"ok": False, "type": "ingest_start_rejected",
+                              "http_status": launched.status_code})
+                        continue
+                    emit({"ok": True, "type": "ingest_started"})
+                    continue
+                snapshot = client.get("/api/v1/project")
+                if snapshot.status_code != 200:
+                    emit({"ok": False, "type": "ingest_unavailable"})
+                    continue
+                stage = (snapshot.get_json() or {}).get("stages", {}).get("ingest", {})
+                status = stage.get("status") if isinstance(stage, dict) else None
+                if not isinstance(status, str) or status not in allowed_stage_statuses:
+                    emit({"ok": False, "type": "ingest_unavailable"})
+                    continue
+                emit({"ok": True, "type": "ingest_status", "status": status})
+                continue
+            if packet.get("op") != "open" or set(packet) != {"op", "folder"}:
                 raise ValueError("unsupported operation")
             folder = _project_folder(data_root, packet.get("folder"))
             reply = client.post("/api/v1/wizard/projects/open", json={"path": str(folder)})
@@ -80,6 +112,7 @@ def run(stdin, stdout, *, engine_dir: Path, data_root: Path, make_client=make_en
                 Path(loaded).resolve() != folder.resolve()):
                 emit({"ok": False, "error": "Engine active project unverified"})
                 continue
+            active_folder = folder.resolve()
             emit({"ok": True, "type": "opened", "folder": folder.name})
         except (ValueError, TypeError, KeyError, json.JSONDecodeError):
             emit({"ok": False, "error": "Invalid worker command"})

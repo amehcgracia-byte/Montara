@@ -61,6 +61,26 @@ class OwnerRuntimeController:
                 bridge.start()
             bridge.open_project(project_id)
 
+    def ingest_start(self, owner_id: str, project_id: str) -> None:
+        bridge, owner_lock = self._worker(owner_id)
+        with owner_lock:
+            # The status/activation path cannot be used to switch to a
+            # foreign owner or an unbound Engine project.
+            bridge.guard.bindings.resolve_internal(owner_id, project_id)
+            state, active, _ = bridge.guard.get_state(owner_id, bridge.runtime_id)
+            if state != "ready" or active != project_id:
+                raise RuntimeBusy("Project not active")
+            bridge.ingest_start(project_id)
+
+    def ingest_status(self, owner_id: str, project_id: str) -> str:
+        bridge, owner_lock = self._worker(owner_id)
+        with owner_lock:
+            bridge.guard.bindings.resolve_internal(owner_id, project_id)
+            state, active, _ = bridge.guard.get_state(owner_id, bridge.runtime_id)
+            if state not in {"busy", "ready"} or active != project_id:
+                raise RuntimeBusy("Project not active")
+            return bridge.ingest_status(project_id)
+
     def close(self, owner_id: str) -> None:
         bridge, owner_lock = self._worker(owner_id)
         with owner_lock:

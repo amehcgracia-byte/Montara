@@ -49,6 +49,9 @@ class ContainerWorkerBridge:
         self._cid_dir: tempfile.TemporaryDirectory | None = None
         self._rx = b""
         self._generation: int | None = None
+        self._ingest_project: str | None = None
+        self._ingest_generation: int | None = None
+        self.last_ingest_failure_code: int | None = None
 
     def _docker(self, *args: str, timeout: float = 5):
         return subprocess.run(
@@ -146,6 +149,63 @@ class ContainerWorkerBridge:
             self.stop()
             raise
 
+    def ingest_start(self, project_id: str) -> None:
+        """Start fixed Engine Ingest using ONLY previously provisioned inputs.
+
+        No file path enters the command. The guard fences the active owner
+        project. A rejected/ambiguous response kills the worker fail-closed.
+        """
+        self.last_ingest_failure_code = None
+        if self._ingest_project is not None:
+            raise WorkerFailure("Ingest already active")
+        if self.process is None or self.process.poll() is not None:
+            raise WorkerFailure("Private Engine not active")
+        self._check_container()
+        generation = self.guard.begin_job(self.owner_id, self.runtime_id, project_id)
+        self._ingest_project = project_id
+        self._ingest_generation = generation
+        try:
+            assert self.process.stdin is not None
+            self.process.stdin.write(b'{"op":"ingest_start"}\n')
+            self.process.stdin.flush()
+            response = self._recv(time.monotonic() + self.open_timeout)
+            if response != {"ok": True, "type": "ingest_started"}:
+                # Internal diagnostic only; never exposed by the HTTP route.
+                if response.get("type") == "ingest_start_rejected" and type(response.get("http_status")) is int:
+                    self.last_ingest_failure_code = response["http_status"]
+                raise WorkerFailure("Engine did not accept Ingest")
+            self._check_container()
+        except Exception:
+            self.stop()
+            raise WorkerFailure("Private Ingest unavailable")
+
+    def ingest_status(self, project_id: str) -> str:
+        if project_id != self._ingest_project or self._ingest_generation is None:
+            raise WorkerFailure("No matching active Ingest")
+        try:
+            if self.process is None or self.process.poll() is not None:
+                raise WorkerFailure("Private Engine not active")
+            self._check_container()
+            assert self.process.stdin is not None
+            self.process.stdin.write(b'{"op":"ingest_status"}\n')
+            self.process.stdin.flush()
+            response = self._recv(time.monotonic() + self.open_timeout)
+            status = response.get("status")
+            if (response.get("ok") is not True or
+                    response.get("type") != "ingest_status" or
+                    status not in {"pending", "idle", "queued", "running",
+                                   "done", "failed", "blocked", "not_started"}):
+                raise WorkerFailure("Engine Ingest status unavailable")
+            if status in {"done", "failed", "blocked"}:
+                self.guard.finish_job(self.owner_id, self.runtime_id,
+                                      project_id, self._ingest_generation)
+                self._ingest_project = None
+                self._ingest_generation = None
+            return status
+        except Exception:
+            self.stop()
+            raise WorkerFailure("Private Ingest status unavailable")
+
     def stop(self) -> None:
         proc, self.process = self.process, None
         cid, self.cid = self.cid, None
@@ -176,6 +236,8 @@ class ContainerWorkerBridge:
                         proc.wait(timeout=3)
                 if proc.stdin: proc.stdin.close()
                 if proc.stdout: proc.stdout.close()
+            self._ingest_project = None
+            self._ingest_generation = None
             self._rx = b""
             if self._cid_dir:
                 self._cid_dir.cleanup()
