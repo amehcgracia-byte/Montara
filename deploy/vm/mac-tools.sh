@@ -5,6 +5,7 @@
 #   montara-disk     disk use on the VM; 'montara-disk clean ...' prints what it would remove (--apply removes)
 #   montara-runs     timing record of every finished job on the VM (~/montara-runs.jsonl)
 #   montara-start    switch the VM on if needed, wait for Montara, connect and open http://127.0.0.1:8101 (--public: Cloudflare address)
+#   montara-open     update Montara and Companion to one compatible release, then open it
 #   montara-stop     switch the VM off now
 #   montara-autostop once: the VM switches itself off after 1 h without web use and 2 h without SSH typing
 # Install: curl -fsSL https://raw.githubusercontent.com/amehcgracia-byte/Montara/main/deploy/vm/mac-tools.sh | bash
@@ -12,6 +13,16 @@ set -euo pipefail
 BIN="$HOME/.montara-tools/bin"
 mkdir -p "$BIN"
 VM="montara-test"; ZONE="europe-west3-a"; PROJECT="montara-pruebas-10292226"
+
+cat > "$BIN/montara-open" <<'SCRIPT'
+#!/bin/bash
+set -euo pipefail
+launcher=$(mktemp -t montara-launch)
+trap 'rm -f "$launcher"' EXIT
+curl -fsSL https://raw.githubusercontent.com/amehcgracia-byte/Montara/main/deploy/vm/launch.py -o "$launcher"
+python3 "$launcher"
+SCRIPT
+chmod +x "$BIN/montara-open"
 
 cat > "$BIN/montara-update" <<SCRIPT
 #!/bin/bash
@@ -108,5 +119,5 @@ SCRIPT
 
 chmod +x "$BIN/montara-update" "$BIN/montara-tunnel" "$BIN/montara-runs" "$BIN/montara-start" "$BIN/montara-stop" "$BIN/montara-autostop"
 grep -q 'montara-tools/bin' "$HOME/.zshrc" 2>/dev/null || echo 'export PATH="$HOME/.montara-tools/bin:$PATH"' >> "$HOME/.zshrc"
-echo "Installed: montara-start, montara-stop, montara-update, montara-tunnel, montara-runs, montara-autostop."
+echo "Installed: montara-open, montara-start, montara-stop, montara-update, montara-tunnel, montara-runs, montara-autostop."
 echo "Close this Terminal window and open a new one, then type one of them."
