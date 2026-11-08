@@ -70,7 +70,9 @@ jobs:
           assert report['all_passed'] and report['completed']==2, report
           assert report['distributed_result'] is False
           assert report['network_bytes_to_server'] is None
-          assert report['browser_localhost_companion_final_body_bytes_observed'] > 1000000, report
+          # Final MP4 in this E2E is downloaded by Python urllib and is
+          # intentionally absent from the Playwright requestfinished meter.
+          assert report['python_http_local_companion_final_body_bytes_observed'] > 1000000, report
           assert report['browser_localhost_server_upload_body_bytes_observed'] > 0, report
           for client in report['clients']:
               transfer=client['browser_transfer']
@@ -79,8 +81,8 @@ jobs:
               assert transfer['original_upload_proven_absent'] is False
               print(client['client_id'], 'server-upload-body',
                     transfer['server_upload_browser_body_bytes_observed'],
-                    'local-final-body',
-                    transfer['companion_final_video_download_body_bytes_observed'],
+                    'python-local-final-body',
+                    transfer['python_http_local_final_download_body_bytes_observed'],
                     'unmeasured-requests',transfer['unmeasured_requests'])
           PY
       - name: Report concise failure logs
