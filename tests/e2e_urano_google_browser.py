@@ -20,9 +20,19 @@ from playwright.sync_api import expect, sync_playwright
 from werkzeug.serving import make_server
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from tests.test_google_flow_contract import SignedFakeGoogle, CLIENT
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from test_google_flow_contract import SignedFakeGoogle, CLIENT
 from urano.google_flow import OIDCSettings
 from urano.google_lab_app import create_google_lab_app
+
+
+class BrowserGoogle(SignedFakeGoogle):
+    def exchange(self, code, verifier, settings):
+        self.calls += 1
+        assert code == self.code
+        assert self.expected_challenge == __import__("base64").urlsafe_b64encode(
+            __import__("hashlib").sha256(verifier.encode()).digest()).rstrip(b"=").decode()
+        return self.token(self.nonce)
 
 
 def available_port():
@@ -46,7 +56,7 @@ def main():
                        check=True, capture_output=True)
         port = available_port()
         origin = f"https://127.0.0.1:{port}"
-        provider = SignedFakeGoogle()
+        provider = BrowserGoogle()
         settings = OIDCSettings(CLIENT, "lab-fake-only", origin + "/urano/v1/google/callback",
                                 frozenset({"alpha@example.test", "beta@example.test"}))
         app = create_google_lab_app(root, settings=settings, provider=provider)
