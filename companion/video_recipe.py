@@ -71,4 +71,12 @@ def validate(recipe):
             if k in s:item[k]=controls(k,s[k])
         result.append(item);total+=item['duration_sec']
     if total>21600:raise ValueError('The edit is longer than six hours')
-    return {'version':1,'engine':recipe['engine'],'platform':'youtube','sources':[{'key':k} for k in keys],'segments':result}
+    diagnostics=recipe.get('diagnostics',[])
+    if not isinstance(diagnostics,list) or len(diagnostics)>2000:raise ValueError('Invalid export diagnostics')
+    clean=[]
+    for row in diagnostics:
+        if not isinstance(row,dict) or row.get('status')!='omitted':raise ValueError('Unresolved source diagnostic')
+        if any(isinstance(row.get(k),bool) or not isinstance(row.get(k),int) for k in ('shot','source','replacement')):raise ValueError('Invalid omission identity')
+        if not 1<=row['shot']<=len(result) or result[row['shot']-1]['source']!=row['replacement']:raise ValueError('Omission does not match the rendered shot')
+        clean.append({k:row[k] for k in ('shot','source','replacement','status')})
+    return {'version':1,'engine':recipe['engine'],'platform':'youtube','sources':[{'key':k} for k in keys],'segments':result,'diagnostics':clean}

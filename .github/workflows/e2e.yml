@@ -72,7 +72,7 @@ jobs:
         run: python -m pytest tests -q
       - name: Session video matching policy
         if: matrix.mode == 'session'
-        run: node --test tests/test_session_video.cjs tests/test_sync_selection.cjs
+        run: node --test tests/test_session_video.cjs tests/test_sync_selection.cjs tests/test_native_export.cjs
       - name: Panorama proxy and session stems to one video master
         if: matrix.mode == 'session'
         run: python tests/e2e_session_video.py --output e2e-output/session-video
