@@ -181,7 +181,11 @@ class OwnerSessionToRealEngine(unittest.TestCase):
         for person in ("alice", "bob"):
             project_file = (self.root / person / "Projects" /
                             ("Owned" + person.title()) / "project.json")
-            saved = json.loads(project_file.read_text())
+            # CI synthetic media belongs to Docker UID 10001; inspect only
+            # with sudo on this disposable runner, never on user machines.
+            saved_text = subprocess.run(["sudo","cat",str(project_file)],
+                                        capture_output=True,text=True,check=True,timeout=10).stdout
+            saved = json.loads(saved_text)
             diagnostics[person] = {
                 "video_records": len(saved.get("inputs", {}).get("videos") or []),
                 "master_record": bool(saved.get("inputs", {}).get("master")),
