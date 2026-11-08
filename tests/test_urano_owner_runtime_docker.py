@@ -16,7 +16,7 @@ from pathlib import Path
 from flask import Flask
 
 from test_google_flow_contract import SignedFakeGoogle, CLIENT
-from test_google_private_engine_docker import _make_project, ENGINE_COMMAND
+import test_google_private_engine_docker as engine_fixture
 
 from urano.container_worker_bridge import ContainerWorkerBridge
 from urano.engine_bindings import EngineProjectRegistry
@@ -63,7 +63,7 @@ class OwnerSessionToRealEngine(unittest.TestCase):
             (workspace / "Projects").mkdir(mode=0o777)
             (workspace / "Projects").chmod(0o777)
             project_folder = "Owned" + person.title()
-            _make_project(os.environ["URANO_TEST_IMAGE_ID"], workspace, project_folder)
+            engine_fixture._make_project(os.environ["URANO_TEST_IMAGE_ID"], workspace, project_folder)
             project = self.catalog.create(owner, project_folder)
             self.project_ids[person] = project.id
             binding = EngineProjectRegistry(
@@ -76,7 +76,7 @@ class OwnerSessionToRealEngine(unittest.TestCase):
                 guard=guard, owner_id=owner, runtime_id=runtime,
                 workspace=workspace, image=os.environ["URANO_TEST_IMAGE_ID"],
                 name="urano-u19-" + person + "-private",
-                worker_command=ENGINE_COMMAND, startup_timeout=115,
+                worker_command=engine_fixture.ENGINE_COMMAND, startup_timeout=115,
                 open_timeout=100, memory_mb=1536, cpus=1.0)
             self.controller.register_trusted(owner, bridge)
             self.bridges[person] = bridge
