@@ -2623,12 +2623,34 @@ async function finishOriginalVideo(s) {
     if(!state.localProject)state.localProject=await montaraCompanion.projectFolder($('#videoName').value.trim()||todayName(),state.files.filter(f=>f.original).map(f=>f.original));
     if(job.cancelled)return;
     if(!state.localProject)throw new Error('Choose a project folder to save the original-quality video.');
+    // A restored Stage edit can still refer to its original server proxy path
+    // even after the person imported the exact camera file again. Reimporting
+    // creates a fresh upload path, so matching the old path alone is incorrect.
+    // Only relink when the proxy stem identifies exactly ONE verified original.
+    const savedOriginals = await footageMemory.list(state.platform).catch(()=>[]);
+    const candidates = [...state.files, ...savedOriginals].filter(f=>f.original?.name && f.original?.fingerprint);
+    const originalFor = source => {
+      const exact = state.files.find(f=>f.path===source.path && f.original);
+      if(exact)return exact.original;
+      if(!/\.small\.mp4$/i.test(source.path))return null;
+      const stem = decodeURIComponent(source.path.split('/').pop()).replace(/\.small\.mp4$/i,'').toLowerCase();
+      const matching = candidates.map(f=>f.original).filter(original=>
+        original.name.replace(/\.[^.]+$/,'').toLowerCase()===stem);
+      const unique = [...new Map(matching.map(original=>[
+        [original.name,original.size,original.fingerprint].join('|'),original
+      ])).values()];
+      return unique.length===1 ? unique[0] : null;
+    };
     const sources=[];
     for(const source of recipe.sources){
+      const original = originalFor(source);
       const file=state.files.find(f=>f.path===source.path);
-      if(file?.original)sources.push({source:source.key,original:file.original});
+      if(original)sources.push({source:source.key,original});
       else {
-        if(file?.small || /\.small\.mp4$/i.test(source.path))throw new Error('Reconnect the original videos on this computer before exporting.');
+        if(file?.small || /\.small\.mp4$/i.test(source.path)){
+          const filename=source.path.split('/').pop();
+          throw new Error('Montara cannot identify the local original for '+filename+'. Reconnect that exact camera file in Footage. If it was imported already, check that it has the same filename and contents as the original used for this edit.');
+        }
         const response=await fetch('/api/v1/edit/native-source/'+source.key+'?'+new URLSearchParams({revision:recipe.revision,project_id:state.projectId}));
         if(!response.ok)throw new Error('The original camera video is unavailable.');
         const name='montara-render-source-'+crypto.randomUUID().replaceAll('-','')+'.mp4';
