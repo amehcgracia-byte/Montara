@@ -2633,7 +2633,7 @@ async function finishOriginalVideo(s) {
       const exact = state.files.find(f=>f.path===source.path && f.original);
       if(exact)return exact.original;
       if(!/\.small\.mp4$/i.test(source.path))return null;
-      const stem = decodeURIComponent(source.path.split('/').pop()).replace(/\.small\.mp4$/i,'').toLowerCase();
+      const stem = source.path.split('/').pop().replace(/\.small\.mp4$/i,'').toLowerCase();
       const matching = candidates.map(f=>f.original).filter(original=>
         original.name.replace(/\.[^.]+$/,'').toLowerCase()===stem);
       const unique = [...new Map(matching.map(original=>[
