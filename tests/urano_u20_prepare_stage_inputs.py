@@ -21,12 +21,12 @@ def main():
     master=media/"master.wav"
     camera=media/"camera-a.mp4"
     subprocess.run(["ffmpeg","-hide_banner","-loglevel","error","-y",
-                    "-f","lavfi","-i","anoisesrc=color=pink:seed=112:duration=7",
+                    "-f","lavfi","-i","anoisesrc=color=pink:seed=1234:amplitude=.2:duration=20",
                     "-ar","48000",str(master)],check=True,timeout=60)
     subprocess.run(["ffmpeg","-hide_banner","-loglevel","error","-y",
-                    "-f","lavfi","-i","testsrc2=size=320x180:rate=24:duration=7",
+                    "-f","lavfi","-i","testsrc2=size=640x360:rate=24:duration=20",
                     "-i",str(master),"-c:v","libx264","-preset","ultrafast",
-                    "-threads","1","-pix_fmt","yuv420p","-c:a","aac",
+                    "-threads","2","-pix_fmt","yuv420p","-c:a","aac",
                     "-shortest",str(camera)],check=True,timeout=80)
     os.environ["ZUCKER_DATA_ROOT"]=str(root)
     os.environ["ZUCKER_MIXER_STATE_ROOT"]=str(root/"Mixer"/"state")
@@ -37,6 +37,11 @@ def main():
     a=client.post("/api/v1/inputs/master",json={"master":str(master)})
     assert v.status_code == 200, (v.status_code,v.get_json())
     assert a.status_code == 200, (a.status_code,a.get_json())
+    # Registration can return 200 even when a synthetic input is rejected by
+    # the media classifier. Ingest requires at least one persisted video.
+    persisted = json.loads((project/"project.json").read_text())
+    assert len(persisted.get("inputs",{}).get("videos") or []) == 1, (
+        "Synthetic camera not accepted by current Engine classifier")
     print(json.dumps({"fixture_prepared":True,"local_media":True}),flush=True)
 
 
