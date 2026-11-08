@@ -45,7 +45,17 @@
       el("projectTitle").textContent = project.title;
       el("notes").value = typeof project.recipe?.notes === "string" ? project.recipe.notes : "";
       el("detail").hidden = false;
+      el("engineStatus").textContent = "Comprobando vinculación Engine…";
       await projects();
+      // Authorization is checked by the backend from this session's owner.
+      // Never show an Engine folder, file path or render token in the browser.
+      try {
+        const link = await call("/urano/v1/projects/" + encodeURIComponent(id) + "/engine");
+        if (current?.id === id) el("engineStatus").textContent =
+          link.linked && !link.engine_access ? "Workspace vinculado (aún sin activar ni render)" : "No disponible";
+      } catch (_) {
+        if (current?.id === id) el("engineStatus").textContent = "Workspace no vinculado o no disponible";
+      }
       notice("Proyecto recuperado.");
     } catch (err) { notice(err.message); }
   }
