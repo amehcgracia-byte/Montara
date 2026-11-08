@@ -1,0 +1,250 @@
+{
+  "schema": "montara-consolidation-plan-v1",
+  "captured_date": "2026-11-08",
+  "baseline_main_sha": "765a34ceec33311cd520856d46fec15adfc6c0a1",
+  "open_pull_requests_at_audit": 36,
+  "integration_policy": {
+    "merge": false,
+    "deploy": false,
+    "production_ports_untouched": [
+      8101,
+      8102,
+      8103
+    ],
+    "server_writes": false,
+    "cloud_provider_agnostic": true
+  },
+  "evidence": {
+    "integrated_lab": {
+      "pr": 137,
+      "sha": "2893cc44b309c08c0c76f9abf529fd5a6cac0d9b",
+      "run": 42531692743,
+      "result": "success",
+      "topology": "single-ci-runner",
+      "real_google": false,
+      "real_wan": false
+    },
+    "windows_git_merge_conflict": {
+      "pr": 74,
+      "base": "main",
+      "mergeable_state": "dirty",
+      "mergeable": false
+    },
+    "main_catalog_present": true,
+    "main_companion_version": "0.6.10",
+    "offline_release_notes_pr": 123,
+    "observed_disk_state_at_current_audit": "not_rechecked"
+  },
+  "dependency_stacks": {
+    "product_runtime": [
+      124,
+      125,
+      126,
+      127,
+      128,
+      129,
+      134,
+      135,
+      136,
+      137
+    ],
+    "measurement_and_preflight": [
+      121,
+      130,
+      131,
+      132,
+      133
+    ],
+    "historical_references": [
+      86,
+      88,
+      89,
+      90,
+      91,
+      92,
+      93,
+      94,
+      95,
+      96,
+      97,
+      98,
+      99,
+      102,
+      104,
+      108,
+      112
+    ],
+    "optional_deferred": [
+      68,
+      74,
+      84,
+      123
+    ]
+  },
+  "integration_units": [
+    {
+      "id": "C1",
+      "purpose": "owner identity and existing catalog",
+      "source_prs": [
+        124,
+        125,
+        126,
+        127,
+        134
+      ],
+      "requires": [
+        "fresh-main",
+        "schema-compatibility",
+        "authz-and-csrf",
+        "no-real-google-in-unapproved-env"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "C2",
+      "purpose": "private worker plus bounded Stage jobs",
+      "source_prs": [
+        128,
+        129,
+        134,
+        135
+      ],
+      "requires": [
+        "C1",
+        "owner-isolation",
+        "timeout-and-cleanup",
+        "no-generic-engine-proxy"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "C3",
+      "purpose": "local Companion and no accidental original upload",
+      "source_prs": [
+        136,
+        74,
+        121,
+        132
+      ],
+      "requires": [
+        "C2",
+        "preserve-main-companion",
+        "file-identity-bindings",
+        "backend-and-frontend-fail-closed",
+        "explicit-optional-manual-only"
+      ],
+      "status": "planned"
+    },
+    {
+      "id": "C4",
+      "purpose": "physical-clients plus approved remote HTTPS acceptance",
+      "source_prs": [
+        130,
+        131,
+        132,
+        133,
+        137
+      ],
+      "requires": [
+        "C3",
+        "two-physical-client-machines",
+        "remote-server-authorized",
+        "actual-WAN-measurements",
+        "source-proxy-original-link"
+      ],
+      "status": "blocked_on_real_environment"
+    },
+    {
+      "id": "C5",
+      "purpose": "beta go-no-go and rollout review",
+      "source_prs": [
+        123
+      ],
+      "requires": [
+        "C4",
+        "Chema-review",
+        "FFmpeg-license-review",
+        "critical-video-quality-issues",
+        "retention-and-quotas"
+      ],
+      "status": "planned"
+    }
+  ],
+  "confirmed_conflicts": [
+    {
+      "pr": 74,
+      "base": "main",
+      "path": "companion/companion.py",
+      "git_state": "dirty",
+      "note": "GitHub PR reports merge conflict; this path also intersects PR #136 but that pair was not merge-tested"
+    }
+  ],
+  "known_overlaps": [
+    {
+      "paths": [
+        "companion/companion.py"
+      ],
+      "prs": [
+        74,
+        136
+      ],
+      "kind": "manual-reconciliation-needed"
+    },
+    {
+      "paths": [
+        "tests/e2e_native_stage.py"
+      ],
+      "prs": [
+        121,
+        132,
+        102,
+        104,
+        112
+      ],
+      "kind": "keep-current-chain-only"
+    },
+    {
+      "paths": [
+        "urano/google_lab_app.py"
+      ],
+      "prs": [
+        126,
+        127,
+        134,
+        135
+      ],
+      "kind": "same-chain-final-version"
+    },
+    {
+      "paths": [
+        "urano/http_owner_runtime.py"
+      ],
+      "prs": [
+        134,
+        135
+      ],
+      "kind": "same-chain-final-version"
+    },
+    {
+      "paths": [
+        "urano/container_worker_bridge.py",
+        "urano/engine_worker_process.py"
+      ],
+      "prs": [
+        128,
+        135
+      ],
+      "kind": "same-chain-final-version"
+    },
+    {
+      "paths": [
+        "web/montara.js"
+      ],
+      "prs": [
+        74
+      ],
+      "kind": "select-fail-closed-guard-and-add-backend-enforcement"
+    }
+  ],
+  "next_action": "prepare separate draft C1 integration against latest main, without merging old stacked PRs or touching servers"
+}
