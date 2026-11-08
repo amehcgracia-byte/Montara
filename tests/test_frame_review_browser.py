@@ -66,3 +66,46 @@ def test_first_three_ready_cards_single_request_and_append_without_rebinding():
             browser.close()
     finally:
         release.set();server.shutdown();server.server_close()
+
+
+def test_extra_360_viewpoint_has_its_own_tile_name_and_pose():
+    """New viewpoints are actual editable cards, not copies of built-in slots."""
+    class StaticHandler(BaseHTTPRequestHandler):
+        def log_message(self,*_): pass
+        def do_GET(self):
+            name=urlsplit(self.path).path.lstrip('/')
+            path=WEB/name
+            if path.is_file() and path.resolve().is_relative_to(WEB):
+                raw=path.read_bytes()
+                self.send_response(200)
+                self.send_header('Content-Type',mimetypes.guess_type(path)[0] or 'application/octet-stream')
+                self.end_headers();self.wfile.write(raw)
+            else:
+                self.send_response(404);self.end_headers()
+    server=ThreadingHTTPServer(('127.0.0.1',0),StaticHandler)
+    thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
+    try:
+        with sync_playwright() as playwright:
+            browser=playwright.chromium.launch()
+            page=browser.new_page()
+            page.route('http://127.0.0.1:47820/**',lambda route:route.abort())
+            errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
+            page.goto(f'http://127.0.0.1:{server.server_port}/')
+            page.evaluate("""() => {
+              state.platform='youtube';
+              state.files=[{kind:'video',name:'camera.small.mp4',path:'/test/camera.small.mp4',cameraType:'360'}];
+              show('cameras');renderCameras();
+            }""")
+            assert page.locator('.sphere .slot').count()==7
+            page.locator('.add-point-of-view').click()
+            custom=page.locator('.slot[data-slot="custom_1"]')
+            assert custom.count()==1
+            custom.locator('input[type=text]').fill('Trumpet')
+            page.locator('.pano').click(position={'x':50,'y':50})
+            assert page.evaluate("state.viewpoints['/test/camera.small.mp4'].custom_1.subject")=='Trumpet'
+            assert page.evaluate("state.viewpoints['/test/camera.small.mp4'].custom_1.enabled") is True
+            assert page.locator('.sphere .slot').count()==8
+            assert not errors,errors
+            browser.close()
+    finally:
+        server.shutdown();server.server_close();thread.join(timeout=3)
