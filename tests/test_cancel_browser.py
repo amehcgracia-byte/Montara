@@ -148,7 +148,8 @@ def test_unused_small_assets_do_not_require_companion(site,usage):
 
 
 @pytest.mark.parametrize('optional',[True,False])
-def test_native_missing_insert_preflight_preserves_slot_and_warns(site,optional):
+@pytest.mark.parametrize('coverage',[True,False])
+def test_native_missing_insert_preflight_preserves_slot_and_warns(site,optional,coverage):
     original={'name':'camera.mov','size':123,'fingerprint':'a'*64}
     logo={'name':'logo.mov','size':12,'fingerprint':'b'*64}
     slot={'source':0,'master_start_sec':1,'clip_start_sec':0,'duration_sec':1}
@@ -156,7 +157,7 @@ def test_native_missing_insert_preflight_preserves_slot_and_warns(site,optional)
     recipe={'version':1,'platform':'youtube','engine':'a'*40,'revision':'reviewed',
             'sources':[{'key':0,'path':'/old/logo.small.mp4','original':logo,'optional':optional},
                        {'key':1,'path':'/old/camera.small.mp4','original':original,'optional':False}],
-            'segments':[slot],'fallbacks':{'0':[fallback]}}
+            'segments':[slot],'fallbacks':{'0':[fallback]} if coverage else {}}
     with sync_playwright() as p:
         browser=p.chromium.launch();page=browser.new_page()
         page.route('http://127.0.0.1:47820/health',lambda route:route.fulfill(headers={'Access-Control-Allow-Origin':'*'},json={'app':'montara-companion','ffmpeg':True,'local_video':{'engine':'a'*40}}))
@@ -176,12 +177,18 @@ def test_native_missing_insert_preflight_preserves_slot_and_warns(site,optional)
         page.locator('#result' if optional else '#failed').wait_for(state='visible')
         starts=page.evaluate('startedNative')
         if optional:
-            assert starts[0]['recipe']['segments']==[fallback]
-            assert starts[0]['originals']==[{'source':1,'original':original}]
+            if coverage:
+                assert starts[0]['recipe']['segments']==[fallback]
+                assert starts[0]['originals']==[{'source':1,'original':original}]
+            else:
+                assert starts[0]['recipe']['segments'][0]['placeholder']=='black'
+                assert starts[0]['recipe']['segments'][0]['duration_sec']==slot['duration_sec']
+                assert starts[0]['originals']==[]
+                assert 'black' in page.locator('#resultInfo').inner_text()
             assert 'logo.mov omitted' in page.locator('#resultInfo').inner_text()
         else:
             assert starts==[]
-            assert 'Shot 1' in page.locator('#errorText').inner_text()
+            assert '1 shot(s)' in page.locator('#errorText').inner_text()
             assert 'logo.mov' in page.locator('#errorText').inner_text()
         browser.close()
 

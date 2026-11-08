@@ -19,11 +19,28 @@ test('optional insert omission retains exact master clock and records decision',
   assert.deepEqual(plan(recipe,[0]),result);
   assert.deepEqual(recipe.segments,[shot]);
 });
-test('required shot, unavailable fallback, or timing mismatch block export', () => {
+test('required shots block; optional shots preserve time even without camera coverage', () => {
   assert.equal(plan({...recipe,sources:recipe.sources.map(s=>({...s,optional:false}))},[0]).blocked,true);
-  assert.equal(plan(recipe,[0,1]).blocked,true);
-  assert.equal(plan({...recipe,fallbacks:{0:[{...fallback, duration_sec:2}]}},[0]).blocked,true);
+  assert.equal(plan(recipe,[0,1]).blocked,false);
+  assert.equal(plan({...recipe,fallbacks:{0:[{...fallback, duration_sec:2}]}},[0]).recipe.segments[0].placeholder,'black');
 });
 test('unused missing source does not block the plan', () => {
   assert.equal(plan({...recipe,segments:[fallback]},[0]).blocked,false);
+});
+
+test('80 saved shots with 16 missing Tune Up inserts yield one warning and exact clocks', () => {
+  const {warnings} = require('../web/native-export.js');
+  const segments = Array.from({length:80}, (_,i)=>({...shot,source:(i+1)%5===0 ? 0 : 1,master_start_sec:i*2,duration_sec:2,clip_start_sec:i*2}));
+  const input={...recipe,segments,fallbacks:{},sources:[{...recipe.sources[0],path:'Tuneup short logo vid.small.mp4'},recipe.sources[1]]};
+  const before=JSON.stringify(input);
+  const result=plan(input,[0]);
+  assert.equal(result.blocked,false);
+  assert.equal(result.diagnostics.length,16);
+  assert.equal(warnings(result.diagnostics).length,1);
+  result.recipe.segments.forEach((s,i)=> {
+    assert.equal(s.master_start_sec,i*2);assert.equal(s.duration_sec,2);
+    if ((i+1)%5===0) assert.equal(s.placeholder,'black');
+    else assert.deepEqual(s,segments[i]);
+  });
+  assert.equal(JSON.stringify(input),before);
 });

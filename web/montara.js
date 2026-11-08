@@ -2651,10 +2651,10 @@ async function finishOriginalVideo(s) {
       if (job.cancelled) return;
     }
     const planned = NativeExport.plan(recipe, unavailable);
-    if (planned.blocked) throw new Error(planned.diagnostics.filter(d=>d.status==='required').map(d=>`Shot ${d.shot} · ${d.name}: ${d.reason} Reconnect its original in Footage.`).join('\n'));
+    if (planned.blocked) throw new Error(NativeExport.warnings(planned.diagnostics.filter(d=>d.status==='required')).join('\n'));
     recipe = planned.recipe;
     job.diagnostics = planned.diagnostics;
-    if (planned.diagnostics.length) toast(planned.diagnostics.map(d=>`Shot ${d.shot} · ${d.name}: ${d.reason}`).join(' '), true);
+    if (planned.diagnostics.length) toast(NativeExport.warnings(planned.diagnostics).join(' '), true);
     const sources=[];
     for(const source of recipe.sources){
       const original = identities.get(source.key);
@@ -2744,7 +2744,7 @@ function showResult(s) {
   $("#download").setAttribute("download", downloadName);
   const bits = [];
   if (!result.native && result.warnings?.length) bits.push(result.warnings.join('; '));
-  if (result.export_diagnostics?.length) bits.push(result.export_diagnostics.map(d=>`Shot ${d.shot}: optional ${d.name || 'insert'} omitted; synchronized camera used`).join('; '));
+  if (result.export_diagnostics?.length) bits.push(NativeExport.warnings(result.export_diagnostics).join('; '));
   if (result.cut_count) bits.push(`${result.cut_count} cuts`);
   if (result.camera_usage) bits.push(`${Object.keys(result.camera_usage).length} camera${Object.keys(result.camera_usage).length === 1 ? "" : "s"}`);
   $("#resultInfo").textContent = result.audio ? "Your mastered audio is ready." : bits.join(" · ");

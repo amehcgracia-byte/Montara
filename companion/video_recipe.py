@@ -57,7 +57,7 @@ def validate(recipe):
     if not isinstance(recipe,dict) or recipe.get('version')!=1 or recipe.get('platform')!='youtube':raise ValueError('Choose a Stage edit')
     if not isinstance(recipe.get('engine'),str) or not re.fullmatch('[a-f0-9]{40}',recipe['engine']):raise ValueError('Unknown editor version')
     sources=recipe.get('sources');segments=recipe.get('segments')
-    if not isinstance(sources,list) or not 1<=len(sources)<=200 or not isinstance(segments,list) or not 1<=len(segments)<=2000:raise ValueError('Invalid video plan size')
+    if not isinstance(sources,list) or not 0<=len(sources)<=200 or not isinstance(segments,list) or not 1<=len(segments)<=2000:raise ValueError('Invalid video plan size')
     keys=[]
     for source in sources:
         key=source.get('key') if isinstance(source,dict) else None
@@ -65,7 +65,16 @@ def validate(recipe):
         keys.append(key)
     result=[];total=0
     for s in segments:
-        if not isinstance(s,dict) or isinstance(s.get('source'),bool) or s.get('source') not in keys:raise ValueError('Unknown video source')
+        if not isinstance(s,dict):raise ValueError('Invalid video segment')
+        placeholder=s.get('placeholder')
+        if placeholder is not None:
+            if placeholder!='black' or set(s)-{'placeholder','master_start_sec','duration_sec','clip_start_sec','playback_speed'} or s.get('clip_start_sec',0)!=0 or s.get('playback_speed',1)!=1:
+                raise ValueError('Invalid neutral interval')
+            result.append({'placeholder':'black','master_start_sec':bounded(s.get('master_start_sec'),0,86400),
+                           'duration_sec':bounded(s.get('duration_sec'),1/60,21600),'clip_start_sec':0,'playback_speed':1})
+            total+=result[-1]['duration_sec']
+            continue
+        if isinstance(s.get('source'),bool) or s.get('source') not in keys:raise ValueError('Unknown video source')
         item={'source':s['source'],'clip_start_sec':bounded(s.get('clip_start_sec',0),0,86400),'duration_sec':bounded(s.get('duration_sec'),1/60,21600),'master_start_sec':bounded(s.get('master_start_sec'),0,86400),'playback_speed':bounded(s.get('playback_speed',1.0),0.5,2.0)}
         for k in ('spherical_shot','motion','flat_framing','video_light','projection','manual_view','insv_fov','reel_framing'):
             if k in s:item[k]=controls(k,s[k])
@@ -76,9 +85,15 @@ def validate(recipe):
     clean=[]
     for row in diagnostics:
         if not isinstance(row,dict) or row.get('status')!='omitted':raise ValueError('Unresolved source diagnostic')
-        if any(isinstance(row.get(k),bool) or not isinstance(row.get(k),int) for k in ('shot','source','replacement')):raise ValueError('Invalid omission identity')
-        if not 1<=row['shot']<=len(result) or result[row['shot']-1]['source']!=row['replacement']:raise ValueError('Omission does not match the rendered shot')
+        if any(isinstance(row.get(k),bool) or not isinstance(row.get(k),int) for k in ('shot','source')):raise ValueError('Invalid omission identity')
+        if not 1<=row['shot']<=len(result):raise ValueError('Invalid omission shot')
+        segment=result[row['shot']-1]
+        if row.get('placeholder')=='black':
+            if 'replacement' not in row or row['replacement'] is not None or segment.get('placeholder')!='black':raise ValueError('Omission does not match the neutral interval')
+        elif isinstance(row.get('replacement'),bool) or not isinstance(row.get('replacement'),int) or segment.get('source')!=row['replacement']:
+            raise ValueError('Omission does not match the rendered shot')
         entry={k:row[k] for k in ('shot','source','replacement','status')}
+        if row.get('placeholder')=='black':entry['placeholder']='black'
         if 'name' in row:
             if not isinstance(row['name'],str) or len(row['name'])>200:raise ValueError('Invalid diagnostic clip name')
             entry['name']=row['name']
