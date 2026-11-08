@@ -17,7 +17,7 @@ const NativeExport = (() => {
         !missing.has(c.source) && byKey.has(c.source) && byKey.get(c.source).optional !== true &&
         c.master_start_sec === s.master_start_sec && c.duration_sec === s.duration_sec);
       if (!alternative) {
-        diagnostics.push({shot:index + 1, source:s.source, status:'required', name:source?.original?.name || source?.path?.split('/').pop(), reason:source?.optional ? 'No synchronized camera covers this optional insert.' : 'This shot needs its original.'});
+        diagnostics.push({shot:index + 1, source:s.source, status:'required', name:source?.original?.name || source?.path?.split('/').pop(), reason:source?.optional ? 'No synchronized camera covers this optional insert.' : !source?.original && /\.small\.mp4$/i.test(source?.path || '') ? 'Original association unavailable or ambiguous. Reimport with Companion and prepare this edit again from Footage.' : 'This shot needs its original.'});
         return s;
       }
       diagnostics.push({shot:index + 1, source:s.source, replacement:alternative.source, status:'omitted', name:source.original?.name || source.path?.split('/').pop(), reason:'Optional insert unavailable; synchronized camera retained for the same interval.'});

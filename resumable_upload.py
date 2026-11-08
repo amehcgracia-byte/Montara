@@ -136,6 +136,53 @@ def preview_original(path) -> dict | None:
     return data.get('preview_of') if (data.get('complete') or data.get('restored')) and data.get('restored', data.get('name')) == Path(path).name else None
 
 
+
+def reconnect_preview_original(path, uploads_root) -> dict | None:
+    """Recover legacy associations only from one byte-identical uploaded proxy.
+
+    Never identify an original by basename or by a lossy visual/audio similarity.
+    Multiple original identities producing the same proxy remain ambiguous.
+    """
+    direct = preview_original(path)
+    if direct:
+        return direct
+    path = Path(path)
+    if not path.name.lower().endswith('.small.mp4') or not path.is_file():
+        return None
+    records = list(Path(uploads_root).glob('*/upload.json'))
+    if len(records) > 5000:
+        return None
+    size = path.stat().st_size
+    if size > 512 * 1024**2:
+        return None
+    with path.open('rb') as handle:
+        first=handle.read(65536);handle.seek(max(0,size-65536));last=handle.read(65536)
+    edge = hashlib.sha256(first+last).hexdigest()
+    def digest(target):
+        hasher=hashlib.sha256()
+        with target.open('rb') as handle:
+            for block in iter(lambda:handle.read(1024*1024),b''):
+                hasher.update(block)
+        return hasher.hexdigest()
+    matches={}; full=None
+    for record in records:
+        try:
+            data=json.loads(record.read_text())
+            if not data.get('complete') or not data.get('video_preview') or data.get('size')!=size or data.get('fingerprint')!=edge:
+                continue
+            target=record.parent/str(data.get('name') or '')
+            if target.resolve().parent != record.parent.resolve():
+                continue
+            original=preview_original(target)
+            if not original or not target.is_file() or target.stat().st_size!=size:
+                continue
+            full=full or digest(path)
+            if digest(target)==full:
+                matches[json.dumps(original,sort_keys=True)]=original
+        except (OSError,ValueError,TypeError):
+            continue
+    return next(iter(matches.values())) if len(matches)==1 else None
+
 def register_resumable_upload(app, data_root, classify):
     root = Path(data_root).resolve() / 'Uploads'
     limit = 256 * 1024**2 if os.environ.get('MONTARA_SESSION_TOKEN') else 30 * 1024**3

@@ -189,12 +189,12 @@ def create_montara_app(data_root: Path = DEFAULT_DATA, samples: bool = True):
     @app.after_request
     def montara_no_stale_interface(response):
         if request.path == '/api/v1/edit/native-recipe' and response.status_code == 200:
-            from resumable_upload import preview_original
+            from resumable_upload import reconnect_preview_original
             payload = response.get_json()
             for source in payload.get('sources', []):
                 path = Path(source['path']).resolve()
                 if path.is_relative_to(data_root.resolve()):
-                    original = preview_original(path)
+                    original = reconnect_preview_original(path, data_root / 'Uploads')
                     if original:
                         source['original'] = original
                         source['preview'] = True

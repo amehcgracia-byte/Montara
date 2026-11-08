@@ -12,8 +12,11 @@ bytes at a new server path no longer requires guessing from `.small.mp4` names.
 Companion checks remembered files again and can reuse a registered renamed file
 only when size and the SHA-256 of its first/last 64 KiB match. This existing bounded
 identity is not a full-file cryptographic digest; it does not detect middle-only
-changes of equal-size files. Ambiguous legacy records without identity do not relink
-by basename. Reconnect the original or recreate that source's edit association.
+changes of equal-size files. Legacy video proxies can recover their association from a newly uploaded, byte-identical
+proxy with exactly one original identity. Migration compares complete proxy bytes,
+not filenames or visual similarity, and refuses ambiguous matches. This bounded
+lookup covers proxies up to 512 MiB and upload libraries up to 5,000 records; larger
+or ambiguous legacy records need a fresh source association.
 
 The engine proposes a deterministic fallback for an optional insert only when a
 current completed sync stage proves coverage for the entire slot. It uses an
