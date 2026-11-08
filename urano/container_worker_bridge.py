@@ -51,6 +51,7 @@ class ContainerWorkerBridge:
         self._generation: int | None = None
         self._ingest_project: str | None = None
         self._ingest_generation: int | None = None
+        self.last_ingest_failure_code: int | None = None
 
     def _docker(self, *args: str, timeout: float = 5):
         return subprocess.run(
@@ -154,6 +155,7 @@ class ContainerWorkerBridge:
         No file path enters the command. The guard fences the active owner
         project. A rejected/ambiguous response kills the worker fail-closed.
         """
+        self.last_ingest_failure_code = None
         if self._ingest_project is not None:
             raise WorkerFailure("Ingest already active")
         if self.process is None or self.process.poll() is not None:
@@ -168,6 +170,9 @@ class ContainerWorkerBridge:
             self.process.stdin.flush()
             response = self._recv(time.monotonic() + self.open_timeout)
             if response != {"ok": True, "type": "ingest_started"}:
+                # Internal diagnostic only; never exposed by the HTTP route.
+                if response.get("type") == "ingest_start_rejected" and type(response.get("http_status")) is int:
+                    self.last_ingest_failure_code = response["http_status"]
                 raise WorkerFailure("Engine did not accept Ingest")
             self._check_container()
         except Exception:
