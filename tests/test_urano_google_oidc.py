@@ -12,6 +12,8 @@ from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
 from urano.google_oidc import GoogleIdentityDenied, verify_google_id_token
 from urano.google_owner import GoogleOwnerStore
+from urano.project_catalog import ProjectCatalog, ProjectNotFound
+from urano.session_auth import SessionStore
 
 CLIENT = "synthetic-client.apps.googleusercontent.com"
 NONCE = "synthetic-high-entropy-nonce-123456789"
@@ -91,6 +93,38 @@ class GoogleOIDCContract(unittest.TestCase):
             self.verify(client_id="other-client")
         with self.assertRaises(GoogleIdentityDenied):
             self.verify(expected_nonce="short")
+
+    def test_google_subjects_keep_separate_project_histories_and_sessions(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            owners = GoogleOwnerStore(root / "google.sqlite3")
+            projects = ProjectCatalog(root / "projects.sqlite3")
+            sessions = SessionStore(root / "sessions.sqlite3")
+            allowed = frozenset({"alpha@example.test"})
+            a = self.verify()
+            b = self.verify(self.token(claims={"sub": "another-google-sub-888"}))
+            owner_a = owners.resolve_beta_owner(a, allowed_emails=allowed)
+            owner_b = owners.resolve_beta_owner(b, allowed_emails=allowed)
+            project_a = projects.create(owner_a, "A's older project")
+            project_b = projects.create(owner_b, "B's independent project")
+            session_a = sessions.issue(owner_a)
+            session_b = sessions.issue(owner_b)
+            self.assertNotEqual(session_a.token, session_b.token)
+            self.assertEqual(sessions.verify(session_a.token).owner_id, owner_a)
+            self.assertEqual(sessions.verify(session_b.token).owner_id, owner_b)
+            self.assertEqual([p.id for p in projects.list_for(owner_a)], [project_a.id])
+            self.assertEqual([p.id for p in projects.list_for(owner_b)], [project_b.id])
+            with self.assertRaises(ProjectNotFound):
+                projects.get(owner_b, project_a.id)
+            with self.assertRaises(ProjectNotFound):
+                projects.get(owner_a, project_b.id)
+            sessions.revoke(session_a.token)
+            self.assertIsNone(sessions.verify(session_a.token))
+            self.assertIsNotNone(sessions.verify(session_b.token))
+            self.assertEqual(
+                GoogleOwnerStore(root / "google.sqlite3").resolve_beta_owner(a, allowed_emails=allowed),
+                owner_a,
+            )
 
     def test_beta_allowlist_and_sub_isolation_across_database_reopen(self):
         with tempfile.TemporaryDirectory() as directory:
