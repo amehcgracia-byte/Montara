@@ -52,6 +52,8 @@ def main():
     parser=argparse.ArgumentParser()
     parser.add_argument("--output",type=Path,required=True)
     parser.add_argument("--owner",choices=("alice","bob"),required=True)
+    parser.add_argument("--u22-handoff",type=Path,
+                        help="Use only the actual U20 Stage-DONE authorized handoff")
     args=parser.parse_args()
     root=args.output.resolve()
     if root.exists() and any(root.iterdir()):
@@ -89,14 +91,23 @@ def main():
         ).hexdigest()[:24]
         helper.sources[lookup]=original
 
-        catalog=ProjectCatalog(scratch/"catalog.sqlite3")
-        owner="synthetic-owner-"+args.owner
-        project=catalog.create(owner,"U21 owned edit")
-        catalog.save_recipe(owner,project.id,{
-            "urano_edits_v1":{"cuts":[
-                {"source_slot":0,"start_ms":500,"end_ms":2500}
-            ]}},expected_revision=0)
-        plan=project_handoff(catalog,owner,project.id)
+        if args.u22_handoff:
+            # This plan was fetched via owner-authorized HTTP after U20's
+            # real pinned Docker Engine reported Ingest DONE. Companion only
+            # sees this pathless JSON, never Docker paths/media/Google secrets.
+            envelope=json.loads(args.u22_handoff.read_text(encoding="utf-8"))
+            if set(envelope)!={"owner","plan"} or envelope["owner"]!=args.owner:
+                raise ValueError("Handoff belongs to another owner")
+            plan=envelope["plan"]
+        else:
+            catalog=ProjectCatalog(scratch/"catalog.sqlite3")
+            owner="synthetic-owner-"+args.owner
+            project=catalog.create(owner,"U21 owned edit")
+            catalog.save_recipe(owner,project.id,{
+                "urano_edits_v1":{"cuts":[
+                    {"source_slot":0,"start_ms":500,"end_ms":2500}
+                ]}},expected_revision=0)
+            plan=project_handoff(catalog,owner,project.id)
         payload={
             "plan":plan,"project":local_id,"master":master.name,
             "originals":[{"source":0,"original":identity}],
@@ -158,6 +169,7 @@ def main():
             assert downloaded.stat().st_size==output.stat().st_size
             result={
                 "schema":"urano-u21-local-render-acceptance-v1",
+                "handoff_from_actual_stage":bool(args.u22_handoff),
                 "owner":args.owner,
                 "passed":True,"native_mp4_bytes":downloaded.stat().st_size,
                 "used_verified_local_original":True,
