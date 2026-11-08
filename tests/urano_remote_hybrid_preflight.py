@@ -38,6 +38,12 @@ def check_server_url(url: str, resolve=socket.getaddrinfo) -> str:
     if parsed.hostname.lower() in ("localhost", "localhost.localdomain"):
         raise ValueError("The shared server may not be loopback")
     try:
+        literal = ipaddress.ip_address(parsed.hostname)
+    except ValueError:
+        literal = None
+    if literal is not None:
+        raise ValueError("Use an approved public DNS hostname, not an IP literal")
+    try:
         addresses = resolve(parsed.hostname, 443, type=socket.SOCK_STREAM)
     except OSError as exc:
         raise ValueError("The HTTPS server hostname cannot be resolved") from exc
