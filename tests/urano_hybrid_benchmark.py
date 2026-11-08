@@ -188,6 +188,12 @@ def _summarize(root: Path, processes, starts, observations):
             sum((c["browser_transfer"] or {}).get(
                 "companion_final_video_download_body_bytes_observed", 0) for c in per_client)
             if all(c["browser_transfer"] is not None for c in per_client) else None),
+        "python_http_local_companion_final_body_bytes_observed": (
+            sum(c["browser_transfer"]["python_http_local_final_download_body_bytes_observed"]
+                for c in per_client)
+            if all(c["browser_transfer"] is not None and
+                   type(c["browser_transfer"].get("python_http_local_final_download_body_bytes_observed")) is int
+                   for c in per_client) else None),
         "network_bytes_to_companion": None,
         "hardware": {"cpu_count_logical": os.cpu_count(), "os": platform.system()},
         "clients": per_client,
