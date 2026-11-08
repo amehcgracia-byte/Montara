@@ -11,6 +11,10 @@ import unittest
 from pathlib import Path
 
 from urano_hybrid_node_meter import build_report, sample_process_tree, save_report
+try:
+    import psutil
+except ImportError:
+    psutil = None
 from urano_hybrid_merge_reports import combine_reports
 
 
@@ -28,6 +32,7 @@ def fake_node(name, role, *, run_id="trial-one", level=2, cpu=10.0):
 
 
 class HybridMeterContracts(unittest.TestCase):
+    @unittest.skipIf(psutil is None, "psutil optional in legacy contract workflow")
     def test_actual_process_tree_observed_and_does_not_execute_actions(self):
         report = sample_process_tree(os.getpid(), duration=0.25, interval=0.1)
         self.assertGreaterEqual(report["samples"], 2)
@@ -36,6 +41,7 @@ class HybridMeterContracts(unittest.TestCase):
         self.assertGreater(report["observation_seconds"], 0)
         self.assertLess(report["observation_seconds"], 2)
 
+    @unittest.skipIf(psutil is None, "psutil optional in legacy contract workflow")
     def test_meter_refuses_bad_roles_labels_and_user_data(self):
         sample = sample_process_tree(os.getpid(), duration=0.11, interval=0.1)
         with self.assertRaises(ValueError):
