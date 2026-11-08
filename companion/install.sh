@@ -40,27 +40,46 @@ if command -v lsof >/dev/null 2>&1; then
   for listener in $(lsof -t -iTCP:47820 -sTCP:LISTEN 2>/dev/null || true); do
     if pgrep -P "$listener" >/dev/null 2>&1; then say "Wait for the current Montara work to finish, then run this installer again.";exit 1;fi
   done
+  for listener in $(lsof -t -iTCP:47820 -sTCP:LISTEN 2>/dev/null || true); do
+    process=$(ps -p "$listener" -o command=)
+    case "$process" in
+      *"$DIR/companion.py"*) ;;
+      *) say "Port 47820 belongs to another application; nothing was replaced."; exit 1 ;;
+    esac
+    say "Stopping the idle Companion before updating…"
+    kill -TERM "$listener"
+    for attempt in $(seq 50); do
+      kill -0 "$listener" 2>/dev/null || break
+      sleep .1
+    done
+    if kill -0 "$listener" 2>/dev/null; then say "Companion did not stop; nothing was replaced."; exit 1; fi
+  done
 fi
 mkdir -p "$DIR/bin"
 for f in video_recipe.py video_jobs.py windows_support.py; do
-  curl -fsSL "$RAW/$f" -o "$DIR/$f.new" && mv "$DIR/$f.new" "$DIR/$f"
+  curl -fsSL "$RAW/$f" -o "$DIR/$f.new"
+  mv "$DIR/$f.new" "$DIR/$f"
 done
 for f in spherical_proxy.py spatialmedia/__init__.py spatialmedia/metadata_utils.py spatialmedia/LICENSE spatialmedia/mpeg/__init__.py spatialmedia/mpeg/box.py spatialmedia/mpeg/constants.py spatialmedia/mpeg/container.py spatialmedia/mpeg/mpeg4_container.py spatialmedia/mpeg/sa3d.py spatialmedia/mpeg/sv3d.py; do
   mkdir -p "$DIR/$(dirname "$f")"
-  curl -fsSL "$RAW/$f" -o "$DIR/$f.new" && mv "$DIR/$f.new" "$DIR/$f"
+  curl -fsSL "$RAW/$f" -o "$DIR/$f.new"
+  mv "$DIR/$f.new" "$DIR/$f"
 done
-curl -fsSL "$RAW/companion.py" -o "$DIR/companion.py.new" && mv "$DIR/companion.py.new" "$DIR/companion.py"
+curl -fsSL "$RAW/companion.py" -o "$DIR/companion.py.new"
+mv "$DIR/companion.py.new" "$DIR/companion.py"
 cat > "$DIR/bin/montara-companion" <<EOF
 #!/bin/bash
 exec "$PY" "$DIR/companion.py" "\$@"
 EOF
 chmod +x "$DIR/bin/montara-companion"
 
+if [ "${MONTARA_NO_SHELL_SETUP:-0}" != 1 ]; then
 for rc in "$HOME/.zshrc" "$HOME/.bashrc"; do
   if [ -f "$rc" ] || [ "$rc" = "$HOME/.zshrc" ]; then
     grep -q 'montara-companion/bin' "$rc" 2>/dev/null || echo 'export PATH="$HOME/.montara-companion/bin:$PATH"' >> "$rc"
   fi
 done
+fi
 # Optional local mixer (about 150 MB): songs of a full session are mixed on this computer with
 # the same mixer as the server, and only the finished MP3 is uploaded.
 #   curl -fsSL https://raw.githubusercontent.com/amehcgracia-byte/Montara/main/companion/install.sh | bash -s -- --mixer
@@ -118,4 +137,14 @@ fi
 
 say "installed in $DIR · next time just type:  montara-companion"
 echo
-exec "$PY" "$DIR/companion.py"
+if [ "${MONTARA_BACKGROUND:-0}" = 1 ]; then
+  nohup "$PY" "$DIR/companion.py" > "$DIR/companion.log" 2>&1 < /dev/null &
+  for attempt in $(seq 30); do
+    if curl -fsS http://127.0.0.1:47820/health >/dev/null 2>&1; then exit 0; fi
+    sleep 1
+  done
+  say "Companion did not become ready. Its log is in $DIR/companion.log"
+  exit 1
+else
+  exec "$PY" "$DIR/companion.py"
+fi
