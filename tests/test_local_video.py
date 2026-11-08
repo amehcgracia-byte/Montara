@@ -118,7 +118,7 @@ def test_native_http_ranges_and_origin_boundaries(tmp_path,monkeypatch):
     finally:server.shutdown();server.server_close();thread.join(timeout=3)
 
 
-def test_personal_transparent_logo_gets_separate_fading_bookends(tmp_path):
+def test_personal_transparent_logo_fades_over_native_video_without_extra_seconds(tmp_path):
     from PIL import Image
     home=tmp_path/'companion';target,sha=install_layout(home)
     folder=tmp_path/'project';folder.mkdir()
@@ -137,16 +137,20 @@ def test_personal_transparent_logo_gets_separate_fading_bookends(tmp_path):
     assert manager.status(token)['status']=='ready',(manager.status(token),(folder/'.montara-renders'/token/'render.log').read_text()[-2000:])
     output=manager.output(token)
     info=json.loads(subprocess.check_output(['ffprobe','-v','error','-show_format','-of','json',str(output)]))
-    assert abs(float(info['format']['duration'])-(4+10.0+10.2))<.12
+    assert abs(float(info['format']['duration'])-4)<.12
     reopened=VideoJobs(home)
     assert reopened.status(token)['status']=='ready' and reopened.output(token)==output
     def frame_at(second):
         raw=subprocess.check_output(['ffmpeg','-v','error','-ss',str(second),'-i',str(output),'-frames:v','1','-vf','scale=192:108','-f','rawvideo','-pix_fmt','rgb24','-'])
         return np.frombuffer(raw,np.uint8).reshape(108,192,3)
     assert frame_at(.1).mean()<16  # starts from black
-    assert frame_at(5.0)[54,96,0]>110  # transparent red logo on black
-    assert frame_at(12.0)[10,10,2]>100  # original blue camera video
-    assert frame_at(24.05).mean()<16  # fades back to black
+    assert frame_at(.6)[54,96,0]>110  # logo remains as footage fades in
+    assert frame_at(.6)[10,10,2]>80
+    assert frame_at(2.0)[10,10,2]>100  # original blue camera video
+    assert frame_at(3.95).mean()<20  # fades back to black
+    for at in (.15,3.7):
+        raw=subprocess.check_output(['ffmpeg','-v','error','-ss',str(at),'-t','0.1','-i',str(output),'-vn','-f','f32le','-ac','1','-'])
+        assert np.sqrt(np.mean(np.frombuffer(raw,dtype='<f4')**2))>.001
 
 
 def test_native_recipe_accepts_deep_flat_crop_but_keeps_motion_limits():

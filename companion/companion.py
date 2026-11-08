@@ -27,7 +27,8 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-VERSION = "0.6.9"
+VERSION = "0.6.10"
+VIDEO_PROXY_RECIPE = 2
 PORT = int(os.environ.get("MONTARA_COMPANION_PORT", "47820"))
 HOME = Path(os.environ.get("MONTARA_COMPANION_HOME", Path.home() / ".montara-companion"))
 CACHE = HOME / "proxies"
@@ -362,13 +363,11 @@ def proxy_command(source: Path, target: Path, p: dict, hardware: bool = False) -
             chain += ["zscale=t=linear:npl=100", "format=gbrpf32le", "zscale=p=bt709",
                       "tonemap=tonemap=hable:desat=0", "zscale=t=bt709:m=bt709:r=tv"]
         chain.append("format=yuv420p")
-        if HW_H264:
-            head += ["-hwaccel", "videotoolbox"]
-    if HW_H264:
+    if hardware and HW_H264:
         video = ["-c:v", "h264_videotoolbox", "-b:v", "2500k", "-maxrate", "4M", "-bufsize", "8M"]
     else:
         video = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "24"]
-    if p.get("panorama") and HW_H264:
+    if p.get("panorama") and hardware and HW_H264:
         video = ["-c:v", "h264_videotoolbox", "-b:v", "4M", "-maxrate", "6M", "-bufsize", "12M"]
     return head + ["-i", str(source), "-map", "0:v:0", "-map", "0:a:0?", "-vf", ",".join(chain),
                    "-fps_mode", "cfr", "-r", str(p["fps"]), "-g", str(p["fps"]), *video,
@@ -386,11 +385,39 @@ def proxy_commands(source: Path, target: Path, p: dict) -> list[list[str]]:
     return [plain]
 
 
+def proxy_picture_error(source: Path, target: Path, p: dict) -> float:
+    """Compare three tiny CPU-decoded pictures; an exit code cannot detect green frames."""
+    errors = []
+    for fraction in (.1, .5, .9):
+        at = max(0., min(float(p['duration'])-.1, int(float(p['duration'])*fraction*p['fps'])/p['fps']))
+        images = []
+        for path in (source, target):
+            result = subprocess.run([FFMPEG, '-v', 'error', '-threads', '1', '-ss', str(at), '-i', str(path),
+                                     '-frames:v', '1', '-vf', 'scale=96:54:flags=bilinear', '-pix_fmt', 'rgb24',
+                                     '-threads', '1', '-f', 'rawvideo', '-'], capture_output=True, timeout=30, check=True)
+            if len(result.stdout) != 96*54*3:
+                raise ValueError('Could not verify the proxy picture')
+            images.append(result.stdout)
+        errors.append(sum(abs(a-b) for a,b in zip(*images))/(96*54*3*255))
+    return max(errors)
+
+
+def proxy_cache_valid(key, target):
+    if not target.is_file() or not target.stat().st_size:
+        return False
+    if is_audio(sources[key[:24]]):
+        return True
+    try:
+        return json.loads(target.with_suffix('.quality.json').read_text()).get('recipe') == VIDEO_PROXY_RECIPE
+    except (OSError, ValueError):
+        return False
+
+
 def make_proxy(key: str) -> None:
     job = jobs[key]
     source = sources[key[:24]]
     target = output_path(key)
-    if target.is_file() and target.stat().st_size:
+    if proxy_cache_valid(key, target):
         job.update(status="ready", progress=1.0, bytes=target.stat().st_size)
         return
     try:
@@ -399,6 +426,17 @@ def make_proxy(key: str) -> None:
             job.update(status="skipped", reason=p["skip"])
             log(f"skip {source.name}: {p['skip']}")
             return
+        cached_picture_failed = False
+        if not p.get('audio') and target.is_file() and target.stat().st_size:
+            try:
+                cached_picture_failed = proxy_picture_error(source, target, p) > .16
+            except (OSError, ValueError, subprocess.SubprocessError):
+                cached_picture_failed = True
+            if not cached_picture_failed:
+                target.with_suffix('.quality.json').write_text(json.dumps({'recipe':VIDEO_PROXY_RECIPE}))
+                job.update(status='ready', progress=1.0, bytes=target.stat().st_size)
+                return
+            log(f'{source.name}: cached picture differs from original; rebuilding with CPU')
         pending = output_path(key, pending=True)
         if p.get("audio"):
             job.update(info={k: p[k] for k in ("codec", "bits", "channels")})
@@ -410,7 +448,7 @@ def make_proxy(key: str) -> None:
                 log(f"lossless {'WavPack' if pending.suffix == '.wv' else 'FLAC'} of {source.name} ({p['bits']}, {p['channels']} ch)")
         else:
             job.update(info={k: p[k] for k in ("fps", "hdr", "codec", "size")})
-            commands = proxy_commands(source, pending, p)
+            commands = [proxy_command(source, pending, p)] if cached_picture_failed else proxy_commands(source, pending, p)
             log(f"small version of {source.name} ({p['codec']} {p['size'][0]}x{p['size'][1]}{' HDR' if p['hdr'] else ''}, "
                 f"{'hardware' if HW_H264 else 'software'} encoder)")
         started = time.monotonic()
@@ -432,7 +470,16 @@ def make_proxy(key: str) -> None:
                     if len(diagnostic_tail) > 20:
                         diagnostic_tail.pop(0)
             process.stdout.close()
-            if process.wait() == 0:
+            succeeded = process.wait() == 0
+            if succeeded and not p.get('audio') and 'h264_videotoolbox' in command:
+                try:
+                    error = proxy_picture_error(source, pending, p)
+                    succeeded = error <= .16
+                    if not succeeded:diagnostic_tail.append(f'Proxy picture differs from original ({error:.3f})')
+                except (OSError, ValueError, subprocess.SubprocessError) as exc:
+                    succeeded = False
+                    diagnostic_tail.append(f'Proxy picture validation failed: {type(exc).__name__}')
+            if succeeded:
                 break
             reason = next((line for line in reversed(diagnostic_tail) if line), "FFmpeg failed")
             if attempt == len(commands):
@@ -443,6 +490,8 @@ def make_proxy(key: str) -> None:
             from spherical_proxy import preserve_panorama
             preserve_panorama(pending, probe)
         pending.replace(target)
+        if not p.get('audio'):
+            target.with_suffix('.quality.json').write_text(json.dumps({'recipe':VIDEO_PROXY_RECIPE}))
         elapsed = time.monotonic() - started
         job.update(status="ready", progress=1.0, bytes=target.stat().st_size, seconds=round(elapsed, 1))
         log(f"ready {source.name}: {target.stat().st_size / 1e6:.0f} MB "
