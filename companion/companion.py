@@ -46,6 +46,7 @@ MIXER_HOME = HOME / "mixer"   # optional: install.sh --mixer (same mixer as the 
 MIX_SLOTS = threading.Semaphore(max(1, int(os.environ.get("MONTARA_COMPANION_MIX_SLOTS", "1"))))
 
 from video_jobs import VideoJobs, stop_process_tree
+from urano_local_handoff import local_render_payload
 video_jobs = VideoJobs(HOME)
 
 sources: dict[str, Path] = {}
@@ -634,7 +635,7 @@ class Handler(BaseHTTPRequestHandler):
         if save:
             return self.save_file(save.group(1), save.group(2))
         try:
-            body = self.body(limit=2*1024*1024 if self.path=="/video-renders" else 65536)
+            body = self.body(limit=2*1024*1024 if self.path in ("/video-renders", "/video-renders/handoff") else 65536)
         except ValueError:
             return self.reply(400, {"error": "invalid request"})
         cancel_video=re.fullmatch(r'/video-renders/([a-f0-9]{32})/cancel',self.path)
@@ -654,6 +655,19 @@ class Handler(BaseHTTPRequestHandler):
                 process=job.get('process')
             if process:stop_process_tree(process)
             return self.reply(200,{'cancelled':True})
+        if self.path == '/video-renders/handoff':
+            # U20's cloud descriptor is NOT executable. Only this local
+            # Companion may bind original identities to filesystem paths.
+            # Existing VideoJobs.start re-verifies size/fingerprint locally.
+            try:
+                runtime=video_jobs.runtime()
+                if not runtime:
+                    return self.reply(409,{'error':'Local renderer unavailable'})
+                local=local_render_payload(body,engine_sha=runtime['engine'])
+                token=video_jobs.start(local,projects,find_original)
+                return self.reply(202,{'id':token,'local_originals':True})
+            except (ValueError,OSError) as exc:
+                return self.reply(400,{'error':str(exc)})
         if self.path == '/video-renders':
             try:
                 token=video_jobs.start(body,projects,find_original)
