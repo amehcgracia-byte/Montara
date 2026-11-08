@@ -94,11 +94,22 @@ def test_tuneup_80_shots_16_missing_inserts_render_without_any_camera_fallback(t
     raw=subprocess.check_output(['ffmpeg','-v','error','-i',str(output),'-vf',"select='eq(mod(n,12),6)',scale=64:36",'-fps_mode','vfr','-pix_fmt','gray','-f','rawvideo','-'])
     frames=np.frombuffer(raw,dtype=np.uint8).reshape(-1,36,64)
     assert len(frames)==80
-    reference=subprocess.check_output(['ffmpeg','-v','error','-i',str(camera),'-vf',"select='eq(mod(n,12),6)',scale=64:36",'-fps_mode','vfr','-pix_fmt','gray','-f','rawvideo','-'])
+    # Compare camera slots with an independent original-quality
+    # export with the same cut boundaries and programme fades. Comparing 360p source
+    # gray values directly to tagged HD output confounds colour-range conversion
+    # with changes to the edit. This control must retain camera pixels as well.
+    control={'version':1,'platform':'youtube','engine':sha,'sources':[{'key':1}],
+             'segments':[{**s,'source':1} for s in shots]}
+    baseline=manager.start({'project':'test','master':master.name,'recipe':control,
+                'originals':[{'source':1,'original':original}],'branding':'none','name':'Control'}, {'test':folder}, lambda _:camera)
+    deadline=time.monotonic()+600
+    while manager.status(baseline)['status'] not in ('ready','failed') and time.monotonic()<deadline:time.sleep(.5)
+    assert manager.status(baseline)['status']=='ready',manager.status(baseline)
+    reference=subprocess.check_output(['ffmpeg','-v','error','-i',str(manager.output(baseline)),'-vf',"select='eq(mod(n,12),6)',scale=64:36",'-fps_mode','vfr','-pix_fmt','gray','-f','rawvideo','-'])
     reference=np.frombuffer(reference,dtype=np.uint8).reshape(-1,36,64)
     for i,frame in enumerate(frames):
         if (i+1)%5==0:assert frame.max()<5,(i+1,frame.max())
-        elif 0<i<79:assert np.abs(frame.astype(float)-reference[i]).mean()<8,(i+1,np.abs(frame.astype(float)-reference[i]).mean())
+        elif 0<i<79:assert np.abs(frame.astype(float)-reference[i]).mean()<3,(i+1,np.abs(frame.astype(float)-reference[i]).mean())
     manifest=json.loads((folder/'.montara-renders'/token/'render.json').read_text())
     assert len(manifest['recipe']['diagnostics'])==16
     assert set(manifest['source_files'])=={'1'}
@@ -108,7 +119,7 @@ def test_tuneup_80_shots_16_missing_inserts_render_without_any_camera_fallback(t
         import shutil
         from pathlib import Path
         target=Path(os.environ['MONTARA_CONTINUITY_PROOF']);target.mkdir(parents=True,exist_ok=True)
-        shutil.copy2(output,target/'80-shots-16-missing-inserts.mp4')
+        shutil.copy2(output,target/'render.mp4')
         (target/'summary.json').write_text(json.dumps({'passed':True,'shots':80,'missing_inserts':16,'warnings':result['warnings'],
             'seconds':float(info['format']['duration']),'resolution':[video['width'],video['height']],
             'audio_correlation_min':min(float(np.corrcoef(expected[int((i*.4+.1)*48000):int((i*.4+.3)*48000)],actual[int((i*.4+.1)*48000):int((i*.4+.3)*48000)])[0,1]) for i in range(1,79)),
