@@ -23,6 +23,7 @@ class OwnerRuntimeController:
 
     def __init__(self):
         self._workers: dict[str, ContainerWorkerBridge] = {}
+        self._owner_locks: dict[str, RLock] = {}
         self._lock = RLock()
 
     def register_trusted(self, owner_id: str, bridge: ContainerWorkerBridge) -> None:
@@ -35,18 +36,25 @@ class OwnerRuntimeController:
             if owner_id in self._workers or any(b is bridge for b in self._workers.values()):
                 raise ValueError("Worker already assigned")
             self._workers[owner_id] = bridge
+            self._owner_locks[owner_id] = RLock()
 
-    def _worker(self, owner_id: str) -> ContainerWorkerBridge:
+    def _worker(self, owner_id: str):
         owner_id = ProjectCatalog._principal(owner_id)
-        bridge = self._workers.get(owner_id)
-        if bridge is None:
+        with self._lock:
+            bridge = self._workers.get(owner_id)
+            owner_lock = self._owner_locks.get(owner_id)
+        if bridge is None or owner_lock is None:
             raise ProjectNotFound("Private worker not provisioned")
-        return bridge
+        return bridge, owner_lock
 
     def activate(self, owner_id: str, project_id: str) -> None:
-        """Resolve the actual project owner BEFORE starting a worker."""
-        with self._lock:
-            bridge = self._worker(owner_id)
+        """Resolve the actual project owner BEFORE starting a worker.
+
+        Same-owner switches are serialized. Different owners use separate
+        locks, so two independent containers CAN start concurrently.
+        """
+        bridge, owner_lock = self._worker(owner_id)
+        with owner_lock:
             # This is a trusted *internal* path check, never exposed as a URL.
             bridge.guard.bindings.resolve_internal(owner_id, project_id)
             if bridge.process is None:
@@ -54,12 +62,13 @@ class OwnerRuntimeController:
             bridge.open_project(project_id)
 
     def close(self, owner_id: str) -> None:
-        with self._lock:
-            self._worker(owner_id).stop()
+        bridge, owner_lock = self._worker(owner_id)
+        with owner_lock:
+            bridge.stop()
 
     def state(self, owner_id: str) -> str:
-        with self._lock:
-            bridge = self._worker(owner_id)
+        bridge, owner_lock = self._worker(owner_id)
+        with owner_lock:
             state, _, _ = bridge.guard.get_state(owner_id, bridge.runtime_id)
             # A stale worker whose process exited must NEVER be reported ready.
             if state in ("ready", "busy", "switching"):
