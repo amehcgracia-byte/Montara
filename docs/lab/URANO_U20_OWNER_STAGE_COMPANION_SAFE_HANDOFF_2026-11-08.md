@@ -23,9 +23,9 @@ En esta CI se generan muestras de vídeo/audio **dentro de carpetas Docker de la
 
 - `tests/test_urano_stage_worker_protocol.py`: worker stdio con Engine fake, operaciones y errores sin ruta.
 - `tests/test_urano_stage_handoff_http.py`: descriptores seguros con revisiones, rechazo de owner extranjero, cookie revocada, rutas explícitas/maliciosas y payload HTTP prohibido.
-- `tests/urano_u20_prepare_stage_inputs.py`: genera únicamente fixtures FFmpeg efímeros de 7 s y los registra dentro de cada workspace del runner Docker.
+- `tests/urano_u20_prepare_stage_inputs.py`: genera únicamente fixtures FFmpeg efímeros de 20 s (640×360, mismo patrón ya validado en U16C) y los registra dentro de cada workspace del runner Docker.
 - `tests/test_urano_owner_runtime_docker.py` se amplía con un ensayo de **dos Engine reales Docker**, sesión de dos propietarios verificados mediante JWT Google ficticios firmados, activación desde Flask HTTP, envío paralelo de Ingest, polling hasta `done`, extracción de descriptor con owner y rechazo de acceso ajeno, y cierre aislado.
-- Workflow `.github/workflows/urano-u20-stage-handoff.yml` con contratos rápidos y Engine real Docker (submódulos Engine/Mixer fijados en el commit, imagen local por SHA256). **No marcar PASS hasta confirmar CI del commit definitivo**.
+- Workflow `.github/workflows/urano-u20-stage-handoff.yml` con contratos rápidos y Engine real Docker (submódulos Engine/Mixer fijados en el commit, imagen local por SHA256). **Evidencia:** [CI U20 42529183583 — SUCCESS](https://github.com/amehcgracia-byte/Montara/actions/runs/42529183583): tanto los contratos rápidos como el ensayo de dos Docker Engine reales, dos Stage Ingest finalizados en `done`, handoff seguro y cierre independiente. El commit documental posterior debe revalidarse por separado en su workflow.
 
 ## Faltan antes de cerrar la arquitectura híbrida
 
@@ -37,3 +37,7 @@ En esta CI se generan muestras de vídeo/audio **dentro de carpetas Docker de la
 ## Límites operativos
 
 No modificar ni desplegar a `main`, VM GCP, puertos **8101 JM / 8102 FER / 8103 potencial**, Cloudflare, Engine/Mixer/Companion de producción o originales de usuarios. Se mantiene una PR **draft** dependiente de U19 **#134** y en el futuro integrar selectivamente con el banco híbrido U18 **#133**. No crear alias/infraestructura productiva sin revisión.
+
+## Diagnóstico resuelto durante U20
+
+El primer fixture de 7 s a 320×180 fue rechazado por el clasificador de vídeo del Engine: la API de registro de entradas devolvió 200, **pero el proyecto persistió con cero vídeos válidos**, por lo que `POST /api/v1/stages/ingest/run` devolvía 409 para ambos propietarios. No se relajó la validación del Engine. La solución fue reutilizar la fuente **probada en U16C (20 s, 640×360, H.264)** y verificar explícitamente que el proyecto tiene un registro válido persistido antes de intentar Ingest. Resultado **dos Stage reales DONE**.
