@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from flask import Flask
@@ -123,6 +125,22 @@ class OwnerPrivateRuntimeContract(unittest.TestCase):
         self.assertEqual(self.bridges["bob"].guard.get_state(
             "owner-bob", self.bridges["bob"].runtime_id)[0], "ready")
         self.assertEqual(self.close("bob").json["state"], "idle")
+
+    def test_two_owners_may_start_in_parallel_not_globally_serialized(self):
+        # If the controller uses a global lock, the first fake start will
+        # wait at the barrier while the second thread cannot enter: test fails.
+        barrier = threading.Barrier(2, timeout=4)
+        for bridge in self.bridges.values():
+            original_start = bridge.start
+            def concurrent_start(start=original_start):
+                barrier.wait()
+                return start()
+            bridge.start = concurrent_start
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            first = pool.submit(self.activate,"alice",self.projects["alice"])
+            second = pool.submit(self.activate,"bob",self.projects["bob"])
+            self.assertEqual(first.result(timeout=7).status_code,200)
+            self.assertEqual(second.result(timeout=7).status_code,200)
 
     def test_foreign_project_denied_before_worker_start(self):
         out = self.activate("alice", self.projects["bob"])
