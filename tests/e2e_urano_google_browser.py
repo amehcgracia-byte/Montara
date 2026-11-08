@@ -78,14 +78,18 @@ def main():
                     assert params["redirect_uri"][0] == settings.redirect_uri
                     assert params["response_type"][0] == "code"
                     assert params["code_challenge_method"][0] == "S256"
+                    print("GOOGLE_AUTH_INTERCEPTED", flush=True)
                     provider.nonce = params["nonce"][0]
                     provider.expected_challenge = params["code_challenge"][0]
                     provider.code = "fake-provider-code"
                     callback = settings.redirect_uri + "?state=" + params["state"][0] + "&code=fake-provider-code"
                     route.fulfill(status=302, headers={"Location": callback}, body="")
 
+                for context in (context_a, context_b):
+                    context.route("**/o/oauth2/v2/auth**", google_redirect)
                 for page in (a, b):
-                    page.route("https://accounts.google.com/**", google_redirect)
+                    page.on("requestfailed", lambda req: print("BROWSER_REQUEST_FAILED", req.url, req.failure, flush=True))
+                    page.on("framenavigated", lambda frame: print("BROWSER_NAV", frame.url[:240], flush=True))
 
                 def login(page, sub, email):
                     provider.sub, provider.email = sub, email
