@@ -1,0 +1,23 @@
+name: URANO Cloudflare static benchmark build (no deploy)
+on:
+  pull_request:
+    paths:
+      - 'tools/cloudflare-static/**'
+      - 'web/**'
+      - '.github/workflows/urano-cloudflare-static.yml'
+  workflow_dispatch:
+jobs:
+  build-static:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Build lab-only static web and validate assets
+        run: python3 tools/cloudflare-static/build.py
+      - name: Assert no backend Python shipped
+        run: |
+          test -f dist/index.html
+          test ! -e dist/app.py
+          grep -q "connect-src &#39;none&#39;" dist/index.html
