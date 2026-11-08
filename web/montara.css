@@ -593,3 +593,5 @@ body.is-intro .top,body.is-intro footer,body.is-intro #version{visibility:hidden
 .track-audition button{font:inherit;font-size:12px;padding:7px 10px;min-height:32px;border-radius:7px;background:transparent;color:var(--text,#f5f3ef);border:1px solid var(--line,#555);cursor:pointer}
 .track-audition button[aria-pressed="true"]{border-color:#ff795b}
 .track-audition button:focus-visible{outline:2px solid #ff795b;outline-offset:2px}
+
+.source-note{flex-basis:100%;font-size:12px;color:var(--muted);line-height:1.5}
