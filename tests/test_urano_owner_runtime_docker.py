@@ -82,7 +82,7 @@ class OwnerSessionToRealEngine(unittest.TestCase):
             self.bridges[person] = bridge
             client = self.app.test_client()
             session = self.sessions.issue(owner)
-            client.set_cookie(SESSION_COOKIE, session.token, secure=True)
+            client.set_cookie(SESSION_COOKIE, session.token, domain="lab.example.test", secure=True)
             self.clients[person] = (client, session)
 
     def cleanup_ci(self):
