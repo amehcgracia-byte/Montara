@@ -10,6 +10,8 @@ from urllib.parse import urlsplit
 from flask import Blueprint, jsonify, request
 
 from urano.owner_runtime_controller import OwnerRuntimeController
+from urano.companion_handoff import project_handoff, UnsafeCompanionPlan
+from urano.project_catalog import ProjectCatalog
 from urano.private_worker_supervisor import WorkerFailure
 from urano.project_catalog import ProjectNotFound
 from urano.runtime_activation import RuntimeBusy, StaleActivation
@@ -17,7 +19,8 @@ from urano.session_auth import SESSION_COOKIE, SessionStore
 
 
 def owner_runtime_blueprint(controller: OwnerRuntimeController,
-                            sessions: SessionStore, *, https_origin: str) -> Blueprint:
+                            sessions: SessionStore, *, https_origin: str,
+                            catalog: ProjectCatalog | None = None) -> Blueprint:
     origin = urlsplit(https_origin)
     if (origin.scheme != "https" or not origin.netloc
             or origin.path or origin.query or origin.fragment
@@ -73,6 +76,48 @@ def owner_runtime_blueprint(controller: OwnerRuntimeController,
             return jsonify(error="Private worker not ready"), 409
         return protected(jsonify(state="ready", render_access=False,
                                  companion_access=False))
+
+    @bp.post("/projects/<project_id>/ingest")
+    def ingest_start(project_id: str):
+        session, error = identity(True)
+        if error is not None:
+            return error
+        try:
+            controller.ingest_start(session.owner_id, project_id)
+        except (ProjectNotFound, ValueError):
+            return jsonify(error="Project workspace unavailable"), 404
+        except (WorkerFailure, RuntimeBusy, StaleActivation, OSError):
+            return jsonify(error="Stage Ingest unavailable"), 409
+        return protected(jsonify(stage="ingest", status="accepted",
+                                 render_access=False, companion_access=False)), 202
+
+    @bp.get("/projects/<project_id>/ingest")
+    def ingest_status(project_id: str):
+        session, error = identity(False)
+        if error is not None:
+            return error
+        try:
+            status = controller.ingest_status(session.owner_id, project_id)
+        except (ProjectNotFound, ValueError):
+            return jsonify(error="Project workspace unavailable"), 404
+        except (WorkerFailure, RuntimeBusy, StaleActivation, OSError):
+            return jsonify(error="Stage Ingest unavailable"), 409
+        return protected(jsonify(stage="ingest", status=status,
+                                 render_access=False, companion_access=False))
+
+    if catalog is not None:
+        @bp.get("/projects/<project_id>/companion-handoff")
+        def companion_handoff(project_id: str):
+            session, error = identity(False)
+            if error is not None:
+                return error
+            try:
+                plan = project_handoff(catalog, session.owner_id, project_id)
+            except UnsafeCompanionPlan:
+                return jsonify(error="No safe Companion edit descriptor available"), 409
+            except (ProjectNotFound, ValueError):
+                return jsonify(error="Project workspace unavailable"), 404
+            return protected(jsonify(plan))
 
     @bp.post("/close")
     def close():
