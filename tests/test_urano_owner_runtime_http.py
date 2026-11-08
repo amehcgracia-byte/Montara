@@ -92,7 +92,7 @@ class OwnerPrivateRuntimeContract(unittest.TestCase):
         for nickname in ("alice", "bob"):
             client = app.test_client()
             session = self.sessions.issue("owner-" + nickname)
-            client.set_cookie(SESSION_COOKIE, session.token, secure=True)
+            client.set_cookie(SESSION_COOKIE, session.token, domain="lab.example.test", secure=True)
             self.clients[nickname] = (client, session)
         self.anon = app.test_client()
 
