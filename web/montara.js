@@ -477,7 +477,7 @@ musicLoopControl.addEventListener("click", async () => {
 });
 $("#rangeAudio").addEventListener("timeupdate", () => {
   const audio = $("#rangeAudio");
-  if (state.platform !== "youtube" || audio.paused) return;
+  if (state.platform !== "youtube" || $("#making").hidden || audio.paused) return;
   const {start, end} = musicLoopBounds(audio);
   if (end > start && audio.currentTime >= end - 0.05) {
     audio.currentTime = start;
