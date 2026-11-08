@@ -1,0 +1,107 @@
+name: URANO U17C browser-localhost transfer meters
+
+on:
+  push:
+    branches:
+      - fernando/urano-u17c-browser-transfer-meter
+  pull_request:
+    paths:
+      - 'tests/urano_browser_transfer.py'
+      - 'tests/test_urano_browser_transfer.py'
+      - 'tests/e2e_native_stage.py'
+      - 'tests/urano_hybrid_benchmark.py'
+      - '.github/workflows/urano-u17c-browser-transfer.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  transfer-privacy-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test transfer measurement, privacy, unknown hosts
+        run: |
+          python -m unittest discover -s tests -p 'test_urano_browser_transfer.py' -v
+          python -m py_compile tests/e2e_native_stage.py tests/urano_browser_transfer.py tests/urano_hybrid_benchmark.py
+
+  full-two-client-transfer:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 48
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Ensure FFmpeg present
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
+            sources_file="$RUNNER_TEMP/montara-ubuntu-sources.list"
+            echo 'deb [signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] https://archive.ubuntu.com/ubuntu noble main universe' > "$sources_file"
+            echo 'deb [signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] https://archive.ubuntu.com/ubuntu noble-updates main universe' >> "$sources_file"
+            opts=(-o "Dir::Etc::sourcelist=$sources_file" -o 'Dir::Etc::sourceparts=-' -o Acquire::Retries=2 -o Acquire::https::Timeout=20)
+            sudo apt-get "${opts[@]}" update
+            sudo apt-get "${opts[@]}" install -y --no-install-recommends ffmpeg fonts-dejavu-core
+          fi
+      - name: Install browser and Companion test dependencies
+        run: |
+          python -m pip install -r requirements.txt psutil
+          python -m playwright install --with-deps chromium
+          python -m playwright install chrome
+      - name: Two local web-server-Companion MP4 E2E with HTTP transfer counters
+        env:
+          MONTARA_TEST_BROWSER_CHANNEL: chrome
+        run: python tests/urano_hybrid_benchmark.py --clients 2 --mode shared-runner --output e2e-output/urano-u17c
+      - name: Require measured server and Companion HTTP exchanges
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path('e2e-output/urano-u17c')
+          report=json.loads((root/'hybrid-report.json').read_text())
+          assert report['all_passed'] and report['completed']==2, report
+          assert report['distributed_result'] is False
+          assert report['network_bytes_to_server'] is None
+          # Final MP4 in this E2E is downloaded by Python urllib and is
+          # intentionally absent from the Playwright requestfinished meter.
+          assert report['python_http_local_companion_final_body_bytes_observed'] > 1000000, report
+          assert report['browser_localhost_server_upload_body_bytes_observed'] > 0, report
+          for client in report['clients']:
+              transfer=client['browser_transfer']
+              assert transfer['network_topology']=='loopback-shared-runner-not-WAN'
+              assert transfer['remote_server_bytes_measured'] is False
+              assert transfer['original_upload_proven_absent'] is False
+              print(client['client_id'], 'server-upload-body',
+                    transfer['server_upload_browser_body_bytes_observed'],
+                    'python-local-final-body',
+                    transfer['python_http_local_final_download_body_bytes_observed'],
+                    'unmeasured-requests',transfer['unmeasured_requests'])
+          PY
+      - name: Report concise failure logs
+        if: failure()
+        run: |
+          for f in e2e-output/urano-u17c/client-*.log; do
+            if [ -f "$f" ]; then
+              echo "=== $(basename "$f") ==="
+              tail -n 60 "$f"
+            fi
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        continue-on-error: true
+        with:
+          name: urano-u17c-hybrid-browser-transfers
+          retention-days: 3
+          path: |
+            e2e-output/urano-u17c/hybrid-report.json
+            e2e-output/urano-u17c/client-*/browser-transfer.json
+            e2e-output/urano-u17c/client-*/summary.json
+            e2e-output/urano-u17c/client-*.log
