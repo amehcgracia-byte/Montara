@@ -1,0 +1,102 @@
+name: URANO U21 private descriptor to local Companion MP4
+
+on:
+  push:
+    branches:
+      - fernando/urano-u21-local-companion-render-handoff
+  pull_request:
+    paths:
+      - 'companion/urano_local_handoff.py'
+      - 'companion/companion.py'
+      - 'tests/test_urano_u21_local_handoff.py'
+      - 'tests/urano_u21_render_client.py'
+      - '.github/workflows/urano-u21-local-render-handoff.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  translation-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Strict pathless cut conversion contracts
+        run: |
+          python -m unittest discover -s tests -p 'test_urano_u21_local_handoff.py' -v
+          python -m py_compile companion/urano_local_handoff.py companion/companion.py tests/urano_u21_render_client.py
+
+  two-isolated-companions-mp4:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 38
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Ensure FFmpeg is installed
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
+            sources_file="$RUNNER_TEMP/montara-ubuntu-sources.list"
+            echo 'deb [signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] https://archive.ubuntu.com/ubuntu noble main universe' > "$sources_file"
+            echo 'deb [signed-by=/usr/share/keyrings/ubuntu-archive-keyring.gpg] https://archive.ubuntu.com/ubuntu noble-updates main universe' >> "$sources_file"
+            opts=(-o "Dir::Etc::sourcelist=$sources_file" -o 'Dir::Etc::sourceparts=-' -o Acquire::Retries=2 -o Acquire::https::Timeout=20)
+            sudo apt-get "${opts[@]}" update
+            sudo apt-get "${opts[@]}" install -y --no-install-recommends ffmpeg fonts-dejavu-core
+          fi
+          ffmpeg -version
+      - name: Install real Engine renderer dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Render two independent local Companion jobs concurrently
+        env:
+          PYTHONPATH: .:tests
+        run: |
+          set -euo pipefail
+          mkdir -p e2e-output/u21
+          python tests/urano_u21_render_client.py --owner alice --output e2e-output/u21/alice > e2e-output/u21/alice.log 2>&1 &
+          pid_alice=$!
+          python tests/urano_u21_render_client.py --owner bob --output e2e-output/u21/bob > e2e-output/u21/bob.log 2>&1 &
+          pid_bob=$!
+          failed=0
+          wait "$pid_alice" || failed=1
+          wait "$pid_bob" || failed=1
+          if [ "$failed" != 0 ]; then
+            tail -n 80 e2e-output/u21/alice.log || true
+            tail -n 80 e2e-output/u21/bob.log || true
+            exit 1
+          fi
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path("e2e-output/u21")
+          rows=[json.loads((root/owner/"summary.json").read_text())
+                for owner in ("alice","bob")]
+          assert all(r["passed"] and r["native_mp4_bytes"]>10000 for r in rows),rows
+          assert all(r["used_verified_local_original"] and r["wrong_fingerprint_rejected"]
+                     and r["foreign_origin_rejected"] for r in rows)
+          assert all(not r["server_remote"] and not r["separate_physical_clients"] for r in rows)
+          print("Two owner-specific local Companion MP4 exports PASS",
+                [r["native_mp4_bytes"] for r in rows])
+          PY
+      - name: Log truncated test failure only
+        if: failure()
+        run: |
+          for f in e2e-output/u21/*.log; do
+            if [ -f "$f" ]; then echo "=== $(basename "$f") ==="; tail -n 60 "$f"; fi
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        continue-on-error: true
+        with:
+          name: urano-u21-local-render-acceptance-reports
+          retention-days: 3
+          path: |
+            e2e-output/u21/*/summary.json
+            e2e-output/u21/*.log
