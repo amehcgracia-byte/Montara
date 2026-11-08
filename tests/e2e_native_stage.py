@@ -106,8 +106,12 @@ def main():
             assert not page.locator('#failed').is_visible(),page.locator('#errorText').inner_text()
             result_url=page.locator('#resultVideo').get_attribute('src');assert result_url.startswith(base+'/video-renders/')
             final=out/'render.mp4'
+            bytes_from_companion_http = 0
             with urlopen(Request(result_url,headers={'Origin':url}),timeout=120) as response,final.open('wb') as target:
-                shutil.copyfileobj(response,target,1024*1024)
+                for chunk in iter(lambda: response.read(1024*1024), b''):
+                    target.write(chunk)
+                    bytes_from_companion_http += len(chunk)
+            assert bytes_from_companion_http == final.stat().st_size and bytes_from_companion_http > 0
             # preload=metadata need not decode a picture until the user seeks
             # or plays (Chromium on Linux can stop at HAVE_METADATA).
             try:page.wait_for_function("document.querySelector('#resultVideo').readyState>=1",timeout=30000)
@@ -147,6 +151,12 @@ def main():
             run(['ffmpeg','-v','error','-i',str(final),'-f','null','-'])
             transfer_report = transfer_meter.report(
                 originals_sizes=[p.stat().st_size for p in [*cameras, master]])
+            # The final MP4 is consumed by Python urllib, not the Playwright
+            # page request listener. Keep the actual streamed HTTP-body count
+            # separate from browser-observed HTTP sizes.
+            transfer_report['python_http_local_final_download_body_bytes_observed'] = (
+                bytes_from_companion_http)
+            transfer_report['python_http_local_final_download_bytes_measured'] = True
             (out/'browser-transfer.json').write_text(
                 json.dumps(transfer_report, indent=2))
             browser.close();(out/'summary.json').write_text(json.dumps({'passed':True,'size':f"{video['width']}x{video['height']}",'original_sources':len(recipe['source_files']),'native_render':True,'server_export_skipped':True,'real_footage':real_mode,'architecture':'Companion local original render, Engine remote recipe in isolated local test'},indent=2));print((out/'summary.json').read_text())
