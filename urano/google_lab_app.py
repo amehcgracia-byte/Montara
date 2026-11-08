@@ -53,7 +53,7 @@ def create_google_lab_app(private_dir: Path, *, settings: OIDCSettings,
         # No routes are enabled by default. The operator must provision the
         # dedicated owner workers before they can be used by the browser.
         app.register_blueprint(owner_runtime_blueprint(
-            runtime_controller, sessions, https_origin=origin))
+            runtime_controller, sessions, https_origin=origin, catalog=catalog))
 
     @app.post("/urano-google-lab/session/refresh")
     def refresh():
