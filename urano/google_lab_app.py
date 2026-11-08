@@ -12,6 +12,8 @@ from flask import Flask, jsonify, request, send_from_directory
 
 from urano.google_flow import OIDCSettings, GoogleProvider, PendingLogins, google_login_blueprint
 from urano.google_owner import GoogleOwnerStore
+from urano.engine_bindings import EngineProjectRegistry
+from urano.http_engine_status import owner_engine_status_blueprint
 from urano.http_projects import project_blueprint
 from urano.project_catalog import ProjectCatalog
 from urano.session_auth import SESSION_COOKIE, SessionStore
@@ -20,7 +22,8 @@ _ASSETS = Path(__file__).resolve().parent / "google_lab_ui"
 
 
 def create_google_lab_app(private_dir: Path, *, settings: OIDCSettings,
-                          provider: GoogleProvider | None = None) -> Flask:
+                          provider: GoogleProvider | None = None,
+                          engine_data_root: Path | None = None) -> Flask:
     root = Path(private_dir).resolve()
     if not root.is_dir() or root.is_symlink():
         raise ValueError("Private laboratory data directory must already exist")
@@ -31,7 +34,14 @@ def create_google_lab_app(private_dir: Path, *, settings: OIDCSettings,
         settings=settings, pending=PendingLogins(root / "pending.sqlite3"),
         owners=GoogleOwnerStore(root / "owners.sqlite3"), sessions=sessions,
         provider=provider, success_path="/urano-google-lab/"))
-    app.register_blueprint(project_blueprint(ProjectCatalog(root / "projects.sqlite3"), sessions))
+    catalog = ProjectCatalog(root / "projects.sqlite3")
+    app.register_blueprint(project_blueprint(catalog, sessions))
+    if engine_data_root is not None:
+        # Operator-only opt-in. Never read this location from HTTP requests or
+        # reuse the global JM/FER Engine root for customer isolation.
+        registry = EngineProjectRegistry(root / "engine_bindings.sqlite3",
+                                         engine_data_root, catalog)
+        app.register_blueprint(owner_engine_status_blueprint(registry, sessions))
     expected = urlsplit(settings.redirect_uri)
     origin = f"{expected.scheme}://{expected.netloc}"
 
