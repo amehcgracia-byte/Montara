@@ -2794,6 +2794,20 @@ if(savedEdit?.project){
     const sourceAudio=state.files.filter(isAudioEntry);
     state.audioTask=savedEdit.audioTask || null;$('#stageAudioOnly').checked=!!state.audioTask;$('#fullSessionOn').checked=state.audioTask==='session';
     const serverVideos=(project.inputs?.videos||[]).map(f=>({...f,id:crypto.randomUUID(),name:f.path.split('/').pop(),kind:'video',path:f.path,small:/\.small\.mp4$/i.test(f.path),...remembered.get(f.path)}));
+    // Recover persisted, per-camera 360 POV names and geometry after a page
+    // refresh. Server profiles store 'subject' as musician identity and 'label'
+    // as the editable name shown to the person.
+    const savedSphereProfiles=project.settings?.spherical_landmarks_by_source || {};
+    for(const camera of serverVideos){
+      const profile=savedSphereProfiles[camera.path];
+      if(!profile || Object.keys(state.viewpoints[camera.path] || {}).length)continue;
+      state.viewpoints[camera.path]=Object.fromEntries(
+        Object.entries(profile).map(([slot, view])=>[slot,{
+          ...view,who:view.subject || "general",
+          subject:view.label || VIEW_SLOTS.find(([key])=>key===slot)?.[1] || view.subject || slot
+        }])
+      );
+    }
     const videoPaths=new Set(serverVideos.map(f=>f.path));
     // The draft may contain only a guide/master. Keep every actual source stem
     // from this browser, rather than replacing them with that intermediate audio.
