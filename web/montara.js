@@ -2614,11 +2614,16 @@ async function finishOriginalVideo(s) {
   beginWork();
   const job={cancelled:false,id:null};state.nativeExport=job;stopPolling();show('making');setProgress(0,'Preparing original-quality video…','');
   try {
+    let recipe=await api('/edit/native-recipe?project_id='+encodeURIComponent(state.projectId));
+    if(job.cancelled)return;
+    const usedKeys=new Set(recipe.segments.map(shot=>shot.source));
+    if (!recipe.sources.some(source=>usedKeys.has(source.key) && (source.preview || /\.small\.mp4$/i.test(source.path) || state.files.some(f=>f.path===source.path && f.small)))) {
+      state.nativeExport=null;
+      return showResult({...s,result:{...s.result,originalQuality:true}});
+    }
     await montaraCompanion.detect();
     if(job.cancelled)return;
     if(!montaraCompanion.info?.local_video)throw new Error('Update the Montara companion with the video renderer to export from your originals.');
-    let recipe=await api('/edit/native-recipe?project_id='+encodeURIComponent(state.projectId));
-    if(job.cancelled)return;
     renderShotBars({tasks:recipe.segments.map((_,i)=>({id:`segment-${i+1}`,label:`Shot ${i+1}/${recipe.segments.length}`,percent:0}))});
     if(recipe.engine!==montaraCompanion.info.local_video.engine)throw new Error('The companion needs the same editor version as this page. Update it before exporting.');
     if(!state.localProject)state.localProject=await montaraCompanion.projectFolder($('#videoName').value.trim()||todayName(),state.files.filter(f=>f.original).map(f=>f.original));
@@ -2711,7 +2716,7 @@ function projectDownloadName(audio=false) {
 }
 function showResult(s) {
   const result = s.result || {};
-  if(state.platform==='youtube' && !result.audio && !result.native && state.files.some(f=>f.kind==='video' && f.small))return finishOriginalVideo(s);
+  if(state.platform==='youtube' && !result.audio && !result.native && !result.originalQuality && videos().some(f=>f.small && !state.syncExcluded.has(f.path)))return finishOriginalVideo(s);
   if(result.native){state.savedLocally=true;$('#resultVideo').crossOrigin='anonymous';}
   else $('#resultVideo').removeAttribute('crossorigin');
   footageMemory.clear(state.platform);  // the video is made; next visit starts clean
