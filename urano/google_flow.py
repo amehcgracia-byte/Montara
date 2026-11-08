@@ -103,9 +103,9 @@ class PendingLogins:
         return state, nonce, verifier
 
     def consume(self, state: str, binding: str | None, *, now: int | None = None):
-        if (not isinstance(state, str) or len(state) > 128 or len(state) < 24
-                or not isinstance(binding, str) or len(binding) > 128 or len(binding) < 24):
+        if not isinstance(state, str) or not 24 <= len(state) <= 128:
             return None
+        valid_binding = isinstance(binding, str) and 24 <= len(binding) <= 128
         timestamp = int(time.time()) if now is None else now
         with self._connect() as db:
             db.execute("BEGIN IMMEDIATE")
@@ -114,6 +114,7 @@ class PendingLogins:
             # Consume even when binding does not match; never enable replay.
             db.execute("DELETE FROM urano_oidc_pending WHERE state_hash=?", (_digest(state),))
             if (row is None or row["expires_at"] <= timestamp
+                    or not valid_binding
                     or not hmac.compare_digest(row["binding_hash"], _digest(binding))):
                 return None
             return row["verifier"], row["nonce"]
