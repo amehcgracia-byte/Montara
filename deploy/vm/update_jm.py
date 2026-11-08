@@ -10,6 +10,7 @@ import subprocess
 import sys
 import time
 from urllib.request import Request,urlopen
+from urllib.error import HTTPError,URLError
 
 
 def run(args, **kwargs):return subprocess.run(args,check=True,text=True,**kwargs)
@@ -36,7 +37,13 @@ def update(release):
         try:
             if release[:7] in request('/montara/version').get('version',''):return current
         except OSError:pass
-    status=request('/api/v1/wizard/status').get('status')
+    for _ in range(45):
+        try:
+            status=request('/api/v1/wizard/status').get('status')
+            break
+        except HTTPError:raise
+        except URLError:time.sleep(1)
+    else:raise RuntimeError('Montara has not become ready. No update was made; retry in a moment.')
     if not isinstance(status,str):raise RuntimeError('Cannot confirm whether Montara is idle. No update was made.')
     if status in {'running','cancelling'}:raise RuntimeError('Montara is working. Retry after it finishes.')
     # Background session/mastering jobs are not all part of the wizard.

@@ -97,10 +97,16 @@ def test_server_update_is_confined_to_jm_and_preserves_data(tmp_path,monkeypatch
     conf.write_text('MONTARA_PREVIEW_PASSWORD=test-only\nMONTARA_PREVIEW_USER=montara\n')
     media=tmp_path/'montara-data/keep.mp4';media.parent.mkdir();media.write_bytes(b'unchanged original')
     calls=[];updated=[already_current]
+    warming=[not already_current]
     def request(req,timeout):
+        if req.full_url.endswith('/status') and warming[0]:
+            from urllib.error import URLError
+            warming[0]=False
+            raise URLError('Server is starting')
         value={'status':'done'} if req.full_url.endswith('/status') else {'version':'Montara '+SHA[:7]}
         return io.BytesIO(json.dumps(value).encode())
     monkeypatch.setattr(remote,'urlopen',request)
+    monkeypatch.setattr(remote.time,'sleep',lambda _:None)
     def command(args,**kwargs):
         calls.append((args,kwargs));out=''
         if args[-2:]==['rev-parse','HEAD']:

@@ -58,6 +58,7 @@ def launch(run=execute, download=fetch, sleep=time.sleep):
     try:
         installed=json.loads(marker.read_text());local=health(download)
         local_current=(isinstance(installed,dict) and installed.get('montara')==release
+            and all(re.fullmatch('[a-f0-9]{40}',str(installed.get(k,''))) for k in ('engine','mixer'))
             and (local.get('local_video') or {}).get('engine')==installed.get('engine')
             and (local.get('local_mix') or {}).get('mixer')==installed.get('mixer'))
     except (OSError,ValueError):pass
