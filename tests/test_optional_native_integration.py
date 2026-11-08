@@ -108,7 +108,10 @@ def test_tuneup_80_shots_16_missing_inserts_render_without_any_camera_fallback(t
     reference=subprocess.check_output(['ffmpeg','-v','error','-i',str(manager.output(baseline)),'-vf',"select='eq(mod(n,12),6)',scale=64:36",'-fps_mode','vfr','-pix_fmt','gray','-f','rawvideo','-'])
     reference=np.frombuffer(reference,dtype=np.uint8).reshape(-1,36,64)
     for i,frame in enumerate(frames):
-        if (i+1)%5==0:assert frame.max()<5,(i+1,frame.max())
+        # FFmpeg builds map limited-range black to slightly different gray
+        # levels (0 on macOS, 7 on Linux). Require a uniformly dark interval,
+        # allowing one legal-range black level, rather than an exact decoder value.
+        if (i+1)%5==0:assert frame.max()<=16 and frame.std()<4,(i+1,frame.max(),frame.std())
         elif 0<i<79:assert np.abs(frame.astype(float)-reference[i]).mean()<3,(i+1,np.abs(frame.astype(float)-reference[i]).mean())
     manifest=json.loads((folder/'.montara-renders'/token/'render.json').read_text())
     assert len(manifest['recipe']['diagnostics'])==16
