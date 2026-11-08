@@ -1,6 +1,6 @@
 # STATUS — laboratorio de Chema (main · claude/* · codex/*)
 Actualizado: 2026-11-07 · lo mantiene el equipo de Chema · 40 líneas como máximo, se sobrescribe.
-- VM: e2-standard-8, `jm` en `127.0.0.1:8101`, `fer` en `:8102`; apagado automático (60 min sin web, 120 min sin SSH)
+- VM: e2-standard-8, `jm` en `142.0.0.1:8101`, `fer` en `:8102`; apagado automático (60 min sin web, 120 min sin SSH)
 - Companion 0.6.6 instalado: fuente 515b44c, Engine 4f481002 y Mixer f15ff91. Actualizado tras comprobar que no había renders activos. La exportación anterior falló al dejar de estar disponible su original 360; diagnóstico preservado.
 ## Sesión completa (jam entera) — cómo va
 | Pieza | PR |
@@ -37,4 +37,4 @@ Actualizado: 2026-11-07 · lo mantiene el equipo de Chema · 40 líneas como má
 - **Usuarios/historial: integrado #100 (ae9e38b)**, selección #86/#88/#89/#90 de FER y corrección de formularios tras await. 23 contratos + HTTPS/Chromium local y Linux pasan; cinco recorridos Linux 42247210322 y capturas revisados. Lab opt-in sin rutas de cuentas activas en app.py; edición real por usuario y #91–#99 pendientes. Detalle: docs/USER_PROJECT_FOUNDATION.md.
 - **0.68 en main 0780433 (#101)**; VM conserva 0.67/ae9e38b. Sólo ventana de cámaras; cinco recorridos Linux 42254637548 aprobados y capturas revisadas. Engine/Mixer sin cambios.
 - **0.69 instalada JM c98282f (#103)**: máster automático de vídeos+pistas y nuevas previews conservan Opus. Cinco recorridos Linux 42288640038 aprobados; HTTP y navegador producción verificados. Companion 0.6.6, Engine 4f481002 y Mixer f15ff91; FER intacto.
-- **0.71 candidata**: fija recuperada mediante sincronía espectral verificada, límite de dos rellenos decorativos, continuidad de encuadre, Swap entre fuentes y fundidos sobre vídeo. Companion 0.6.10 valida píxeles y usa CPU si la GPU corrompe la copia. Engine f901d6e0, 127 pruebas focales y 27 Companion/cancel pasan; Linux completo pendiente. Ver docs/SHOT_CONTINUITY_071.md.
+- **0.71 candidata**: fija recuperada mediante sincronía espectral verificada, límite de dos rellenos decorativos, continuidad de encuadre, Swap entre fuentes y fundidos sobre vídeo. Companion 0.6.10 valida píxeles y usa CPU si la GPU corrompe la copia. Engine b5e48317, 142 pruebas focales y 28 Companion/cancel pasan; Linux completo pendiente. Ver docs/SHOT_CONTINUITY_071.md.

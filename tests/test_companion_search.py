@@ -160,3 +160,18 @@ def test_successful_hardware_exit_with_wrong_picture_retries_cpu(tmp_path,monkey
     assert companion.proxy_cache_valid(key,companion.output_path(key))
     companion.output_path(key).with_suffix('.quality.json').unlink()
     assert not companion.proxy_cache_valid(key,companion.output_path(key))
+
+
+def test_old_healthy_proxy_is_checked_once_without_reencoding(tmp_path,monkeypatch):
+    source=tmp_path/'source.mp4';source.write_bytes(b'source');key='e'*24
+    monkeypatch.setattr(companion,'CACHE',tmp_path)
+    monkeypatch.setitem(companion.sources,key,source);monkeypatch.setitem(companion.jobs,key,{'status':'working'})
+    target=companion.output_path(key);target.write_bytes(b'healthy cached video')
+    monkeypatch.setattr(companion,'probe',lambda p:{})
+    monkeypatch.setattr(companion,'plan',lambda info:PLAN)
+    checks=[]
+    monkeypatch.setattr(companion,'proxy_picture_error',lambda *a:checks.append(True) or .01)
+    monkeypatch.setattr(companion.subprocess,'Popen',lambda *a,**k:pytest.fail('Healthy cache must not reencode'))
+    companion.make_proxy(key);companion.make_proxy(key)
+    assert checks==[True] and target.read_bytes()==b'healthy cached video'
+    assert companion.jobs[key]['status']=='ready'
