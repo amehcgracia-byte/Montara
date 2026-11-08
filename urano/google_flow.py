@@ -167,9 +167,13 @@ class GoogleProvider:
 
 def google_login_blueprint(*, settings: OIDCSettings, pending: PendingLogins,
                            owners: GoogleOwnerStore, sessions: SessionStore,
-                           provider: GoogleProvider | None = None) -> Blueprint:
+                           provider: GoogleProvider | None = None,
+                           success_path: str = "/urano/v1/projects") -> Blueprint:
     """Opt-in only; mount in a distinct lab app behind trusted HTTPS origin."""
     provider = GoogleProvider() if provider is None else provider
+    # Do not accept a target from a browser/query string or arbitrary URL.
+    if not isinstance(success_path, str) or not success_path.startswith("/") or success_path.startswith("//") or "\\\\" in success_path or "?" in success_path or "#" in success_path:
+        raise ValueError("Local fixed success path required")
     bp = Blueprint("urano_google_oidc_lab", __name__, url_prefix="/urano/v1/google")
     callback = settings.redirect_uri
     expected_origin = f"{urlsplit(callback).scheme}://{urlsplit(callback).netloc}"
@@ -231,7 +235,7 @@ def google_login_blueprint(*, settings: OIDCSettings, pending: PendingLogins,
                 response.status_code = 401
             else:
                 old_session = request.cookies.get(SESSION_COOKIE)
-                response = redirect("/urano/v1/projects", code=303)
+                response = redirect(success_path, code=303)
                 set_session_cookie(response, issued)
                 sessions.revoke(old_session)
         response.delete_cookie(FLOW_COOKIE, secure=True, httponly=True, samesite="Lax", path="/")
