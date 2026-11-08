@@ -117,7 +117,7 @@ def owner_runtime_blueprint(controller: OwnerRuntimeController,
                 return jsonify(error="No safe Companion edit descriptor available"), 409
             except (ProjectNotFound, ValueError):
                 return jsonify(error="Project workspace unavailable"), 404
-            return protected(jsonify(plan))
+            return protected(jsonify(plan=plan))
 
     @bp.post("/close")
     def close():
