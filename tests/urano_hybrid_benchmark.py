@@ -45,7 +45,12 @@ def _safe_scratch(path: Path) -> Path:
 
 
 def _rooted_process_roles(pid: int):
-    """Return a snapshot of role process trees within one E2E test subprocess."""
+    """Snapshot observed CPU/RSS per component, including child FFmpeg processes.
+
+    A descendant belongs to local Companion or server if an ancestor launched
+    that component. FFmpeg fixture generation by the E2E driver is 'other',
+    never incorrectly charged to the server or local export.
+    """
     if psutil is None:
         return {}
     try:
@@ -56,15 +61,22 @@ def _rooted_process_roles(pid: int):
     found = {}
     for child in children:
         try:
-            command = " ".join(child.cmdline()).lower()
-            if "companion.py" in command:
+            commands = []
+            node = child
+            while node.pid != pid:
+                commands.append(" ".join(node.cmdline()).lower())
+                node = node.parent()
+                if node is None:
+                    break
+            if any("companion.py" in c for c in commands):
                 role = "local_companion"
-            elif "app.py" in command and "--port" in command:
+            elif any("app.py" in c and "--port" in c for c in commands):
                 role = "server"
-            elif any(s in command for s in ("chromium", "chrome", "playwright")):
+            elif any("chromium" in c or "chrome" in c or "playwright" in c
+                     for c in commands):
                 role = "browser"
             else:
-                role = "other"
+                role = "fixture_or_controller"
             found[child.pid] = {
                 "role": role, "cpu_seconds": sum(child.cpu_times()[:2]),
                 "rss_bytes": child.memory_info().rss
@@ -75,24 +87,41 @@ def _rooted_process_roles(pid: int):
 
 
 def _monitor(processes, period=0.5):
-    """Sample process CPU and current RSS; cannot see CPU from already-exited jobs."""
-    metrics = {key: {"peak_rss_bytes": 0, "cpu_seconds_observed": 0.0}
-               for key in processes}
+    """Sampling only: not cgroup meters and not resource billing counters."""
+    roles = ("local_companion", "server", "browser", "fixture_or_controller")
+    metrics = {key: {
+        "peak_rss_bytes": 0,
+        "cpu_seconds_observed": 0.0,
+        "cpu_seconds_by_role_observed": {role: 0.0 for role in roles},
+        "peak_rss_by_role_bytes_observed": {role: 0 for role in roles},
+        "completed_monotonic": None,
+    } for key in processes}
     snapshots = {key: {} for key in processes}
     while any(p.poll() is None for p in processes.values()):
         for key, process in processes.items():
             if process.poll() is not None:
+                if metrics[key]["completed_monotonic"] is None:
+                    metrics[key]["completed_monotonic"] = time.monotonic()
                 continue
             children = _rooted_process_roles(process.pid)
             rss = sum(value["rss_bytes"] for value in children.values())
             metrics[key]["peak_rss_bytes"] = max(metrics[key]["peak_rss_bytes"], rss)
-            # Accumulated per-process CPU deltas, not elapsed CPU percent:
-            # this is an *observation*, not an exact cgroup billing counter.
+            grouped_rss = {role: 0 for role in roles}
             for pid, value in children.items():
+                role = value["role"]
+                grouped_rss[role] += value["rss_bytes"]
                 old = snapshots[key].get(pid, 0.0)
-                metrics[key]["cpu_seconds_observed"] += max(0.0, value["cpu_seconds"] - old)
+                delta = max(0.0, value["cpu_seconds"] - old)
+                metrics[key]["cpu_seconds_observed"] += delta
+                metrics[key]["cpu_seconds_by_role_observed"][role] += delta
+            for role, value in grouped_rss.items():
+                metrics[key]["peak_rss_by_role_bytes_observed"][role] = max(
+                    metrics[key]["peak_rss_by_role_bytes_observed"][role], value)
             snapshots[key] = {pid: val["cpu_seconds"] for pid, val in children.items()}
         time.sleep(period)
+    for key in metrics:
+        if metrics[key]["completed_monotonic"] is None:
+            metrics[key]["completed_monotonic"] = time.monotonic()
     return metrics
 
 
@@ -115,13 +144,16 @@ def _summarize(root: Path, processes, starts, observations):
             "client_id": name,
             "success": success,
             "returncode": proc.returncode,
-            "wall_seconds": round(time.monotonic() - starts[name], 3),
+            "wall_seconds": round((observations[name].get("completed_monotonic")
+                                   or time.monotonic()) - starts[name], 3),
             "native_mp4_bytes": video_file.stat().st_size if video_file.is_file() else None,
             "companion_local_original_render": summary.get("native_render") is True,
             "server_export_skipped": summary.get("server_export_skipped") is True,
             "original_sources": summary.get("original_sources"),
             "observed_cpu_seconds_process_tree": round(observations[name]["cpu_seconds_observed"], 3),
             "sampled_peak_rss_bytes": observations[name]["peak_rss_bytes"],
+            "observed_cpu_seconds_by_role": observations[name].get("cpu_seconds_by_role_observed"),
+            "sampled_peak_rss_by_role_bytes": observations[name].get("peak_rss_by_role_bytes_observed"),
         })
     nsuccess = sum(p["success"] for p in per_client)
     times = [p["wall_seconds"] for p in per_client]
