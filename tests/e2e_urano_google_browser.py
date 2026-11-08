@@ -73,29 +73,31 @@ def main():
                 for page in (a, b):
                     page.on("pageerror", lambda err: errors.append(str(err)))
 
-                def google_redirect(route):
-                    params = parse_qs(urlsplit(route.request.url).query)
-                    assert params["redirect_uri"][0] == settings.redirect_uri
-                    assert params["response_type"][0] == "code"
-                    assert params["code_challenge_method"][0] == "S256"
-                    print("GOOGLE_AUTH_INTERCEPTED", flush=True)
-                    provider.nonce = params["nonce"][0]
-                    provider.expected_challenge = params["code_challenge"][0]
-                    provider.code = "fake-provider-code"
-                    callback = settings.redirect_uri + "?state=" + params["state"][0] + "&code=fake-provider-code"
-                    route.fulfill(status=302, headers={"Location": callback}, body="")
-
-                for context in (context_a, context_b):
-                    context.route("**/o/oauth2/v2/auth**", google_redirect)
-                for page in (a, b):
-                    page.on("requestfailed", lambda req: print("BROWSER_REQUEST_FAILED", req.url, req.failure, flush=True))
-                    page.on("framenavigated", lambda frame: print("BROWSER_NAV", frame.url[:240], flush=True))
-
                 def login(page, sub, email):
                     provider.sub, provider.email = sub, email
                     page.goto(origin + "/urano-google-lab/")
                     expect(page.locator("#signedOut")).to_be_visible()
-                    page.locator("#googleLogin").click()
+                    expect(page.locator("#googleLogin")).to_have_attribute("href", "/urano/v1/google/start")
+                    # BrowserContext's API client shares cookies with its real
+                    # Chromium tab. Max redirects 0: absolutely no request to
+                    # Google's external authorization endpoint.
+                    response = page.context.request.get(
+                        origin + "/urano/v1/google/start", max_redirects=0)
+                    assert response.status == 302, response.status
+                    authorization = urlsplit(response.headers["location"])
+                    assert authorization.scheme == "https"
+                    assert authorization.netloc == "accounts.google.com"
+                    assert authorization.path == "/o/oauth2/v2/auth"
+                    params = parse_qs(authorization.query)
+                    assert params["redirect_uri"] == [settings.redirect_uri]
+                    assert params["response_type"] == ["code"]
+                    assert params["code_challenge_method"] == ["S256"]
+                    provider.nonce = params["nonce"][0]
+                    provider.expected_challenge = params["code_challenge"][0]
+                    provider.code = "fake-provider-code"
+                    callback = (settings.redirect_uri + "?state=" + params["state"][0]
+                                + "&code=fake-provider-code")
+                    page.goto(callback)
                     page.wait_for_url(origin + "/urano-google-lab/", timeout=15000)
                     expect(page.locator("#signedIn")).to_be_visible(timeout=15000)
 
