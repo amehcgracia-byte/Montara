@@ -14,6 +14,8 @@ from urano.google_flow import OIDCSettings, GoogleProvider, PendingLogins, googl
 from urano.google_owner import GoogleOwnerStore
 from urano.engine_bindings import EngineProjectRegistry
 from urano.http_engine_status import owner_engine_status_blueprint
+from urano.http_owner_runtime import owner_runtime_blueprint
+from urano.owner_runtime_controller import OwnerRuntimeController
 from urano.http_projects import project_blueprint
 from urano.project_catalog import ProjectCatalog
 from urano.session_auth import SESSION_COOKIE, SessionStore
@@ -23,7 +25,8 @@ _ASSETS = Path(__file__).resolve().parent / "google_lab_ui"
 
 def create_google_lab_app(private_dir: Path, *, settings: OIDCSettings,
                           provider: GoogleProvider | None = None,
-                          engine_data_root: Path | None = None) -> Flask:
+                          engine_data_root: Path | None = None,
+                          runtime_controller: OwnerRuntimeController | None = None) -> Flask:
     root = Path(private_dir).resolve()
     if not root.is_dir() or root.is_symlink():
         raise ValueError("Private laboratory data directory must already exist")
@@ -44,6 +47,13 @@ def create_google_lab_app(private_dir: Path, *, settings: OIDCSettings,
         app.register_blueprint(owner_engine_status_blueprint(registry, sessions))
     expected = urlsplit(settings.redirect_uri)
     origin = f"{expected.scheme}://{expected.netloc}"
+    if runtime_controller is not None:
+        if engine_data_root is None or not isinstance(runtime_controller, OwnerRuntimeController):
+            raise ValueError("Trusted private worker needs explicit Engine root")
+        # No routes are enabled by default. The operator must provision the
+        # dedicated owner workers before they can be used by the browser.
+        app.register_blueprint(owner_runtime_blueprint(
+            runtime_controller, sessions, https_origin=origin))
 
     @app.post("/urano-google-lab/session/refresh")
     def refresh():
