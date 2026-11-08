@@ -16,7 +16,8 @@ from pathlib import Path
 
 from urano.container_worker_bridge import ContainerWorkerBridge
 from urano.engine_bindings import EngineProjectRegistry
-from urano.google_oidc import GoogleIdentity
+from urano.google_oidc import verify_google_id_token
+from test_google_flow_contract import SignedFakeGoogle, CLIENT
 from urano.google_owner import GoogleOwnerStore
 from urano.project_catalog import ProjectCatalog, ProjectNotFound
 from urano.runtime_activation import RuntimeActivationGuard
@@ -67,12 +68,17 @@ class GoogleOwnedRealEngineDockerBridge(unittest.TestCase):
         self.catalog = ProjectCatalog(self.root / "catalog.sqlite3")
         self.owner_store = GoogleOwnerStore(self.root / "google-owner.sqlite3")
         allowed = frozenset({"alice@example.test", "bob@example.test"})
-        self.principals = {
-            name: self.owner_store.resolve_beta_owner(
-                GoogleIdentity(f"google-sub-{name}", f"{name}@example.test"),
-                allowed_emails=allowed)
-            for name in ("alice", "bob")
-        }
+        google = SignedFakeGoogle()
+        self.principals = {}
+        for name in ("alice", "bob"):
+            google.sub, google.email = f"google-sub-{name}", f"{name}@example.test"
+            signed_token = google.token("u16b-nonce-of-at-least-16-characters")
+            verified = verify_google_id_token(
+                signed_token, client_id=CLIENT,
+                expected_nonce="u16b-nonce-of-at-least-16-characters",
+                jwks=google.jwks())
+            self.principals[name] = self.owner_store.resolve_beta_owner(
+                verified, allowed_emails=allowed)
         self.guard = None
         self.owners = {}
         # CI-only synthetic files: allow non-root container ID to write. This
@@ -98,10 +104,8 @@ class GoogleOwnedRealEngineDockerBridge(unittest.TestCase):
                 project = self.catalog.create(self.principals[owner], name)
                 binding.bind_trusted(self.principals[owner], project.id, name)
                 info["ids"][name] = project.id
-        # One guard/catalog shared only by trusted orchestrator, but each
-        # binding resolves exclusively into its owner's own workspace.
-        # A multi-workspace adapter is not yet implemented: use one guard per
-        # owner for this isolated Engine test and test auth separately.
+        # The trusted orchestrator holds the catalog and verified principal;
+        # each owner gets a separate Engine root, runtime guard and container.
         for owner, info in self.owners.items():
             guard = RuntimeActivationGuard(
                 self.root / f"guard-{owner}.sqlite3",
