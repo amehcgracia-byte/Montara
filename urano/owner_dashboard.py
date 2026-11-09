@@ -121,7 +121,7 @@ button:disabled{opacity:.5;cursor:not-allowed}p,small{color:#b0bfd0}#status[role
 <button id="handoff" type="button">Comprobar descriptor para Companion</button>
 <p id="handoff-status" role="status" aria-live="polite"></p>
 <h3>Exportación local de prueba</h3>
-<p>Solo para cortes básicos con originales seleccionados manualmente; todavía no se ha probado la correspondencia con los proxies de Stage. Revisa que las cámaras sean las correctas.</p>
+<p>Solo para cortes básicos. La exportación se bloqueará si Stage no ha registrado de forma fiable la identidad de cada proxy y su vídeo original.</p>
 <label>Audio maestro WAV <input id="master-audio" type="file" accept=".wav,audio/wav,audio/x-wav" /></label>
 <button id="export-local" type="button">Exportar MP4 en Companion</button>
 <p id="export-status" role="status" aria-live="polite"></p>
@@ -248,8 +248,24 @@ document.querySelector('#verify-originals').addEventListener('click',async event
       if(!result.located) throw Error('Companion no encuentra el original de cámara '+used[i]+': '+files[i].name);
       mapping.push({source:used[i],original:result.identity});
     }
-    verifiedOriginals = {revision, mapping};
-    target.textContent='Companion reconoce '+mapping.length+' original(es). Orden de cámaras: '+used.join(', ')+'. Aún no está verificado su vínculo con los proxies de Stage.';
+    // The browser is NOT allowed to attest proxy provenance. Trust only
+    // read-only, owner-bound identities recorded during trusted Stage ingest.
+    const cert=await api('runtime/projects/'+encodeURIComponent(projectId)+'/verified-sources');
+    if(cert.project_revision!==revision || !/^[a-f0-9]{64}$/.test(cert.stage_revision || ''))
+      throw Error('El manifiesto de Stage no corresponde a esta revisión');
+    if(!Array.isArray(cert.sources) || cert.sources.length!==mapping.length)
+      throw Error('Los originales no coinciden con las fuentes certificadas de Stage');
+    for(let i=0;i<mapping.length;i++){
+      const trusted=cert.sources[i];
+      const local=mapping[i];
+      if(trusted.source_slot!==local.source ||
+        trusted.original.name!==local.original.name ||
+        trusted.original.size!==local.original.size ||
+        trusted.original.fingerprint!==local.original.fingerprint)
+        throw Error('La cámara '+local.source+' no corresponde al original certificado por Stage');
+    }
+    verifiedOriginals = {revision, stage_revision:cert.stage_revision, mapping};
+    target.textContent='Companion y Stage coinciden en '+mapping.length+' original(es) certificados.';
   }catch(e){target.textContent=e.message;}
   finally{button.disabled=false;}
 });
@@ -261,6 +277,12 @@ async function runLocalExport() {
   try {
     if (!verifiedOriginals || verifiedOriginals.revision !== revision)
       throw Error('Verifica los originales de este plan antes de exportar');
+    const cert=await api('runtime/projects/'+encodeURIComponent(projectId)+'/verified-sources');
+    if(cert.project_revision !== verifiedOriginals.revision ||
+       cert.stage_revision !== verifiedOriginals.stage_revision ||
+       JSON.stringify(cert.sources) !== JSON.stringify(verifiedOriginals.mapping.map(x=>({
+         source_slot:x.source, original:x.original}))))
+      throw Error('La procedencia de Stage ha cambiado. Vuelve a verificar los originales');
     const audio = document.querySelector('#master-audio').files?.[0];
     if (!audio || !/\\.wav$/i.test(audio.name) || audio.size<=0 || audio.size>1024*1024*1024)
       throw Error('Selecciona un archivo WAV maestro de hasta 1 GB');
