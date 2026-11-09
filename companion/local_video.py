@@ -143,7 +143,10 @@ def run(manifest):
     except Exception as exc:
         timing(phase='export failed',seconds=round(time.monotonic()-export_started,3),error_type=type(exc).__name__)
         raise
-    perf=result.get('performance') or {}
+    try:
+        perf=json.loads(Path(result['export_manifest']).read_text()).get('performance') or {}
+    except (OSError, ValueError, KeyError, TypeError):
+        perf={}
     phases=perf.get('phases',{})
     timing(phase='360 preparation',seconds=phases.get('source_prepare_sec'),sources=phases.get('source_proxy_count'),reused=restored)
     timing(phase='render segments',seconds=perf.get('wall_sec'),segments=perf.get('segment_count'))
