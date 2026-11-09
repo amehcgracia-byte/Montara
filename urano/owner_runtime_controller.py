@@ -15,7 +15,7 @@ from urano.private_worker_supervisor import WorkerFailure
 from urano.runtime_activation import RuntimeBusy, StaleActivation
 from urano.trusted_stage_inputs import prepare_trusted_stage_inputs
 from urano.stage_source_provenance import StageSourceProvenance, UnverifiedSources
-from urano.stage_ingest_attestation import attest_authenticated_inbox
+from urano.stage_ingest_attestation import attest_authenticated_worker_proof
 
 
 class OwnerRuntimeController:
@@ -137,15 +137,17 @@ class OwnerRuntimeController:
             # revoked, while status remains an accurate Engine result.
             if status == "done" and self._attestation is not None:
                 provenance, inbox_root, inside = self._attestation
-                bound = bridge.guard.bindings.resolve_internal(owner_id, project_id)
+                # Binding must remain valid before accepting the worker's
+                # pathless proof. The trusted bridge verifies the live CID,
+                # active owner/project and private network-free stdio channel.
+                bridge.guard.bindings.resolve_internal(owner_id, project_id)
                 try:
-                    attest_authenticated_inbox(
-                        provenance, bridge.guard.bindings, inbox_root,
-                        owner_id, project_id,
-                        engine_project_file=bound / "project.json",
-                        container_workspace=inside,
+                    proof = bridge.ingest_proof(project_id)
+                    attest_authenticated_worker_proof(
+                        provenance, inbox_root, owner_id, project_id,
+                        proof=proof,
                     )
-                except (UnverifiedSources, OSError, ValueError, KeyError):
+                except (UnverifiedSources, OSError, ValueError, KeyError, WorkerFailure):
                     provenance.invalidate_trusted(owner_id, project_id)
             return status
 
