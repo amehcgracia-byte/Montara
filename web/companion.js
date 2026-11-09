@@ -53,6 +53,16 @@ const montaraCompanion = (() => {
       if (!response.ok) throw new Error('The companion could not save the video.');
       return (await response.json()).saved;
     },
+    /* Identity probe for an original explicitly selected by the user.
+       Never uploads file bytes; SHA-256 runs in the browser and /locate resolves
+       only on this person's Companion. No server receives the identity. */
+    async verifyLocalOriginal(file) {
+      if (!file || !this.isVideo(file)) throw new Error('Choose a local video original');
+      if (!info && !(await this.detect())) throw new Error('Montara Companion is not available');
+      const identity = {name:file.name,size:file.size,fingerprint:await fingerprint(file)};
+      const located = await this.locateOriginal(identity);
+      return {identity,located};
+    },
     async locateOriginal(original) {
       const response = await call('/locate', json(original));
       if (response.status === 404) return false;
