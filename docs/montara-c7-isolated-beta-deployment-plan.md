@@ -18,6 +18,72 @@ que nuestro C7 pueda arrancar en esta VM tal cual. No es aceptable
 sustituir Docker por LXD de forma implícita ni usar permisos sudo para
 simular que la separación por propietario ya funciona.
 
+## Decisión de producto: usuarios reales, no usuarios Docker
+
+**Docker no es un requisito funcional del editor.** El usuario final entra con
+Google desde el navegador, abre su propio proyecto, genera proxies con
+Companion y exporta localmente. No ve Docker ni tiene que instalarlo.
+Los dos contenedores en CI son una forma de comprobar **aislamiento del Engine
+y de sus ficheros** bajo dos identidades distintas, no una simulación de
+interfaz de usuario.
+
+**En la implementación actual**, el puente privado
+`ContainerWorkerBridge` **sí invoca Docker literalmente** para ejecutar
+cada worker. Prescindir de Docker es técnicamente posible, pero **no** se
+consigue quitando ese ejecutable: habría que escribir un adaptador para
+procesos separados por UID, LXD u otro aislamiento equivalente, demostrar
+destrucción y revocación al cerrar sesión, controlar límites y ficheros, y
+repetir todas las pruebas de propietarios cruzados. El supervisor de proceso
+`private_worker_supervisor.py` lo advierte expresamente: no es una sandbox
+multiusuario por sí solo.
+
+### Escalonar pruebas con personas, sin sobredimensionar
+
+1. **C8 personal**: un usuario autorizado, vídeos sintéticos o propios,
+   Companion instalado, proyecto, cortes, audio y MP4 final. Aislamiento
+   suficiente para esta prueba controlada y sin servicio público de invitación.
+   Preferir un despliegue temporal con los permisos existentes, pero **no
+   afirmar** que el backend multiusuario Docker funciona en una máquina que
+   todavía no tiene Docker.
+2. **Beta cerrada con amigos**: 2–4 personas reales, cada una con su propia
+   cuenta Google, sesión, proyectos, fuentes y permisos; nunca compartir un
+   Engine con estado mutable. Solo abrir las invitaciones cuando la plataforma
+   de aislamiento elegida haya pasado la aceptación de usuarios cruzados.
+3. **Después de las pruebas**: comparar coste, mantenimiento y seguridad de
+   Docker frente a procesos aislados por usuario Linux o LXD. Si se sustituye
+   Docker, eliminar la dependencia mediante PR y regresiones, **no por borrar
+   imágenes sin haber reemplazado el código**.
+
+**Regla:** no alquilar otra VM ni instalar Docker solo para marcar una fase en
+un roadmap. Escoger la opción mínima capaz de ejecutar la prueba pendiente
+con separación verificable.
+
+## Inventario, caducidad y retirada de residuos de laboratorio
+
+Registrar antes de activar cualquier prueba: recurso/imagen, ID de dueño,
+proyecto, ruta de datos, fecha de creación, consumo máximo, responsable y
+condición de retirada. Diferenciar:
+
+- **Efímero**: contenedores de CI, temporales de pruebas, imágenes de build,
+  registros sintéticos, recibos HMAC de laboratorio, runners y logs
+  descartables. El comando Docker actual usa `--rm` para el contenedor,
+  pero **eso no elimina imágenes, cachés, ficheros montados ni volúmenes**.
+- **Persistente y necesario**: código, historia y pruebas de URANO/JÚPITER/
+  SATURNO, proyectos legítimos de usuarios, consentimientos, snapshots
+  necesarios para diagnosticar incidencias y claves activas; no limpiar
+  automáticamente.
+- **Retirada controlada**: al cerrar C8, generar un informe *dry-run* de
+  imágenes, volúmenes, contenedores detenidos, almacenamiento de proxies,
+  carpetas temporales, acciones y PR históricas. Revisarlo con propietario y
+  Chema si afecta a la VM compartida; eliminar únicamente recursos
+  identificados inequívocamente como propios y sin usuarios activos.
+
+**Prohibido** ejecutar `docker system prune -a --volumes`,
+`rm -rf` sobre rutas compartidas, limpiar carpetas de Chema, o borrar
+ramas/PR de otra persona. Tampoco borrar imágenes mientras algún worker
+activo las utilice. La limpieza de ramas se hace por cambios funcionales
+únicos y dependencias, no por antigüedad ni número de commits.
+
 ## Opciones antes de la primera prueba real
 
 | Opción | Ventaja | Condición / inconveniente |
@@ -26,10 +92,7 @@ simular que la separación por propietario ya funciona.
 | B. Instalación paralela dentro de la VM actual | Aprovecha RAM y disco disponibles y acceso Gateway | Docker falta. Instalarlo, cambiar servicios o configurar un nuevo proxy son cambios **compartidos** y requieren autorización expresa del usuario y Chema; sin ello C7 está bloqueado |
 | C. Adaptación explícita a LXD | El binario ya está presente | Exige nuevo modelo de seguridad y repetir aceptación de dos propietarios en LXD. No es equivalente a Docker ni es atajo validado |
 
-**Recomendación:** preparar el despliegue A como objetivo preferido de
-primera beta funcional, manteniendo B como alternativa sujeta a aprobación
-y C únicamente si se decide invertir en validación específica. No se
-ha creado ninguna instancia ni contratado recursos.
+**Recomendación revisada:** evitar contratar recursos o instalar Docker hasta determinar qué hace falta para **C8 personal**. Para una beta pública de amigos sin vigilancia se exige aislamiento real por propietario: A es la opción menos invasiva con el bridge Docker actual; B necesita autorización de cambios compartidos; C exige adaptador y pruebas nuevas. No se ha creado ninguna instancia ni contratado recursos.
 
 ## Arquitectura objetivo
 
