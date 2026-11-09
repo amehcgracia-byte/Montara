@@ -8,6 +8,7 @@ on:
       - web/montara.js
       - web/montara.css
       - companion/video_jobs.py
+      - companion/local_video.py
       - tests/native-render-progress.test.cjs
       - .github/workflows/native-render-progress.yml
 jobs:
@@ -19,4 +20,4 @@ jobs:
         with:
           node-version: '22'
       - run: node --test tests/native-render-progress.test.cjs
-      - run: python -m py_compile companion/video_jobs.py
+      - run: python -m py_compile companion/video_jobs.py companion/local_video.py
