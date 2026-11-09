@@ -19,10 +19,13 @@ from urano.google_owner import GoogleOwnerStore
 from urano.http_projects import project_blueprint
 from urano.project_catalog import ProjectCatalog
 from urano.session_auth import SESSION_COOKIE, SessionStore
+from urano.owner_runtime_controller import OwnerRuntimeController
+from urano.http_owner_runtime import owner_runtime_blueprint
 
 
 def create_owner_api(private_dir: Path, *, settings: OIDCSettings,
-                     provider: GoogleProvider | None = None) -> Flask:
+                     provider: GoogleProvider | None = None,
+                     runtime_controller: OwnerRuntimeController | None = None) -> Flask:
     root = Path(private_dir).resolve()
     if not root.is_dir() or root.is_symlink():
         raise ValueError("Existing private database directory required")
@@ -37,10 +40,19 @@ def create_owner_api(private_dir: Path, *, settings: OIDCSettings,
         provider=provider,
         success_path="/urano/v1/projects",
     ))
-    app.register_blueprint(project_blueprint(
-        ProjectCatalog(root / "projects.sqlite3"), session_store))
+    catalog = ProjectCatalog(root / "projects.sqlite3")
+    app.register_blueprint(project_blueprint(catalog, session_store))
     url = urlsplit(settings.redirect_uri)
     allowed_origin = f"{url.scheme}://{url.netloc}"
+    if runtime_controller is not None:
+        if not isinstance(runtime_controller, OwnerRuntimeController):
+            raise ValueError("Only a trusted private runtime controller may be installed")
+        # Opt-in ONLY. No worker is provisioned by this factory, login, or
+        # any client HTTP request: an operator must register each owner-worker
+        # pair via trusted infrastructure prior to activation.
+        app.register_blueprint(owner_runtime_blueprint(
+            runtime_controller, session_store,
+            https_origin=allowed_origin, catalog=catalog))
 
     @app.post("/urano/v1/session/refresh")
     def refresh_csrf():
