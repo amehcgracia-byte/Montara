@@ -254,3 +254,24 @@ def test_private_video_proxy_large_chunks_resume_and_reuse(tmp_path):
     assert c.put(url, data=payload[len(first):], headers={'Upload-Offset': str(len(first))}).status_code == 200
     assert c.post(url + '/finish', json={}).status_code == 200
     assert c.post('/montara/uploads', json=body).json['complete']
+
+
+def test_concurrent_delete_is_idempotent_after_the_lock_is_acquired(tmp_path, monkeypatch):
+    import fcntl
+    import shutil
+    c = make_client(tmp_path)
+    job = create(c, b'pending').json
+    path = tmp_path / 'Uploads' / job['id']
+    url = '/montara/uploads/' + job['id']
+    lock = fcntl.flock
+
+    def after_other_delete(fd, mode):
+        lock(fd, mode)
+        shutil.rmtree(path)
+
+    with monkeypatch.context() as patch:
+        patch.setattr('resumable_upload.fcntl.flock', after_other_delete)
+        response = c.delete(url)
+    assert response.status_code == 200 and response.json['deleted']
+    assert c.delete(url).json['deleted']
+    assert c.get(url).status_code == 404
