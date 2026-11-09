@@ -34,3 +34,8 @@ test('Stage waiting music stops when navigating away from rendering', () => {
   assert(source.includes("if (id !== 'making' && !$('#making').hidden && state.platform === 'youtube') $('#rangeAudio').pause();"));
   assert(source.includes("state.platform !== \"youtube\" || $(\"#making\").hidden || audio.paused"));
 });
+
+test('Navigation iterates all screens instead of one element', () => {
+  assert(source.includes('$$(".screen").forEach((s) => { s.hidden = s.id !== id; });'));
+  assert(!source.includes('  $(".screen").forEach('));
+});
