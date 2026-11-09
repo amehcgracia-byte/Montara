@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from flask import Blueprint, Response, jsonify, request
 from urano.session_auth import SESSION_COOKIE, SessionStore
+from urano.project_catalog import ProjectCatalog, ProjectNotFound
 
 PAGE = """<!doctype html>
 <html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -27,7 +28,7 @@ small{display:block;color:#a7b8ce;margin-top:7px}#status[role=alert]{color:#ffd4
 <form id="create"><input id="title" maxlength="120" required aria-label="Nombre del proyecto" placeholder="Nombre del proyecto">
 <button class="primary" type="submit">Crear proyecto</button></form>
 <p id="status" role="alert" aria-live="polite"></p><ul id="projects" aria-label="Tus proyectos"></ul>
-<p><small>Editor y render multiusuario en integración. Esta pantalla no abre el motor global.</small></p>
+<p><small>Motor privado Stage en integración. Esta pantalla nunca abre el motor global.</small></p>
 </main><script defer src="/urano/v1/dashboard.js"></script></body></html>"""
 
 SCRIPT = """'use strict';
@@ -50,7 +51,14 @@ async function load() {
       label.textContent = project.title;
       const detail = document.createElement('small');
       detail.textContent = 'Proyecto privado · ' + project.id;
-      li.append(label, detail); list.append(li);
+      li.append(label, detail);
+      if (window.MONTARA_PRIVATE_RUNTIME) {
+        const link = document.createElement('a'); link.href = '/urano/v1/workspace/' + encodeURIComponent(project.id);
+        link.textContent = 'Abrir espacio de trabajo privado';
+        link.style.cssText = 'display:inline-block;color:#d8e9ff;margin-top:12px';
+        li.append(link);
+      }
+      list.append(li);
     }
     status.textContent = projects.length ? '' : 'Todavía no tienes proyectos.';
   } catch (e) {
@@ -80,7 +88,69 @@ document.querySelector('#logout').addEventListener('click', async () => {
 load();"""
 
 
-def owner_dashboard_blueprint(sessions: SessionStore, *, https_origin: str) -> Blueprint:
+WORKSPACE_PAGE = """<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Montara · Espacio privado</title>
+<style>
+:root{font-family:system-ui,-apple-system,sans-serif;color-scheme:dark;background:#101621;color:#eef3fa}
+body{max-width:820px;margin:55px auto;padding:0 24px}a{color:#bfdcff}h1{font-size:clamp(25px,5vw,40px)}
+button{font:inherit;cursor:pointer;background:#e5eaf0;color:#121822;border:0;border-radius:10px;padding:12px 16px;margin:6px 8px 6px 0}
+button:disabled{opacity:.5;cursor:not-allowed}p,small{color:#b0bfd0}#status[role=alert]{color:#ffd49a}
+</style></head><body><a href="/urano/v1/dashboard">← Mis proyectos</a>
+<h1 id="name">Espacio de trabajo privado</h1>
+<p>Stage y Engine aislados para este proyecto. El editor visual y la exportación local se conectarán después.</p>
+<p id="status" role="alert" aria-live="polite">Comprobando...</p>
+<button id="activate" type="button">Activar Engine privado</button>
+<button id="ingest" type="button" disabled>Iniciar Stage</button>
+<button id="refresh" type="button">Actualizar estado</button>
+<script defer src="/urano/v1/workspace.js"></script></body></html>"""
+
+WORKSPACE_SCRIPT = """'use strict';
+const projectId = decodeURIComponent(location.pathname.split('/').pop());
+const status = document.querySelector('#status');
+const activate = document.querySelector('#activate');
+const ingest = document.querySelector('#ingest');
+const refresh = document.querySelector('#refresh');
+async function api(path, options={}) {
+  const response = await fetch('/urano/v1/' + path, {credentials:'same-origin',cache:'no-store',...options});
+  const body = await response.json().catch(() => ({}));
+  if(!response.ok) throw Error(body.error || 'Operación no disponible');
+  return body;
+}
+async function csrf() {
+  const {csrf} = await api('session/refresh',{method:'POST',headers:{Origin:location.origin}});
+  return csrf;
+}
+async function update() {
+  try {
+    const project = await api('projects/' + encodeURIComponent(projectId));
+    document.querySelector('#name').textContent = project.project.title;
+    const {state} = await api('runtime/state');
+    status.textContent = 'Engine privado: ' + state;
+    ingest.disabled = state !== 'ready';
+  } catch(e) {status.textContent=e.message;ingest.disabled=true;}
+}
+async function run(path) {
+  activate.disabled=true;ingest.disabled=true;refresh.disabled=true;
+  try {
+    await api(path,{method:'POST',headers:{'X-Urano-CSRF':await csrf(),Origin:location.origin}});
+    await update();
+  } catch(e){status.textContent=e.message;}
+  finally {activate.disabled=false;refresh.disabled=false;}
+}
+activate.addEventListener('click',()=>run('runtime/projects/'+encodeURIComponent(projectId)+'/activate'));
+ingest.addEventListener('click',()=>run('runtime/projects/'+encodeURIComponent(projectId)+'/ingest'));
+refresh.addEventListener('click',async ()=>{
+  try {
+    const x=await api('runtime/projects/'+encodeURIComponent(projectId)+'/ingest');
+    status.textContent='Stage: '+x.status;
+  } catch(e) {await update();}
+});
+update();"""
+
+def owner_dashboard_blueprint(sessions: SessionStore, *, https_origin: str,
+                              catalog: ProjectCatalog | None = None,
+                              runtime_available: bool = False) -> Blueprint:
     bp = Blueprint("urano_owner_dashboard", __name__, url_prefix="/urano/v1")
     @bp.before_request
     def protect():
@@ -100,8 +170,34 @@ def owner_dashboard_blueprint(sessions: SessionStore, *, https_origin: str) -> B
 
     @bp.get("/dashboard.js")
     def dashboard_js():
-        response = Response(SCRIPT, content_type="application/javascript; charset=utf-8")
+        response = Response("window.MONTARA_PRIVATE_RUNTIME = " + ("true" if runtime_available else "false") + ";\n" + SCRIPT,
+                            content_type="application/javascript; charset=utf-8")
         response.headers["Cache-Control"] = "no-store"
         response.headers["X-Content-Type-Options"] = "nosniff"
         return response
+
+    if runtime_available:
+        if catalog is None:
+            raise ValueError("Workspace requires existing owner project catalog")
+
+        @bp.get("/workspace/<project_id>")
+        def workspace(project_id: str):
+            identity = sessions.verify(request.cookies.get(SESSION_COOKIE))
+            try:
+                project = catalog.get(identity.owner_id, project_id)
+            except (ProjectNotFound, ValueError):
+                return jsonify(error="Project not found"), 404
+            response = Response(WORKSPACE_PAGE, content_type="text/html; charset=utf-8")
+            response.headers["Content-Security-Policy"] = "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'"
+            response.headers["X-Frame-Options"] = "DENY"
+            response.headers["Cache-Control"] = "no-store"
+            response.headers["X-Content-Type-Options"] = "nosniff"
+            return response
+
+        @bp.get("/workspace.js")
+        def workspace_js():
+            response = Response(WORKSPACE_SCRIPT, content_type="application/javascript; charset=utf-8")
+            response.headers["Cache-Control"] = "no-store"
+            response.headers["X-Content-Type-Options"] = "nosniff"
+            return response
     return bp
