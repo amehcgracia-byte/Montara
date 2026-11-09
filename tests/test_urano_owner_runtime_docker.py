@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import os
 import json
+import hashlib
+import hmac
 import time
 import subprocess
 import tempfile
@@ -29,6 +31,8 @@ from urano.owner_runtime_controller import OwnerRuntimeController
 from urano.project_catalog import ProjectCatalog
 from urano.runtime_activation import RuntimeActivationGuard
 from urano.session_auth import SESSION_COOKIE, SessionStore
+from urano.companion_receipt_auth import CompanionReceiptVerifier
+from urano.stage_source_provenance import StageSourceProvenance, UnverifiedSources
 
 ORIGIN = "https://lab.example.test"
 
@@ -144,6 +148,168 @@ class OwnerSessionToRealEngine(unittest.TestCase):
         for bridge in self.bridges.values():
             self.assertIsNone(bridge.cid)
 
+
+    def test_two_real_engines_register_private_proxy_bytes_before_ingest(self):
+        """C5: two real isolated Engine containers, bounded synthetic 20s MP4s.
+
+        The test asserts the actual Engine-registered paths and Stage DONE;
+        browser original claims are deliberately NOT certified.
+        """
+        inbox=self.root/"private-proxy-inbox"
+        inbox.mkdir()
+        # Operator-paired, owner-specific HMAC keys on the disposable runner.
+        # This is synthetic signed identity; the actual Companion signer is
+        # tested separately in test_c5_companion_proxy_receipt.py.
+        keys={}
+        for person in ("alice","bob"):
+            secret=self.root/(person+"-pairing.key")
+            secret.write_bytes(os.urandom(32))
+            secret.chmod(0o600)
+            keys[self.bridges[person].owner_id]=secret
+        verifier=CompanionReceiptVerifier(keys)
+        provenance=StageSourceProvenance(self.root/"provenance.sqlite3",self.catalog)
+        self.controller.configure_trusted_attestation(
+            provenance,inbox,container_workspace=Path("/workspace"))
+        digests={}
+        for person in ("alice","bob"):
+            workspace=self.root/person
+            fixture=[
+                "docker","run","--rm","--network","none","--user","10001:10001",
+                "--mount",f"type=bind,src={workspace},dst=/workspace",
+                "--workdir","/app/engine",os.environ["URANO_TEST_IMAGE_ID"],
+                "python","/app/tests/urano_u20_prepare_stage_inputs.py",
+                "Owned"+person.title()
+            ]
+            setup=subprocess.run(fixture,capture_output=True,text=True,timeout=150)
+            self.assertEqual(setup.returncode,0,setup.stderr[-1000:])
+            project_id=self.project_ids[person]
+            owner=self.bridges[person].owner_id
+            camera=(workspace/"Projects"/("Owned"+person.title())/
+                    "inputs"/"camera-a.mp4")
+            self.assertTrue(camera.is_file())
+            digest=hashlib.sha256(camera.read_bytes()).hexdigest()
+            digests[person]=digest
+            directory=inbox/hashlib.sha256(owner.encode()).hexdigest()/project_id
+            directory.mkdir(parents=True,mode=0o700)
+            (directory/f"slot-0-{digest}.mp4").write_bytes(camera.read_bytes())
+            original={"name":person+".mp4","size":camera.stat().st_size,
+                      "fingerprint":digest}
+            unsigned={"schema":"montara-companion-proxy-receipt-v1",
+                      "project_id":project_id,"source_slot":0,
+                      "original":original,"proxy_sha256":digest}
+            message=json.dumps(unsigned,sort_keys=True,separators=(",",":"),
+                               ensure_ascii=True).encode()
+            sig=hmac.new(keys[owner].read_bytes(),message,hashlib.sha256).hexdigest()
+            authenticated=verifier.verify(owner,project_id,0,digest,original,
+                                         {"receipt":unsigned,"signature":sig})
+            self.assertTrue(authenticated["receipt_authenticated"])
+            (directory/f"slot-0-{digest}.json").write_text(json.dumps({
+                "source_slot":0,"proxy_sha256":digest,
+                "original_claim":original,
+                "attested":False,"bytes":camera.stat().st_size,
+                "receipt_authenticated":True}))
+        self.assertNotEqual(digests["alice"],"")
+        self.assertEqual(self.activate("alice",self.project_ids["bob"]).status_code,404)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            futures=[pool.submit(self.activate,person,self.project_ids[person])
+                     for person in ("alice","bob")]
+            self.assertTrue(all(x.result(timeout=180).status_code==200 for x in futures))
+        # CI fixture has host-owned files; isolated containers run UID 10001.
+        # chown ONLY new synthetic staged input directories. Production requires
+        # a dedicated matching OS identity, never chmod 777 on user media.
+        for person in ("alice","bob"):
+            bridge=self.bridges[person]
+            pid=self.project_ids[person]
+            from urano.trusted_stage_inputs import prepare_trusted_stage_inputs
+            # The real Engine fixture generated inputs/ as UID 10001. Grant
+            # the runner temporary ownership of THIS disposable directory,
+            # perform trusted host-side copy, then return everything to 10001.
+            # Never do this on a shared VM or on user media.
+            inputs=(self.root/person/"Projects"/("Owned"+person.title())/"inputs")
+            fix_parent=subprocess.run(
+                ["sudo","chown",f"{os.getuid()}:{os.getgid()}",str(inputs)],
+                capture_output=True,text=True,timeout=20)
+            self.assertEqual(fix_parent.returncode,0,fix_parent.stderr)
+            paths=prepare_trusted_stage_inputs(
+                bridge.guard.bindings,inbox,bridge.owner_id,pid,source_slots={0})
+            self.assertEqual(len(paths),1)
+            self.assertEqual(hashlib.sha256(paths[0].read_bytes()).hexdigest(),
+                             digests[person])
+            scoped=paths[0].parent
+            fix=subprocess.run(["sudo","chown","-R","10001:10001",str(inputs)],
+                                capture_output=True,text=True,timeout=20)
+            self.assertEqual(fix.returncode,0,fix.stderr)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            registered=[pool.submit(self.bridges[person].register_staged_inputs,
+                                    self.project_ids[person])
+                        for person in ("alice","bob")]
+            self.assertEqual([f.result(timeout=150) for f in registered],[1,1])
+        # Verify Engine persisted the exact hash-named file for each owner.
+        for person in ("alice","bob"):
+            workspace=self.root/person
+            project_file=workspace/"Projects"/("Owned"+person.title())/"project.json"
+            # Disposable CI runner only: Engine writes project.json as UID
+            # 10001. Read it without changing the file's ownership/ACLs.
+            saved_text=subprocess.run(
+                ["sudo","cat",str(project_file)],capture_output=True,
+                text=True,check=True,timeout=15).stdout
+            doc=json.loads(saved_text)
+            videos=doc.get("inputs",{}).get("videos") or []
+            self.assertEqual(len(videos),1,doc.get("inputs",{}))
+            self.assertIn(digests[person],videos[0]["path"])
+            self.assertNotIn("Owned"+("Bob" if person=="alice" else "Alice"),
+                             videos[0]["path"])
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            started=[pool.submit(self._stage_post,person,self.project_ids[person])
+                     for person in ("alice","bob")]
+            self.assertEqual([f.result(timeout=100).status_code for f in started],
+                             [202,202])
+        deadline=time.monotonic()+240
+        done=set()
+        while len(done)<2 and time.monotonic()<deadline:
+            for person in ("alice","bob"):
+                if person in done: continue
+                client,_=self.clients[person]
+                response=client.get(
+                    f"/urano/v1/runtime/projects/{self.project_ids[person]}/ingest",
+                    base_url=ORIGIN)
+                self.assertEqual(response.status_code,200,response.get_data(as_text=True))
+                status=response.json["status"]
+                self.assertNotIn(status,("blocked","failed"))
+                if status=="done":done.add(person)
+            time.sleep(.5)
+        self.assertEqual(done,{"alice","bob"})
+        # A real Engine DONE now drives the operator-only final certificate.
+        # None of this flow can be triggered by an arbitrary browser claim.
+        for person in ("alice","bob"):
+            bridge=self.bridges[person]
+            try:
+                verified=provenance.verified(
+                    bridge.owner_id,self.project_ids[person],source_slots={0})
+            except UnverifiedSources as missing:
+                from urano.stage_ingest_attestation import attest_authenticated_inbox
+                bound=bridge.guard.bindings.resolve_internal(
+                    bridge.owner_id,self.project_ids[person])
+                try:
+                    attest_authenticated_inbox(
+                        provenance,bridge.guard.bindings,inbox,
+                        bridge.owner_id,self.project_ids[person],
+                        engine_project_file=bound/"project.json",
+                        container_workspace=Path("/workspace"))
+                except Exception as reason:
+                    # Internal CI diagnostic only; never return paths to HTTP.
+                    self.fail("Automatic Stage provenance unavailable: "+
+                              type(reason).__name__+" "+str(reason))
+                self.fail("Controller did not attest despite direct verifier success")
+            self.assertEqual(verified["sources"][0]["original"]["name"],
+                             person+".mp4")
+            self.assertRegex(verified["stage_revision"],r"^[a-f0-9]{64}$")
+        with self.assertRaises(Exception):
+            provenance.verified(
+                self.bridges["alice"].owner_id,self.project_ids["bob"],
+                source_slots={0})
+        self.assertEqual(self.close("alice").status_code,200)
+        self.assertEqual(self.close("bob").status_code,200)
 
     def _stage_post(self, who, project_id):
         client, session = self.clients[who]

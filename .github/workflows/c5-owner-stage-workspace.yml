@@ -1,0 +1,81 @@
+name: C5 private owner Stage workspace
+
+on:
+  push:
+    branches:
+      - fernando/c5-owner-stage-workspace-20261109
+  pull_request:
+    paths:
+      - 'urano/owner_dashboard.py'
+      - 'urano/minimal_owner_api.py'
+      - 'tests/test_c5_private_workspace.py'
+      - 'tests/test_c5_private_cut_plan.py'
+      - 'urano/companion_handoff.py'
+      - 'urano/http_owner_runtime.py'
+      - 'urano/stage_source_provenance.py'
+      - 'urano/stage_ingest_attestation.py'
+      - 'tests/test_c5_stage_ingest_attestation.py'
+      - 'companion/companion.py'
+      - 'web/companion.js'
+      - 'tests/test_c5_companion_proxy_receipt.py'
+      - 'urano/private_proxy_inbox.py'
+      - 'urano/companion_receipt_auth.py'
+      - 'tests/test_c5_signed_companion_receipt.py'
+      - 'tests/test_c5_authenticated_ingest_attestation.py'
+      - 'tests/test_c5_post_ingest_certification.py'
+      - 'tests/test_c5_worker_ingest_proof.py'
+      - 'tests/test_c5_private_proxy_inbox.py'
+      - 'urano/trusted_stage_inputs.py'
+      - 'urano/engine_worker_process.py'
+      - 'urano/container_worker_bridge.py'
+      - 'urano/owner_runtime_controller.py'
+      - 'tests/test_c5_trusted_stage_inputs.py'
+      - 'tests/test_c5_stage_source_provenance.py'
+      - '.github/workflows/c5-owner-stage-workspace.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  workspace-stage-ownership:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install existing owner API requirements
+        run: python -m pip install 'Flask>=3,<4' -r requirements-urano-oidc.txt
+      - name: Verify C1 C2 C4 and C5 ownership boundaries
+        run: |
+          python -m unittest discover -s tests -p 'test_c1_minimal_owner_api.py' -v
+          python -m unittest discover -s tests -p 'test_c2_google_to_private_engine.py' -v
+          python -m unittest discover -s tests -p 'test_c4_owner_dashboard.py' -v
+          python -m unittest discover -s tests -p 'test_c5_private_workspace.py' -v
+          python -m unittest discover -s tests -p 'test_c5_private_cut_plan.py' -v
+          python -m unittest discover -s tests -p 'test_c5_stage_source_provenance.py' -v
+          python -m unittest discover -s tests -p 'test_c5_stage_ingest_attestation.py' -v
+          python -m unittest discover -s tests -p 'test_c5_companion_proxy_receipt.py' -v
+          python -m unittest discover -s tests -p 'test_c5_private_proxy_inbox.py' -v
+          python -m unittest discover -s tests -p 'test_c5_signed_companion_receipt.py' -v
+          python -m unittest discover -s tests -p 'test_c5_authenticated_ingest_attestation.py' -v
+          python -m unittest discover -s tests -p 'test_c5_post_ingest_certification.py' -v
+          python -m unittest discover -s tests -p 'test_c5_worker_ingest_proof.py' -v
+          python -m unittest discover -s tests -p 'test_c5_trusted_stage_inputs.py' -v
+          python -m unittest discover -s tests -p 'test_urano_stage_worker_protocol.py' -v
+          python -m unittest discover -s tests -p 'test_urano_u21_local_handoff.py' -v
+          python -m py_compile urano/owner_dashboard.py urano/minimal_owner_api.py urano/stage_source_provenance.py
+      - name: Validate embedded private browser scripts
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import subprocess, tempfile
+          from urano.owner_dashboard import SCRIPT, WORKSPACE_SCRIPT
+          with tempfile.TemporaryDirectory() as directory:
+              for name, script in (("dashboard.js", SCRIPT), ("workspace.js", WORKSPACE_SCRIPT)):
+                  path = Path(directory) / name
+                  path.write_text(script, encoding="utf-8")
+                  subprocess.run(["node", "--check", str(path)], check=True)
+          PY
+          node --check web/companion.js

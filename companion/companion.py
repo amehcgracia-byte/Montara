@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import functools
 import hashlib
+import hmac
 import json
 import os
 import re
@@ -26,6 +27,7 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 
 VERSION = "0.6.10"
 VIDEO_PROXY_RECIPE = 2
@@ -414,6 +416,75 @@ def proxy_cache_valid(key, target):
         return False
 
 
+def video_proxy_receipt(key: str) -> dict:
+    """Read-only receipt computed on local files after successful proxy creation.
+
+    A receipt is evidence from the local Companion, NOT a server-trusted
+    attestation by itself. The upload/ingest service must authenticate its
+    transport and verify the same proxy bytes before certification.
+    """
+    if not isinstance(key, str) or not re.fullmatch(r"[a-f0-9]{24}", key):
+        raise ValueError("Invalid proxy identity")
+    job = jobs.get(key)
+    source = sources.get(key)
+    target = output_path(key)
+    if (not job or job.get("status") != "ready" or source is None
+            or not source.is_file() or source.is_symlink()
+            or is_audio(source) or not proxy_cache_valid(key, target)
+            or target.is_symlink()):
+        raise ValueError("Proxy and original are not available")
+    size = source.stat().st_size
+    if size <= 0:
+        raise ValueError("Empty original source")
+    original = {"name": source.name, "size": size, "fingerprint": fingerprint(source)}
+    expected_id = hashlib.sha256(
+        f"{original['name']}|{size}|{original['fingerprint']}".encode()
+    ).hexdigest()[:24]
+    if expected_id != key:
+        raise ValueError("Original source changed after proxy creation")
+    digest = hashlib.sha256()
+    with target.open("rb") as handle:
+        while chunk := handle.read(1024 * 1024):
+            digest.update(chunk)
+    if target.stat().st_size <= 0:
+        raise ValueError("Empty proxy")
+    return {"original": original, "proxy_sha256": digest.hexdigest()}
+
+
+
+def signed_video_proxy_receipt(key: str, project_id: str, source_slot: int) -> dict:
+    """Sign actual original+proxy bytes using an operator-paired local secret.
+
+    Provision MONTARA_COMPANION_RECEIPT_KEY_FILE through a secure operator
+    channel to Companion AND the specific owner verifier on the server.
+    Never allow this key to be read over HTTP or embedded in the website.
+    Without explicit provisioning, fail closed.
+    """
+    keyfile = os.environ.get("MONTARA_COMPANION_RECEIPT_KEY_FILE")
+    if not keyfile:
+        raise ValueError("Companion signed receipts not provisioned")
+    if (not re.fullmatch(r"[0-9a-f-]{36}", project_id)
+            or type(source_slot) is not int or not 0 <= source_slot <= 15):
+        raise ValueError("Invalid project or camera")
+    keypath = Path(keyfile)
+    if keypath.is_symlink() or not keypath.is_file():
+        raise ValueError("Invalid receipt key file")
+    if os.name != "nt" and keypath.stat().st_mode & 0o077:
+        raise ValueError("Receipt key must be private to Companion")
+    secret = keypath.read_bytes()
+    if len(secret) != 32:
+        raise ValueError("Invalid receipt key")
+    actual = video_proxy_receipt(key)
+    signed = {"schema": "montara-companion-proxy-receipt-v1",
+              "project_id": project_id, "source_slot": source_slot,
+              "original": actual["original"],
+              "proxy_sha256": actual["proxy_sha256"]}
+    message = json.dumps(signed, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
+    return {"receipt": signed,
+            "signature": hmac.new(secret, message, hashlib.sha256).hexdigest()}
+
+
+
 def make_proxy(key: str) -> None:
     job = jobs[key]
     source = sources[key[:24]]
@@ -611,6 +682,25 @@ class Handler(BaseHTTPRequestHandler):
                 except (OSError, ValueError):
                     snapshot = job['snapshot']
             return self.reply(200, snapshot)
+        parsed = urlsplit(self.path)
+        signed_match = re.fullmatch(r"/proxies/([a-f0-9]{24})/signed-receipt", parsed.path)
+        if signed_match:
+            params = parse_qs(parsed.query, keep_blank_values=True)
+            project = params.get("project_id", [])
+            slot = params.get("slot", [])
+            if len(project) != 1 or len(slot) != 1 or not re.fullmatch(r"(?:[0-9]|1[0-5])", slot[0]):
+                return self.reply(400, {"error": "Invalid signed receipt request"})
+            try:
+                return self.reply(200, signed_video_proxy_receipt(
+                    signed_match.group(1), project[0], int(slot[0])))
+            except (ValueError, OSError):
+                return self.reply(409, {"error": "Signed receipt unavailable"})
+        receipt = re.fullmatch(r"/proxies/([a-f0-9]{24})/receipt", self.path)
+        if receipt:
+            try:
+                return self.reply(200, video_proxy_receipt(receipt.group(1)))
+            except (OSError, ValueError):
+                return self.reply(409, {"error": "Proxy source receipt unavailable"})
         match = re.fullmatch(r"/proxies/([a-f0-9]{24}p?)(/file)?", self.path)
         if not match or match.group(1) not in jobs:
             return self.reply(404, {"error": "unknown"})

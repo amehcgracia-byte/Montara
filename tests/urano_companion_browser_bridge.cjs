@@ -67,6 +67,13 @@ async function scenario(mode) {
           : response({ status: "ready", progress: 1 });
       }
       if (endpoint === "/proxies/" + proxyKey + "/file") return response({});
+      if (endpoint === "/proxies/" + proxyKey + "/receipt") {
+        return response({
+          original: {name:original.name,size:original.size,
+                     fingerprint: mode === "bad_receipt" ? "f".repeat(64) : expectedFinger},
+          proxy_sha256: mode === "bad_proxy" ? "0".repeat(64) : createHash("sha256").update(proxyData).digest("hex"),
+        });
+      }
       throw Error("Unexpected Companion route: " + endpoint);
     },
     XMLHttpRequest: class {
@@ -95,6 +102,7 @@ async function scenario(mode) {
     assert.deepEqual(calls, [
       "/health", "/locate", "/proxies",
       "/proxies/" + proxyKey, "/proxies/" + proxyKey + "/file",
+      "/proxies/" + proxyKey + "/receipt",
     ]);
     assert.equal(uploads.length, 1, "Only one network transfer to server");
     assert.equal(uploads[0].route, "/montara/uploads");
@@ -124,5 +132,7 @@ async function scenario(mode) {
   await scenario("success");
   await scenario("missing");
   await scenario("failed");
-  console.log("URANO_BROWSER_COMPANION_CONTRACT_PASS: 3 cases, actual browser functions, mocked HTTP");
+  await scenario("bad_receipt");
+  await scenario("bad_proxy");
+  console.log("URANO_BROWSER_COMPANION_CONTRACT_PASS: 5 cases, actual browser functions, mocked HTTP");
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -53,6 +53,31 @@ const montaraCompanion = (() => {
       if (!response.ok) throw new Error('The companion could not save the video.');
       return (await response.json()).saved;
     },
+    /* Identity probe for an original explicitly selected by the user.
+       Never uploads file bytes; SHA-256 runs in the browser and /locate resolves
+       only on this person's Companion. No server receives the identity. */
+    /* Local proxy receipt, computed by Companion from its original and the
+       finished proxy bytes. An untrusted browser must never be the authority
+       that certifies this receipt to Stage. */
+    async localProxyReceipt(id, original) {
+      if (!/^[a-f0-9]{24}$/.test(id || '')) throw new Error('Invalid Companion proxy identity');
+      const response = await call(`/proxies/${id}/receipt`);
+      if (!response.ok) throw new Error('Companion has no verified proxy receipt');
+      const receipt = await response.json();
+      if (!receipt?.original || !/^[a-f0-9]{64}$/.test(receipt.proxy_sha256 || '') ||
+          receipt.original.name !== original.name ||
+          receipt.original.size !== original.size ||
+          receipt.original.fingerprint !== original.fingerprint)
+        throw new Error('Companion original and proxy receipt do not match');
+      return receipt;
+    },
+    async verifyLocalOriginal(file) {
+      if (!file || !this.isVideo(file)) throw new Error('Choose a local video original');
+      if (!info && !(await this.detect())) throw new Error('Montara Companion is not available');
+      const identity = {name:file.name,size:file.size,fingerprint:await fingerprint(file)};
+      const located = await this.locateOriginal(identity);
+      return {identity,located};
+    },
     async locateOriginal(original) {
       const response = await call('/locate', json(original));
       if (response.status === 404) return false;
@@ -62,6 +87,20 @@ const montaraCompanion = (() => {
     async startVideo(body) {
       const response=await call('/video-renders',json(body));const data=await response.json();
       if(!response.ok){const error=new Error(data.error || 'Could not start original-quality export');error.status=response.status;throw error;}return data.id;
+    },
+    /* Exact existing local U21 handoff endpoint; never send originals to web server. */
+    async startHandoffVideo(body) {
+      if (!info && !(await this.detect())) throw new Error('Montara Companion is not available');
+      if (!info?.local_video) throw new Error('Install the Companion local video renderer first');
+      const response = await call('/video-renders/handoff', json(body));
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const error = new Error(result.error || 'Could not start local handoff export');
+        error.status = response.status; throw error;
+      }
+      if (result.local_originals !== true || !/^[a-f0-9]{32}$/.test(result.id || ''))
+        throw new Error('Unexpected Companion export response');
+      return result.id;
     },
     async videoStatus(id) {
       const response=await call(`/video-renders/${id}`);if(!response.ok)throw new Error('The companion video export is unavailable');return response.json();
@@ -92,14 +131,84 @@ const montaraCompanion = (() => {
         const download = await call(`/proxies/${id}/file`);
         if (!download.ok) return null;
         const blob = await download.blob();
+        const receipt = !audio ? await this.localProxyReceipt(id, {name:file.name,size:file.size,fingerprint:print}) : null;
+        if (receipt) {
+          // Verify the EXACT bytes passed to the upload path. The Companion
+          // may have changed its cached proxy between receipt and download.
+          // A browser-computed hash is only a transfer integrity check, never
+          // authority to attest Stage original ownership.
+          const hash = [...new Uint8Array(await crypto.subtle.digest('SHA-256', await blob.arrayBuffer()))]
+            .map(byte => byte.toString(16).padStart(2, '0')).join('');
+          if (hash !== receipt.proxy_sha256)
+            throw new Error('Companion proxy changed during transfer; prepare it again');
+        }
         const wavpack = blob.type === 'audio/x-wavpack';  // float originals: WavPack instead of FLAC
         const name = preview ? file.name + '.opus' : audio ? file.name + (wavpack ? '.wv' : '.flac') : file.name.replace(/\.[^.]+$/, '') + '.small.mp4';
         const type = preview ? 'audio/ogg' : audio ? blob.type || 'audio/flac' : 'video/mp4';
-        return {file: new File([blob], name, {type}), preview, original: {name: file.name, size: file.size, lastModified: file.lastModified, fingerprint: print, companion: id}};
+        return {file: new File([blob], name, {type}), preview, original: {name: file.name, size: file.size, lastModified: file.lastModified, fingerprint: print, companion: id}, provenance_receipt:receipt};
       } catch (error) {
         console.warn('Companion unavailable for this file', error);
         return null;
       }
+    },
+    /* Opt-in Stage inbox, scoped to current authenticated owner and project.
+       Receipt claims are NOT trusted source attestation on the server.
+       Only proxy bytes travel here; never send original media. */
+    async stagePrivateProxy(projectId, sourceSlot, small, csrf) {
+      if (!/^[a-f0-9-]{36}$/.test(projectId || '') ||
+          !Number.isInteger(sourceSlot) || sourceSlot < 0 || sourceSlot > 15 ||
+          !small?.file || !small?.provenance_receipt ||
+          !small?.original || typeof csrf !== 'string' || !csrf)
+        throw new Error('Missing private proxy identity or session');
+      const receipt = small.provenance_receipt;
+      const original = {
+        name: small.original.name, size: small.original.size,
+        fingerprint: small.original.fingerprint
+      };
+      if (JSON.stringify(original) !== JSON.stringify(receipt.original))
+        throw new Error('Companion proxy receipt does not match original');
+      if (!(small.file instanceof Blob) || small.file.type !== 'video/mp4')
+        throw new Error('Only Companion-produced video proxies can be staged');
+      // Companion generates an authenticated receipt using an operator-paired
+      // secret; the browser only relays it and never learns that secret.
+      const envelope=await this.signedPrivateProxyReceipt(
+        small.original.companion,projectId,sourceSlot,original,receipt.proxy_sha256);
+      const response = await fetch(
+        '/urano/v1/proxy-inbox/projects/' + encodeURIComponent(projectId) +
+        '/slots/' + sourceSlot, {
+          method: 'PUT', credentials: 'same-origin', cache: 'no-store',
+          headers: {'Content-Type':'video/mp4', 'X-Urano-CSRF':csrf,
+                    'X-Urano-Proxy-SHA256':receipt.proxy_sha256,
+                    'X-Urano-Original-Claim':JSON.stringify(original),
+                    'X-Urano-Signed-Receipt':JSON.stringify(envelope),
+                    'Origin':location.origin},
+          body:small.file
+        });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || result.attested !== false ||
+          result.proxy_sha256 !== receipt.proxy_sha256)
+        throw new Error(result.error || 'Private Stage proxy staging failed');
+      return result;  // attested:false; Stage must verify separately.
+    },
+    async signedPrivateProxyReceipt(id, projectId, sourceSlot, original, expectedHash) {
+      if (!/^[a-f0-9]{24}$/.test(id || '') ||
+          !/^[0-9a-f-]{36}$/.test(projectId || '') ||
+          !Number.isInteger(sourceSlot) || sourceSlot < 0 || sourceSlot > 15)
+        throw new Error('Invalid signed receipt request');
+      const url='/proxies/'+id+'/signed-receipt?project_id='+
+        encodeURIComponent(projectId)+'&slot='+sourceSlot;
+      const response=await call(url);
+      if(!response.ok) throw new Error('Companion has not been paired for signed source receipts');
+      const envelope=await response.json();
+      const receipt=envelope?.receipt;
+      if(receipt?.project_id!==projectId || receipt?.source_slot!==sourceSlot ||
+         receipt?.proxy_sha256!==expectedHash ||
+         receipt?.original?.name!==original.name ||
+         receipt?.original?.size!==original.size ||
+         receipt?.original?.fingerprint!==original.fingerprint ||
+         !/^[a-f0-9]{64}$/.test(envelope.signature || ''))
+        throw new Error('Companion signed source receipt does not match proxy');
+      return envelope;
     },
     /* One range of an original audio file; resolves to a Blob. 'opus' (Fast, high bitrate) when this
        companion can, otherwise lossless (FLAC, or WavPack for float). */
