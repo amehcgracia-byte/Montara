@@ -85,6 +85,22 @@ class AuthenticatedIngestAttestation(unittest.TestCase):
             attest_authenticated_worker_proof(
                 self.provenance,self.inbox,"owner-a",self.project.id,proof=proof)
 
+    def test_previous_signed_receipt_cannot_recertify_after_slot_replacement(self):
+        proof=[{"slot":0,"proxy_sha256":self.hash,
+                "normalized_sha256":"b"*64}]
+        replacement_hash="f"*64
+        other=self.owner_inbox/f"slot-0-{replacement_hash}.json"
+        other.write_text(json.dumps({
+            "source_slot":0,"proxy_sha256":replacement_hash,
+            "original_claim":{"name":"new-camera.mp4","size":789,
+                              "fingerprint":"c"*64},
+            "attested":False,"bytes":789,"receipt_authenticated":True}))
+        with self.assertRaises(UnverifiedSources):
+            attest_authenticated_worker_proof(
+                self.provenance,self.inbox,"owner-a",self.project.id,proof=proof)
+        with self.assertRaises(UnverifiedSources):
+            self.provenance.verified("owner-a",self.project.id,source_slots={0})
+
     def test_worker_proof_detects_swapped_camera_hash_and_modified_inbox(self):
         proof=[{"slot":0,"proxy_sha256":self.hash,
                 "normalized_sha256":"f"*64}]
