@@ -82,7 +82,7 @@ def run(stdin, stdout, *, engine_dir: Path, data_root: Path, make_client=make_en
                 paths = []
                 slots = set()
                 for candidate in sorted(camera_dir.iterdir()):
-                    match = re.fullmatch(r"camera-([0-9]|1[0-5])-([0-9a-f]{64})\\.mp4", candidate.name)
+                    match = re.fullmatch(r"camera-([0-9]|1[0-5])-([0-9a-f]{64})\.mp4", candidate.name)
                     if not match:
                         # Ignore temporary files, never register arbitrary media.
                         continue
