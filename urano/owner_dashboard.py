@@ -278,10 +278,17 @@ async function runLocalExport() {
     if (!verifiedOriginals || verifiedOriginals.revision !== revision)
       throw Error('Verifica los originales de este plan antes de exportar');
     const cert=await api('runtime/projects/'+encodeURIComponent(projectId)+'/verified-sources');
+    const sourceMatches = Array.isArray(cert.sources) &&
+      cert.sources.length === verifiedOriginals.mapping.length &&
+      verifiedOriginals.mapping.every((item,i)=>{
+        const trusted=cert.sources[i];
+        return trusted?.source_slot===item.source &&
+          trusted.original?.name===item.original.name &&
+          trusted.original?.size===item.original.size &&
+          trusted.original?.fingerprint===item.original.fingerprint;
+      });
     if(cert.project_revision !== verifiedOriginals.revision ||
-       cert.stage_revision !== verifiedOriginals.stage_revision ||
-       JSON.stringify(cert.sources) !== JSON.stringify(verifiedOriginals.mapping.map(x=>({
-         source_slot:x.source, original:x.original}))))
+       cert.stage_revision !== verifiedOriginals.stage_revision || !sourceMatches)
       throw Error('La procedencia de Stage ha cambiado. Vuelve a verificar los originales');
     const audio = document.querySelector('#master-audio').files?.[0];
     if (!audio || !/\\.wav$/i.test(audio.name) || audio.size<=0 || audio.size>1024*1024*1024)
