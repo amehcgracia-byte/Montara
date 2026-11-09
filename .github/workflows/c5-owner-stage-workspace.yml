@@ -21,6 +21,7 @@ on:
       - 'urano/private_proxy_inbox.py'
       - 'urano/companion_receipt_auth.py'
       - 'tests/test_c5_signed_companion_receipt.py'
+      - 'tests/test_c5_authenticated_ingest_attestation.py'
       - 'tests/test_c5_private_proxy_inbox.py'
       - 'urano/trusted_stage_inputs.py'
       - 'urano/engine_worker_process.py'
@@ -56,6 +57,7 @@ jobs:
           python -m unittest discover -s tests -p 'test_c5_companion_proxy_receipt.py' -v
           python -m unittest discover -s tests -p 'test_c5_private_proxy_inbox.py' -v
           python -m unittest discover -s tests -p 'test_c5_signed_companion_receipt.py' -v
+          python -m unittest discover -s tests -p 'test_c5_authenticated_ingest_attestation.py' -v
           python -m unittest discover -s tests -p 'test_c5_trusted_stage_inputs.py' -v
           python -m unittest discover -s tests -p 'test_urano_stage_worker_protocol.py' -v
           python -m unittest discover -s tests -p 'test_urano_u21_local_handoff.py' -v
