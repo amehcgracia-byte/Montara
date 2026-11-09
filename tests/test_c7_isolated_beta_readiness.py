@@ -29,11 +29,12 @@ class C7BetaReadiness(unittest.TestCase):
     def test_complete_explicit_review_can_pass(self):
         state = check_c7_deployment(**BASE)
         self.assertTrue(state.ready_for_private_beta)
-        self.assertEqual(len(state.gates), len(BASE))
+        # Two Docker facts (CLI + daemon) deliberately form one safety gate.
+        self.assertEqual(len(state.gates), len(BASE)-1)
         self.assertEqual([g.name for g in state.gates], list(dict.fromkeys(g.name for g in state.gates)))
         report = state.public_report()
         self.assertTrue(report["ready_for_private_beta"])
-        self.assertEqual(len(report["gates"]), len(BASE))
+        self.assertEqual(len(report["gates"]), len(BASE)-1)
 
     def test_every_missing_gate_blocks_beta(self):
         for key in BASE:
