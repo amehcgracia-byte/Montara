@@ -9,6 +9,9 @@ on:
       - 'urano/owner_dashboard.py'
       - 'urano/minimal_owner_api.py'
       - 'tests/test_c5_private_workspace.py'
+      - 'tests/test_c5_private_cut_plan.py'
+      - 'urano/companion_handoff.py'
+      - 'urano/http_owner_runtime.py'
       - '.github/workflows/c5-owner-stage-workspace.yml'
 
 permissions:
@@ -31,4 +34,6 @@ jobs:
           python -m unittest discover -s tests -p 'test_c2_google_to_private_engine.py' -v
           python -m unittest discover -s tests -p 'test_c4_owner_dashboard.py' -v
           python -m unittest discover -s tests -p 'test_c5_private_workspace.py' -v
+          python -m unittest discover -s tests -p 'test_c5_private_cut_plan.py' -v
+          python -m unittest discover -s tests -p 'test_urano_u21_local_handoff.py' -v
           python -m py_compile urano/owner_dashboard.py urano/minimal_owner_api.py
