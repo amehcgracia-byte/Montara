@@ -19,7 +19,7 @@ from flask import Blueprint, jsonify, request
 
 from urano.project_catalog import ProjectCatalog, ProjectNotFound
 from urano.session_auth import SESSION_COOKIE, SessionStore
-from urano.stage_source_provenance import UnverifiedSources, _canonical_sources
+from urano.stage_source_provenance import StageSourceProvenance, UnverifiedSources, _canonical_sources
 
 _MAX_PROXY_BYTES = 128 * 1024 * 1024
 _SLOT = re.compile(r"^(?:[0-9]|1[0-5])$")
@@ -27,7 +27,8 @@ _DIGEST = re.compile(r"^[a-f0-9]{64}$")
 
 
 def private_proxy_inbox_blueprint(catalog: ProjectCatalog, sessions: SessionStore,
-                                  *, https_origin: str, staging_root: Path) -> Blueprint:
+                                  *, https_origin: str, staging_root: Path,
+                                  stage_provenance: StageSourceProvenance | None = None) -> Blueprint:
     parsed = urlsplit(https_origin)
     if (parsed.scheme != "https" or not parsed.netloc or parsed.path
             or parsed.query or parsed.fragment or parsed.username or parsed.password):
@@ -100,6 +101,11 @@ def private_proxy_inbox_blueprint(catalog: ProjectCatalog, sessions: SessionStor
                     temporary.write(block)
             if copied != length or digest.hexdigest() != expected:
                 return jsonify(error="Proxy bytes do not match digest"), 422
+            # All old source certificates become invalid BEFORE replacement.
+            # Even identical media re-uploads require an independent Stage
+            # recheck. If invalidation fails, do not publish staged bytes.
+            if stage_provenance is not None:
+                stage_provenance.invalidate_trusted(session.owner_id, project_id)
             target = folder / f"slot-{int(slot)}-{expected}.mp4"
             # Staged bytes are immutable by digest; untrusted identity claims
             # NEVER cause certification. Replacing an existing same-hash file
