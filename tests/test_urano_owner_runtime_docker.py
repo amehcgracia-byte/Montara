@@ -221,7 +221,12 @@ class OwnerSessionToRealEngine(unittest.TestCase):
         for person in ("alice","bob"):
             workspace=self.root/person
             project_file=workspace/"Projects"/("Owned"+person.title())/"project.json"
-            doc=json.loads(project_file.read_text())
+            # Disposable CI runner only: Engine writes project.json as UID
+            # 10001. Read it without changing the file's ownership/ACLs.
+            saved_text=subprocess.run(
+                ["sudo","cat",str(project_file)],capture_output=True,
+                text=True,check=True,timeout=15).stdout
+            doc=json.loads(saved_text)
             videos=doc.get("inputs",{}).get("videos") or []
             self.assertEqual(len(videos),1,doc.get("inputs",{}))
             self.assertIn(digests[person],videos[0]["path"])
