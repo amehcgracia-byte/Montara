@@ -89,6 +89,18 @@ class StageSourceProvenance:
                          stage_revision=excluded.stage_revision""",
                        (project_id, owner_id, json.dumps(canonical), stage_revision))
 
+    def invalidate_trusted(self, owner_id: str, project_id: str) -> None:
+        """Discard a previous certificate before replacing Stage inputs.
+
+        The authenticated project owner can update source material, but only
+        trusted infrastructure can issue a NEW attestation after Ingest.
+        """
+        self.catalog.get(owner_id, project_id)
+        with self._connect() as db:
+            db.execute(
+                "DELETE FROM urano_stage_source_provenance WHERE project_id=? AND owner_id=?",
+                (project_id, owner_id))
+
     def verified(self, owner_id: str, project_id: str, *,
                  source_slots: set[int]) -> dict:
         self.catalog.get(owner_id, project_id)
