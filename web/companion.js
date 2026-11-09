@@ -56,6 +56,21 @@ const montaraCompanion = (() => {
     /* Identity probe for an original explicitly selected by the user.
        Never uploads file bytes; SHA-256 runs in the browser and /locate resolves
        only on this person's Companion. No server receives the identity. */
+    /* Local proxy receipt, computed by Companion from its original and the
+       finished proxy bytes. An untrusted browser must never be the authority
+       that certifies this receipt to Stage. */
+    async localProxyReceipt(id, original) {
+      if (!/^[a-f0-9]{24}$/.test(id || '')) throw new Error('Invalid Companion proxy identity');
+      const response = await call(`/proxies/${id}/receipt`);
+      if (!response.ok) throw new Error('Companion has no verified proxy receipt');
+      const receipt = await response.json();
+      if (!receipt?.original || !/^[a-f0-9]{64}$/.test(receipt.proxy_sha256 || '') ||
+          receipt.original.name !== original.name ||
+          receipt.original.size !== original.size ||
+          receipt.original.fingerprint !== original.fingerprint)
+        throw new Error('Companion original and proxy receipt do not match');
+      return receipt;
+    },
     async verifyLocalOriginal(file) {
       if (!file || !this.isVideo(file)) throw new Error('Choose a local video original');
       if (!info && !(await this.detect())) throw new Error('Montara Companion is not available');
@@ -116,10 +131,11 @@ const montaraCompanion = (() => {
         const download = await call(`/proxies/${id}/file`);
         if (!download.ok) return null;
         const blob = await download.blob();
+        const receipt = !audio ? await this.localProxyReceipt(id, {name:file.name,size:file.size,fingerprint:print}) : null;
         const wavpack = blob.type === 'audio/x-wavpack';  // float originals: WavPack instead of FLAC
         const name = preview ? file.name + '.opus' : audio ? file.name + (wavpack ? '.wv' : '.flac') : file.name.replace(/\.[^.]+$/, '') + '.small.mp4';
         const type = preview ? 'audio/ogg' : audio ? blob.type || 'audio/flac' : 'video/mp4';
-        return {file: new File([blob], name, {type}), preview, original: {name: file.name, size: file.size, lastModified: file.lastModified, fingerprint: print, companion: id}};
+        return {file: new File([blob], name, {type}), preview, original: {name: file.name, size: file.size, lastModified: file.lastModified, fingerprint: print, companion: id}, provenance_receipt:receipt};
       } catch (error) {
         console.warn('Companion unavailable for this file', error);
         return null;
