@@ -251,7 +251,7 @@ def create_montara_app(data_root: Path = DEFAULT_DATA, samples: bool = True):
         folder = ROOT / "companion"
         buffer = io.BytesIO()
         with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
-            for name, mode in (("Install Montara Companion.command", 0o755), ("companion.py", 0o644), ("video_jobs.py", 0o644), ("video_recipe.py", 0o644), ("README.md", 0o644)):
+            for name, mode in (("Install Montara Companion.command", 0o755), ("companion.py", 0o644), ("video_jobs.py", 0o644), ("video_recipe.py", 0o644), ("urano_local_handoff.py", 0o644), ("README.md", 0o644)):
                 info = zipfile.ZipInfo(f"Montara Companion/{name}")
                 info.external_attr = (0o100000 | mode) << 16
                 info.compress_type = zipfile.ZIP_DEFLATED
