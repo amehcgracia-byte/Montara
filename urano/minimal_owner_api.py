@@ -47,7 +47,9 @@ def create_owner_api(private_dir: Path, *, settings: OIDCSettings,
     url = urlsplit(settings.redirect_uri)
     allowed_origin = f"{url.scheme}://{url.netloc}"
     if enable_dashboard:
-        app.register_blueprint(owner_dashboard_blueprint(session_store, https_origin=allowed_origin))
+        app.register_blueprint(owner_dashboard_blueprint(
+            session_store, https_origin=allowed_origin, catalog=catalog,
+            runtime_available=runtime_controller is not None))
     if runtime_controller is not None:
         if not isinstance(runtime_controller, OwnerRuntimeController):
             raise ValueError("Only a trusted private runtime controller may be installed")
