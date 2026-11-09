@@ -36,7 +36,7 @@ fi
 
 mkdir -p "$DIR/bin"
 if [ "$(pwd)" != "$DIR" ]; then
-  for f in video_recipe.py video_jobs.py companion.py; do cp "$f" "$DIR/$f" || { pause; exit 1; }; done
+  for f in video_recipe.py video_jobs.py urano_local_handoff.py companion.py; do cp "$f" "$DIR/$f" || { pause; exit 1; }; done
 fi
 mkdir -p "$HOME/Applications"
 if [ "$(cd "$(dirname "$0")" && pwd)" != "$HOME/Applications" ]; then
