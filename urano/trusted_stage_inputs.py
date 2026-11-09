@@ -58,9 +58,11 @@ def prepare_trusted_stage_inputs(
             raise UnverifiedSources("Invalid Stage proxy metadata") from exc
         digest = _SLOT.fullmatch(metadata.name).group(2)
         if (not isinstance(item, dict) or set(item) !=
-                {"source_slot", "proxy_sha256", "original_claim", "attested", "bytes"}
+                {"source_slot", "proxy_sha256", "original_claim", "attested",
+                 "bytes", "receipt_authenticated"}
                 or item["source_slot"] != slot or type(item["source_slot"]) is not int
                 or item["proxy_sha256"] != digest or item["attested"] is not False
+                or type(item["receipt_authenticated"]) is not bool
                 or type(item["bytes"]) is not int or not 0 < item["bytes"] <= _LIMIT):
             raise UnverifiedSources("Invalid proxy manifest")
         _canonical_sources([{"source_slot": slot, "original": item["original_claim"]}])
