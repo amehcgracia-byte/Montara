@@ -117,6 +117,8 @@ button:disabled{opacity:.5;cursor:not-allowed}p,small{color:#b0bfd0}#status[role
 <p>Selecciona los mismos vídeos originales utilizados en el proyecto, en el orden de cámaras. Solo se consultará a Companion en tu ordenador.</p>
 <input id="local-originals" type="file" accept="video/*,.mov,.mp4,.mkv,.mts,.m4v,.avi,.webm" multiple>
 <button id="verify-originals" type="button">Verificar originales en Companion</button>
+<button id="prepare-private-proxies" type="button" disabled>Preparar proxies para Stage privado (sin certificar)</button>
+<p id="proxy-inbox-status" role="status" aria-live="polite"></p>
 <p id="originals-status" role="status" aria-live="polite"></p>
 <button id="handoff" type="button">Comprobar descriptor para Companion</button>
 <p id="handoff-status" role="status" aria-live="polite"></p>
@@ -334,12 +336,37 @@ async function runLocalExport() {
 }
 exportButton.addEventListener('click',runLocalExport);
 document.querySelector('#local-originals').addEventListener('change',()=>{verifiedOriginals=null;});
+const proxyButton=document.querySelector('#prepare-private-proxies');
+proxyButton.disabled = !window.MONTARA_PROXY_INBOX;
+proxyButton.addEventListener('click',async()=>{
+  const target=document.querySelector('#proxy-inbox-status');
+  const files=[...document.querySelector('#local-originals').files];
+  const slots=[...new Set(cuts.map(c=>c.source_slot))].sort((a,b)=>a-b);
+  proxyButton.disabled=true;
+  try {
+    if(!window.MONTARA_PROXY_INBOX) throw Error('La entrada privada de Stage no está activada');
+    if(!files.length || files.length!==slots.length)
+      throw Error('Selecciona un vídeo original por cada cámara del plan');
+    if(!await montaraCompanion.detect()) throw Error('Companion no está disponible');
+    for(let i=0;i<files.length;i++){
+      if(!montaraCompanion.isVideo(files[i])) throw Error('Solo se admiten vídeos originales');
+      target.textContent='Preparando proxy de cámara '+slots[i]+' en Companion…';
+      const small=await montaraCompanion.smallVersion(files[i],()=>{},()=>false);
+      if(!small?.file || !small?.provenance_receipt)
+        throw Error('Companion no pudo crear un proxy verificable');
+      await montaraCompanion.stagePrivateProxy(projectId,slots[i],small,await csrf());
+    }
+    target.textContent='Proxies recibidos en el proyecto privado. Pendientes de validación por Stage; aún no certificados.';
+  }catch(e){target.textContent=e.message;}
+  finally{proxyButton.disabled=!window.MONTARA_PROXY_INBOX;}
+});
 update();
 loadEdits().catch(e=>{editStatus.textContent=e.message;});"""
 
 def owner_dashboard_blueprint(sessions: SessionStore, *, https_origin: str,
                               catalog: ProjectCatalog | None = None,
-                              runtime_available: bool = False) -> Blueprint:
+                              runtime_available: bool = False,
+                              proxy_inbox_available: bool = False) -> Blueprint:
     bp = Blueprint("urano_owner_dashboard", __name__, url_prefix="/urano/v1")
     @bp.before_request
     def protect():
@@ -396,7 +423,8 @@ def owner_dashboard_blueprint(sessions: SessionStore, *, https_origin: str,
 
         @bp.get("/workspace.js")
         def workspace_js():
-            response = Response(WORKSPACE_SCRIPT, content_type="application/javascript; charset=utf-8")
+            response = Response("window.MONTARA_PROXY_INBOX = " + ("true" if proxy_inbox_available else "false") + ";\n" + WORKSPACE_SCRIPT,
+                                content_type="application/javascript; charset=utf-8")
             response.headers["Cache-Control"] = "no-store"
             response.headers["X-Content-Type-Options"] = "nosniff"
             return response
