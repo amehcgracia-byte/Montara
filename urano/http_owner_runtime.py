@@ -99,6 +99,13 @@ def owner_runtime_blueprint(controller: OwnerRuntimeController,
         if error is not None:
             return error
         try:
+            # Once Ingest is requested, any previous provenance is stale.
+            # Revoke BEFORE starting the worker: a concurrent export cannot
+            # rely on an old certificate while Stage begins changing inputs.
+            # Only revoke a project verified to belong to this session owner.
+            if stage_provenance is not None and catalog is not None:
+                catalog.get(session.owner_id, project_id)
+                stage_provenance.invalidate_trusted(session.owner_id, project_id)
             controller.ingest_start(session.owner_id, project_id)
         except (ProjectNotFound, ValueError):
             return jsonify(error="Project workspace unavailable"), 404
