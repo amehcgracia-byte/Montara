@@ -32,3 +32,10 @@ test('percentage text is not inside the animated zoom wrapper',()=>{
   assert.match(css,/\.ring \.ring-brand\{[^}]*gap:8px\}/);
   assert.match(css,/\.ring \.loading-mark\{[^}]*animation:brandbreathe/);
 });
+
+test('Companion shows explicit pre-render phases before the FFmpeg export',()=>{
+  const local = fs.readFileSync('companion/local_video.py','utf8');
+  assert.match(local,/Checking local camera metadata/);
+  assert.match(local,/Preparing reviewed shot plan for original-quality export/);
+  assert.match(local,/Starting original-quality frame rendering/);
+});
