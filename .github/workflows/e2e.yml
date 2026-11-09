@@ -125,6 +125,7 @@ jobs:
           home = Path(os.environ['RUNNER_TEMP']) / 'montara-test-companion'
           layout = install_layout(home)
           shutil.copy('companion/companion.py', home / 'companion.py')
+          shutil.copy('companion/urano_local_handoff.py', home / 'urano_local_handoff.py')
           (layout / 'venv').symlink_to(Path(sys.prefix))
           import subprocess
           (layout / 'MIXER_COMMIT').write_text(subprocess.check_output(['git', '-C', 'mixer', 'rev-parse', 'HEAD'], text=True).strip())
