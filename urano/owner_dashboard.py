@@ -95,7 +95,7 @@ WORKSPACE_PAGE = """<!doctype html>
 :root{font-family:system-ui,-apple-system,sans-serif;color-scheme:dark;background:#101621;color:#eef3fa}
 body{max-width:820px;margin:55px auto;padding:0 24px}a{color:#bfdcff}h1{font-size:clamp(25px,5vw,40px)}
 button{font:inherit;cursor:pointer;background:#e5eaf0;color:#121822;border:0;border-radius:10px;padding:12px 16px;margin:6px 8px 6px 0}
-button:disabled{opacity:.5;cursor:not-allowed}p,small{color:#b0bfd0}#status[role=alert]{color:#ffd49a}
+button:disabled{opacity:.5;cursor:not-allowed}p,small{color:#b0bfd0}#status[role=alert]{color:#ffd49a}section{margin-top:30px;border-top:1px solid #344054;padding-top:18px}form{display:flex;flex-wrap:wrap;align-items:end;gap:12px}label{display:grid;gap:6px}input{width:145px;padding:9px;color:#eef3fa;background:#1a2635;border:1px solid #64748b;border-radius:8px;font:inherit}ol{line-height:1.9}
 </style></head><body><a href="/urano/v1/dashboard">← Mis proyectos</a>
 <h1 id="name">Espacio de trabajo privado</h1>
 <p>Stage y Engine aislados para este proyecto. El editor visual y la exportación local se conectarán después.</p>
@@ -103,6 +103,18 @@ button:disabled{opacity:.5;cursor:not-allowed}p,small{color:#b0bfd0}#status[role
 <button id="activate" type="button">Activar Engine privado</button>
 <button id="ingest" type="button" disabled>Iniciar Stage</button>
 <button id="refresh" type="button">Actualizar estado</button>
+<section aria-label="Cortes del proyecto"><h2>Plan de cortes privado</h2>
+<p>Prepara un corte básico por cámara. Los originales permanecen en tu ordenador; esto aún no es el editor visual definitivo.</p>
+<form id="edit-cuts">
+<label>Cámara (0–15) <input id="slot" type="number" min="0" max="15" step="1" value="0" required></label>
+<label>Desde (segundos) <input id="start" type="number" min="0" step=".001" value="0" required></label>
+<label>Hasta (segundos) <input id="end" type="number" min=".001" step=".001" value="5" required></label>
+<button type="submit">Guardar corte</button></form>
+<p id="edits-status" role="status" aria-live="polite"></p>
+<ol id="cuts" aria-label="Cortes guardados"></ol>
+<button id="handoff" type="button">Comprobar descriptor para Companion</button>
+<p id="handoff-status" role="status" aria-live="polite"></p>
+</section>
 <script defer src="/urano/v1/workspace.js"></script></body></html>"""
 
 WORKSPACE_SCRIPT = """'use strict';
@@ -146,7 +158,63 @@ refresh.addEventListener('click',async ()=>{
     status.textContent='Stage: '+x.status;
   } catch(e) {await update();}
 });
-update();"""
+let revision = null;
+let cuts = [];
+const editStatus = document.querySelector('#edits-status');
+function drawCuts() {
+  const container = document.querySelector('#cuts');
+  container.replaceChildren();
+  cuts.forEach((cut, index) => {
+    const li = document.createElement('li');
+    li.textContent = 'Corte '+(index+1)+': cámara '+cut.source_slot+
+      ' · '+(cut.start_ms/1000)+'–'+(cut.end_ms/1000)+' s';
+    container.append(li);
+  });
+}
+async function loadEdits() {
+  const response = await api('projects/'+encodeURIComponent(projectId));
+  revision = response.project.revision;
+  const saved = response.project.recipe?.urano_edits_v1?.cuts;
+  cuts = Array.isArray(saved) ? saved : [];
+  drawCuts();
+  editStatus.textContent = cuts.length ? 'Plan guardado · revisión '+revision : 'Todavía no hay cortes guardados.';
+}
+document.querySelector('#edit-cuts').addEventListener('submit',async event => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const button = form.querySelector('button');
+  button.disabled = true;
+  try {
+    if (revision === null) throw Error('El proyecto no está listo');
+    const slot = Number(document.querySelector('#slot').value);
+    const start_ms = Math.round(Number(document.querySelector('#start').value)*1000);
+    const end_ms = Math.round(Number(document.querySelector('#end').value)*1000);
+    if (!Number.isInteger(slot) || slot<0 || slot>15 ||
+        !Number.isSafeInteger(start_ms) || !Number.isSafeInteger(end_ms) ||
+        start_ms<0 || end_ms<=start_ms) throw Error('Comprueba los tiempos y la cámara');
+    const response = await api('runtime/projects/'+encodeURIComponent(projectId)+'/edits',{
+      method:'PUT', headers:{'Content-Type':'application/json','X-Urano-CSRF':await csrf(),'Origin':location.origin},
+      body:JSON.stringify({expected_revision:revision,cuts:[...cuts,{source_slot:slot,start_ms,end_ms}]})
+    });
+    revision = response.revision;
+    cuts = response.cuts;
+    drawCuts(); editStatus.textContent='Corte guardado · revisión '+revision;
+  } catch(e) {
+    editStatus.textContent=e.message; await loadEdits().catch(()=>{});
+  } finally {button.disabled=false;}
+});
+document.querySelector('#handoff').addEventListener('click', async () => {
+  const target = document.querySelector('#handoff-status');
+  try {
+    const result = await api('runtime/projects/'+encodeURIComponent(projectId)+'/companion-handoff');
+    if (result.plan.render_ready !== false || result.plan.local_source_resolution_verified !== false)
+      throw Error('Estado de seguridad inesperado');
+    target.textContent='Descriptor validado: '+result.plan.cuts.length+
+      ' cortes. Companion debe reconocer los originales locales antes de exportar.';
+  } catch(e){target.textContent=e.message;}
+});
+update();
+loadEdits().catch(e=>{editStatus.textContent=e.message;});"""
 
 def owner_dashboard_blueprint(sessions: SessionStore, *, https_origin: str,
                               catalog: ProjectCatalog | None = None,
