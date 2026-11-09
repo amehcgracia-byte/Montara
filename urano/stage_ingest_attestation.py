@@ -21,8 +21,9 @@ def attest_stage_ingest(
 
     Each receipt has {source_slot, original, proxy_sha256}. The original
     identity must have been paired with the proxy during trusted preprocessing.
-    This verifies the proxy bytes, not the authenticity of an arbitrary browser
-    assertion. The transport producing receipts remains to be integrated.
+    Verifies the Stage input bytes against the trusted receipt AND verifies
+    that normalized output exists; the latter may be transcoded. It does not
+    authenticate an arbitrary browser assertion or establish trusted transport.
     """
     provenance.catalog.get(owner_id, project_id)
     file = Path(engine_project_file)
@@ -56,22 +57,34 @@ def attest_stage_ingest(
         if (not isinstance(expected, str) or len(expected) != 64
                 or any(ch not in "0123456789abcdef" for ch in expected)):
             raise UnverifiedSources("Proxy digest required")
+        # The source byte stream is what the Companion receipt describes.
+        # Engine may normalize/transcode that source into *different* bytes,
+        # so verify the source SHA-256, then independently require a completed
+        # normalized output with an authenticated Engine project snapshot.
+        source_path = video.get("path")
         normalized = video.get("normalized")
-        if not isinstance(normalized, dict) or not isinstance(normalized.get("path"), str):
-            raise UnverifiedSources("Stage normalized proxy unavailable")
-        proxy = Path(normalized["path"])
-        if not proxy.is_absolute() or proxy.is_symlink() or not proxy.is_file():
-            raise UnverifiedSources("Trusted Stage proxy is missing or linked")
-        digest = hashlib.sha256()
-        try:
-            with proxy.open("rb") as handle:
-                while chunk := handle.read(1024 * 1024):
-                    digest.update(chunk)
-        except OSError as exc:
-            raise UnverifiedSources("Cannot verify Stage proxy bytes") from exc
-        if digest.hexdigest() != expected:
-            raise UnverifiedSources("Stage proxy does not match Companion receipt")
-        proof.append({"slot": slot, "proxy_sha256": expected})
+        if (not isinstance(source_path, str) or not isinstance(normalized, dict)
+                or not isinstance(normalized.get("path"), str)):
+            raise UnverifiedSources("Stage source or normalized output unavailable")
+        source = Path(source_path)
+        output = Path(normalized["path"])
+        if any(not item.is_absolute() or item.is_symlink() or not item.is_file()
+               for item in (source, output)):
+            raise UnverifiedSources("Trusted Stage files missing or linked")
+        hashes = []
+        for item in (source, output):
+            digest = hashlib.sha256()
+            try:
+                with item.open("rb") as handle:
+                    for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                        digest.update(chunk)
+            except OSError as exc:
+                raise UnverifiedSources("Cannot verify Stage media bytes") from exc
+            hashes.append(digest.hexdigest())
+        if hashes[0] != expected:
+            raise UnverifiedSources("Stage source bytes do not match Companion receipt")
+        proof.append({"slot": slot, "proxy_sha256": expected,
+                      "normalized_sha256": hashes[1]})
     stage_revision = hashlib.sha256(json.dumps(
         proof, sort_keys=True, separators=(",", ":")).encode("utf-8")
     ).hexdigest()
