@@ -58,6 +58,53 @@ class TestC5StageSourceProvenance(TestC5PrivateWorkspace):
                          "expected_revision":1})
         self.assertEqual(self.a.get(endpoint,base_url=HOST).status_code,409)
 
+    def test_replacing_proxy_revokes_previous_stage_certificate(self):
+        import hashlib
+        import json
+        staging=self.root/"staging"
+        staging.mkdir()
+        self.app=create_owner_api(
+            self.root,
+            settings=OIDCSettings(CLIENT,"fake-secret-do-not-use",CALLBACK,
+                                  frozenset({"alpha@example.test","beta@example.test"})),
+            provider=self.google,runtime_controller=self.controller,
+            enable_dashboard=True,stage_provenance=self.provenance,
+            proxy_staging_root=staging)
+        self.a,self.b=self.app.test_client(),self.app.test_client()
+        owner_a,csrf_a=self.login(self.a,sub="stage-upload-a",email="alpha@example.test")
+        owner_b,csrf_b=self.login(self.b,sub="stage-upload-b",email="beta@example.test")
+        project_a,_=self.provision(owner_a,"alice")
+        project_b,_=self.provision(owner_b,"bob")
+        route="/urano/v1/runtime/projects/"+project_a+"/verified-sources"
+        save=self.a.put("/urano/v1/runtime/projects/"+project_a+"/edits",
+                        base_url=HOST,headers={"Origin":HOST,"X-Urano-CSRF":csrf_a},
+                        json={"expected_revision":0,
+                              "cuts":[{"source_slot":0,"start_ms":0,"end_ms":900}]})
+        self.assertEqual(save.status_code,200)
+        original={"name":"camera.mp4","size":1234,"fingerprint":"a"*64}
+        sources=[{"source_slot":0,"original":original}]
+        self.provenance.register_trusted(owner_a,project_a,sources,stage_revision="b"*64)
+        self.assertEqual(self.a.get(route,base_url=HOST).status_code,200)
+        payload=b"new-private-proxy"*500
+        inbox="/urano/v1/proxy-inbox/projects/"+project_a+"/slots/0"
+        headers={"Origin":HOST,"X-Urano-CSRF":csrf_a,
+                 "X-Urano-Original-Claim":json.dumps(original),
+                 "X-Urano-Proxy-SHA256":hashlib.sha256(payload).hexdigest()}
+        bad=dict(headers,**{"X-Urano-Proxy-SHA256":"0"*64})
+        self.assertEqual(self.a.put(inbox,base_url=HOST,data=payload,
+                         content_type="video/mp4",headers=bad).status_code,422)
+        self.assertEqual(self.a.get(route,base_url=HOST).status_code,200)
+        self.assertEqual(self.b.put(inbox,base_url=HOST,data=payload,
+                         content_type="video/mp4",
+                         headers={**headers,"X-Urano-CSRF":csrf_b}).status_code,404)
+        self.assertEqual(self.a.get(route,base_url=HOST).status_code,200)
+        new=self.a.put(inbox,base_url=HOST,data=payload,
+                       content_type="video/mp4",headers=headers)
+        self.assertEqual(new.status_code,201,new.get_data(as_text=True))
+        self.assertIs(new.json["attested"],False)
+        self.assertEqual(self.a.get(route,base_url=HOST).status_code,409)
+        self.assertEqual(self.b.get(route,base_url=HOST).status_code,409)
+
     def test_unauthenticated_or_unknown_provenance_denied(self):
         self.assertEqual(self.a.get("/urano/v1/runtime/projects/any/verified-sources",
                                     base_url=HOST).status_code,401)
