@@ -151,6 +151,40 @@ const montaraCompanion = (() => {
         return null;
       }
     },
+    /* Opt-in Stage inbox, scoped to current authenticated owner and project.
+       Receipt claims are NOT trusted source attestation on the server.
+       Only proxy bytes travel here; never send original media. */
+    async stagePrivateProxy(projectId, sourceSlot, small, csrf) {
+      if (!/^[a-f0-9-]{36}$/.test(projectId || '') ||
+          !Number.isInteger(sourceSlot) || sourceSlot < 0 || sourceSlot > 15 ||
+          !small?.file || !small?.provenance_receipt ||
+          !small?.original || typeof csrf !== 'string' || !csrf)
+        throw new Error('Missing private proxy identity or session');
+      const receipt = small.provenance_receipt;
+      const original = {
+        name: small.original.name, size: small.original.size,
+        fingerprint: small.original.fingerprint
+      };
+      if (JSON.stringify(original) !== JSON.stringify(receipt.original))
+        throw new Error('Companion proxy receipt does not match original');
+      if (!(small.file instanceof Blob) || small.file.type !== 'video/mp4')
+        throw new Error('Only Companion-produced video proxies can be staged');
+      const response = await fetch(
+        '/urano/v1/proxy-inbox/projects/' + encodeURIComponent(projectId) +
+        '/slots/' + sourceSlot, {
+          method: 'PUT', credentials: 'same-origin', cache: 'no-store',
+          headers: {'Content-Type':'video/mp4', 'X-Urano-CSRF':csrf,
+                    'X-Urano-Proxy-SHA256':receipt.proxy_sha256,
+                    'X-Urano-Original-Claim':JSON.stringify(original),
+                    'Origin':location.origin},
+          body:small.file
+        });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || result.attested !== false ||
+          result.proxy_sha256 !== receipt.proxy_sha256)
+        throw new Error(result.error || 'Private Stage proxy staging failed');
+      return result;  // attested:false; Stage must verify separately.
+    },
     /* One range of an original audio file; resolves to a Blob. 'opus' (Fast, high bitrate) when this
        companion can, otherwise lossless (FLAC, or WavPack for float). */
     canFastSegments() { return Boolean(info?.segment_formats?.includes('opus')); },
