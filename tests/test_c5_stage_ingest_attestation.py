@@ -1,4 +1,4 @@
-"""Trusted Stage proxy attestation is tied to actual normalized bytes."""
+"""Trusted Stage source bytes must match Companion, even when normalization transcodes."""
 import hashlib
 import json
 import tempfile
@@ -24,7 +24,7 @@ class StageIngestAttestation(unittest.TestCase):
         self.engine=self.root/"project.json"
         self.snapshot={
             "stages":{"ingest":{"status":"done"}},
-            "inputs":{"videos":[{"path":str(self.root/"original.mov"),
+            "inputs":{"videos":[{"path":str(self.proxy),
                                 "normalized":{"path":str(self.proxy),"kind":"proxy"}}]}
         }
         self.engine.write_text(json.dumps(self.snapshot))
@@ -62,6 +62,20 @@ class StageIngestAttestation(unittest.TestCase):
         with self.assertRaises(UnverifiedSources):
             self.provenance.verified("owner-a",self.a.id,source_slots={0})
 
+    def test_transcoded_stage_output_is_distinct_but_source_receipt_still_valid(self):
+        normalized=self.root/"transcoded-stage.mp4"
+        normalized.write_bytes(b"stage-transcoded-different-from-companion-proxy")
+        self.snapshot["inputs"]["videos"][0]["normalized"]["path"]=str(normalized)
+        self.engine.write_text(json.dumps(self.snapshot))
+        revision=self.attest()
+        self.assertRegex(revision,r"^[a-f0-9]{64}$")
+        self.assertEqual(self.provenance.verified(
+            "owner-a",self.a.id,source_slots={0})["stage_revision"],revision)
+        # Even if the Stage output exists, its source must not change.
+        self.proxy.write_bytes(b"edited-input-after-transfer")
+        with self.assertRaises(UnverifiedSources):
+            self.attest()
+
     def test_unfinished_ingest_or_missing_normalized_proxy(self):
         self.snapshot["stages"]["ingest"]["status"]="running"
         self.engine.write_text(json.dumps(self.snapshot))
@@ -90,7 +104,7 @@ class StageIngestAttestation(unittest.TestCase):
         second=self.root/"second-proxy.mp4"
         second.write_bytes(b"another-camera-proxy")
         self.snapshot["inputs"]["videos"].append({
-            "path":str(self.root/"second-original.mov"),
+            "path":str(second),
             "normalized":{"path":str(second),"kind":"proxy"}})
         self.engine.write_text(json.dumps(self.snapshot))
         first=dict(self.receipt)
