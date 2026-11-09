@@ -54,8 +54,10 @@ class VideoJobs:
     def runtime(self):
         python=self.home/'venv/bin/python';marker=self.home/'ENGINE_COMMIT'
         if (self.home/'INSTALLING').exists():return None
-        if not python.is_file() or not marker.is_file() or not (self.home/'local_video.py').is_file():return None
-        sha=marker.read_text().strip()
+        if not os.access(python, os.X_OK) or not (self.home/'local_video.py').is_file():return None
+        if not (self.home/'engine/core/stages/export.py').is_file():return None
+        try:sha=marker.read_text().strip()
+        except (OSError, UnicodeError):return None
         return {'engine':sha} if re.fullmatch('[a-f0-9]{40}',sha) else None
 
     def start(self,body,projects,find_original):

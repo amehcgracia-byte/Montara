@@ -1927,28 +1927,36 @@ async function openFrames() {
   if(state.framesPending)pollFrames();
 }
 let framesRequest=null;
-async function refreshFrames(first) {
+async function refreshFrames(first, index) {
   // One request in flight. An interval must not fill all server threads.
-  if(framesRequest){await framesRequest;if(first)return refreshFrames(true);return;}
-  framesRequest=updateFrames(first);
+  if(framesRequest){await framesRequest;if(first)return refreshFrames(true,index);return;}
+  framesRequest=updateFrames(first,index);
   try { return await framesRequest; } finally { framesRequest=null; }
 }
-async function updateFrames(first) {
+async function updateFrames(first,index) {
   const generation=work.generation;
-  const data = await api(`/wizard/review?render=${first ? 1 : 0}`);
+  const data = await api(`/wizard/review?render=${first ? 1 : 0}${Number.isInteger(index) ? "&shot="+index : ""}`);
   if(generation!==work.generation)return;
   const all = data.items || [];
-  if(all.slice(0,3).some(item=>item.thumbnail_status==='failed'))throw new Error('Could not prepare a camera frame. Your project is saved; retry or choose another camera.');
-  let ready=0;
-  for(let first=0;first<all.length;first+=3){
-    const batch=all.slice(first,first+3);
-    if(!batch.every(item=>item.thumbnail && (item.preview_ready || item.preview_error)))break;
-    ready+=batch.length;
+  const stage = (data.platform || state.platform) === 'youtube';
+  if (!stage && all.slice(0,3).some(item=>item.thumbnail_status==='failed'))throw new Error('Could not prepare a camera frame. Your project is saved; retry or choose another camera.');
+  let items = all;
+  const settled = item => item.thumbnail_status === 'failed' ||
+    Boolean(item.thumbnail && (item.preview_ready || item.preview_error));
+  let pending = all.filter(item => !settled(item)).length;
+  if (!stage) {
+    let ready = 0;
+    for (let start=0;start<all.length;start+=3) {
+      const batch = all.slice(start,start+3);
+      if (!batch.every(item => item.thumbnail && (item.preview_ready || item.preview_error))) break;
+      ready += batch.length;
+    }
+    items = all.slice(0,ready);
+    pending = all.length-ready;
   }
-  const items=all.slice(0,ready);
-  const pending=all.length-ready;
+  const ready = all.length-pending;
   state.framesPending=Boolean(pending);
-  if(state.waitingFrames && (ready || !all.length)){
+  if(state.waitingFrames && (stage || ready || !all.length)){
     state.waitingFrames=false;
     show('frames');
   }
@@ -1982,11 +1990,18 @@ async function updateFrames(first) {
     const img = fig.querySelector("img");
     const thumb = fig.querySelector(".thumb");
     fig.classList.toggle("reel-frame",state.platform==='reel');
-    if(item.preview_error){const label=thumb.querySelector(".hover-status");label.textContent="Preview unavailable · Edit to change camera";label.hidden=false;}
     // The thumbnail changes when a shot is swapped: use it to version the preview URL.
     const preview = item.preview || `/api/v1/wizard/review/preview/${item.index}?v=${encodeURIComponent(item.thumbnail || "")}`;
     if (thumb.dataset.preview && thumb.dataset.preview !== preview) { if (frameHover?.thumb === thumb) stopFrameHover(); resetFrameVideo(thumb); }
     thumb.dataset.preview = preview;
+    const unavailable = item.thumbnail_status === 'failed' || item.preview_error;
+    const status = thumb.querySelector(".hover-status");
+    if (unavailable) {
+      status.textContent = "Preview unavailable · Edit to change camera";
+      status.hidden = false;
+    } else if (status.textContent.startsWith("Preview unavailable ·")) {
+      status.hidden = true;
+    }
     const landmark = viewpointName(item);
     const type=item.camera_type || (item.pose && Object.keys(item.pose).length?"360":"moving");
     const label = `${{fixed:"Fixed",moving:"Moving","360":"360"}[type]}${type==="360" && landmark?" · "+landmark:""}`;
@@ -2000,7 +2015,8 @@ async function updateFrames(first) {
     }
     fig.querySelector(".src").textContent=label;
     if(!item.thumbnail)img.hidden=true;
-    fig.classList.toggle("busy", !item.thumbnail || (!item.preview_ready && !item.preview_error) || swapping.has(item.index));
+    if (unavailable) swapping.delete(item.index);
+    fig.classList.toggle("busy", !unavailable && (!item.thumbnail || !item.preview_ready || swapping.has(item.index)));
     fig.querySelector(".dur").textContent = `${Number(item.duration_sec).toFixed(1)} s`;
     fig.querySelector(".swap").disabled = item.candidate_count !== undefined && item.candidate_count < 2;
   }
@@ -2644,11 +2660,18 @@ async function finishOriginalVideo(s) {
       await workRequest(generation,'/wizard/review/render',{});
       startPolling();return;
     }
-    await montaraCompanion.detect();
+    const companion = await montaraCompanion.detect();
     if(job.cancelled)return;
-    if(!montaraCompanion.info?.local_video)throw new Error('Update the Montara companion with the video renderer to export from your originals.');
+    if (!companion || companion.local_video?.engine !== recipe.engine) {
+      const error = new Error(!companion
+        ? 'Montara could not reach Companion. Open it and allow local network access if your browser asks.'
+        : !companion.local_video
+          ? 'Companion is running, but its original-quality video renderer is unavailable.'
+          : 'This edit requires a different version of the Companion video renderer.');
+      error.companion = {needsUpdate: Boolean(companion), retry: () => finishOriginalVideo(s)};
+      throw error;
+    }
     renderShotBars({tasks:recipe.segments.map((_,i)=>({id:`segment-${i+1}`,label:`Shot ${i+1}/${recipe.segments.length}`,percent:0}))});
-    if(recipe.engine!==montaraCompanion.info.local_video.engine)throw new Error('The companion needs the same editor version as this page. Update it before exporting.');
     if(!state.localProject)state.localProject=await montaraCompanion.projectFolder($('#videoName').value.trim()||todayName(),state.files.filter(f=>f.original).map(f=>f.original));
     if(job.cancelled)return;
     if(!state.localProject)throw new Error('Choose a project folder to save the original-quality video.');
@@ -2807,6 +2830,17 @@ function fail(error) {
   if(error instanceof WorkCancelled)return;
   stopPolling();
   $("#errorText").textContent = error.message;
+  const recovery = $("#companionRecovery");
+  recovery.hidden = !error.companion;
+  if (error.companion) {
+    const download = $("#companionRecoveryDownload");
+    download.hidden = !isDesktopMac;
+    download.textContent = error.companion.needsUpdate ? "Download Companion update" : "Download Companion for Mac";
+    $("#companionRecoveryHelp").textContent = isDesktopMac
+      ? "Unzip the download and open Install Montara Companion. If updating, wait for local work to finish and close Companion first."
+      : "Ask your Montara administrator for the matching video renderer for this computer.";
+    $("#companionRecoveryRetry").onclick = error.companion.retry;
+  }
   show("failed");
 }
 

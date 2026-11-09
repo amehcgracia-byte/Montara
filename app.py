@@ -244,22 +244,42 @@ def create_montara_app(data_root: Path = DEFAULT_DATA, samples: bool = True):
 
     @app.get("/montara/companion/download")
     def montara_companion_download():
-        """Zip for macOS: double-click 'Install Montara Companion.command' (executable bit kept)."""
+        """Provide a macOS installer pinned to this exact Montara release."""
         import io
+        import re
         import zipfile
         from flask import send_file
-        folder = ROOT / "companion"
+
+        def release_sha(variable, folder):
+            value = os.environ.get(variable)
+            if not value:
+                value = subprocess.check_output(
+                    ['git', '-C', str(folder), 'rev-parse', 'HEAD'],
+                    text=True, stderr=subprocess.DEVNULL, timeout=5,
+                ).strip()
+            if not re.fullmatch(r'[a-f0-9]{40}', value):
+                raise ValueError("Missing full release SHA")
+            return value
+
+        try:
+            source = release_sha("MONTARA_BUILD_SHA", ROOT)
+            engine = release_sha("MONTARA_ENGINE_SHA", ENGINE)
+        except (OSError, subprocess.SubprocessError, ValueError):
+            return jsonify(error="This Montara build has no versioned Companion installer."), 503
+
         buffer = io.BytesIO()
         with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
-            for name, mode in (("Install Montara Companion.command", 0o755), ("companion.py", 0o644), ("video_jobs.py", 0o644), ("video_recipe.py", 0o644), ("README.md", 0o644)):
+            for name, mode in (("Install Montara Companion.command", 0o755), ("install.sh", 0o644)):
                 info = zipfile.ZipInfo(f"Montara Companion/{name}")
+                info.create_system = 3
                 info.external_attr = (0o100000 | mode) << 16
                 info.compress_type = zipfile.ZIP_DEFLATED
-                archive.writestr(info, (folder / name).read_bytes())
-            engine_sha = subprocess.check_output(['git','-C',str(ENGINE),'rev-parse','HEAD'],text=True).strip()
-            archive.writestr('Montara Companion/EDITOR_COMMIT', engine_sha+'\n')
+                archive.writestr(info, (ROOT / "companion" / name).read_bytes())
+            archive.writestr('Montara Companion/SOURCE_COMMIT', source + '\n')
+            archive.writestr('Montara Companion/EDITOR_COMMIT', engine + '\n')
         buffer.seek(0)
-        return send_file(buffer, mimetype="application/zip", as_attachment=True, download_name="Montara Companion.zip")
+        return send_file(buffer, mimetype="application/zip", as_attachment=True,
+                         download_name=f"Montara Companion-{source[:8]}.zip", max_age=0)
     _apply_branding(str(load_global_config().get("montara_branding_mode") or "montara"), data_root)
 
     @app.get("/montara/samples")

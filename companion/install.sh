@@ -35,6 +35,22 @@ if ! command -v ffmpeg >/dev/null 2>&1 && [ ! -x /opt/homebrew/bin/ffmpeg ] && [
 fi
 say "ffmpeg: ok"
 
+if [ "${MONTARA_REQUIRE_CLOSED:-0}" = 1 ]; then
+  if ! command -v lsof >/dev/null 2>&1; then
+    say "Could not check whether Companion is running."; exit 1
+  fi
+  if lsof -t -iTCP:47820 -sTCP:LISTEN >/dev/null 2>&1; then
+    say "Wait for Montara work to finish, quit Companion, then reopen this installer."
+    exit 1
+  fi
+fi
+if [ -n "${MONTARA_EXPECTED_ENGINE:-}" ]; then
+  expected="$(curl -fsSL "https://api.github.com/repos/amehcgracia-byte/Montara/contents/engine?ref=$REF" | "$PY" -c 'import json,sys; print(json.load(sys.stdin)["sha"])')"
+  if [ "$expected" != "$MONTARA_EXPECTED_ENGINE" ]; then
+    say "The installer does not match the Editor version on this page."; exit 1
+  fi
+fi
+
 # Do not replace code underneath a local mix, proxy or video render.
 if command -v lsof >/dev/null 2>&1; then
   for listener in $(lsof -t -iTCP:47820 -sTCP:LISTEN 2>/dev/null || true); do
@@ -46,6 +62,9 @@ if command -v lsof >/dev/null 2>&1; then
       *"$DIR/companion.py"*) ;;
       *) say "Port 47820 belongs to another application; nothing was replaced."; exit 1 ;;
     esac
+    if [ "${MONTARA_REQUIRE_CLOSED:-0}" = 1 ]; then
+      say "Companion started during setup. Wait for work to finish and quit it first."; exit 1
+    fi
     say "Stopping the idle Companion before updating…"
     kill -TERM "$listener"
     for attempt in $(seq 50); do
@@ -119,23 +138,48 @@ if [ "${1:-}" = "--video" ] || [ "${MONTARA_VIDEO:-}" = "1" ]; then
     VPY="$(brew --prefix python@3.11)/bin/python3.11"
   fi
   [ -n "$VPY" ] || { say "The video renderer needs Python 3.10–3.12. Install Python 3.11, then run this installer with --video."; exit 1; }
-  SHA="$(curl -fsSL "https://api.github.com/repos/amehcgracia-byte/Montara/contents/engine?ref=$REF" | "$VPY" -c 'import json,sys; print(json.load(sys.stdin)["sha"])')"
-  mkdir -p "$VIDEO/brand"
-  touch "$VIDEO/INSTALLING"
-  rm -rf "$VIDEO/engine.new" && mkdir -p "$VIDEO/engine.new"
-  curl -fsSL "https://codeload.github.com/amehcgracia-byte/zucker_videos/tar.gz/$SHA" | tar -xz -C "$VIDEO/engine.new" --strip-components=1
-  rm -rf "$VIDEO/engine" && mv "$VIDEO/engine.new" "$VIDEO/engine"
-  for f in local_video.py video_recipe.py; do curl -fsSL "$RAW/$f" -o "$VIDEO/$f"; done
-  for f in montara-logo.png montara-watermark.png; do curl -fsSL "$ROOT_RAW/web/brand/$f" -o "$VIDEO/brand/$f"; done
+  SHA="${expected:-$(curl -fsSL "https://api.github.com/repos/amehcgracia-byte/Montara/contents/engine?ref=$REF" | "$VPY" -c 'import json,sys; print(json.load(sys.stdin)["sha"])')}"
+  [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || { say "Invalid Editor version."; exit 1; }
+  mkdir -p "$VIDEO"
+  stage=$(mktemp -d "$VIDEO/.update.XXXXXXXX")
+  trap 'rm -rf "$stage"' EXIT
+  mkdir -p "$stage/engine" "$stage/brand"
+  curl -fsSL "https://codeload.github.com/amehcgracia-byte/zucker_videos/tar.gz/$SHA" | tar -xz -C "$stage/engine" --strip-components=1
+  for f in local_video.py video_recipe.py; do curl -fsSL "$RAW/$f" -o "$stage/$f"; done
+  for f in montara-logo.png montara-watermark.png; do curl -fsSL "$ROOT_RAW/web/brand/$f" -o "$stage/brand/$f"; done
   [ -x "$VIDEO/venv/bin/python" ] || "$VPY" -m venv "$VIDEO/venv"
   "$VIDEO/venv/bin/python" -m pip install -q 'numpy>=1.26,<2' 'scipy>=1.11,<1.15' 'opencv-python-headless>=4.9,<4.12' 'pillow>=10' 'flask>=3'
-  (cd "$VIDEO/engine" && ZUCKER_DATA_ROOT="$VIDEO/state" "$VIDEO/venv/bin/python" -c 'from core.stages.export import ExportStage')
-  echo "$SHA" > "$VIDEO/ENGINE_COMMIT"
+  (cd "$stage/engine" && ZUCKER_DATA_ROOT="$stage/smoke" "$VIDEO/venv/bin/python" -c 'from core.stages.export import ExportStage')
+  printf '%s\n' "$SHA" > "$stage/ENGINE_COMMIT"
+  if [ "${MONTARA_REQUIRE_CLOSED:-0}" = 1 ] && lsof -t -iTCP:47820 -sTCP:LISTEN >/dev/null 2>&1; then
+    say "Companion started during setup. Wait for work to finish and quit it first."; exit 1
+  fi
+  touch "$VIDEO/INSTALLING"
+  if [ -d "$VIDEO/engine" ] || [ -d "$VIDEO/brand" ]; then
+    previous=$(mktemp -d "$VIDEO/.previous.XXXXXXXX")
+    for f in engine ENGINE_COMMIT local_video.py video_recipe.py brand; do
+      [ ! -e "$VIDEO/$f" ] || mv "$VIDEO/$f" "$previous/$f"
+    done
+  fi
+  for f in engine local_video.py video_recipe.py brand ENGINE_COMMIT; do mv "$stage/$f" "$VIDEO/$f"; done
   rm -f "$VIDEO/INSTALLING"
+  rm -rf "$stage"
+  trap - EXIT
   say "Original-quality video renderer ready (editor ${SHA:0:7})"
 fi
 
-say "installed in $DIR · next time just type:  montara-companion"
+if [ "${MONTARA_REQUIRE_CLOSED:-0}" = 1 ]; then
+  mkdir -p "$HOME/Applications"
+  cat > "$HOME/Applications/Montara Companion.command" <<'EOF'
+#!/bin/bash
+export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+exec "$HOME/.montara-companion/bin/montara-companion"
+EOF
+  chmod +x "$HOME/Applications/Montara Companion.command"
+  say "Installed. Next time, open Montara Companion from Spotlight."
+else
+  say "installed in $DIR · next time just type:  montara-companion"
+fi
 echo
 if [ "${MONTARA_BACKGROUND:-0}" = 1 ]; then
   nohup "$PY" "$DIR/companion.py" > "$DIR/companion.log" 2>&1 < /dev/null &

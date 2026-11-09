@@ -50,7 +50,7 @@ const montaraCompanion = (() => {
     get info() { return info; },
     async detect() {
       try {
-        const response = await call('/health', {}, 1200);
+        const response = await call('/health', {cache: 'no-store'}, 2500);
         const data = await response.json();
         info = response.ok && data.app === 'montara-companion' && data.ffmpeg ? data : null;
       } catch { info = null; }
