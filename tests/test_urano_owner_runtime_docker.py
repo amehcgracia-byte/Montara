@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 import json
 import hashlib
+import hmac
 import time
 import subprocess
 import tempfile
@@ -30,6 +31,8 @@ from urano.owner_runtime_controller import OwnerRuntimeController
 from urano.project_catalog import ProjectCatalog
 from urano.runtime_activation import RuntimeActivationGuard
 from urano.session_auth import SESSION_COOKIE, SessionStore
+from urano.companion_receipt_auth import CompanionReceiptVerifier
+from urano.stage_source_provenance import StageSourceProvenance, UnverifiedSources
 
 ORIGIN = "https://lab.example.test"
 
@@ -154,6 +157,19 @@ class OwnerSessionToRealEngine(unittest.TestCase):
         """
         inbox=self.root/"private-proxy-inbox"
         inbox.mkdir()
+        # Operator-paired, owner-specific HMAC keys on the disposable runner.
+        # This is synthetic signed identity; the actual Companion signer is
+        # tested separately in test_c5_companion_proxy_receipt.py.
+        keys={}
+        for person in ("alice","bob"):
+            secret=self.root/(person+"-pairing.key")
+            secret.write_bytes(os.urandom(32))
+            secret.chmod(0o600)
+            keys[self.bridges[person].owner_id]=secret
+        verifier=CompanionReceiptVerifier(keys)
+        provenance=StageSourceProvenance(self.root/"provenance.sqlite3",self.catalog)
+        self.controller.configure_trusted_attestation(
+            provenance,inbox,container_workspace=Path("/workspace"))
         digests={}
         for person in ("alice","bob"):
             workspace=self.root/person
@@ -176,11 +192,22 @@ class OwnerSessionToRealEngine(unittest.TestCase):
             directory=inbox/hashlib.sha256(owner.encode()).hexdigest()/project_id
             directory.mkdir(parents=True,mode=0o700)
             (directory/f"slot-0-{digest}.mp4").write_bytes(camera.read_bytes())
+            original={"name":person+".mp4","size":camera.stat().st_size,
+                      "fingerprint":digest}
+            unsigned={"schema":"montara-companion-proxy-receipt-v1",
+                      "project_id":project_id,"source_slot":0,
+                      "original":original,"proxy_sha256":digest}
+            message=json.dumps(unsigned,sort_keys=True,separators=(",",":"),
+                               ensure_ascii=True).encode()
+            sig=hmac.new(keys[owner].read_bytes(),message,hashlib.sha256).hexdigest()
+            authenticated=verifier.verify(owner,project_id,0,digest,original,
+                                         {"receipt":unsigned,"signature":sig})
+            self.assertTrue(authenticated["receipt_authenticated"])
             (directory/f"slot-0-{digest}.json").write_text(json.dumps({
                 "source_slot":0,"proxy_sha256":digest,
-                "original_claim":{"name":person+".mp4","size":camera.stat().st_size,
-                                  "fingerprint":digest},
-                "attested":False,"bytes":camera.stat().st_size,"receipt_authenticated":False}))
+                "original_claim":original,
+                "attested":False,"bytes":camera.stat().st_size,
+                "receipt_authenticated":True}))
         self.assertNotEqual(digests["alice"],"")
         self.assertEqual(self.activate("alice",self.project_ids["bob"]).status_code,404)
         with ThreadPoolExecutor(max_workers=2) as pool:
@@ -252,8 +279,19 @@ class OwnerSessionToRealEngine(unittest.TestCase):
                 if status=="done":done.add(person)
             time.sleep(.5)
         self.assertEqual(done,{"alice","bob"})
-        # Receipts were browser claims, not attested provenance.
-        self.assertFalse(any(self.root.rglob("provenance.sqlite3")))
+        # A real Engine DONE now drives the operator-only final certificate.
+        # None of this flow can be triggered by an arbitrary browser claim.
+        for person in ("alice","bob"):
+            bridge=self.bridges[person]
+            verified=provenance.verified(
+                bridge.owner_id,self.project_ids[person],source_slots={0})
+            self.assertEqual(verified["sources"][0]["original"]["name"],
+                             person+".mp4")
+            self.assertRegex(verified["stage_revision"],r"^[a-f0-9]{64}$")
+        with self.assertRaises(Exception):
+            provenance.verified(
+                self.bridges["alice"].owner_id,self.project_ids["bob"],
+                source_slots={0})
         self.assertEqual(self.close("alice").status_code,200)
         self.assertEqual(self.close("bob").status_code,200)
 
