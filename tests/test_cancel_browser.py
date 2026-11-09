@@ -70,7 +70,7 @@ def test_result_download_uses_project_not_internal_filename(site):
 
 
 @pytest.mark.parametrize('rejected',[False,True])
-def test_native_cancel_waits_for_late_job_id_and_keeps_shot_bars(site,rejected):
+def test_native_cancel_waits_for_late_job_id_without_premature_shot_bars(site,rejected):
     with sync_playwright() as p:
         browser=p.chromium.launch();page=browser.new_page()
         page.route('http://127.0.0.1:47820/health',lambda route:route.fulfill(headers={'Access-Control-Allow-Origin':'*'},json={'app':'montara-companion','ffmpeg':True,'local_video':{'engine':'a'*40}}))
@@ -90,8 +90,9 @@ def test_native_cancel_waits_for_late_job_id_and_keeps_shot_bars(site,rejected):
           void finishOriginalVideo({result:{}});
         }""")
         page.wait_for_function('!!window.releaseNative')
-        assert page.locator('#renderBars i').count()==3
-        assert page.locator('#renderBars').is_visible()
+        # Segment tasks exist, but no frame work started: bars stay hidden.
+        assert page.locator('#renderBars i').count()==0
+        assert page.locator('#renderBars').is_hidden()
         page.locator('#cancel').click();page.wait_for_timeout(100)
         assert page.evaluate('cancelledJobs.length')==0
         page.evaluate('bad=>releaseNative(bad)',rejected)
