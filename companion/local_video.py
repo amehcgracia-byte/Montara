@@ -35,7 +35,8 @@ def run(manifest):
     p=create_project('Montara original quality',str(root/'edit.zuckervid'))
     sources={int(k):Path(v) for k,v in body['source_files'].items()}
     records=[]
-    for key,path in sources.items():
+    for source_index,(key,path) in enumerate(sources.items(),1):
+        update(0,f'Checking local camera metadata {source_index}/{len(sources)}')
         expected=body.get('verified_originals',{}).get(str(key))
         if expected:
             with path.open('rb') as handle:
@@ -65,8 +66,10 @@ def run(manifest):
         s['camera_id']=_camera_id_from_render_path(s)
         if s['clip_start_sec']+s['duration_sec']*s.get('playback_speed',1.0)>float(r['probe']['duration'])+.15:raise ValueError('The original does not cover the shot at this playback speed')
         segments.append(s)
+    update(0,'Preparing reviewed shot plan for original-quality export')
     p.save();atomic_write_json(p.artifacts_dir/'edit_plan.json',{'platform':'youtube','segments':segments})
     atomic_write_json(p.artifacts_dir/'coverage.json',{'platform':'youtube','sources':[],'segments':segments})
+    update(0,'Starting original-quality frame rendering')
     ExportStage().run(p,update)
     outputs=sorted(p.exports_dir.glob('*.mp4'),key=lambda v:v.stat().st_mtime)
     if not outputs:raise RuntimeError('No final video was produced')
