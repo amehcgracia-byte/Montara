@@ -5,6 +5,7 @@ filesystem paths, Google mocks, or an unverified owner identifier.
 """
 from __future__ import annotations
 
+from pathlib import Path
 from flask import Blueprint, Response, jsonify, request
 from urano.session_auth import SESSION_COOKIE, SessionStore
 from urano.project_catalog import ProjectCatalog, ProjectNotFound
@@ -112,9 +113,15 @@ button:disabled{opacity:.5;cursor:not-allowed}p,small{color:#b0bfd0}#status[role
 <button type="submit">Guardar corte</button></form>
 <p id="edits-status" role="status" aria-live="polite"></p>
 <ol id="cuts" aria-label="Cortes guardados"></ol>
+<h3>Originales en este ordenador</h3>
+<p>Selecciona los mismos vídeos originales utilizados en el proyecto, en el orden de cámaras. Solo se consultará a Companion en tu ordenador.</p>
+<input id="local-originals" type="file" accept="video/*,.mov,.mp4,.mkv,.mts,.m4v,.avi,.webm" multiple>
+<button id="verify-originals" type="button">Verificar originales en Companion</button>
+<p id="originals-status" role="status" aria-live="polite"></p>
 <button id="handoff" type="button">Comprobar descriptor para Companion</button>
 <p id="handoff-status" role="status" aria-live="polite"></p>
 </section>
+<script defer src="/urano/v1/companion-client.js"></script>
 <script defer src="/urano/v1/workspace.js"></script></body></html>"""
 
 WORKSPACE_SCRIPT = """'use strict';
@@ -213,6 +220,24 @@ document.querySelector('#handoff').addEventListener('click', async () => {
       ' cortes. Companion debe reconocer los originales locales antes de exportar.';
   } catch(e){target.textContent=e.message;}
 });
+document.querySelector('#verify-originals').addEventListener('click',async event => {
+  const button=event.currentTarget;
+  const target=document.querySelector('#originals-status');
+  const files=[...document.querySelector('#local-originals').files];
+  if(!files.length){target.textContent='Selecciona al menos un original';return;}
+  button.disabled=true;
+  try {
+    if(typeof montaraCompanion==='undefined') throw Error('Companion no está disponible');
+    let verified=0;
+    for(let i=0;i<files.length;i++){
+      const result=await montaraCompanion.verifyLocalOriginal(files[i]);
+      if(!result.located) throw Error('Companion no encuentra el original de cámara '+i+': '+files[i].name);
+      verified++;
+    }
+    target.textContent='Companion reconoce '+verified+' original(es) localmente. Todavía falta confirmar su vínculo con los proxies de Stage.';
+  }catch(e){target.textContent=e.message;}
+  finally{button.disabled=false;}
+});
 update();
 loadEdits().catch(e=>{editStatus.textContent=e.message;});"""
 
@@ -258,6 +283,17 @@ def owner_dashboard_blueprint(sessions: SessionStore, *, https_origin: str,
             response = Response(WORKSPACE_PAGE, content_type="text/html; charset=utf-8")
             response.headers["Content-Security-Policy"] = "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'"
             response.headers["X-Frame-Options"] = "DENY"
+            response.headers["Cache-Control"] = "no-store"
+            response.headers["X-Content-Type-Options"] = "nosniff"
+            return response
+
+        @bp.get("/companion-client.js")
+        def companion_client():
+            # Read the one existing client implementation. Do not fork it into a
+            # separate editor: this endpoint only serves the authenticated page.
+            client_path = Path(__file__).resolve().parents[1] / "web" / "companion.js"
+            response = Response(client_path.read_text(encoding="utf-8"),
+                                content_type="application/javascript; charset=utf-8")
             response.headers["Cache-Control"] = "no-store"
             response.headers["X-Content-Type-Options"] = "nosniff"
             return response
