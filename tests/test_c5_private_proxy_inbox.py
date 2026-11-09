@@ -78,6 +78,16 @@ class TestC5PrivateProxyInbox(TestC4OwnerDashboard):
         self.assertIn("stagePrivateProxy(projectId, sourceSlot, small, csrf)",js)
         self.assertIn("result.attested !== false",js)
 
+    def test_proxy_stream_can_exceed_small_json_limit_without_becoming_original_upload(self):
+        self.login(self.a,"proxy-large","alpha@example.test")
+        project=self.setup_project(self.a)
+        csrf=self.csrf(self.a)
+        video=b"proxy-data"*48000  # 480 KiB, above the default 300 KB JSON cap
+        result=self.send_proxy(self.a,project,video,csrf=csrf,slot=2)
+        self.assertEqual(result.status_code,201,result.get_data(as_text=True))
+        self.assertIs(result.json["attested"],False)
+        self.assertEqual(result.json["bytes"],len(video))
+
     def test_disabled_by_default_and_no_original_upload(self):
         plain=create_owner_api(self.root,
             settings=OIDCSettings(CLIENT,"fake-secret-do-not-use",CALLBACK,
