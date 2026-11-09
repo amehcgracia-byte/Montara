@@ -7,6 +7,7 @@ const AUDIO_NAME = /\.(wav|mp3|m4a|aiff?|flac|ogg|opus|wv)$/i;
 const partLane = file => partLanes[AUDIO_NAME.test(file.name) ? 'audio' : 'video'];
 async function sendResumableUpload(file, progress, registered = () => {}, cancelled = () => false, extra = {}) {
   const lane = partLane(file);
+  const transferTiming = {started: performance.now(), prepared: null, uploaded: null};
   if (lane.active >= PART_LANE_LIMIT) await new Promise(resolve => lane.waiting.push(resolve));
   else lane.active += 1;
   const stopIfCancelled = () => { if (cancelled()) throw new Error('Upload removed.'); };
@@ -19,6 +20,8 @@ async function sendResumableUpload(file, progress, registered = () => {}, cancel
     let job = await api('/montara/uploads', {...extra, name: file.name, size: file.size, fingerprint});
     registered(job.id);
     let offset = job.received;
+    const startingOffset = offset;
+    transferTiming.prepared = performance.now();
     progress(offset / file.size);
     while (!job.complete && offset < file.size) {
       stopIfCancelled();
@@ -40,8 +43,21 @@ async function sendResumableUpload(file, progress, registered = () => {}, cancel
       progress(offset / file.size);
     }
     stopIfCancelled();
+    transferTiming.uploaded = performance.now();
     progress(1, 'Preparing file');
-    return await api(`/montara/uploads/${job.id}/finish`, {});
+    const completed = await api(`/montara/uploads/${job.id}/finish`, {});
+    const finished = performance.now();
+    const uploadSec = (transferTiming.uploaded - transferTiming.prepared) / 1000;
+    console.info('[Montara upload timing]', {
+      step: 'server transfer',
+      setup_sec: +((transferTiming.prepared - transferTiming.started) / 1000).toFixed(2),
+      upload_sec: +uploadSec.toFixed(2),
+      finalize_sec: +((finished - transferTiming.uploaded) / 1000).toFixed(2),
+      total_sec: +((finished - transferTiming.started) / 1000).toFixed(2),
+      transferred_mib: +((file.size - startingOffset) / 1048576).toFixed(1),
+      throughput_mib_sec: +(((file.size - startingOffset) / 1048576) / Math.max(uploadSec, .001)).toFixed(2)
+    });
+    return completed;
   } finally {
     const next = lane.waiting.shift();
     if (next) next(); else lane.active -= 1;
