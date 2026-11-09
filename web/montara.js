@@ -2656,17 +2656,29 @@ async function finishOriginalVideo(s) {
     const candidates = [...state.files, ...savedOriginals];
     const identities = new Map();
     const unavailable = [];
-    for (const source of recipe.sources) {
+    // Verify up to two independent camera originals concurrently. This only
+    // runs identity/HEAD checks: never fetch full source bodies in parallel.
+    let checkedSources = 0;
+    const verifySources = async (source) => {
+      if (job.cancelled) return;
       const original = NativeExport.originalFor(source, candidates);
       identities.set(source.key, original);
+      let missing = false;
       if (original) {
-        if (!await montaraCompanion.locateOriginal(original)) unavailable.push(source.key);
-      } else if (source.preview || /\.small\.mp4$/i.test(source.path) || state.files.some(f=>f.path===source.path && f.small)) unavailable.push(source.key);
-      else {
+        missing = !(await montaraCompanion.locateOriginal(original));
+      } else if (source.preview || /\.small\.mp4$/i.test(source.path) || state.files.some(f=>f.path===source.path && f.small)) {
+        missing = true;
+      } else {
         const checked = await fetch('/api/v1/edit/native-source/'+source.key+'?'+new URLSearchParams({revision:recipe.revision,project_id:state.projectId}), {method:'HEAD'});
-        if ([400,404,410].includes(checked.status)) unavailable.push(source.key);
-        else if (!checked.ok) throw new Error('Could not check this edit’s originals. Reopen the edit and retry.');
+        missing = [400,404,410].includes(checked.status);
+        if (!missing && !checked.ok) throw new Error('Could not check this edit’s originals. Reopen the edit and retry.');
       }
+      if (missing) unavailable.push(source.key);
+      checkedSources += 1;
+      if (!job.cancelled) setProgress(0,'Finding original camera files…',`Checked ${checkedSources} of ${recipe.sources.length} sources`);
+    };
+    for (let index=0;index<recipe.sources.length;index+=2) {
+      await Promise.all(recipe.sources.slice(index,index+2).map(verifySources));
       if (job.cancelled) return;
     }
     const planned = NativeExport.plan(recipe, unavailable);
@@ -2675,7 +2687,10 @@ async function finishOriginalVideo(s) {
     job.diagnostics = planned.diagnostics;
     if (planned.diagnostics.length) toast(NativeExport.warnings(planned.diagnostics).join(' '), true);
     const sources=[];
+    let transferredSources=0;
     for(const source of recipe.sources){
+      if(job.cancelled)return;
+      setProgress(0,'Connecting original camera files…',`Source ${transferredSources+1} of ${recipe.sources.length} · ${identities.get(source.key)?'Checking local original':'Preparing server fallback'}`);
       const original = identities.get(source.key);
       const file=state.files.find(f=>f.path===source.path);
       if(original)sources.push({source:source.key,original});
@@ -2689,9 +2704,10 @@ async function finishOriginalVideo(s) {
         const name='montara-render-source-'+crypto.randomUUID().replaceAll('-','')+'.mp4';
         await montaraCompanion.saveInProject(state.localProject.id,name,await response.blob());sources.push({source:source.key,asset:name});
       }
+      transferredSources++;
       if(job.cancelled)return;
     }
-    setProgress(1,'Preparing your master…','');
+    setProgress(1,'Preparing your master…','Copying the audio master to Companion');
     const response=await fetch('/api/v1/edit/native-master?'+new URLSearchParams({revision:recipe.revision,project_id:state.projectId}));
     if(!response.ok)throw new Error('The master is not available for this edit.');
     const master='montara-render-audio-'+crypto.randomUUID().replaceAll('-','')+'.audio';
