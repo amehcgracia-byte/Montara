@@ -608,6 +608,22 @@ def save_projects() -> None:
 
 
 # ---------- HTTP ----------
+def trusted_signed_receipt_origin(origin: str) -> bool:
+    """A paired Companion never signs receipts for a generic Vercel preview.
+
+    An exact HTTPS beta origin must be provisioned by the operator. The broad
+    legacy CORS allowlist remains available for non-sensitive Companion APIs,
+    but it cannot authorize signing for an unrelated project/domain.
+    """
+    expected = os.environ.get("MONTARA_COMPANION_BETA_ORIGIN", "")
+    if not isinstance(origin, str) or not expected or origin != expected:
+        return False
+    parsed = urlsplit(expected)
+    return bool(parsed.scheme == "https" and parsed.hostname
+                and not parsed.username and not parsed.password
+                and not parsed.path and not parsed.query and not parsed.fragment)
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = f"MontaraCompanion/{VERSION}"
 
@@ -637,8 +653,13 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def do_OPTIONS(self):
-        self.send_response(204 if self.origin_ok() else 403)
-        self.cors(self.origin_ok())
+        signed = re.fullmatch(
+            r"/proxies/[a-f0-9]{24}/signed-receipt(?:\?.*)?", self.path)
+        allowed = self.origin_ok()
+        if signed and not trusted_signed_receipt_origin(self.headers.get("Origin", "")):
+            allowed = None
+        self.send_response(204 if allowed else 403)
+        self.cors(allowed)
         self.send_header("Content-Length", "0")
         self.end_headers()
 
@@ -685,6 +706,10 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlsplit(self.path)
         signed_match = re.fullmatch(r"/proxies/([a-f0-9]{24})/signed-receipt", parsed.path)
         if signed_match:
+            # Explicit private beta binding: an origin matched by the broad
+            # legacy regex is NOT sufficient to obtain an HMAC receipt.
+            if not trusted_signed_receipt_origin(self.headers.get("Origin", "")):
+                return self.reply(403, {"error": "Paired beta origin required"})
             params = parse_qs(parsed.query, keep_blank_values=True)
             project = params.get("project_id", [])
             slot = params.get("slot", [])
