@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from pathlib import Path
 
 from urano.stage_source_provenance import StageSourceProvenance, UnverifiedSources, _canonical_sources
@@ -97,3 +98,84 @@ def attest_stage_ingest(
     provenance.register_trusted(
         owner_id, project_id, identity, stage_revision=stage_revision)
     return stage_revision
+
+
+def attest_authenticated_inbox(
+    provenance: StageSourceProvenance,
+    bindings: "EngineProjectRegistry", inbox_root: Path,
+    owner_id: str, project_id: str, *,
+    engine_project_file: Path,
+) -> str:
+    """Operator-only final attestation after real Stage Ingest has reached DONE.
+
+    A true receipt_authenticated flag can ONLY be written by the private inbox
+    after verifying the Companion's operator-provisioned HMAC. This function
+    does not expose an HTTP endpoint and never trusts the original_claim alone.
+    Both the Engine snapshot and each input must belong to the owner's binding.
+    """
+    from urano.engine_bindings import EngineProjectRegistry
+    if not isinstance(bindings, EngineProjectRegistry):
+        raise UnverifiedSources("Trusted Engine binding required")
+    root = bindings.resolve_internal(owner_id, project_id)
+    expected_project = root / "project.json"
+    if (Path(engine_project_file).resolve() != expected_project.resolve()
+            or Path(engine_project_file).is_symlink()):
+        raise UnverifiedSources("Stage project is not bound to owner")
+    owner_dir = Path(inbox_root) / hashlib.sha256(owner_id.encode()).hexdigest()
+    folder = owner_dir / project_id
+    if (Path(inbox_root).is_symlink() or owner_dir.is_symlink()
+            or folder.is_symlink() or not folder.is_dir()):
+        raise UnverifiedSources("Private Companion receipts unavailable")
+    try:
+        state = json.loads(expected_project.read_text(encoding="utf-8"))
+        videos = state["inputs"]["videos"]
+    except (OSError, KeyError, ValueError, TypeError) as exc:
+        raise UnverifiedSources("Engine source catalog unavailable") from exc
+    if not isinstance(videos, list) or not 1 <= len(videos) <= 16:
+        raise UnverifiedSources("Missing Stage sources")
+    receipts = []
+    for slot, video in enumerate(videos):
+        # The worker registers only this exact source name after integrity
+        # checking. Do not infer authenticity from matching camera names.
+        if not isinstance(video, dict) or not isinstance(video.get("path"), str):
+            raise UnverifiedSources("Stage camera source missing")
+        source = Path(video["path"])
+        pattern = re.fullmatch(
+            r"camera-" + str(slot) + r"-([a-f0-9]{64})\.mp4",
+            source.name)
+        if not pattern:
+            raise UnverifiedSources("Stage source is not a trusted proxy")
+        digest = pattern.group(1)
+        expected_input = root / "inputs" / "urano-staged-proxies" / source.name
+        if source != expected_input or source.is_symlink():
+            raise UnverifiedSources("Engine source outside certified workspace")
+        manifest = folder / f"slot-{slot}-{digest}.json"
+        staged = folder / f"slot-{slot}-{digest}.mp4"
+        if any(p.is_symlink() or not p.is_file() for p in (manifest, staged)):
+            raise UnverifiedSources("Authenticated receipt files missing")
+        if manifest.stat().st_size > 4096:
+            raise UnverifiedSources("Unexpected receipt size")
+        try:
+            entry = json.loads(manifest.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            raise UnverifiedSources("Invalid receipt record") from exc
+        if (not isinstance(entry, dict) or
+                set(entry) != {"source_slot", "proxy_sha256", "original_claim",
+                               "attested", "bytes", "receipt_authenticated"} or
+                type(entry["source_slot"]) is not int or entry["source_slot"] != slot or
+                entry["proxy_sha256"] != digest or
+                entry["attested"] is not False or
+                entry["receipt_authenticated"] is not True or
+                type(entry["bytes"]) is not int or
+                entry["bytes"] <= 0 or staged.stat().st_size != entry["bytes"]):
+            raise UnverifiedSources("Unauthenticated or inconsistent Companion receipt")
+        check = hashlib.sha256()
+        with staged.open("rb") as reader:
+            for block in iter(lambda: reader.read(1024 * 1024), b""):
+                check.update(block)
+        if check.hexdigest() != digest:
+            raise UnverifiedSources("Companion staged proxy was altered")
+        receipts.append({"source_slot": slot, "proxy_sha256": digest,
+                         "original": entry["original_claim"]})
+    return attest_stage_ingest(provenance, owner_id, project_id,
+                               engine_project_file=expected_project, receipts=receipts)
