@@ -414,6 +414,41 @@ def proxy_cache_valid(key, target):
         return False
 
 
+def video_proxy_receipt(key: str) -> dict:
+    """Read-only receipt computed on local files after successful proxy creation.
+
+    A receipt is evidence from the local Companion, NOT a server-trusted
+    attestation by itself. The upload/ingest service must authenticate its
+    transport and verify the same proxy bytes before certification.
+    """
+    if not isinstance(key, str) or not re.fullmatch(r"[a-f0-9]{24}", key):
+        raise ValueError("Invalid proxy identity")
+    job = jobs.get(key)
+    source = sources.get(key)
+    target = output_path(key)
+    if (not job or job.get("status") != "ready" or source is None
+            or not source.is_file() or source.is_symlink()
+            or is_audio(source) or not proxy_cache_valid(key, target)
+            or target.is_symlink()):
+        raise ValueError("Proxy and original are not available")
+    size = source.stat().st_size
+    if size <= 0:
+        raise ValueError("Empty original source")
+    original = {"name": source.name, "size": size, "fingerprint": fingerprint(source)}
+    expected_id = hashlib.sha256(
+        f"{original['name']}|{size}|{original['fingerprint']}".encode()
+    ).hexdigest()[:24]
+    if expected_id != key:
+        raise ValueError("Original source changed after proxy creation")
+    digest = hashlib.sha256()
+    with target.open("rb") as handle:
+        while chunk := handle.read(1024 * 1024):
+            digest.update(chunk)
+    if target.stat().st_size <= 0:
+        raise ValueError("Empty proxy")
+    return {"original": original, "proxy_sha256": digest.hexdigest()}
+
+
 def make_proxy(key: str) -> None:
     job = jobs[key]
     source = sources[key[:24]]
@@ -611,6 +646,12 @@ class Handler(BaseHTTPRequestHandler):
                 except (OSError, ValueError):
                     snapshot = job['snapshot']
             return self.reply(200, snapshot)
+        receipt = re.fullmatch(r"/proxies/([a-f0-9]{24})/receipt", self.path)
+        if receipt:
+            try:
+                return self.reply(200, video_proxy_receipt(receipt.group(1)))
+            except (OSError, ValueError):
+                return self.reply(409, {"error": "Proxy source receipt unavailable"})
         match = re.fullmatch(r"/proxies/([a-f0-9]{24}p?)(/file)?", self.path)
         if not match or match.group(1) not in jobs:
             return self.reply(404, {"error": "unknown"})
