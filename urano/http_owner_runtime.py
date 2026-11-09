@@ -16,11 +16,13 @@ from urano.private_worker_supervisor import WorkerFailure
 from urano.project_catalog import ProjectNotFound
 from urano.runtime_activation import RuntimeBusy, StaleActivation
 from urano.session_auth import SESSION_COOKIE, SessionStore
+from urano.stage_source_provenance import StageSourceProvenance, UnverifiedSources
 
 
 def owner_runtime_blueprint(controller: OwnerRuntimeController,
                             sessions: SessionStore, *, https_origin: str,
-                            catalog: ProjectCatalog | None = None) -> Blueprint:
+                            catalog: ProjectCatalog | None = None,
+                            stage_provenance: StageSourceProvenance | None = None) -> Blueprint:
     origin = urlsplit(https_origin)
     if (origin.scheme != "https" or not origin.netloc
             or origin.path or origin.query or origin.fragment
@@ -171,6 +173,27 @@ def owner_runtime_blueprint(controller: OwnerRuntimeController,
             except (ProjectNotFound, ValueError):
                 return jsonify(error="Project workspace unavailable"), 404
             return protected(jsonify(plan=plan))
+
+    if catalog is not None:
+        @bp.get("/projects/<project_id>/verified-sources")
+        def verified_sources(project_id: str):
+            session, error = identity(False)
+            if error is not None:
+                return error
+            try:
+                project = catalog.get(session.owner_id, project_id)
+                cuts = validate_cut_list(project.recipe.get("urano_edits_v1", {}).get("cuts"),
+                                         require_nonempty=True)
+                if stage_provenance is None:
+                    raise UnverifiedSources("No attested Stage provenance")
+                certificate = stage_provenance.verified(
+                    session.owner_id, project_id,
+                    source_slots={entry["source_slot"] for entry in cuts})
+            except (ProjectNotFound, ValueError):
+                return jsonify(error="Verified Stage sources unavailable"), 409
+            return protected(jsonify(project_revision=project.revision,
+                                     stage_revision=certificate["stage_revision"],
+                                     sources=certificate["sources"]))
 
     @bp.post("/close")
     def close():
