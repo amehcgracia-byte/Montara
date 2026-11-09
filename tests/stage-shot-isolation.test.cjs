@@ -30,3 +30,9 @@ test('each Stage shot has a movement checkbox, saved without touching siblings',
   assert.match(edit, /field\('movement'\)\.checked=doc\.movement !== false/);
   assert.match(edit, /movement:field\('movement'\)\.checked/);
 });
+
+test('Companion native recipe keeps the movement choice for each shot', () => {
+  const recipe = fs.readFileSync('companion/video_recipe.py','utf8');
+  assert.match(recipe, /'motion_enabled','flat_framing'/);
+  assert.match(recipe, /k=='motion_enabled' and not isinstance\(s\[k\],bool\)/);
+});
