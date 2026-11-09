@@ -149,6 +149,33 @@ class ContainerWorkerBridge:
             self.stop()
             raise
 
+    def register_staged_inputs(self, project_id: str) -> int:
+        """Trusted operation: worker reads only fixed hashed camera files.
+
+        No paths or media metadata pass over stdio or owner HTTP.
+        """
+        if self.process is None or self.process.poll() is not None:
+            raise WorkerFailure("Private Engine not active")
+        self._check_container()
+        state, active, _ = self.guard.get_state(self.owner_id, self.runtime_id)
+        if state != "ready" or active != project_id:
+            raise WorkerFailure("Private project must be active")
+        try:
+            assert self.process.stdin is not None
+            self.process.stdin.write(b'{"op":"register_staged_proxies"}\\n')
+            self.process.stdin.flush()
+            response = self._recv(time.monotonic() + self.open_timeout)
+            count = response.get("source_count")
+            if (response.get("ok") is not True or
+                    response.get("type") != "staged_inputs_registered" or
+                    type(count) is not int or not 1 <= count <= 16):
+                raise WorkerFailure("Engine rejected staged inputs")
+            self._check_container()
+            return count
+        except Exception:
+            self.stop()
+            raise WorkerFailure("Cannot verify private Stage input registration")
+
     def ingest_start(self, project_id: str) -> None:
         """Start fixed Engine Ingest using ONLY previously provisioned inputs.
 
