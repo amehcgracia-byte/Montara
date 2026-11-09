@@ -125,9 +125,9 @@ async function update() {
   try {
     const project = await api('projects/' + encodeURIComponent(projectId));
     document.querySelector('#name').textContent = project.project.title;
-    const {state} = await api('runtime/state');
-    status.textContent = 'Engine privado: ' + state;
-    ingest.disabled = state !== 'ready';
+    const state = await api('runtime/projects/' + encodeURIComponent(projectId) + '/state');
+    status.textContent = 'Este proyecto: ' + state.state;
+    ingest.disabled = !state.can_start_ingest;
   } catch(e) {status.textContent=e.message;ingest.disabled=true;}
 }
 async function run(path) {
