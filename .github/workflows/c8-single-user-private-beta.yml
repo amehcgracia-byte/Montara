@@ -1,0 +1,46 @@
+name: C8 single-user private beta (offline, no deployment)
+
+on:
+  push:
+    branches:
+      - fernando/c8-personal-private-beta-20261109
+    paths:
+      - 'deploy/personal_beta.py'
+      - 'tests/test_c8_personal_beta.py'
+      - 'docs/montara-c8-personal-private-beta.md'
+      - '.github/workflows/c8-single-user-private-beta.yml'
+  pull_request:
+    paths:
+      - 'deploy/personal_beta.py'
+      - 'tests/test_c8_personal_beta.py'
+      - '.github/workflows/c8-single-user-private-beta.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  personal-preview-private-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install only web test dependencies
+        run: python -m pip install 'Flask>=3,<4'
+      - name: Test private-only single-user beta and existing Basic Auth wrapper
+        run: |
+          python -m unittest discover -s tests -p 'test_c8_personal_beta.py' -v
+          python -m py_compile deploy/personal_beta.py deploy/entry.py
+      - name: Verify no server deployment occurs in CI
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          source=Path("deploy/personal_beta.py").read_text()
+          assert '127.0.0.1' in source
+          assert '"--workers", "1"' in source
+          assert not any(term in source for term in ("docker run", "systemctl", "gcloud compute", "cloudflared tunnel run"))
+          print("C8 private launcher: no infra provisioner / no public listener")
+          PY
