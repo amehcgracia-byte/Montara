@@ -70,7 +70,8 @@ def create_owner_api(private_dir: Path, *, settings: OIDCSettings,
         # Explicit opt-in. No such route in any legacy app or default owner API.
         app.register_blueprint(private_proxy_inbox_blueprint(
             catalog, session_store, https_origin=allowed_origin,
-            staging_root=proxy_staging_root))
+            staging_root=proxy_staging_root,
+            stage_provenance=stage_provenance))
 
     @app.post("/urano/v1/session/refresh")
     def refresh_csrf():
