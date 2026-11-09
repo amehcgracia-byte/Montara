@@ -81,6 +81,9 @@ def private_proxy_inbox_blueprint(catalog: ProjectCatalog, sessions: SessionStor
         digest = hashlib.sha256()
         copied = 0
         try:
+            # Flask's default owner API cap is 300 KB for JSON endpoints.
+            # Only this authenticated binary route permits a bounded proxy.
+            request.max_content_length = _MAX_PROXY_BYTES
             with tempfile.NamedTemporaryFile(
                     dir=folder, prefix=".incoming-", suffix=".part",
                     delete=False) as temporary:
