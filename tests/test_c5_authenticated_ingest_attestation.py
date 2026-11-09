@@ -12,7 +12,7 @@ from pathlib import Path
 from urano.project_catalog import ProjectCatalog
 from urano.engine_bindings import EngineProjectRegistry
 from urano.stage_source_provenance import StageSourceProvenance, UnverifiedSources
-from urano.stage_ingest_attestation import attest_authenticated_inbox
+from urano.stage_ingest_attestation import attest_authenticated_inbox, attest_authenticated_worker_proof
 
 
 class AuthenticatedIngestAttestation(unittest.TestCase):
@@ -63,6 +63,41 @@ class AuthenticatedIngestAttestation(unittest.TestCase):
         return attest_authenticated_inbox(
             self.provenance,self.binding,self.inbox,owner,self.project.id,
             engine_project_file=self.engine)
+
+    def test_isolated_worker_hashes_certify_without_reading_engine_files(self):
+        # Simulate an Engine project with UID-only permissions. The backend
+        # must verify owner-specific inbox hashes, not open project.json.
+        proof=[{"slot":0,"proxy_sha256":self.hash,
+                "normalized_sha256":hashlib.sha256(
+                    self.normalized.read_bytes()).hexdigest()}]
+        self.engine.chmod(0o000)
+        revision=attest_authenticated_worker_proof(
+            self.provenance,self.inbox,"owner-a",self.project.id,proof=proof)
+        self.assertRegex(revision,r"^[a-f0-9]{64}$")
+        certified=self.provenance.verified(
+            "owner-a",self.project.id,source_slots={0})
+        self.assertEqual(certified["sources"][0]["original"],
+                         self.entry["original_claim"])
+        self.provenance.invalidate_trusted("owner-a",self.project.id)
+        self.entry["receipt_authenticated"]=False
+        self.meta.write_text(json.dumps(self.entry))
+        with self.assertRaises(UnverifiedSources):
+            attest_authenticated_worker_proof(
+                self.provenance,self.inbox,"owner-a",self.project.id,proof=proof)
+
+    def test_worker_proof_detects_swapped_camera_hash_and_modified_inbox(self):
+        proof=[{"slot":0,"proxy_sha256":self.hash,
+                "normalized_sha256":"f"*64}]
+        invalid=[dict(proof[0],proxy_sha256="a"*64)]
+        with self.assertRaises(UnverifiedSources):
+            attest_authenticated_worker_proof(
+                self.provenance,self.inbox,"owner-a",self.project.id,proof=invalid)
+        self.upload.write_bytes(b"not-the-receipted-proxy")
+        with self.assertRaises(UnverifiedSources):
+            attest_authenticated_worker_proof(
+                self.provenance,self.inbox,"owner-a",self.project.id,proof=proof)
+        with self.assertRaises(UnverifiedSources):
+            self.provenance.verified("owner-a",self.project.id,source_slots={0})
 
     def test_authenticated_signed_receipt_can_be_attested_after_stage_done(self):
         revision=self.attest()
