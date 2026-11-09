@@ -71,7 +71,7 @@ async function scenario(mode) {
         return response({
           original: {name:original.name,size:original.size,
                      fingerprint: mode === "bad_receipt" ? "f".repeat(64) : expectedFinger},
-          proxy_sha256:createHash("sha256").update(proxyData).digest("hex"),
+          proxy_sha256: mode === "bad_proxy" ? "0".repeat(64) : createHash("sha256").update(proxyData).digest("hex"),
         });
       }
       throw Error("Unexpected Companion route: " + endpoint);
@@ -133,5 +133,6 @@ async function scenario(mode) {
   await scenario("missing");
   await scenario("failed");
   await scenario("bad_receipt");
-  console.log("URANO_BROWSER_COMPANION_CONTRACT_PASS: 4 cases, actual browser functions, mocked HTTP");
+  await scenario("bad_proxy");
+  console.log("URANO_BROWSER_COMPANION_CONTRACT_PASS: 5 cases, actual browser functions, mocked HTTP");
 })().catch(error => { console.error(error); process.exitCode = 1; });
