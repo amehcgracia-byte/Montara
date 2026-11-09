@@ -537,10 +537,10 @@ async function uploadSmall(file, entry) {
   // Companion problems never trigger an automatic video-original upload.
   // An explicit confirmation retains this as an experimental escape hatch.
   if (!entry.removed && montaraCompanion.isVideo(file) && !small?.file) {
-    const message = small?.missing
+    const message = small?.downloadFailed ? "Could not read the prepared proxy from Companion. Add the same file again to retry the proxy." : small?.missing
       ? "Video not found on this computer. Check the file and retry with Companion."
       : "Companion could not prepare this video. Check Companion and retry.";
-    if (!confirmOriginalVideoUpload(file, entry, message)) {
+    if (small?.downloadFailed || !confirmOriginalVideoUpload(file, entry, message)) {
       entry.kind = "error";
       entry.error = message;
       entry.wholeFile = file;
@@ -619,7 +619,7 @@ async function uploadInParts(file, entry) {
   entry.uploadController = controller;
   try {
     const extra = companionVideoFiles.has(file) && entry.original ? {video_preview:true,original:{name:entry.original.name,size:entry.original.size,fingerprint:entry.original.fingerprint}} : entry.manualOriginalUpload === file ? {original_video_consent:true} : /\.opus$/i.test(file.name) && entry.original ? {original: {name: entry.original.name, size: entry.original.size, fingerprint: entry.original.fingerprint}, compact_preview:state.platform==='youtube' && state.files.some(f=>f.kind==='video'||/\.(mp4|mov|mkv|mts|m2ts|webm|avi|m4v)$/i.test(f.name))} : {};
-    const data = await sendResumableUpload(file, (progress, phase) => { entry.progress = progress; if(phase)entry.phase=phase; renderFiles(); }, id => {entry.uploadId = id; remember(entry);}, () => entry.removed, extra, controller.signal);
+    const data = await sendResumableUpload(file, (progress, phase) => { entry.progress = progress; if(phase)entry.phase=phase; renderFiles(); }, id => {entry.uploadId = id; if (!entry.removed) remember(entry);}, () => entry.removed, extra, controller.signal);
     const found = ['videos', 'master', 'songs', 'ignored'].map(kind => [kind, (data[kind] || [])[0]]).find(([, item]) => item);
     if (!found) throw new Error('Not a usable media file');
     entry.kind = found[0] === 'videos' ? 'video' : found[0];
@@ -763,7 +763,7 @@ document.addEventListener('click', event => {
   entry.uploadController?.abort();
   footageMemory.forget(entry.id);
   if (entry.xhr && entry.kind === 'uploading') entry.xhr.abort();
-  if (entry.uploadId && entry.kind !== 'video' && entry.kind !== 'master' && entry.kind !== 'songs') {
+  if (!entry.uploadController && entry.uploadId && entry.kind !== 'video' && entry.kind !== 'master' && entry.kind !== 'songs') {
     fetch(`/montara/uploads/${entry.uploadId}`, {method: 'DELETE'}).catch(() => {});
   }
   state.files = state.files.filter(f => f !== entry);

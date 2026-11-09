@@ -254,7 +254,10 @@ def register_resumable_upload(app, data_root, classify):
             fcntl.flock(lock, fcntl.LOCK_EX)
             reserved = 0
             for path in root.glob('*/upload.json'):
-                item = load(path.parent)
+                try:
+                    item = load(path.parent)
+                except FileNotFoundError:
+                    continue  # An unfinished upload was cancelled during allocation.
                 if (item['name'] == name and item['size'] == size and item['fingerprint'] == fingerprint
                         and item.get('preview_of') == record.get('preview_of')
                         and item.get('video_preview', False) == record.get('video_preview', False)
@@ -270,13 +273,21 @@ def register_resumable_upload(app, data_root, classify):
             (work / 'source.part').touch()
             return jsonify(public(work, load(work))), 201
 
+    def missing_chunk(upload_id):
+        if request.method == 'DELETE' and re.fullmatch('[a-f0-9]{32}', upload_id):
+            return jsonify(deleted=True)
+        return failure('Unknown upload.', 404)
+
     @app.route('/montara/uploads/<upload_id>', methods=['GET', 'PUT', 'DELETE'])
     def upload_chunk(upload_id):
         try:
             work = lookup(upload_id)
             with (work / 'upload.lock').open('a') as lock:
                 fcntl.flock(lock, fcntl.LOCK_EX)
-                data = load(work)
+                try:
+                    data = load(work)
+                except FileNotFoundError:
+                    return missing_chunk(upload_id)
                 if request.method == 'GET':
                     return jsonify(public(work, data))
                 if request.method == 'DELETE':
@@ -311,8 +322,8 @@ def register_resumable_upload(app, data_root, classify):
                     else:
                         handle.write(payload); handle.flush(); os.fsync(handle.fileno())
                 return jsonify(public(work, data))
-        except ValueError as exc:
-            return failure(str(exc), 404)
+        except (ValueError, FileNotFoundError):
+            return missing_chunk(upload_id)
 
     @app.post('/montara/uploads/<upload_id>/finish')
     def upload_finish(upload_id):

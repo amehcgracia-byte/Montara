@@ -5,7 +5,7 @@
    a lossless FLAC (name.wav.flac); the server restores the identical WAV. For a full session
    it becomes a light Opus preview (name.wav.opus); at export only the song ranges of the
    originals are sent, lossless (segment). Without the
-   companion, or if it cannot help with a file, Montara uploads the original as before. */
+   companion, the video original requires explicit user consent. */
 const montaraCompanion = (() => {
   const BASE = 'http://127.0.0.1:47820';
   const EDGE = 65536;
@@ -21,6 +21,25 @@ const montaraCompanion = (() => {
     if(options.signal?.aborted)abort();
     try { return await fetch(BASE + path, {...options, signal: controller.signal}); }
     finally { if (timer) clearTimeout(timer);options.signal?.removeEventListener('abort',abort); }
+  }
+  async function readProxy(id, cancelled) {
+    for (let attempt = 0; attempt < 3 && !cancelled(); attempt++) {
+      try {
+        const response = await call(`/proxies/${id}/file`, {cache: 'no-store'});
+        if (response.ok) {
+          const blob = await response.blob();
+          if (cancelled()) return null;
+          if (blob.size && (!response.headers?.get('Content-Length') || blob.size === Number(response.headers.get('Content-Length'))))
+            return {blob, retries: attempt};
+        } else if (![408, 429, 502, 503, 504].includes(response.status)) {
+          return null;
+        }
+      } catch (error) {
+        if (!(error instanceof TypeError) && error.name !== 'TypeError') throw error;
+      }
+      if (attempt < 2 && !cancelled()) await new Promise(resolve => setTimeout(resolve, 250 * (attempt + 1)));
+    }
+    return null;
   }
   async function fingerprint(file) {
     const edges = await new Blob([file.slice(0, EDGE), file.slice(Math.max(0, file.size - EDGE))]).arrayBuffer();
@@ -96,14 +115,15 @@ const montaraCompanion = (() => {
           onProgress(preview ? 'Light preview' : audio ? 'Lossless copy' : 'Small version', state.progress || 0);
           await new Promise(resolve => setTimeout(resolve, 800));
         }
-        const download = await call(`/proxies/${id}/file`);
-        if (!download.ok) return null;
-        const blob = await download.blob();
+        const download = await readProxy(id, cancelled);
+        if (!download) return cancelled() ? null : {downloadFailed: true};
+        const {blob, retries} = download;
         timings.downloaded = nowMs();
         // Stage performance diagnostics: durations only; no filenames or local paths.
         console.info('[Montara upload timing]', {
           step: 'local proxy',
           cache_hit: cacheHit,
+          local_read_retries: retries,
           original_mib: +(file.size / 1048576).toFixed(1),
           locate_sec: +((timings.located - timings.started) / 1000).toFixed(2),
           convert_sec: +((timings.proxyReady - timings.located) / 1000).toFixed(2),

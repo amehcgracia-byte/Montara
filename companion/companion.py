@@ -646,13 +646,20 @@ class Handler(BaseHTTPRequestHandler):
         target = output_path(match.group(1))
         if job.get("status") != "ready" or not target.is_file():
             return self.reply(409, {"error": "not ready"})
-        self.send_response(200)
-        self.cors(self.origin_ok())
-        self.send_header("Content-Type", {".flac": "audio/flac", ".wv": "audio/x-wavpack", ".opus": "audio/ogg"}.get(target.suffix, "video/mp4"))
-        self.send_header("Content-Length", str(target.stat().st_size))
-        self.end_headers()
-        with target.open("rb") as handle:
-            shutil.copyfileobj(handle, self.wfile, 1024 * 1024)
+        try:
+            handle = target.open("rb")
+        except FileNotFoundError:
+            return self.reply(409, {"error": "not ready"})
+        with handle:
+            try:
+                self.send_response(200)
+                self.cors(self.origin_ok())
+                self.send_header("Content-Type", {".flac": "audio/flac", ".wv": "audio/x-wavpack", ".opus": "audio/ogg"}.get(target.suffix, "video/mp4"))
+                self.send_header("Content-Length", str(os.fstat(handle.fileno()).st_size))
+                self.end_headers()
+                shutil.copyfileobj(handle, self.wfile, 1024 * 1024)
+            except (BrokenPipeError, ConnectionResetError):
+                log("Proxy read disconnected; cached file retained")
 
     def do_POST(self):
         if not self.origin_ok():
