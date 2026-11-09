@@ -120,6 +120,12 @@ button:disabled{opacity:.5;cursor:not-allowed}p,small{color:#b0bfd0}#status[role
 <p id="originals-status" role="status" aria-live="polite"></p>
 <button id="handoff" type="button">Comprobar descriptor para Companion</button>
 <p id="handoff-status" role="status" aria-live="polite"></p>
+<h3>Exportación local de prueba</h3>
+<p>Solo para cortes básicos con originales seleccionados manualmente; todavía no se ha probado la correspondencia con los proxies de Stage. Revisa que las cámaras sean las correctas.</p>
+<label>Audio maestro WAV <input id="master-audio" type="file" accept=".wav,audio/wav,audio/x-wav" /></label>
+<button id="export-local" type="button">Exportar MP4 en Companion</button>
+<p id="export-status" role="status" aria-live="polite"></p>
+<a id="export-download" hidden>Descargar MP4 local</a>
 </section>
 <script defer src="/urano/v1/companion-client.js"></script>
 <script defer src="/urano/v1/workspace.js"></script></body></html>"""
@@ -167,6 +173,8 @@ refresh.addEventListener('click',async ()=>{
 });
 let revision = null;
 let cuts = [];
+let verifiedOriginals = null;
+const exportButton = document.querySelector('#export-local');
 const editStatus = document.querySelector('#edits-status');
 function drawCuts() {
   const container = document.querySelector('#cuts');
@@ -205,7 +213,9 @@ document.querySelector('#edit-cuts').addEventListener('submit',async event => {
     });
     revision = response.revision;
     cuts = response.cuts;
+    verifiedOriginals = null;
     drawCuts(); editStatus.textContent='Corte guardado · revisión '+revision;
+    document.querySelector('#originals-status').textContent='Los cortes cambiaron. Vuelve a verificar los originales.';
   } catch(e) {
     editStatus.textContent=e.message; await loadEdits().catch(()=>{});
   } finally {button.disabled=false;}
@@ -221,6 +231,7 @@ document.querySelector('#handoff').addEventListener('click', async () => {
   } catch(e){target.textContent=e.message;}
 });
 document.querySelector('#verify-originals').addEventListener('click',async event => {
+  verifiedOriginals = null;
   const button=event.currentTarget;
   const target=document.querySelector('#originals-status');
   const files=[...document.querySelector('#local-originals').files];
@@ -228,16 +239,72 @@ document.querySelector('#verify-originals').addEventListener('click',async event
   button.disabled=true;
   try {
     if(typeof montaraCompanion==='undefined') throw Error('Companion no está disponible');
-    let verified=0;
+    const used = [...new Set(cuts.map(c=>c.source_slot))].sort((a,b)=>a-b);
+    if (!used.length) throw Error('Guarda primero un plan de cortes');
+    if (used.length !== files.length) throw Error('Selecciona exactamente un original por cámara usada ('+used.join(', ')+')');
+    const mapping = [];
     for(let i=0;i<files.length;i++){
       const result=await montaraCompanion.verifyLocalOriginal(files[i]);
-      if(!result.located) throw Error('Companion no encuentra el original de cámara '+i+': '+files[i].name);
-      verified++;
+      if(!result.located) throw Error('Companion no encuentra el original de cámara '+used[i]+': '+files[i].name);
+      mapping.push({source:used[i],original:result.identity});
     }
-    target.textContent='Companion reconoce '+verified+' original(es) localmente. Todavía falta confirmar su vínculo con los proxies de Stage.';
+    verifiedOriginals = {revision, mapping};
+    target.textContent='Companion reconoce '+mapping.length+' original(es). Orden de cámaras: '+used.join(', ')+'. Aún no está verificado su vínculo con los proxies de Stage.';
   }catch(e){target.textContent=e.message;}
   finally{button.disabled=false;}
 });
+async function runLocalExport() {
+  const target = document.querySelector('#export-status');
+  const download = document.querySelector('#export-download');
+  download.hidden = true;download.removeAttribute('href');
+  exportButton.disabled = true;
+  try {
+    if (!verifiedOriginals || verifiedOriginals.revision !== revision)
+      throw Error('Verifica los originales de este plan antes de exportar');
+    const audio = document.querySelector('#master-audio').files?.[0];
+    if (!audio || !/\\.wav$/i.test(audio.name) || audio.size<=0 || audio.size>1024*1024*1024)
+      throw Error('Selecciona un archivo WAV maestro de hasta 1 GB');
+    const result = await api('runtime/projects/'+encodeURIComponent(projectId)+'/companion-handoff');
+    const plan = result.plan;
+    if (plan.project_revision !== revision || plan.render_ready !== false ||
+        plan.local_source_resolution_verified !== false || !Array.isArray(plan.cuts) ||
+        JSON.stringify(plan.cuts) !== JSON.stringify(cuts))
+      throw Error('El plan ha cambiado o no es seguro. Recarga los cortes');
+    const used = [...new Set(cuts.map(c=>c.source_slot))].sort((a,b)=>a-b);
+    if (JSON.stringify(used)!==JSON.stringify(verifiedOriginals.mapping.map(x=>x.source)))
+      throw Error('Cámaras sin originales verificados');
+    if (!await montaraCompanion.detect() || !montaraCompanion.info?.local_video)
+      throw Error('Instala o actualiza Companion con renderizador local');
+    // The folder picker and master transfer stay on this person's computer.
+    const folder = await montaraCompanion.projectFolder('Montara beta local', []);
+    if (!folder?.id) throw Error('Selecciona una carpeta local en Companion');
+    const masterName='montara-render-audio-'+crypto.randomUUID().replaceAll('-','')+'.audio';
+    target.textContent='Guardando audio maestro únicamente en Companion…';
+    await montaraCompanion.saveInProject(folder.id,masterName,audio);
+    const payload={plan,project:folder.id,master:masterName,
+      originals:verifiedOriginals.mapping,name:'Montara beta local',branding:'none'};
+    target.textContent='Renderizando MP4 en este ordenador…';
+    const id = await montaraCompanion.startHandoffVideo(payload);
+    for(let n=0;n<600;n++){
+      const state=await montaraCompanion.videoStatus(id);
+      if(state.status==='ready'){
+        const url=montaraCompanion.videoUrl(id,true);
+        download.href=url;
+        download.textContent='Descargar MP4 terminado en Companion';
+        download.hidden=false;
+        target.textContent='MP4 generado localmente. Verifica el resultado antes de utilizarlo.';
+        return;
+      }
+      if(state.status==='failed' || state.status==='cancelled')
+        throw Error(state.error || 'El render local no terminó');
+      await new Promise(resolve=>setTimeout(resolve,1000));
+    }
+    throw Error('No se ha confirmado la finalización del render. Revisa Companion.');
+  }catch(e){target.textContent=e.message;}
+  finally{exportButton.disabled=false;}
+}
+exportButton.addEventListener('click',runLocalExport);
+document.querySelector('#local-originals').addEventListener('change',()=>{verifiedOriginals=null;});
 update();
 loadEdits().catch(e=>{editStatus.textContent=e.message;});"""
 
