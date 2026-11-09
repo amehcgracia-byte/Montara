@@ -37,11 +37,26 @@ class TestC5PrivateWorkspace(FullOwnerToEngineIntegration):
         self.assertIn("MONTARA_PRIVATE_RUNTIME = true",
                       self.a.get("/urano/v1/dashboard.js",base_url=HOST).get_data(as_text=True))
 
+        state_url="/urano/v1/runtime/projects/"+project_a+"/state"
+        before=self.a.get(state_url,base_url=HOST)
+        self.assertEqual(before.status_code,200)
+        self.assertEqual(before.json["state"],"inactive")
+        self.assertFalse(before.json["can_start_ingest"])
+        self.assertEqual(self.b.get(state_url,base_url=HOST).status_code,404)
+        self.assertEqual(self.a.get("/urano/v1/runtime/projects/"+project_b+"/state",
+                                    base_url=HOST).status_code,404)
         self.assertEqual(self.post(self.b,project_a,csrf_b).status_code,404)
         self.assertEqual(bridge_a.starts,0)
         self.assertEqual(self.post(self.a,project_a,csrf_a).status_code,200)
         self.assertEqual(bridge_a.starts,1)
         self.assertEqual(bridge_b.starts,0)
+        active=self.a.get(state_url,base_url=HOST)
+        self.assertEqual(active.status_code,200)
+        self.assertEqual(active.json["state"],"ready")
+        self.assertTrue(active.json["is_active_project"])
+        self.assertTrue(active.json["can_start_ingest"])
+        self.assertNotIn("path",active.json)
+        self.assertNotIn("container",active.json)
         self.assertEqual(self.a.get("/urano/v1/runtime/state",base_url=HOST).json["state"],"ready")
 
         for route in ("/api/v1/wizard/status","/montara/uploads","/video-renders"):
