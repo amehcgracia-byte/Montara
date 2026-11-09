@@ -57,6 +57,18 @@ class TestC5PrivateWorkspace(FullOwnerToEngineIntegration):
         self.assertTrue(active.json["can_start_ingest"])
         self.assertNotIn("path",active.json)
         self.assertNotIn("container",active.json)
+        # Two projects can belong to ONE owner, but only the selected active
+        # project may start Stage. An owner-level "ready" is insufficient.
+        other=self.catalog.create(owner_a,"Alice second")
+        folder=bridge_a.guard.bindings.projects_dir/"Stage-alice-second"
+        folder.mkdir()
+        (folder/"project.json").write_text('{"synthetic":true}')
+        bridge_a.guard.bindings.bind_trusted(owner_a,other.id,folder.name)
+        other_state=self.a.get("/urano/v1/runtime/projects/"+other.id+"/state",base_url=HOST)
+        self.assertEqual(other_state.status_code,200)
+        self.assertEqual(other_state.json["state"],"inactive")
+        self.assertFalse(other_state.json["is_active_project"])
+        self.assertFalse(other_state.json["can_start_ingest"])
         self.assertEqual(self.a.get("/urano/v1/runtime/state",base_url=HOST).json["state"],"ready")
 
         for route in ("/api/v1/wizard/status","/montara/uploads","/video-renders"):
