@@ -283,8 +283,24 @@ class OwnerSessionToRealEngine(unittest.TestCase):
         # None of this flow can be triggered by an arbitrary browser claim.
         for person in ("alice","bob"):
             bridge=self.bridges[person]
-            verified=provenance.verified(
-                bridge.owner_id,self.project_ids[person],source_slots={0})
+            try:
+                verified=provenance.verified(
+                    bridge.owner_id,self.project_ids[person],source_slots={0})
+            except UnverifiedSources as missing:
+                from urano.stage_ingest_attestation import attest_authenticated_inbox
+                bound=bridge.guard.bindings.resolve_internal(
+                    bridge.owner_id,self.project_ids[person])
+                try:
+                    attest_authenticated_inbox(
+                        provenance,bridge.guard.bindings,inbox,
+                        bridge.owner_id,self.project_ids[person],
+                        engine_project_file=bound/"project.json",
+                        container_workspace=Path("/workspace"))
+                except Exception as reason:
+                    # Internal CI diagnostic only; never return paths to HTTP.
+                    self.fail("Automatic Stage provenance unavailable: "+
+                              type(reason).__name__+" "+str(reason))
+                self.fail("Controller did not attest despite direct verifier success")
             self.assertEqual(verified["sources"][0]["original"]["name"],
                              person+".mp4")
             self.assertRegex(verified["stage_revision"],r"^[a-f0-9]{64}$")
