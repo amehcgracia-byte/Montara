@@ -132,6 +132,16 @@ const montaraCompanion = (() => {
         if (!download.ok) return null;
         const blob = await download.blob();
         const receipt = !audio ? await this.localProxyReceipt(id, {name:file.name,size:file.size,fingerprint:print}) : null;
+        if (receipt) {
+          // Verify the EXACT bytes passed to the upload path. The Companion
+          // may have changed its cached proxy between receipt and download.
+          // A browser-computed hash is only a transfer integrity check, never
+          // authority to attest Stage original ownership.
+          const hash = [...new Uint8Array(await crypto.subtle.digest('SHA-256', await blob.arrayBuffer()))]
+            .map(byte => byte.toString(16).padStart(2, '0')).join('');
+          if (hash !== receipt.proxy_sha256)
+            throw new Error('Companion proxy changed during transfer; prepare it again');
+        }
         const wavpack = blob.type === 'audio/x-wavpack';  // float originals: WavPack instead of FLAC
         const name = preview ? file.name + '.opus' : audio ? file.name + (wavpack ? '.wv' : '.flac') : file.name.replace(/\.[^.]+$/, '') + '.small.mp4';
         const type = preview ? 'audio/ogg' : audio ? blob.type || 'audio/flac' : 'video/mp4';
