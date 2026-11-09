@@ -33,7 +33,7 @@ def validate_beta_origin(origin: str) -> str:
             or parsed.username or parsed.password or parsed.path
             or parsed.query or parsed.fragment or parsed.hostname in
             {"localhost", "127.0.0.1"} or parsed.hostname.endswith(".localhost")
-            or "*" in origin or "\" in origin or parsed.hostname.endswith(".")):
+            or "*" in origin or chr(92) in origin or parsed.hostname.endswith(".")):
         raise ValueError("Public exact HTTPS hostname required")
     if parsed.port not in (None, 443):
         raise ValueError("Only standard HTTPS port is allowed for beta")
