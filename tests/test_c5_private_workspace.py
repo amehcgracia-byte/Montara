@@ -16,6 +16,7 @@ class TestC5PrivateWorkspace(FullOwnerToEngineIntegration):
 
     def test_owner_workspace_route_and_private_activation(self):
         self.assertEqual(self.a.get("/urano/v1/workspace.js",base_url=HOST).status_code,401)
+        self.assertEqual(self.a.get("/urano/v1/companion-client.js",base_url=HOST).status_code,401)
         self.assertEqual(self.a.get("/urano/v1/workspace/foreign",base_url=HOST).status_code,401)
         owner_a,csrf_a=self.login(self.a,sub="google-sub-a",email="alpha@example.test")
         owner_b,csrf_b=self.login(self.b,sub="google-sub-b",email="beta@example.test")
@@ -28,6 +29,14 @@ class TestC5PrivateWorkspace(FullOwnerToEngineIntegration):
         self.assertEqual(page.headers["Cache-Control"],"no-store")
         self.assertIn("default-src 'none'",page.headers["Content-Security-Policy"])
         self.assertEqual(self.a.get("/urano/v1/workspace.js",base_url=HOST).status_code,200)
+        local_client=self.a.get("/urano/v1/companion-client.js",base_url=HOST)
+        self.assertEqual(local_client.status_code,200)
+        self.assertIn("verifyLocalOriginal",local_client.get_data(as_text=True))
+        self.assertEqual(local_client.headers["Cache-Control"],"no-store")
+        self.assertIn('id="local-originals"',page.get_data(as_text=True))
+        self.assertIn("http://127.0.0.1:47820",page.headers["Content-Security-Policy"])
+        self.assertIn("verifyLocalOriginal",self.a.get("/urano/v1/workspace.js",base_url=HOST).get_data(as_text=True))
+        self.assertEqual(self.b.get("/urano/v1/companion-client.js",base_url=HOST).status_code,200)
         self.assertEqual(self.a.get("/urano/v1/workspace/"+project_b,base_url=HOST).status_code,404)
         self.assertEqual(self.b.get("/urano/v1/workspace/"+project_a,base_url=HOST).status_code,404)
         self.assertEqual(self.b.get("/urano/v1/workspace/invalid",base_url=HOST).status_code,404)
@@ -82,4 +91,5 @@ class TestC5PrivateWorkspace(FullOwnerToEngineIntegration):
         routes={x.rule for x in plain.url_map.iter_rules()}
         self.assertNotIn("/urano/v1/workspace/<project_id>",routes)
         self.assertNotIn("/urano/v1/workspace.js",routes)
+        self.assertNotIn("/urano/v1/companion-client.js",routes)
         self.assertEqual(plain.test_client().get("/urano/v1/workspace/any",base_url=HOST).status_code,404)
