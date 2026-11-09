@@ -162,7 +162,7 @@ class ContainerWorkerBridge:
             raise WorkerFailure("Private project must be active")
         try:
             assert self.process.stdin is not None
-            self.process.stdin.write(b'{"op":"register_staged_proxies"}\\n')
+            self.process.stdin.write(b'{"op":"register_staged_proxies"}\n')
             self.process.stdin.flush()
             response = self._recv(time.monotonic() + self.open_timeout)
             count = response.get("source_count")
