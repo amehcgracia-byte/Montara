@@ -281,7 +281,7 @@ def owner_dashboard_blueprint(sessions: SessionStore, *, https_origin: str,
             except (ProjectNotFound, ValueError):
                 return jsonify(error="Project not found"), 404
             response = Response(WORKSPACE_PAGE, content_type="text/html; charset=utf-8")
-            response.headers["Content-Security-Policy"] = "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'"
+            response.headers["Content-Security-Policy"] = "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self' http://127.0.0.1:47820; base-uri 'none'; frame-ancestors 'none'; form-action 'none'"
             response.headers["X-Frame-Options"] = "DENY"
             response.headers["Cache-Control"] = "no-store"
             response.headers["X-Content-Type-Options"] = "nosniff"
