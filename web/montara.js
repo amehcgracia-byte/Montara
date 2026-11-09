@@ -163,7 +163,7 @@ function show(id) {
       history.pushState(entry, '', location.href);
     }
   }
-  $(".screen").forEach((s) => { s.hidden = s.id !== id; });
+  $$(".screen").forEach((s) => { s.hidden = s.id !== id; });
   updateMusicLoopControl(id);
   const inFlow = STEP_ORDER.includes(id) || id === "failed" || id === "mode";
   $("#steps").hidden = !inFlow || id === "mode" || state.platform==='show';
