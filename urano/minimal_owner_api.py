@@ -22,12 +22,14 @@ from urano.session_auth import SESSION_COOKIE, SessionStore
 from urano.owner_runtime_controller import OwnerRuntimeController
 from urano.http_owner_runtime import owner_runtime_blueprint
 from urano.owner_dashboard import owner_dashboard_blueprint
+from urano.stage_source_provenance import StageSourceProvenance
 
 
 def create_owner_api(private_dir: Path, *, settings: OIDCSettings,
                      provider: GoogleProvider | None = None,
                      runtime_controller: OwnerRuntimeController | None = None,
-                     enable_dashboard: bool = False) -> Flask:
+                     enable_dashboard: bool = False,
+                     stage_provenance: StageSourceProvenance | None = None) -> Flask:
     root = Path(private_dir).resolve()
     if not root.is_dir() or root.is_symlink():
         raise ValueError("Existing private database directory required")
@@ -58,7 +60,8 @@ def create_owner_api(private_dir: Path, *, settings: OIDCSettings,
         # pair via trusted infrastructure prior to activation.
         app.register_blueprint(owner_runtime_blueprint(
             runtime_controller, session_store,
-            https_origin=allowed_origin, catalog=catalog))
+            https_origin=allowed_origin, catalog=catalog,
+            stage_provenance=stage_provenance))
 
     @app.post("/urano/v1/session/refresh")
     def refresh_csrf():
