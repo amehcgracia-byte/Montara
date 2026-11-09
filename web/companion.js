@@ -73,6 +73,20 @@ const montaraCompanion = (() => {
       const response=await call('/video-renders',json(body));const data=await response.json();
       if(!response.ok){const error=new Error(data.error || 'Could not start original-quality export');error.status=response.status;throw error;}return data.id;
     },
+    /* Exact existing local U21 handoff endpoint; never send originals to web server. */
+    async startHandoffVideo(body) {
+      if (!info && !(await this.detect())) throw new Error('Montara Companion is not available');
+      if (!info?.local_video) throw new Error('Install the Companion local video renderer first');
+      const response = await call('/video-renders/handoff', json(body));
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const error = new Error(result.error || 'Could not start local handoff export');
+        error.status = response.status; throw error;
+      }
+      if (result.local_originals !== true || !/^[a-f0-9]{32}$/.test(result.id || ''))
+        throw new Error('Unexpected Companion export response');
+      return result.id;
+    },
     async videoStatus(id) {
       const response=await call(`/video-renders/${id}`);if(!response.ok)throw new Error('The companion video export is unavailable');return response.json();
     },
