@@ -13,6 +13,7 @@ from urano.companion_receipt_auth import CompanionReceiptVerifier
 from urano.google_flow import OIDCSettings
 from urano.minimal_owner_api import create_owner_api
 from urano.stage_source_provenance import UnverifiedSources
+from urano.session_auth import SESSION_COOKIE, SessionStore
 
 
 class TestC5SignedCompanionReceipt(unittest.TestCase):
@@ -57,8 +58,12 @@ class TestC5SignedCompanionReceipt(unittest.TestCase):
 
     def test_signature_required_and_scoped_to_exact_owner_project_slot_and_proxy(self):
         fx=self.fixture
-        owner_a,csrf_a=fx.login(fx.a,sub="signed-a",email="alpha@example.test")
-        owner_b,csrf_b=fx.login(fx.b,sub="signed-b",email="beta@example.test")
+        fx.login(fx.a,sub="signed-a",email="alpha@example.test")
+        fx.login(fx.b,sub="signed-b",email="beta@example.test")
+        sessions=SessionStore(fx.root/"sessions.sqlite3")
+        owner_a=sessions.verify(fx.a.get_cookie(SESSION_COOKIE).value).owner_id
+        owner_b=sessions.verify(fx.b.get_cookie(SESSION_COOKIE).value).owner_id
+        csrf_a,csrf_b=fx.csrf(fx.a),fx.csrf(fx.b)
         self.verifier._keys={owner_a:self.secret}
         project_a=fx.setup_project(fx.a)
         project_b=fx.setup_project(fx.b)
