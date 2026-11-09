@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import json
+import hashlib
 import time
 import subprocess
 import tempfile
@@ -144,6 +145,103 @@ class OwnerSessionToRealEngine(unittest.TestCase):
         for bridge in self.bridges.values():
             self.assertIsNone(bridge.cid)
 
+
+    def test_two_real_engines_register_private_proxy_bytes_before_ingest(self):
+        """C5: two real isolated Engine containers, bounded synthetic 20s MP4s.
+
+        The test asserts the actual Engine-registered paths and Stage DONE;
+        browser original claims are deliberately NOT certified.
+        """
+        inbox=self.root/"private-proxy-inbox"
+        inbox.mkdir()
+        digests={}
+        for person in ("alice","bob"):
+            workspace=self.root/person
+            fixture=[
+                "docker","run","--rm","--network","none","--user","10001:10001",
+                "--mount",f"type=bind,src={workspace},dst=/workspace",
+                "--workdir","/app/engine",os.environ["URANO_TEST_IMAGE_ID"],
+                "python","/app/tests/urano_u20_prepare_stage_inputs.py",
+                "Owned"+person.title()
+            ]
+            setup=subprocess.run(fixture,capture_output=True,text=True,timeout=150)
+            self.assertEqual(setup.returncode,0,setup.stderr[-1000:])
+            project_id=self.project_ids[person]
+            owner=self.bridges[person].owner_id
+            camera=(workspace/"Projects"/("Owned"+person.title())/
+                    "inputs"/"camera-a.mp4")
+            self.assertTrue(camera.is_file())
+            digest=hashlib.sha256(camera.read_bytes()).hexdigest()
+            digests[person]=digest
+            directory=inbox/hashlib.sha256(owner.encode()).hexdigest()/project_id
+            directory.mkdir(parents=True,mode=0o700)
+            (directory/f"slot-0-{digest}.mp4").write_bytes(camera.read_bytes())
+            (directory/f"slot-0-{digest}.json").write_text(json.dumps({
+                "source_slot":0,"proxy_sha256":digest,
+                "original_claim":{"name":person+".mp4","size":camera.stat().st_size,
+                                  "fingerprint":digest},
+                "attested":False,"bytes":camera.stat().st_size}))
+        self.assertNotEqual(digests["alice"],"")
+        self.assertEqual(self.activate("alice",self.project_ids["bob"]).status_code,404)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            futures=[pool.submit(self.activate,person,self.project_ids[person])
+                     for person in ("alice","bob")]
+            self.assertTrue(all(x.result(timeout=180).status_code==200 for x in futures))
+        # CI fixture has host-owned files; isolated containers run UID 10001.
+        # chown ONLY new synthetic staged input directories. Production requires
+        # a dedicated matching OS identity, never chmod 777 on user media.
+        for person in ("alice","bob"):
+            bridge=self.bridges[person]
+            pid=self.project_ids[person]
+            from urano.trusted_stage_inputs import prepare_trusted_stage_inputs
+            paths=prepare_trusted_stage_inputs(
+                bridge.guard.bindings,inbox,bridge.owner_id,pid,source_slots={0})
+            self.assertEqual(len(paths),1)
+            self.assertEqual(hashlib.sha256(paths[0].read_bytes()).hexdigest(),
+                             digests[person])
+            scoped=paths[0].parent
+            fix=subprocess.run(["sudo","chown","-R","10001:10001",str(scoped)],
+                                capture_output=True,text=True,timeout=20)
+            self.assertEqual(fix.returncode,0,fix.stderr)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            registered=[pool.submit(self.bridges[person].register_staged_inputs,
+                                    self.project_ids[person])
+                        for person in ("alice","bob")]
+            self.assertEqual([f.result(timeout=150) for f in registered],[1,1])
+        # Verify Engine persisted the exact hash-named file for each owner.
+        for person in ("alice","bob"):
+            workspace=self.root/person
+            project_file=workspace/"Projects"/("Owned"+person.title())/"project.json"
+            doc=json.loads(project_file.read_text())
+            videos=doc.get("inputs",{}).get("videos") or []
+            self.assertEqual(len(videos),1,doc.get("inputs",{}))
+            self.assertIn(digests[person],videos[0]["path"])
+            self.assertNotIn("Owned"+("Bob" if person=="alice" else "Alice"),
+                             videos[0]["path"])
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            started=[pool.submit(self._stage_post,person,self.project_ids[person])
+                     for person in ("alice","bob")]
+            self.assertEqual([f.result(timeout=100).status_code for f in started],
+                             [202,202])
+        deadline=time.monotonic()+240
+        done=set()
+        while len(done)<2 and time.monotonic()<deadline:
+            for person in ("alice","bob"):
+                if person in done: continue
+                client,_=self.clients[person]
+                response=client.get(
+                    f"/urano/v1/runtime/projects/{self.project_ids[person]}/ingest",
+                    base_url=ORIGIN)
+                self.assertEqual(response.status_code,200,response.get_data(as_text=True))
+                status=response.json["status"]
+                self.assertNotIn(status,("blocked","failed"))
+                if status=="done":done.add(person)
+            time.sleep(.5)
+        self.assertEqual(done,{"alice","bob"})
+        # Receipts were browser claims, not attested provenance.
+        self.assertFalse(any(self.root.rglob("provenance.sqlite3")))
+        self.assertEqual(self.close("alice").status_code,200)
+        self.assertEqual(self.close("bob").status_code,200)
 
     def _stage_post(self, who, project_id):
         client, session = self.clients[who]
