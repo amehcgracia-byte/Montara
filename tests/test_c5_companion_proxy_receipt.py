@@ -69,6 +69,26 @@ class C5CompanionProxyReceipt(unittest.TestCase):
             companion.sources[key]=original
             companion.jobs[key]["status"]="ready"
             actual_receipt=companion.video_proxy_receipt(key)
+            # Real local signer: optional operator-paired key stays off HTTP.
+            import hmac
+            secretfile=root/"companion-signing-key"
+            secretfile.write_bytes(b"test-only-secret-32-bytes-long...."[:32])
+            secretfile.chmod(0o600)
+            os.environ["MONTARA_COMPANION_RECEIPT_KEY_FILE"]=str(secretfile)
+            signed=companion.signed_video_proxy_receipt(
+                key,"01234567-89ab-cdef-0123-456789abcdef",0)
+            msg=json.dumps(signed["receipt"],sort_keys=True,separators=(",",":"),
+                           ensure_ascii=True).encode()
+            assert hmac.compare_digest(
+                signed["signature"],
+                hmac.new(secretfile.read_bytes(),msg,hashlib.sha256).hexdigest())
+            assert signed["receipt"]["original"]==actual_receipt["original"]
+            assert signed["receipt"]["proxy_sha256"]==actual_receipt["proxy_sha256"]
+            assert "path" not in str(signed)
+            try:
+                companion.signed_video_proxy_receipt(key,"../../foreign-project",0)
+                raise AssertionError("Unsafe project ID accepted")
+            except ValueError:pass
             staged=root/"staged.mp4"
             staged.write_bytes(proxy.read_bytes())
             project_file=root/"project.json"
