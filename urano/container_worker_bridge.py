@@ -233,6 +233,50 @@ class ContainerWorkerBridge:
             self.stop()
             raise WorkerFailure("Private Ingest status unavailable")
 
+    def ingest_proof(self, project_id: str) -> list[dict]:
+        """Return hashes computed under the isolated Engine UID, not file paths.
+
+        Only a trusted owner-bound active container can answer. No untrusted
+        path is accepted over stdio. A malformed response kills the worker.
+        """
+        if self.process is None or self.process.poll() is not None:
+            raise WorkerFailure("Private Engine is not active")
+        self._check_container()
+        state, active, _ = self.guard.get_state(self.owner_id, self.runtime_id)
+        if state != "ready" or active != project_id:
+            raise WorkerFailure("Ingest proof requires the completed active project")
+        try:
+            assert self.process.stdin is not None
+            self.process.stdin.write(b'{"op":"ingest_proof"}\n')
+            self.process.stdin.flush()
+            result = self._recv(time.monotonic() + self.open_timeout)
+            sources = result.get("sources")
+            if (result.get("ok") is not True or
+                    result.get("type") != "ingest_proof" or
+                    not isinstance(sources, list) or not 1 <= len(sources) <= 16):
+                raise WorkerFailure("Invalid private Engine ingest proof")
+            expected_slots = set(range(len(sources)))
+            found_slots = set()
+            for entry in sources:
+                if not isinstance(entry, dict) or set(entry) != {
+                    "slot", "proxy_sha256", "normalized_sha256"}:
+                    raise WorkerFailure("Invalid private Engine proof format")
+                slot = entry["slot"]
+                if type(slot) is not int or slot not in expected_slots or slot in found_slots:
+                    raise WorkerFailure("Invalid Engine proof slot")
+                if any(not isinstance(entry[k], str) or
+                       not re.fullmatch(r"[a-f0-9]{64}", entry[k])
+                       for k in ("proxy_sha256", "normalized_sha256")):
+                    raise WorkerFailure("Invalid Engine proof hash")
+                found_slots.add(slot)
+            if found_slots != expected_slots:
+                raise WorkerFailure("Incomplete private Engine ingest proof")
+            self._check_container()
+            return sorted(sources, key=lambda entry: entry["slot"])
+        except Exception:
+            self.stop()
+            raise WorkerFailure("Private Engine ingest proof unavailable")
+
     def stop(self) -> None:
         proc, self.process = self.process, None
         cid, self.cid = self.cid, None
