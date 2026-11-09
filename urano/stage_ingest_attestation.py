@@ -245,6 +245,13 @@ def attest_authenticated_worker_proof(
         digest = attested["proxy_sha256"]
         metadata = directory / f"slot-{slot}-{digest}.json"
         proxy = directory / f"slot-{slot}-{digest}.mp4"
+        # Replacing one camera leaves older digest-named inbox entries.
+        # An older Stage DONE may never silently re-certify an old proxy:
+        # reject ambiguous slots until trusted operator re-provisions Ingest.
+        candidates = [p for p in directory.iterdir()
+                      if re.fullmatch(rf"slot-{slot}-[a-f0-9]{{64}}\.json", p.name)]
+        if len(candidates) != 1 or candidates[0] != metadata:
+            raise UnverifiedSources("Private camera receipt was replaced")
         if (metadata.is_symlink() or proxy.is_symlink() or
                 not metadata.is_file() or not proxy.is_file()
                 or metadata.stat().st_size > 4096):
