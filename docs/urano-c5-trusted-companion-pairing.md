@@ -8,6 +8,8 @@ Companion conserva el vídeo original en el equipo local. Después de generar un
 
 El servidor verifica una firma asociada **al propietario exacto**, a un proyecto UUID, un slot de cámara, nombre/tamaño/huella del original y SHA-256 completo del proxy. Solo entonces escribe en el inbox privado `receipt_authenticated: true` y **`attested: false`**. No existe inscripción de claves por HTTP.
 
+El controlador privado ya dispone de un enlace **opt-in**: el operador llama a `OwnerRuntimeController.configure_trusted_attestation(provenance, inbox_root, container_workspace=Path('/workspace'))` durante el aprovisionamiento del servicio. Cuando ese mismo worker aislado notifica `Ingest DONE`, el controlador invoca automáticamente `attest_authenticated_inbox()` usando únicamente el binding del propietario activo. Si falta un recibo auténtico, el hash no coincide o la carpeta no puede leerse con permisos seguros, **la certificación permanece revocada**; no se presenta un falso `render_ready`.
+
 Tras Stage Ingest `done`, `attest_authenticated_inbox()` es una operación **interna del operador**: comprueba que cada vídeo del Engine está en su proyecto privado, que el inbox guarda recibos autenticados, que los bytes coinciden, y que hay una salida Stage finalizada. Solo entonces llama a `StageSourceProvenance.register_trusted()`.
 
 No se debe conectar `original_claim` sin firma a `register_trusted`, aunque coincida su SHA-256: el navegador podría fabricarlo. Una re-subida válida o nuevo Ingest invalida las certificaciones previas.
@@ -34,7 +36,7 @@ No se debe conectar `original_claim` sin firma a `register_trusted`, aunque coin
 ## Evidencia y limitaciones
 
 - [PR C5 #145](https://github.com/amehcgracia-byte/Montara/pull/145): histórico, pruebas de aislamiento y aceptación Docker real.
-- Pruebas `tests/test_c5_signed_companion_receipt.py`, `tests/test_c5_companion_proxy_receipt.py` y `tests/test_c5_authenticated_ingest_attestation.py`.
+- Pruebas `tests/test_c5_signed_companion_receipt.py`, `tests/test_c5_companion_proxy_receipt.py`, `tests/test_c5_authenticated_ingest_attestation.py` y `tests/test_c5_post_ingest_certification.py`. El último grupo comprueba el enlace opcional al estado de Ingest: `running` no certifica, `done` puede certificar y los errores invalidan el certificado anterior.
 - **Pendiente de integración final:** wiring del servicio que llama a la certificación tras Ingest DONE, aprovisionamiento real por propietario, pruebas en navegador/Companion reales y despliegue HTTPS. No declarar `render_ready` simplemente porque un archivo esté staged o `receipt_authenticated:true`.
 
 `main` y los servicios de la VM permanecen sin cambios. La fusión requiere autorización explícita del usuario y aprobación final de Chema.
