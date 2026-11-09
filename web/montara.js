@@ -139,6 +139,8 @@ function rememberOpenEdit(id){
   }));} catch {}
 }
 function show(id) {
+  // Stop Stage's waiting-room audio when leaving the processing screen.
+  if (id !== 'making' && !$('#making').hidden && state.platform === 'youtube') $('#rangeAudio').pause();
   if (id !== 'footage' && trackAudition.audio) stopTrackAudition();
   rememberOpenEdit(id);
   clearTimeout(introTimer);
@@ -162,6 +164,7 @@ function show(id) {
     }
   }
   $$(".screen").forEach((s) => { s.hidden = s.id !== id; });
+  updateMusicLoopControl(id);
   const inFlow = STEP_ORDER.includes(id) || id === "failed" || id === "mode";
   $("#steps").hidden = !inFlow || id === "mode" || state.platform==='show';
   $("#newVideo").hidden = inFlow;
@@ -431,6 +434,67 @@ $("#rangeTrack").addEventListener("change", () => {
 });
 $("#rangeAudio").addEventListener("loadedmetadata", () => { range.duration = $("#rangeAudio").duration || 0; if(state.platform==='reel')range.end=Math.min(range.duration,range.start+Number($("#reelDuration").value));drawRange(); });
 $("#rangeAudio").addEventListener("timeupdate", drawRange);
+
+// The range player is deliberately persistent across screens. No second audio
+// element is created: this avoids overlapping playback and keeps pause state.
+const musicLoopControl = document.createElement("button");
+musicLoopControl.type = "button";
+musicLoopControl.id = "musicLoopControl";
+musicLoopControl.className = "btn primary";
+musicLoopControl.hidden = true;
+musicLoopControl.style.cssText = "display:block;margin:20px auto 0;min-width:160px;border-radius:999px";
+musicLoopControl.setAttribute("aria-label", "Play your song while Montara works");
+document.querySelector("#making")?.append(musicLoopControl);
+
+function musicLoopBounds(audio) {
+  const duration = Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : Infinity;
+  const start = Math.max(0, Math.min(range.start || 0, duration));
+  const end = Math.max(start, Math.min(range.end ?? duration, duration));
+  return {start, end};
+}
+function updateMusicLoopControl(screen) {
+  const audio = document.querySelector("#rangeAudio");
+  const allowed = screen === "making" && state.platform === "youtube" &&
+    !state.audioTask && Boolean(audio?.getAttribute("src"));
+  musicLoopControl.hidden = !allowed;
+  musicLoopControl.style.display = allowed ? "block" : "none";
+  if (!allowed) return;
+  const playing = !audio.paused && !audio.ended;
+  musicLoopControl.textContent = playing ? "❚❚  Pause music" : "▶  Play your song";
+  musicLoopControl.setAttribute("aria-label", playing ? "Pause your song" : "Play your song");
+  musicLoopControl.setAttribute("aria-pressed", String(playing));
+}
+musicLoopControl.addEventListener("click", async () => {
+  const audio = document.querySelector("#rangeAudio");
+  if (!audio) return;
+  if (!audio.paused) audio.pause();
+  else {
+    const {start, end} = musicLoopBounds(audio);
+    if (audio.ended || audio.currentTime < start || audio.currentTime >= end - 0.05)
+      audio.currentTime = start;
+    try { await audio.play(); }
+    catch (error) { toast("Your browser could not play this audio.", true); }
+  }
+  updateMusicLoopControl("making");
+});
+$("#rangeAudio").addEventListener("timeupdate", () => {
+  const audio = $("#rangeAudio");
+  if (state.platform !== "youtube" || $("#making").hidden || audio.paused) return;
+  const {start, end} = musicLoopBounds(audio);
+  if (end > start && audio.currentTime >= end - 0.05) {
+    audio.currentTime = start;
+    audio.play().catch(() => {});
+  }
+});
+$("#rangeAudio").addEventListener("ended", () => {
+  const audio = $("#rangeAudio");
+  if (state.platform !== "youtube" || $("#making").hidden) return;
+  audio.currentTime = musicLoopBounds(audio).start;
+  audio.play().catch(() => updateMusicLoopControl("making"));
+});
+$("#rangeAudio").addEventListener("play", () => updateMusicLoopControl($("#making").hidden ? "" : "making"));
+$("#rangeAudio").addEventListener("pause", () => updateMusicLoopControl($("#making").hidden ? "" : "making"));
+
 $("#rangeStart").addEventListener("click", () => {
   range.start = $("#rangeAudio").currentTime || 0;
   if(state.platform==='reel')range.end=Math.min(range.duration||Infinity,range.start+Number($("#reelDuration").value));

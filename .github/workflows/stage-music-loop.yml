@@ -1,0 +1,22 @@
+name: Stage Music Loop checks
+on:
+  pull_request:
+    paths:
+      - 'web/montara.js'
+      - 'tests/music-loop.test.cjs'
+      - '.github/workflows/stage-music-loop.yml'
+  push:
+    branches:
+      - 'fix/stage-music-loop-nov2026'
+jobs:
+  music-loop:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check web/montara.js
+      - run: node --test tests/music-loop.test.cjs
