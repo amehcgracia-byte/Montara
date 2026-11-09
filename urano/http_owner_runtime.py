@@ -10,8 +10,8 @@ from urllib.parse import urlsplit
 from flask import Blueprint, jsonify, request
 
 from urano.owner_runtime_controller import OwnerRuntimeController
-from urano.companion_handoff import project_handoff, UnsafeCompanionPlan
-from urano.project_catalog import ProjectCatalog
+from urano.companion_handoff import project_handoff, UnsafeCompanionPlan, validate_cut_list
+from urano.project_catalog import ProjectCatalog, ProjectConflict
 from urano.private_worker_supervisor import WorkerFailure
 from urano.project_catalog import ProjectNotFound
 from urano.runtime_activation import RuntimeBusy, StaleActivation
@@ -120,6 +120,45 @@ def owner_runtime_blueprint(controller: OwnerRuntimeController,
                                  render_access=False, companion_access=False))
 
     if catalog is not None:
+        @bp.put("/projects/<project_id>/edits")
+        def save_private_edits(project_id: str):
+            # Strictly metadata-only, owner-verified; no raw media, paths or
+            # arbitrary Engine commands enter the server over this endpoint.
+            session = sessions.verify(request.cookies.get(SESSION_COOKIE))
+            if session is None:
+                return jsonify(error="Authentication required"), 401
+            if (request.host_url.rstrip("/") != expected
+                    or request.headers.get("Origin") != expected):
+                return jsonify(error="HTTPS same-origin required"), 403
+            if not session.matches_csrf(request.headers.get("X-Urano-CSRF")):
+                return jsonify(error="Invalid CSRF token"), 403
+            if request.content_length is None or request.content_length > 100000:
+                return jsonify(error="Invalid edit payload size"), 413
+            body = request.get_json(silent=True)
+            if not isinstance(body, dict) or set(body) != {"cuts", "expected_revision"}:
+                return jsonify(error="Invalid edit payload"), 400
+            revision = body["expected_revision"]
+            if type(revision) is not int or revision < 0:
+                return jsonify(error="Invalid revision"), 400
+            try:
+                cuts = validate_cut_list(body["cuts"], require_nonempty=True)
+                current = catalog.get(session.owner_id, project_id)
+                if current.recipe and set(current.recipe) - {"urano_edits_v1", "notes"}:
+                    return jsonify(error="Unsupported existing edit schema"), 409
+                recipe = {"urano_edits_v1": {"cuts": cuts}}
+                if isinstance(current.recipe.get("notes"), str):
+                    recipe["notes"] = current.recipe["notes"]
+                saved = catalog.save_recipe(session.owner_id, project_id, recipe,
+                                            expected_revision=revision)
+            except UnsafeCompanionPlan:
+                return jsonify(error="Invalid cuts"), 400
+            except (ProjectNotFound, ValueError):
+                return jsonify(error="Project workspace unavailable"), 404
+            except ProjectConflict:
+                return jsonify(error="Project was updated elsewhere"), 409
+            return protected(jsonify(project_id=saved.id, revision=saved.revision,
+                                    cuts=cuts, render_ready=False))
+
         @bp.get("/projects/<project_id>/companion-handoff")
         def companion_handoff(project_id: str):
             session, error = identity(False)
