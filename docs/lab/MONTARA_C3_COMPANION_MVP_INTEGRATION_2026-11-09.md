@@ -47,3 +47,13 @@ El primer test del usuario debe llegar **después**, no sustituir la aceptación
 **Próxima tarea necesaria:** puente web autenticado a backend privado y un ensayo aislado en VM con el puerto SSH disponible. No abrir más líneas de experimentación ni exigir 25 usuarios concurrentes ahora.
 
 **Sin merge ni despliegue de main.**
+
+## U23 — Sincronización, CI y puerta de integración (09-11-2026)
+
+- **Gobernanza:** prohibido fusionar o desplegar cambios sobre `main` sin consulta previa al usuario y **OK definitivo de Chema**. Las pruebas, correcciones y preparación en ramas aisladas sí están autorizadas. La integración se propondrá en bloques **C1 → C2 → C3**, tras revisar sus dependencias y el estado de `main` justo antes de cada bloque.
+- **Base de código:** al verificar el 09-11, `main@765a34ceec33311cd520856d46fec15adfc6c0a1` está contenido íntegramente en C3, con **0 commits behind**. No crear merges vacíos: repetir comparación inmediatamente antes de integrar porque Chema puede avanzar `main`.
+- **Regresión Linux:** en el HEAD previo `837d15b`, `tests/e2e_native_stage.py` no copiaba `urano_local_handoff.py` al Companion temporal. Corregido en `0c9318d`. La repetición `42622608269` alcanzó la prueba de mezclador y falló al iniciar otro Companion temporal; `.github/workflows/e2e.yml` tampoco copiaba el módulo. Corregido en `14e3a50`. **Pendiente confirmar CI final, no declarar PASS todavía**.
+- **CI confirmado sobre `0c9318d`:** C2 y los dos workflows C3, Windows, U12 y U12b han terminado SUCCESS. La suite Linux exige revalidación por el segundo problema de fixture.
+- **VM GCP:** se restableció SSH por Gateway al encender `montara-test-gcp-static` (35.242.225.127). Revisados sin cambios servicios 8101/8102/8103; todos responden HTTP 401 (autenticación) y `montara-main.service` está activo en 8103. Directorios de laboratorios previos detectados; **no reutilizar ni borrar sin examinar propietario y estado**. No se ha realizado despliegue.
+- **Cloudflare:** existe `montara-cloudflare-lab.pages.dev`, proyecto Pages conectado a la rama `fernando/lab-cloudflare-static-benchmark`. No crear duplicados ni considerar este laboratorio una beta autenticada.
+- **Próximo trabajo beta:** puente web autenticado hacia owner/Stage privado, identidad proxy-original, política backend contra subida accidental de originales y validación aislada antes de pruebas humanas. No exponer la web global como multiowner.
