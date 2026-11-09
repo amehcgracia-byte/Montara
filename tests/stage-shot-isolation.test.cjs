@@ -23,3 +23,10 @@ test('musician memory remains explicit and opt-in', () => {
   assert.match(edit, /name="rememberMusician"/);
   assert.match(edit, /field\('rememberMusician'\)\.value\?\{remember_musician:/);
 });
+
+test('each Stage shot has a movement checkbox, saved without touching siblings', () => {
+  const edit = source.slice(source.indexOf('async function openMusicShot('), source.indexOf('function previewMusicShot('));
+  assert.match(edit, /type="checkbox" name="movement"/);
+  assert.match(edit, /field\('movement'\)\.checked=doc\.movement !== false/);
+  assert.match(edit, /movement:field\('movement'\)\.checked/);
+});
