@@ -83,8 +83,32 @@ class StageIngestAttestation(unittest.TestCase):
         ):
             with self.subTest(invalid=invalid),self.assertRaises(UnverifiedSources):
                 self.attest([invalid])
-        self.assertEqual(self.provenance.verified("owner-a",self.a.id,source_slots={0})
-                         if False else None,None)
+        with self.assertRaises(UnverifiedSources):
+            self.provenance.verified("owner-a",self.a.id,source_slots={0})
+
+    def test_swapped_camera_receipts_do_not_certify_proxies(self):
+        second=self.root/"second-proxy.mp4"
+        second.write_bytes(b"another-camera-proxy")
+        self.snapshot["inputs"]["videos"].append({
+            "path":str(self.root/"second-original.mov"),
+            "normalized":{"path":str(second),"kind":"proxy"}})
+        self.engine.write_text(json.dumps(self.snapshot))
+        first=dict(self.receipt)
+        second_receipt={
+            "source_slot":1,
+            "original":{"name":"second-original.mov","size":123,
+                        "fingerprint":"b"*64},
+            "proxy_sha256":hashlib.sha256(second.read_bytes()).hexdigest()}
+        good=[first,second_receipt]
+        self.attest(good)
+        self.assertEqual(len(self.provenance.verified(
+            "owner-a",self.a.id,source_slots={0,1})["sources"]),2)
+        swapped=[
+            {**first,"proxy_sha256":second_receipt["proxy_sha256"]},
+            {**second_receipt,"proxy_sha256":first["proxy_sha256"]},
+        ]
+        with self.assertRaises(UnverifiedSources):
+            self.attest(swapped)
 
     def test_rejects_symlink_proxy(self):
         linked=self.root/"linked.mp4"
