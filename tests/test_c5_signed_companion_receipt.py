@@ -67,6 +67,8 @@ class TestC5SignedCompanionReceipt(unittest.TestCase):
         self.verifier._keys={owner_a:self.secret}
         project_a=fx.setup_project(fx.a)
         project_b=fx.setup_project(fx.b)
+        # Creating a project rotates the session CSRF token.
+        csrf_a,csrf_b=fx.csrf(fx.a),fx.csrf(fx.b)
         original={"name":"my-camera.mov","size":78998,"fingerprint":"a"*64}
         blob=b"this-is-a-proxy"*150
         digest=hashlib.sha256(blob).hexdigest()
