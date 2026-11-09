@@ -23,13 +23,15 @@ from urano.owner_runtime_controller import OwnerRuntimeController
 from urano.http_owner_runtime import owner_runtime_blueprint
 from urano.owner_dashboard import owner_dashboard_blueprint
 from urano.stage_source_provenance import StageSourceProvenance
+from urano.private_proxy_inbox import private_proxy_inbox_blueprint
 
 
 def create_owner_api(private_dir: Path, *, settings: OIDCSettings,
                      provider: GoogleProvider | None = None,
                      runtime_controller: OwnerRuntimeController | None = None,
                      enable_dashboard: bool = False,
-                     stage_provenance: StageSourceProvenance | None = None) -> Flask:
+                     stage_provenance: StageSourceProvenance | None = None,
+                     proxy_staging_root: Path | None = None) -> Flask:
     root = Path(private_dir).resolve()
     if not root.is_dir() or root.is_symlink():
         raise ValueError("Existing private database directory required")
@@ -62,6 +64,12 @@ def create_owner_api(private_dir: Path, *, settings: OIDCSettings,
             runtime_controller, session_store,
             https_origin=allowed_origin, catalog=catalog,
             stage_provenance=stage_provenance))
+
+    if proxy_staging_root is not None:
+        # Explicit opt-in. No such route in any legacy app or default owner API.
+        app.register_blueprint(private_proxy_inbox_blueprint(
+            catalog, session_store, https_origin=allowed_origin,
+            staging_root=proxy_staging_root))
 
     @app.post("/urano/v1/session/refresh")
     def refresh_csrf():
