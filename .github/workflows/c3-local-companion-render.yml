@@ -27,6 +27,9 @@ jobs:
       - name: Strict pathless cut conversion contracts
         run: |
           python -m unittest discover -s tests -p 'test_urano_u21_local_handoff.py' -v
+          python -m unittest discover -s tests -p 'test_c3_companion_delivery.py' -v
+          bash -n companion/install.sh
+          bash -n 'companion/Install Montara Companion.command'
           python -m py_compile companion/urano_local_handoff.py companion/companion.py tests/urano_u21_render_client.py
 
   two-isolated-companions-mp4:
