@@ -37,3 +37,16 @@ jobs:
           python -m unittest discover -s tests -p 'test_c5_private_cut_plan.py' -v
           python -m unittest discover -s tests -p 'test_urano_u21_local_handoff.py' -v
           python -m py_compile urano/owner_dashboard.py urano/minimal_owner_api.py
+      - name: Validate embedded private browser scripts
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import subprocess, tempfile
+          from urano.owner_dashboard import SCRIPT, WORKSPACE_SCRIPT
+          with tempfile.TemporaryDirectory() as directory:
+              for name, script in (("dashboard.js", SCRIPT), ("workspace.js", WORKSPACE_SCRIPT)):
+                  path = Path(directory) / name
+                  path.write_text(script, encoding="utf-8")
+                  subprocess.run(["node", "--check", str(path)], check=True)
+          PY
+          node --check web/companion.js
