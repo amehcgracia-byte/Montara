@@ -73,6 +73,10 @@ class TestC5PrivateProxyInbox(TestC4OwnerDashboard):
         self.assertIs(record["attested"],False)
         self.assertEqual(record["proxy_sha256"],hashlib.sha256(video).hexdigest())
         self.assertEqual(list(self.staging.rglob("*.part")),[])
+        # Existing Companion helper sends a proxy only, never its original.
+        js=(Path(__file__).resolve().parents[1]/"web"/"companion.js").read_text()
+        self.assertIn("stagePrivateProxy(projectId, sourceSlot, small, csrf)",js)
+        self.assertIn("result.attested !== false",js)
 
     def test_disabled_by_default_and_no_original_upload(self):
         plain=create_owner_api(self.root,
