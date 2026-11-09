@@ -68,6 +68,12 @@ def attest_stage_ingest(
             raise UnverifiedSources("Stage source or normalized output unavailable")
         source = Path(source_path)
         output = Path(normalized["path"])
+        # The Engine input must live inside this owner's project workspace,
+        # not another user's folder or an arbitrary host path. The normalized
+        # cache may reside elsewhere under the Engine's own isolation.
+        if (not source.is_absolute() or not source.resolve().is_relative_to(file.parent.resolve())
+                or not file.parent.is_dir() or file.parent.is_symlink()):
+            raise UnverifiedSources("Stage source is outside its private project")
         if any(not item.is_absolute() or item.is_symlink() or not item.is_file()
                for item in (source, output)):
             raise UnverifiedSources("Trusted Stage files missing or linked")
