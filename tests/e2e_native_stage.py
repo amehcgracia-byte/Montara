@@ -21,7 +21,7 @@ def main():
         run(['ffmpeg','-v','error','-y','-f','lavfi','-i','testsrc2=size=1920x1080:rate=30:duration=20','-i',str(master),'-vf',f'eq=brightness={-.1+i*.04}','-c:v','libx264','-preset','ultrafast','-threads','2','-c:a','aac','-shortest',str(media/f'camera-{i}.mp4')])
     home=out/'companion';home.mkdir(exist_ok=True)
     install_layout(home)
-    for name in ('companion.py','video_jobs.py','video_recipe.py'):shutil.copy2(ROOT/'companion'/name,home/name)
+    for name in ('companion.py','video_jobs.py','video_recipe.py','urano_local_handoff.py'):shutil.copy2(ROOT/'companion'/name,home/name)
     chosen=out/'chosen-folder';chosen.mkdir(exist_ok=True)
     project_id='b'*16;(home/'projects.json').write_text(json.dumps({project_id:str(chosen)}))
     port,helper_port=free_port(),free_port();url=f'http://127.0.0.1:{port}';base=f'http://127.0.0.1:{helper_port}'
