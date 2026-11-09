@@ -180,7 +180,7 @@ class OwnerSessionToRealEngine(unittest.TestCase):
                 "source_slot":0,"proxy_sha256":digest,
                 "original_claim":{"name":person+".mp4","size":camera.stat().st_size,
                                   "fingerprint":digest},
-                "attested":False,"bytes":camera.stat().st_size}))
+                "attested":False,"bytes":camera.stat().st_size,"receipt_authenticated":False}))
         self.assertNotEqual(digests["alice"],"")
         self.assertEqual(self.activate("alice",self.project_ids["bob"]).status_code,404)
         with ThreadPoolExecutor(max_workers=2) as pool:
