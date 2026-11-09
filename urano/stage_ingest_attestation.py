@@ -206,3 +206,79 @@ def attest_authenticated_inbox(
         engine_project_file=expected_project, receipts=receipts,
         host_workspace=bindings.root if container_workspace is not None else None,
         container_workspace=container_workspace)
+
+
+def attest_authenticated_worker_proof(
+    provenance: StageSourceProvenance,
+    inbox_root: Path,
+    owner_id: str,
+    project_id: str,
+    *,
+    proof: list[dict],
+) -> str:
+    """Certify only a trusted isolated Engine's post-DONE hash-only proof.
+
+    The controller receives this proof over the checked Docker worker's private
+    stdio pipe, never via HTTP. The proof hashes must agree with the per-owner
+    inbox whose original identity was verified using a pinned Companion HMAC.
+    This design does not require broadening host access to Engine project files.
+    """
+    provenance.catalog.get(owner_id, project_id)
+    if not isinstance(proof, list) or not 1 <= len(proof) <= 16:
+        raise UnverifiedSources("Missing private Engine source proof")
+    root = Path(inbox_root)
+    directory = root / hashlib.sha256(owner_id.encode()).hexdigest() / project_id
+    if (root.is_symlink() or not root.is_dir() or
+            directory.is_symlink() or not directory.is_dir()
+            or not directory.resolve().is_relative_to(root.resolve())):
+        raise UnverifiedSources("Trusted private Companion inbox unavailable")
+    canonical = []
+    summary = []
+    for slot, attested in enumerate(proof):
+        if (not isinstance(attested, dict) or set(attested) !=
+                {"slot", "proxy_sha256", "normalized_sha256"} or
+                type(attested["slot"]) is not int or attested["slot"] != slot or
+                any(not isinstance(attested.get(k), str) or
+                    not re.fullmatch(r"[a-f0-9]{64}", attested[k])
+                    for k in ("proxy_sha256", "normalized_sha256"))):
+            raise UnverifiedSources("Invalid owner Stage proof")
+        digest = attested["proxy_sha256"]
+        metadata = directory / f"slot-{slot}-{digest}.json"
+        proxy = directory / f"slot-{slot}-{digest}.mp4"
+        if (metadata.is_symlink() or proxy.is_symlink() or
+                not metadata.is_file() or not proxy.is_file()
+                or metadata.stat().st_size > 4096):
+            raise UnverifiedSources("Private authenticated receipt missing")
+        try:
+            entry = json.loads(metadata.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            raise UnverifiedSources("Invalid Companion receipt metadata") from exc
+        if (not isinstance(entry, dict) or set(entry) != {
+                "source_slot", "proxy_sha256", "original_claim", "attested",
+                "bytes", "receipt_authenticated"} or
+                type(entry["source_slot"]) is not int or entry["source_slot"] != slot or
+                entry["proxy_sha256"] != digest or
+                entry["attested"] is not False or
+                entry["receipt_authenticated"] is not True or
+                type(entry["bytes"]) is not int or
+                not 0 < entry["bytes"] <= 128 * 1024 * 1024 or
+                proxy.stat().st_size != entry["bytes"]):
+            raise UnverifiedSources("Companion receipt is not authenticated")
+        checked = hashlib.sha256()
+        try:
+            with proxy.open("rb") as source:
+                for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                    checked.update(chunk)
+        except OSError as exc:
+            raise UnverifiedSources("Private proxy could not be checked") from exc
+        if checked.hexdigest() != digest:
+            raise UnverifiedSources("Companion inbox proxy changed")
+        canonical.append({"source_slot": slot, "original": entry["original_claim"]})
+        summary.append(attested)
+    sources = _canonical_sources(canonical)
+    revision = hashlib.sha256(json.dumps(
+        summary, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    provenance.register_trusted(owner_id, project_id, sources,
+                                stage_revision=revision)
+    return revision
