@@ -74,7 +74,7 @@ class C5CompanionProxyReceipt(unittest.TestCase):
             project_file=root/"project.json"
             project_file.write_text(json.dumps({
               "stages":{"ingest":{"status":"done"}},
-              "inputs":{"videos":[{"normalized":{"path":str(staged),"kind":"proxy"}}]}
+              "inputs":{"videos":[{"path":str(staged),"normalized":{"path":str(staged),"kind":"proxy"}}]}
             }))
             envelope=[{"source_slot":0,**actual_receipt}]
             revision=attest_stage_ingest(provenance,"owner-stage",project.id,
