@@ -58,6 +58,35 @@ class C5CompanionProxyReceipt(unittest.TestCase):
                 raise AssertionError("Incomplete proxy incorrectly accepted")
             except ValueError:
                 pass
+            # Same bytes: actual Companion receipt can be checked against a
+            # completed Stage snapshot by a trusted ingest-side caller.
+            from urano.project_catalog import ProjectCatalog
+            from urano.stage_source_provenance import StageSourceProvenance, UnverifiedSources
+            from urano.stage_ingest_attestation import attest_stage_ingest
+            catalog=ProjectCatalog(root/"catalog.sqlite3")
+            project=catalog.create("owner-stage","Receipt integration")
+            provenance=StageSourceProvenance(root/"provenance.sqlite3",catalog)
+            companion.sources[key]=original
+            companion.jobs[key]["status"]="ready"
+            actual_receipt=companion.video_proxy_receipt(key)
+            staged=root/"staged.mp4"
+            staged.write_bytes(proxy.read_bytes())
+            project_file=root/"project.json"
+            project_file.write_text(json.dumps({
+              "stages":{"ingest":{"status":"done"}},
+              "inputs":{"videos":[{"normalized":{"path":str(staged),"kind":"proxy"}}]}
+            }))
+            envelope=[{"source_slot":0,**actual_receipt}]
+            revision=attest_stage_ingest(provenance,"owner-stage",project.id,
+                                         engine_project_file=project_file,receipts=envelope)
+            assert provenance.verified("owner-stage",project.id,source_slots={0})["stage_revision"]==revision
+            staged.write_bytes(b"modified-stage-proxy")
+            try:
+                attest_stage_ingest(provenance,"owner-stage",project.id,
+                                    engine_project_file=project_file,receipts=envelope)
+                raise AssertionError("Mismatched Stage bytes accepted")
+            except UnverifiedSources:
+                pass
             print("LOCAL_PROXY_RECEIPT_PASS")
         ''')
         with tempfile.TemporaryDirectory(prefix="montara-c5-receipt-") as folder:
