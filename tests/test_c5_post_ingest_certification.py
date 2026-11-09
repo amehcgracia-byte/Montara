@@ -28,8 +28,12 @@ class TestC5PostIngestCertification(unittest.TestCase):
         (self.project_dir/"project.json").write_text("{}")
         self.bindings=Mock()
         self.bindings.resolve_internal.return_value=self.project_dir
-        self.bridge=SimpleNamespace(guard=SimpleNamespace(bindings=self.bindings),
-                                    ingest_status=Mock(return_value="done"))
+        self.bridge=SimpleNamespace(
+            guard=SimpleNamespace(
+                bindings=self.bindings,
+                get_state=Mock(return_value=("busy",self.project_id,1))),
+            runtime_id="test-only-owner-runtime",
+            ingest_status=Mock(return_value="done"))
         self.controller=OwnerRuntimeController()
         self.controller._worker=lambda owner:(self.bridge,RLock())
 
