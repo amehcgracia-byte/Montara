@@ -1,0 +1,19 @@
+name: Stage shot isolation
+on:
+  push:
+    branches:
+      - fix/stage-shot-independent-framing-20261109
+  pull_request:
+    paths:
+      - web/cut-editor.js
+      - tests/stage-shot-isolation.test.cjs
+      - .github/workflows/stage-shot-isolation.yml
+jobs:
+  shot-isolation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test tests/stage-shot-isolation.test.cjs
