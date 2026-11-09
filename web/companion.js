@@ -74,19 +74,20 @@ const montaraCompanion = (() => {
       if (!info || !this.helps(file)) return null;
       const audio = this.isAudio(file);
       preview = preview && audio && !!info.audio_preview;
-      const timings = {started: performance.now(), located: null, proxyReady: null, downloaded: null};
+      const nowMs = () => typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now();
+      const timings = {started: nowMs(), located: null, proxyReady: null, downloaded: null};
       try {
         onProgress('Finding it on your computer', 0);
         const print = await fingerprint(file);
         const located = await call('/locate', json({name: file.name, size: file.size, fingerprint: print}));
         if (!located.ok) return located.status === 404 ? {missing: true} : null;
         const located_ = await located.json();
-        timings.located = performance.now();
+        timings.located = nowMs();
         const {id} = await (await call('/proxies', json({id: located_.id, preview}))).json();
         for (;;) {
           if (cancelled()) return null;
           const state = await (await call(`/proxies/${id}`)).json();
-          if (state.status === 'ready') { timings.proxyReady = performance.now(); break; }
+          if (state.status === 'ready') { timings.proxyReady = nowMs(); break; }
           if (state.status === 'skipped' || state.status === 'failed') { console.info('Companion:', state.reason || state.error); return null; }
           onProgress(preview ? 'Light preview' : audio ? 'Lossless copy' : 'Small version', state.progress || 0);
           await new Promise(resolve => setTimeout(resolve, 800));
@@ -94,7 +95,7 @@ const montaraCompanion = (() => {
         const download = await call(`/proxies/${id}/file`);
         if (!download.ok) return null;
         const blob = await download.blob();
-        timings.downloaded = performance.now();
+        timings.downloaded = nowMs();
         // Stage performance diagnostics: durations only; no filenames or local paths.
         console.info('[Montara upload timing]', {
           step: 'local proxy',
