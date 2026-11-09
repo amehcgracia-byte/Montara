@@ -61,8 +61,8 @@ class TestC5SignedCompanionReceipt(unittest.TestCase):
         fx.login(fx.a,sub="signed-a",email="alpha@example.test")
         fx.login(fx.b,sub="signed-b",email="beta@example.test")
         sessions=SessionStore(fx.root/"sessions.sqlite3")
-        owner_a=sessions.verify(fx.a.get_cookie(SESSION_COOKIE).value).owner_id
-        owner_b=sessions.verify(fx.b.get_cookie(SESSION_COOKIE).value).owner_id
+        owner_a=sessions.verify(fx.a.get_cookie(SESSION_COOKIE,domain="lab.example.test").value).owner_id
+        owner_b=sessions.verify(fx.b.get_cookie(SESSION_COOKIE,domain="lab.example.test").value).owner_id
         csrf_a,csrf_b=fx.csrf(fx.a),fx.csrf(fx.b)
         self.verifier._keys={owner_a:self.secret}
         project_a=fx.setup_project(fx.a)
