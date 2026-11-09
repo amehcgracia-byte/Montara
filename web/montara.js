@@ -1761,7 +1761,10 @@ function renderShotBars(s) {
   const box = $("#renderBars");
   const shots = (s.tasks || []).filter((t) => /^segment-\d+$/.test(t.id || ""));
   const total = Math.max(0, ...shots.map((t) => Number((/\/(\d+)/.exec(t.label || "") || [])[1] || 0)));
-  if (!total || s.status === "done") { box.hidden = true; box.innerHTML = ""; return; }
+  // Companion seeds every segment at 0% before export starts. Do not show
+  // empty shot bars during original inspection, transcoding or preparation.
+  const started = shots.some(t => Number(t.percent || 0) > 0);
+  if (!total || !started || s.status === "done" || s.status === "ready") { box.hidden = true; box.innerHTML = ""; return; }
   if (box.children.length !== total) box.innerHTML = Array.from({ length: total }, () => "<i></i>").join("");
   box.classList.toggle("many", total > 60);
   for (const t of shots) {
@@ -2653,26 +2656,47 @@ async function finishOriginalVideo(s) {
     const candidates = [...state.files, ...savedOriginals];
     const identities = new Map();
     const unavailable = [];
-    for (const source of recipe.sources) {
+    // Verify up to two independent camera originals concurrently. This only
+    // runs identity/HEAD checks: never fetch full source bodies in parallel.
+    const checksStarted = performance.now();
+    const lookupByIdentity = new Map();
+    let checkedSources = 0;
+    const verifySources = async (source) => {
+      if (job.cancelled) return;
       const original = NativeExport.originalFor(source, candidates);
       identities.set(source.key, original);
+      let missing = false;
       if (original) {
-        if (!await montaraCompanion.locateOriginal(original)) unavailable.push(source.key);
-      } else if (source.preview || /\.small\.mp4$/i.test(source.path) || state.files.some(f=>f.path===source.path && f.small)) unavailable.push(source.key);
-      else {
+        const identity = JSON.stringify([original.name, original.size, original.fingerprint]);
+        if (!lookupByIdentity.has(identity)) lookupByIdentity.set(identity, montaraCompanion.locateOriginal(original));
+        missing = !(await lookupByIdentity.get(identity));
+      } else if (source.preview || /\.small\.mp4$/i.test(source.path) || state.files.some(f=>f.path===source.path && f.small)) {
+        missing = true;
+      } else {
         const checked = await fetch('/api/v1/edit/native-source/'+source.key+'?'+new URLSearchParams({revision:recipe.revision,project_id:state.projectId}), {method:'HEAD'});
-        if ([400,404,410].includes(checked.status)) unavailable.push(source.key);
-        else if (!checked.ok) throw new Error('Could not check this edit’s originals. Reopen the edit and retry.');
+        missing = [400,404,410].includes(checked.status);
+        if (!missing && !checked.ok) throw new Error('Could not check this edit’s originals. Reopen the edit and retry.');
       }
+      if (missing) unavailable.push(source.key);
+      checkedSources += 1;
+      if (!job.cancelled) setProgress(0,'Finding original camera files…',`Checked ${checkedSources} of ${recipe.sources.length} sources`);
+    };
+    for (let index=0;index<recipe.sources.length;index+=2) {
+      await Promise.all(recipe.sources.slice(index,index+2).map(verifySources));
       if (job.cancelled) return;
     }
+    console.info('[Montara native timing]', {phase:'check originals', seconds:(performance.now()-checksStarted)/1000, sources:checkedSources, local_checks:lookupByIdentity.size, unavailable:unavailable.length});
     const planned = NativeExport.plan(recipe, unavailable);
     if (planned.blocked) throw new Error(NativeExport.warnings(planned.diagnostics.filter(d=>d.status==='required')).join('\n'));
     recipe = planned.recipe;
     job.diagnostics = planned.diagnostics;
     if (planned.diagnostics.length) toast(NativeExport.warnings(planned.diagnostics).join(' '), true);
     const sources=[];
+    let connectedSources=0, transferredBytes=0, fallbackSources=0;
+    const transferStarted=performance.now();
     for(const source of recipe.sources){
+      if(job.cancelled)return;
+      setProgress(0,'Connecting original camera files…',`Source ${connectedSources+1} of ${recipe.sources.length} · ${identities.get(source.key)?'Checking local original':'Preparing server fallback'}`);
       const original = identities.get(source.key);
       const file=state.files.find(f=>f.path===source.path);
       if(original)sources.push({source:source.key,original});
@@ -2684,15 +2708,22 @@ async function finishOriginalVideo(s) {
         const response=await fetch('/api/v1/edit/native-source/'+source.key+'?'+new URLSearchParams({revision:recipe.revision,project_id:state.projectId}));
         if(!response.ok)throw new Error('The original camera video is unavailable.');
         const name='montara-render-source-'+crypto.randomUUID().replaceAll('-','')+'.mp4';
-        await montaraCompanion.saveInProject(state.localProject.id,name,await response.blob());sources.push({source:source.key,asset:name});
+        const blob=await response.blob();
+        if(job.cancelled)return;
+        await montaraCompanion.saveInProject(state.localProject.id,name,blob);sources.push({source:source.key,asset:name});
+        transferredBytes+=blob.size;fallbackSources++;
       }
+      connectedSources++;
       if(job.cancelled)return;
     }
-    setProgress(1,'Preparing your master…','');
+    setProgress(1,'Preparing your master…','Copying the audio master to Companion');
     const response=await fetch('/api/v1/edit/native-master?'+new URLSearchParams({revision:recipe.revision,project_id:state.projectId}));
     if(!response.ok)throw new Error('The master is not available for this edit.');
     const master='montara-render-audio-'+crypto.randomUUID().replaceAll('-','')+'.audio';
-    await montaraCompanion.saveInProject(state.localProject.id,master,await response.blob());
+    const masterBlob=await response.blob();
+    if(job.cancelled)return;
+    await montaraCompanion.saveInProject(state.localProject.id,master,masterBlob);
+    console.info('[Montara native timing]', {phase:'connect export assets', seconds:(performance.now()-transferStarted)/1000, fallback_sources:fallbackSources, fallback_bytes:transferredBytes, master_bytes:masterBlob.size});
     if(job.cancelled)return;
     let logo=null;
     if(state.branding==='mine'){
@@ -2716,7 +2747,11 @@ async function watchNativeVideo(job,s={}) {
       if(status.status==='failed')throw new Error(status.error || 'The original-quality export failed.');
       if(status.status==='cancelled')return;
       renderShotBars(status);
-      setProgress(Math.min(99,Math.round((status.progress||0)*100)),'Rendering original-quality video…','');
+      const phase = status.message?.trim() || (status.status === 'queued' ? 'Waiting to start the local render…' : 'Preparing original-quality video…');
+      const elapsed = Number.isFinite(status.elapsed_sec) ? `Elapsed ${Math.floor(status.elapsed_sec / 60)}m ${Math.floor(status.elapsed_sec % 60)}s` : '';
+      const activeShots = (status.tasks || []).filter(task => /^segment-/.test(task.id || '') && Number(task.percent || 0) > 0);
+      const shotDetail = activeShots.length ? `${activeShots.filter(task => Number(task.percent || 0) >= 100).length} of ${activeShots.length} started shots finished` : 'Shot rendering has not started yet';
+      setProgress(Math.min(99,Math.round((status.progress||0)*100)),phase,[elapsed,shotDetail].filter(Boolean).join(' · '));
       if(status.status==='ready')break;
       await new Promise(resolve=>setTimeout(resolve,700));
     }
