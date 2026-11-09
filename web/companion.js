@@ -169,6 +169,10 @@ const montaraCompanion = (() => {
         throw new Error('Companion proxy receipt does not match original');
       if (!(small.file instanceof Blob) || small.file.type !== 'video/mp4')
         throw new Error('Only Companion-produced video proxies can be staged');
+      // Companion generates an authenticated receipt using an operator-paired
+      // secret; the browser only relays it and never learns that secret.
+      const envelope=await this.signedPrivateProxyReceipt(
+        small.original.companion,projectId,sourceSlot,original,receipt.proxy_sha256);
       const response = await fetch(
         '/urano/v1/proxy-inbox/projects/' + encodeURIComponent(projectId) +
         '/slots/' + sourceSlot, {
@@ -176,6 +180,7 @@ const montaraCompanion = (() => {
           headers: {'Content-Type':'video/mp4', 'X-Urano-CSRF':csrf,
                     'X-Urano-Proxy-SHA256':receipt.proxy_sha256,
                     'X-Urano-Original-Claim':JSON.stringify(original),
+                    'X-Urano-Signed-Receipt':JSON.stringify(envelope),
                     'Origin':location.origin},
           body:small.file
         });
@@ -184,6 +189,26 @@ const montaraCompanion = (() => {
           result.proxy_sha256 !== receipt.proxy_sha256)
         throw new Error(result.error || 'Private Stage proxy staging failed');
       return result;  // attested:false; Stage must verify separately.
+    },
+    async signedPrivateProxyReceipt(id, projectId, sourceSlot, original, expectedHash) {
+      if (!/^[a-f0-9]{24}$/.test(id || '') ||
+          !/^[0-9a-f-]{36}$/.test(projectId || '') ||
+          !Number.isInteger(sourceSlot) || sourceSlot < 0 || sourceSlot > 15)
+        throw new Error('Invalid signed receipt request');
+      const url='/proxies/'+id+'/signed-receipt?project_id='+
+        encodeURIComponent(projectId)+'&slot='+sourceSlot;
+      const response=await call(url);
+      if(!response.ok) throw new Error('Companion has not been paired for signed source receipts');
+      const envelope=await response.json();
+      const receipt=envelope?.receipt;
+      if(receipt?.project_id!==projectId || receipt?.source_slot!==sourceSlot ||
+         receipt?.proxy_sha256!==expectedHash ||
+         receipt?.original?.name!==original.name ||
+         receipt?.original?.size!==original.size ||
+         receipt?.original?.fingerprint!==original.fingerprint ||
+         !/^[a-f0-9]{64}$/.test(envelope.signature || ''))
+        throw new Error('Companion signed source receipt does not match proxy');
+      return envelope;
     },
     /* One range of an original audio file; resolves to a Blob. 'opus' (Fast, high bitrate) when this
        companion can, otherwise lossless (FLAC, or WavPack for float). */
