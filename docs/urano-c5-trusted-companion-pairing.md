@@ -4,7 +4,7 @@
 
 ## Objetivo y frontera de confianza
 
-Companion conserva el vídeo original en el equipo local. Después de generar un proxy, lee **el original y los bytes completos del proxy**, calcula sus huellas y puede emitir un recibo con firma HMAC-SHA256. El navegador transporta el recibo, pero **no dispone de la clave**.
+Companion conserva el vídeo original en el equipo local. Después de generar un proxy, calcula una **huella de extremos del original** (primeros y últimos 64 KiB + tamaño + nombre) y el **SHA-256 completo de los bytes del proxy**, y puede emitir un recibo con firma HMAC-SHA256. **Limitación explícita:** la huella de extremos NO prueba criptográficamente que los bytes interiores de un original enorme no hayan cambiado sin alterar extremos ni tamaño. En una fase posterior se puede reforzar con hash integral o manifiesto de fragmentos cuando la eficiencia del procesado lo permita. El navegador transporta el recibo, pero **no dispone de la clave**.
 
 El servidor verifica una firma asociada **al propietario exacto**, a un proyecto UUID, un slot de cámara, nombre/tamaño/huella del original y SHA-256 completo del proxy. Solo entonces escribe en el inbox privado `receipt_authenticated: true` y **`attested: false`**. No existe inscripción de claves por HTTP.
 
