@@ -17,6 +17,8 @@ from urano.stage_source_provenance import StageSourceProvenance, UnverifiedSourc
 def attest_stage_ingest(
     provenance: StageSourceProvenance, owner_id: str, project_id: str,
     *, engine_project_file: Path, receipts: list[dict],
+    host_workspace: Path | None = None,
+    container_workspace: Path | None = None,
 ) -> str:
     """Register only if completed Engine ingest and every proxy matches its receipt.
 
@@ -67,11 +69,28 @@ def attest_stage_ingest(
         if (not isinstance(source_path, str) or not isinstance(normalized, dict)
                 or not isinstance(normalized.get("path"), str)):
             raise UnverifiedSources("Stage source or normalized output unavailable")
-        source = Path(source_path)
-        output = Path(normalized["path"])
-        # The Engine input must live inside this owner's project workspace,
-        # not another user's folder or an arbitrary host path. The normalized
-        # cache may reside elsewhere under the Engine's own isolation.
+        def trusted_host_path(recorded: str) -> Path:
+            candidate = Path(recorded)
+            if not candidate.is_absolute():
+                raise UnverifiedSources("Stage returned a relative media path")
+            if host_workspace is None and container_workspace is None:
+                return candidate
+            if host_workspace is None or container_workspace is None:
+                raise UnverifiedSources("Incomplete trusted mount mapping")
+            host, inside = Path(host_workspace), Path(container_workspace)
+            if (not host.is_absolute() or host.is_symlink() or
+                    not inside.is_absolute() or inside == Path("/")):
+                raise UnverifiedSources("Unsafe trusted mount mapping")
+            # Do not resolve a guessed path or allow /workspace-other. Only
+            # exact child paths of the operator-provided bind mount can map.
+            if not candidate.is_relative_to(inside):
+                raise UnverifiedSources("Stage media outside private container mount")
+            return host / candidate.relative_to(inside)
+
+        source = trusted_host_path(source_path)
+        output = trusted_host_path(normalized["path"])
+        # Source input MUST be inside the bound private Engine project; the
+        # normalized output can live in its own container-local workspace cache.
         if (not source.is_absolute() or not source.resolve().is_relative_to(file.parent.resolve())
                 or not file.parent.is_dir() or file.parent.is_symlink()):
             raise UnverifiedSources("Stage source is outside its private project")
@@ -105,6 +124,7 @@ def attest_authenticated_inbox(
     bindings: "EngineProjectRegistry", inbox_root: Path,
     owner_id: str, project_id: str, *,
     engine_project_file: Path,
+    container_workspace: Path | None = None,
 ) -> str:
     """Operator-only final attestation after real Stage Ingest has reached DONE.
 
@@ -147,7 +167,11 @@ def attest_authenticated_inbox(
             raise UnverifiedSources("Stage source is not a trusted proxy")
         digest = pattern.group(1)
         expected_input = root / "inputs" / "urano-staged-proxies" / source.name
-        if source != expected_input or source.is_symlink():
+        inside_path = Path(container_workspace) / expected_input.relative_to(bindings.root) if container_workspace is not None else None
+        if (source not in (expected_input, inside_path) or
+                source.is_symlink() or
+                (container_workspace is not None and (
+                    not container_workspace.is_absolute() or container_workspace == Path("/")))):
             raise UnverifiedSources("Engine source outside certified workspace")
         manifest = folder / f"slot-{slot}-{digest}.json"
         staged = folder / f"slot-{slot}-{digest}.mp4"
@@ -177,5 +201,8 @@ def attest_authenticated_inbox(
             raise UnverifiedSources("Companion staged proxy was altered")
         receipts.append({"source_slot": slot, "proxy_sha256": digest,
                          "original": entry["original_claim"]})
-    return attest_stage_ingest(provenance, owner_id, project_id,
-                               engine_project_file=expected_project, receipts=receipts)
+    return attest_stage_ingest(
+        provenance, owner_id, project_id,
+        engine_project_file=expected_project, receipts=receipts,
+        host_workspace=bindings.root if container_workspace is not None else None,
+        container_workspace=container_workspace)
