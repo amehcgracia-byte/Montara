@@ -15,6 +15,9 @@ on:
       - 'urano/stage_source_provenance.py'
       - 'urano/stage_ingest_attestation.py'
       - 'tests/test_c5_stage_ingest_attestation.py'
+      - 'companion/companion.py'
+      - 'web/companion.js'
+      - 'tests/test_c5_companion_proxy_receipt.py'
       - 'tests/test_c5_stage_source_provenance.py'
       - '.github/workflows/c5-owner-stage-workspace.yml'
 
@@ -41,6 +44,7 @@ jobs:
           python -m unittest discover -s tests -p 'test_c5_private_cut_plan.py' -v
           python -m unittest discover -s tests -p 'test_c5_stage_source_provenance.py' -v
           python -m unittest discover -s tests -p 'test_c5_stage_ingest_attestation.py' -v
+          python -m unittest discover -s tests -p 'test_c5_companion_proxy_receipt.py' -v
           python -m unittest discover -s tests -p 'test_urano_u21_local_handoff.py' -v
           python -m py_compile urano/owner_dashboard.py urano/minimal_owner_api.py urano/stage_source_provenance.py
       - name: Validate embedded private browser scripts
