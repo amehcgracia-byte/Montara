@@ -105,6 +105,28 @@ class TestC5StageSourceProvenance(TestC5PrivateWorkspace):
         self.assertEqual(self.a.get(route,base_url=HOST).status_code,409)
         self.assertEqual(self.b.get(route,base_url=HOST).status_code,409)
 
+    def test_ingest_request_revokes_old_certificate_before_worker_use(self):
+        owner,csrf=self.login(self.a,sub="google-reingest",email="alpha@example.test")
+        project,_=self.provision(owner,"alice")
+        edits=self.a.put("/urano/v1/runtime/projects/"+project+"/edits",
+                         base_url=HOST,headers={"Origin":HOST,"X-Urano-CSRF":csrf},
+                         json={"expected_revision":0,"cuts":[
+                             {"source_slot":0,"start_ms":100,"end_ms":2000}]})
+        self.assertEqual(edits.status_code,200)
+        self.provenance.register_trusted(
+            owner,project,[{"source_slot":0,"original":{
+                "name":"camera.mp4","size":1000,"fingerprint":"c"*64}}],
+            stage_revision="d"*64)
+        checked="/urano/v1/runtime/projects/"+project+"/verified-sources"
+        self.assertEqual(self.a.get(checked,base_url=HOST).status_code,200)
+        # Even if worker has not yet been activated and the request is
+        # rejected, no previously certified source can be exported after
+        # this user's explicit intent to re-run Ingest.
+        reply=self.a.post("/urano/v1/runtime/projects/"+project+"/ingest",
+                          base_url=HOST,headers={"Origin":HOST,"X-Urano-CSRF":csrf})
+        self.assertEqual(reply.status_code,409)
+        self.assertEqual(self.a.get(checked,base_url=HOST).status_code,409)
+
     def test_unauthenticated_or_unknown_provenance_denied(self):
         self.assertEqual(self.a.get("/urano/v1/runtime/projects/any/verified-sources",
                                     base_url=HOST).status_code,401)
