@@ -108,6 +108,66 @@ def run(stdin, stdout, *, engine_dir: Path, data_root: Path, make_client=make_en
                 emit({"ok": True, "type": "staged_inputs_registered",
                       "source_count": len(paths)})
                 continue
+            if packet.get("op") == "ingest_proof":
+                # Fixed authenticated stdio command. Compute the proof under
+                # the Engine UID, never grant the HTTP/host process file access.
+                # Only SHA-256 hashes and slot integers cross this channel.
+                if set(packet) != {"op"} or active_folder is None:
+                    raise ValueError("An opened private Engine project is required")
+                state = client.application.config.get("ZUCKER_STATE")
+                loaded = getattr(getattr(state, "project", None), "folder", None)
+                if not isinstance(loaded, (str, Path)) or Path(loaded).resolve() != active_folder:
+                    raise ValueError("Active Engine project changed")
+                snapshot = client.get("/api/v1/project")
+                if snapshot.status_code != 200:
+                    raise ValueError("Engine snapshot unavailable")
+                project = snapshot.get_json()
+                stage = (project.get("stages") or {}).get("ingest") or {}
+                if not isinstance(stage, dict) or stage.get("status") != "done":
+                    raise ValueError("Stage Ingest did not finish")
+                videos = (project.get("inputs") or {}).get("videos")
+                if not isinstance(videos, list) or not 1 <= len(videos) <= 16:
+                    raise ValueError("Stage camera count unavailable")
+                proofs = []
+                camera_dir = active_folder / "inputs" / "urano-staged-proxies"
+                if camera_dir.is_symlink() or not camera_dir.is_dir():
+                    raise ValueError("Private Engine input folder missing")
+                for slot, video in enumerate(videos):
+                    if not isinstance(video, dict):
+                        raise ValueError("Unrecognized Engine camera")
+                    raw = video.get("path")
+                    norm = video.get("normalized")
+                    if (not isinstance(raw, str) or not isinstance(norm, dict)
+                            or not isinstance(norm.get("path"), str)):
+                        raise ValueError("Engine camera or normalized output unavailable")
+                    source = Path(raw)
+                    normalized = Path(norm["path"])
+                    match = re.fullmatch(r"camera-" + str(slot) + r"-([a-f0-9]{64})\.mp4", source.name)
+                    if not match:
+                        raise ValueError("Source is not a private staged camera")
+                    expected = camera_dir / source.name
+                    if (not source.is_absolute() or source != expected or
+                            source.is_symlink() or not source.is_file()):
+                        raise ValueError("Source is outside private camera folder")
+                    # Normalized media must also belong to this container's
+                    # dedicated storage. Reject symlinks, including ancestors.
+                    if (not normalized.is_absolute() or normalized.is_symlink()
+                            or not normalized.is_file() or
+                            not normalized.resolve().is_relative_to(data_root.resolve())):
+                        raise ValueError("Normalized media outside private worker root")
+                    def sha256_file(path):
+                        digest = hashlib.sha256()
+                        with path.open("rb") as handle:
+                            for block in iter(lambda: handle.read(1024 * 1024), b""):
+                                digest.update(block)
+                        return digest.hexdigest()
+                    source_hash = sha256_file(source)
+                    if source_hash != match.group(1):
+                        raise ValueError("Stage input changed after registration")
+                    proofs.append({"slot": slot, "proxy_sha256": source_hash,
+                                   "normalized_sha256": sha256_file(normalized)})
+                emit({"ok": True, "type": "ingest_proof", "sources": proofs})
+                continue
             if packet.get("op") in ("ingest_start", "ingest_status"):
                 # Strict fixed operations. No user-supplied paths, media IDs,
                 # filenames, URLs or request bodies; Engine uses inputs that
