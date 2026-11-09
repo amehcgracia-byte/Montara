@@ -20,6 +20,7 @@ from flask import Blueprint, jsonify, request
 from urano.project_catalog import ProjectCatalog, ProjectNotFound
 from urano.session_auth import SESSION_COOKIE, SessionStore
 from urano.stage_source_provenance import StageSourceProvenance, UnverifiedSources, _canonical_sources
+from urano.companion_receipt_auth import CompanionReceiptVerifier
 
 _MAX_PROXY_BYTES = 128 * 1024 * 1024
 _SLOT = re.compile(r"^(?:[0-9]|1[0-5])$")
@@ -28,7 +29,8 @@ _DIGEST = re.compile(r"^[a-f0-9]{64}$")
 
 def private_proxy_inbox_blueprint(catalog: ProjectCatalog, sessions: SessionStore,
                                   *, https_origin: str, staging_root: Path,
-                                  stage_provenance: StageSourceProvenance | None = None) -> Blueprint:
+                                  stage_provenance: StageSourceProvenance | None = None,
+                                  receipt_verifier: CompanionReceiptVerifier | None = None) -> Blueprint:
     parsed = urlsplit(https_origin)
     if (parsed.scheme != "https" or not parsed.netloc or parsed.path
             or parsed.query or parsed.fragment or parsed.username or parsed.password):
@@ -69,6 +71,19 @@ def private_proxy_inbox_blueprint(catalog: ProjectCatalog, sessions: SessionStor
             _canonical_sources([{"source_slot": int(slot), "original": original}])
         except (ValueError, TypeError, UnverifiedSources):
             return jsonify(error="Invalid original metadata"), 400
+
+        authenticated_receipt = None
+        if receipt_verifier is not None:
+            envelope_text = request.headers.get("X-Urano-Signed-Receipt", "")
+            if not envelope_text or len(envelope_text.encode("utf-8")) > 4096:
+                return jsonify(error="Signed Companion receipt required"), 403
+            try:
+                envelope = json.loads(envelope_text)
+                authenticated_receipt = receipt_verifier.verify(
+                    session.owner_id, project_id, int(slot), expected,
+                    original, envelope)
+            except (UnverifiedSources, ValueError, TypeError, OSError):
+                return jsonify(error="Companion source receipt not trusted"), 403
 
         # Derive all paths from verified principal and UUID, never from filename.
         owner_token = hashlib.sha256(session.owner_id.encode()).hexdigest()
@@ -117,6 +132,7 @@ def private_proxy_inbox_blueprint(catalog: ProjectCatalog, sessions: SessionStor
                 "source_slot": int(slot), "proxy_sha256": expected,
                 "original_claim": original, "attested": False,
                 "bytes": copied,
+                "receipt_authenticated": authenticated_receipt is not None,
             }
             with tempfile.NamedTemporaryFile(
                     mode="w", encoding="utf-8", dir=folder,
@@ -126,7 +142,8 @@ def private_proxy_inbox_blueprint(catalog: ProjectCatalog, sessions: SessionStor
                 json.dump(record, metadata, separators=(",", ":"))
             os.replace(tmp_meta, pending)
             result = jsonify(source_slot=int(slot), proxy_sha256=expected,
-                             bytes=copied, attested=False)
+                             bytes=copied, attested=False,
+                             receipt_authenticated=authenticated_receipt is not None)
             result.headers["Cache-Control"] = "no-store"
             return result, 201
         except (OSError, ValueError):
