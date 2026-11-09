@@ -130,6 +130,7 @@ class VideoJobs:
             with self.lock:
                 if job['status']=='cancelled':return
                 job['status']='rendering'
+                job['started_monotonic']=time.monotonic()
             try:
                 with (job['work']/'render.log').open('wb') as log:
                     with self.lock:
@@ -164,6 +165,8 @@ class VideoJobs:
         job=self.jobs.get(token)
         if not job:return None
         result={k:job[k] for k in ('status','progress','error','tasks','diagnostics') if k in job}
+        if job['status']=='rendering' and 'started_monotonic' in job:
+            result['elapsed_sec']=round(max(0.,time.monotonic()-job['started_monotonic']),1)
         if job['status']=='rendering':
             try:
                 snap=json.loads(job['snapshot'].read_text())
