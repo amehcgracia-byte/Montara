@@ -62,6 +62,20 @@ def owner_runtime_blueprint(controller: OwnerRuntimeController,
         return protected(jsonify(state=current, render_access=False,
                                  companion_access=False))
 
+    @bp.get("/projects/<project_id>/state")
+    def project_state(project_id: str):
+        session, error = identity(False)
+        if error is not None:
+            return error
+        try:
+            current = controller.project_state(session.owner_id, project_id)
+        except (ProjectNotFound, ValueError):
+            return jsonify(error="Project workspace unavailable"), 404
+        except (WorkerFailure, RuntimeBusy, StaleActivation, OSError):
+            return jsonify(error="Private worker not ready"), 409
+        return protected(jsonify(**current, render_access=False,
+                                 companion_access=False))
+
     @bp.post("/projects/<project_id>/activate")
     def activate(project_id: str):
         session, error = identity(True)
