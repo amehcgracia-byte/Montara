@@ -81,6 +81,26 @@ class OwnerRuntimeController:
                 raise RuntimeBusy("Project not active")
             return bridge.ingest_status(project_id)
 
+    def project_state(self, owner_id: str, project_id: str) -> dict:
+        """Owner-scoped status for exactly one bound project, not a global ready flag.
+
+        A ready worker for project A must never enable Stage for project B.
+        No internal paths, container identities or other owners are returned.
+        """
+        bridge, owner_lock = self._worker(owner_id)
+        with owner_lock:
+            bridge.guard.bindings.resolve_internal(owner_id, project_id)
+            state, active, _ = bridge.guard.get_state(owner_id, bridge.runtime_id)
+            if state in ("ready", "busy", "switching"):
+                if bridge.process is None or bridge.process.poll() is not None:
+                    state = "unavailable"
+            selected = active == project_id
+            return {
+                "state": state if selected else "inactive",
+                "is_active_project": selected,
+                "can_start_ingest": selected and state == "ready",
+            }
+
     def close(self, owner_id: str) -> None:
         bridge, owner_lock = self._worker(owner_id)
         with owner_lock:
