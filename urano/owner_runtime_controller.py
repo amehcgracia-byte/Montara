@@ -7,11 +7,13 @@ paths, or rendering exposed through these operations.
 from __future__ import annotations
 
 from threading import RLock
+from pathlib import Path
 
 from urano.container_worker_bridge import ContainerWorkerBridge
 from urano.project_catalog import ProjectCatalog, ProjectNotFound
 from urano.private_worker_supervisor import WorkerFailure
 from urano.runtime_activation import RuntimeBusy, StaleActivation
+from urano.trusted_stage_inputs import prepare_trusted_stage_inputs
 
 
 class OwnerRuntimeController:
@@ -60,6 +62,28 @@ class OwnerRuntimeController:
             if bridge.process is None:
                 bridge.start()
             bridge.open_project(project_id)
+
+    def register_private_inputs_trusted(self, owner_id: str, project_id: str,
+                                        *, inbox_root: Path, source_slots: set[int]) -> int:
+        """Operator-only: promote private verified proxy bytes into active Engine.
+
+        Not exposed by HTTP. The original receipt remains UNTRUSTED until
+        separate real Stage provenance verification is completed.
+        """
+        bridge, owner_lock = self._worker(owner_id)
+        with owner_lock:
+            bridge.guard.bindings.resolve_internal(owner_id, project_id)
+            state, active, _ = bridge.guard.get_state(owner_id, bridge.runtime_id)
+            if state != "ready" or active != project_id:
+                raise RuntimeBusy("Project must be active for trusted provisioning")
+            prepared = prepare_trusted_stage_inputs(
+                bridge.guard.bindings, inbox_root, owner_id, project_id,
+                source_slots=source_slots)
+            count = bridge.register_staged_inputs(project_id)
+            if count != len(prepared):
+                bridge.stop()
+                raise WorkerFailure("Private Engine source count mismatch")
+            return count
 
     def ingest_start(self, owner_id: str, project_id: str) -> None:
         bridge, owner_lock = self._worker(owner_id)
