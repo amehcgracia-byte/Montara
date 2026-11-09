@@ -28,7 +28,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 VERSION = "0.6.10"
-VIDEO_PROXY_RECIPE = 2
+VIDEO_PROXY_RECIPE = 3
 PORT = int(os.environ.get("MONTARA_COMPANION_PORT", "47820"))
 HOME = Path(os.environ.get("MONTARA_COMPANION_HOME", Path.home() / ".montara-companion"))
 CACHE = HOME / "proxies"
@@ -369,6 +369,13 @@ def proxy_command(source: Path, target: Path, p: dict, hardware: bool = False) -
         video = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "24"]
     if p.get("panorama") and hardware and HW_H264:
         video = ["-c:v", "h264_videotoolbox", "-b:v", "4M", "-maxrate", "6M", "-bufsize", "12M"]
+    # Long flat clips dominate WAN transfer. Keep resolution, frame rate and
+    # audio unchanged, and leave the higher-detail 360 profile alone.
+    if p.get("duration", 0) >= 600 and not p.get("panorama"):
+        if hardware and HW_H264:
+            video = ["-c:v", "h264_videotoolbox", "-b:v", "1250k", "-maxrate", "1800k", "-bufsize", "3600k"]
+        else:
+            video += ["-maxrate", "1250k", "-bufsize", "2500k"]
     return head + ["-i", str(source), "-map", "0:v:0", "-map", "0:a:0?", "-vf", ",".join(chain),
                    "-fps_mode", "cfr", "-r", str(p["fps"]), "-g", str(p["fps"]), *video,
                    # -colorspace cannot convert frames on the chip: scale_vt has already tagged them.
@@ -418,7 +425,7 @@ def make_proxy(key: str) -> None:
     source = sources[key[:24]]
     target = output_path(key)
     if proxy_cache_valid(key, target):
-        job.update(status="ready", progress=1.0, bytes=target.stat().st_size)
+        job.update(status="ready", progress=1.0, bytes=target.stat().st_size, cache_hit=True)
         return
     try:
         p = audio_plan(probe(source)) if is_audio(source) else plan(probe(source))
@@ -432,9 +439,9 @@ def make_proxy(key: str) -> None:
                 cached_picture_failed = proxy_picture_error(source, target, p) > .16
             except (OSError, ValueError, subprocess.SubprocessError):
                 cached_picture_failed = True
-            if not cached_picture_failed:
+            if not cached_picture_failed and (p.get('panorama') or p.get('duration', 0) < 600):
                 target.with_suffix('.quality.json').write_text(json.dumps({'recipe':VIDEO_PROXY_RECIPE}))
-                job.update(status='ready', progress=1.0, bytes=target.stat().st_size)
+                job.update(status='ready', progress=1.0, bytes=target.stat().st_size, cache_hit=True)
                 return
             log(f'{source.name}: cached picture differs from original; rebuilding with CPU')
         pending = output_path(key, pending=True)
@@ -493,11 +500,11 @@ def make_proxy(key: str) -> None:
         if not p.get('audio'):
             target.with_suffix('.quality.json').write_text(json.dumps({'recipe':VIDEO_PROXY_RECIPE}))
         elapsed = time.monotonic() - started
-        job.update(status="ready", progress=1.0, bytes=target.stat().st_size, seconds=round(elapsed, 1))
+        job.update(status="ready", progress=1.0, bytes=target.stat().st_size, cache_hit=False, seconds=round(elapsed, 1))
         log(f"ready {source.name}: {target.stat().st_size / 1e6:.0f} MB "
             f"({100 * target.stat().st_size / max(1, source.stat().st_size):.0f}% of the original) in {elapsed:.0f} s "
             f"({p['duration'] / max(elapsed, 0.1):.1f}x real time)")
-    except Exception as error:  # reported to the page, which then uploads the original
+    except Exception as error:  # the browser requires consent before sending an original
         job.update(status="failed", error=str(error)[:300])
         log(f"failed {source.name}: {error}")
     finally:
@@ -678,11 +685,12 @@ class Handler(BaseHTTPRequestHandler):
             preview = body.get("preview") is True and is_audio(sources[source_id]) and OPUS
             key = source_id + ("p" if preview else "")
             with lock:
-                stale = jobs.get(key, {}).get("status") == "ready" and not output_path(key).is_file()
+                reused = jobs.get(key, {}).get("status") == "ready" and proxy_cache_valid(key, output_path(key))
+                stale = jobs.get(key, {}).get("status") == "ready" and not reused
                 if key not in jobs or stale or jobs[key].get("status") == "failed":
                     jobs[key] = {"status": "working", "progress": 0.0}
                     threading.Thread(target=make_proxy, args=(key,), daemon=True).start()
-            return self.reply(202, {"id": key, "preview": bool(preview)})
+            return self.reply(202, {"id": key, "preview": bool(preview), "reused": reused})
         if self.path == "/segment":
             return self.send_segment(body)
         if self.path == "/projects":

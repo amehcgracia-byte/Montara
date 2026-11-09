@@ -76,6 +76,7 @@ const montaraCompanion = (() => {
       preview = preview && audio && !!info.audio_preview;
       const nowMs = () => typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now();
       const timings = {started: nowMs(), located: null, proxyReady: null, downloaded: null};
+      let cacheHit = null;
       try {
         onProgress('Finding it on your computer', 0);
         const print = await fingerprint(file);
@@ -83,11 +84,14 @@ const montaraCompanion = (() => {
         if (!located.ok) return located.status === 404 ? {missing: true} : null;
         const located_ = await located.json();
         timings.located = nowMs();
-        const {id} = await (await call('/proxies', json({id: located_.id, preview}))).json();
+        const queued = await call('/proxies', json({id: located_.id, preview}));
+        if (!queued.ok) return null;
+        const {id, reused} = await queued.json();
+        if (!id) return null;
         for (;;) {
           if (cancelled()) return null;
           const state = await (await call(`/proxies/${id}`)).json();
-          if (state.status === 'ready') { timings.proxyReady = nowMs(); break; }
+          if (state.status === 'ready') { cacheHit = reused === true || state.cache_hit === true ? true : state.cache_hit ?? null; timings.proxyReady = nowMs(); break; }
           if (state.status === 'skipped' || state.status === 'failed') { console.info('Companion:', state.reason || state.error); return null; }
           onProgress(preview ? 'Light preview' : audio ? 'Lossless copy' : 'Small version', state.progress || 0);
           await new Promise(resolve => setTimeout(resolve, 800));
@@ -99,6 +103,8 @@ const montaraCompanion = (() => {
         // Stage performance diagnostics: durations only; no filenames or local paths.
         console.info('[Montara upload timing]', {
           step: 'local proxy',
+          cache_hit: cacheHit,
+          original_mib: +(file.size / 1048576).toFixed(1),
           locate_sec: +((timings.located - timings.started) / 1000).toFixed(2),
           convert_sec: +((timings.proxyReady - timings.located) / 1000).toFixed(2),
           local_read_sec: +((timings.downloaded - timings.proxyReady) / 1000).toFixed(2),
