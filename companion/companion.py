@@ -632,7 +632,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def origin_ok(self) -> str | None:
         origin = self.headers.get("Origin", "")
-        return origin if ORIGINS.match(origin) else None
+        return origin if (ORIGINS.match(origin) or trusted_signed_receipt_origin(origin)) else None
 
     def cors(self, origin: str | None) -> None:
         if origin:
