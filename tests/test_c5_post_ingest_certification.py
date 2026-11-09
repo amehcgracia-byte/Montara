@@ -33,7 +33,9 @@ class TestC5PostIngestCertification(unittest.TestCase):
                 bindings=self.bindings,
                 get_state=Mock(return_value=("busy",self.project_id,1))),
             runtime_id="test-only-owner-runtime",
-            ingest_status=Mock(return_value="done"))
+            ingest_status=Mock(return_value="done"),
+            ingest_proof=Mock(return_value=[{
+                "slot":0,"proxy_sha256":"a"*64,"normalized_sha256":"b"*64}]))
         self.controller=OwnerRuntimeController()
         self.controller._worker=lambda owner:(self.bridge,RLock())
 
@@ -50,7 +52,7 @@ class TestC5PostIngestCertification(unittest.TestCase):
     def test_only_real_done_triggers_owner_scoped_attestation(self):
         self.controller.configure_trusted_attestation(
             self.provenance,self.inbox,container_workspace=Path("/workspace"))
-        with patch("urano.owner_runtime_controller.attest_authenticated_inbox",
+        with patch("urano.owner_runtime_controller.attest_authenticated_worker_proof",
                    return_value="a"*64) as attest:
             self.bridge.ingest_status.return_value="running"
             self.assertEqual(
@@ -60,9 +62,9 @@ class TestC5PostIngestCertification(unittest.TestCase):
             self.assertEqual(
                 self.controller.ingest_status(self.owner,self.project_id),"done")
             attest.assert_called_once_with(
-                self.provenance,self.bindings,self.inbox,self.owner,self.project_id,
-                engine_project_file=self.project_dir/"project.json",
-                container_workspace=Path("/workspace"))
+                self.provenance,self.inbox,self.owner,self.project_id,
+                proof=[{"slot":0,"proxy_sha256":"a"*64,
+                        "normalized_sha256":"b"*64}])
 
     def test_invalid_receipt_leaves_stage_done_but_certificate_unavailable(self):
         sources=[{"source_slot":0,"original":{
@@ -70,7 +72,7 @@ class TestC5PostIngestCertification(unittest.TestCase):
         self.provenance.register_trusted(
             self.owner,self.project_id,sources,stage_revision="b"*64)
         self.controller.configure_trusted_attestation(self.provenance,self.inbox)
-        with patch("urano.owner_runtime_controller.attest_authenticated_inbox",
+        with patch("urano.owner_runtime_controller.attest_authenticated_worker_proof",
                    side_effect=UnverifiedSources("invalid receipt")):
             self.assertEqual(
                 self.controller.ingest_status(self.owner,self.project_id),"done")
@@ -78,7 +80,7 @@ class TestC5PostIngestCertification(unittest.TestCase):
             self.provenance.verified(self.owner,self.project_id,source_slots={0})
 
     def test_unprovisioned_mode_keeps_legacy_stage_status(self):
-        with patch("urano.owner_runtime_controller.attest_authenticated_inbox") as attest:
+        with patch("urano.owner_runtime_controller.attest_authenticated_worker_proof") as attest:
             self.assertEqual(
                 self.controller.ingest_status(self.owner,self.project_id),"done")
             attest.assert_not_called()
@@ -86,7 +88,7 @@ class TestC5PostIngestCertification(unittest.TestCase):
     def test_foreign_owner_never_certifies(self):
         self.controller.configure_trusted_attestation(self.provenance,self.inbox)
         self.bindings.resolve_internal.side_effect=ProjectNotFound("foreign")
-        with patch("urano.owner_runtime_controller.attest_authenticated_inbox") as attest:
+        with patch("urano.owner_runtime_controller.attest_authenticated_worker_proof") as attest:
             with self.assertRaises(ProjectNotFound):
                 self.controller.ingest_status("owner-b",self.project_id)
             attest.assert_not_called()
