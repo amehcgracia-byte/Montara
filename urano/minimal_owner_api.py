@@ -53,7 +53,8 @@ def create_owner_api(private_dir: Path, *, settings: OIDCSettings,
     if enable_dashboard:
         app.register_blueprint(owner_dashboard_blueprint(
             session_store, https_origin=allowed_origin, catalog=catalog,
-            runtime_available=runtime_controller is not None))
+            runtime_available=runtime_controller is not None,
+            proxy_inbox_available=proxy_staging_root is not None))
     if runtime_controller is not None:
         if not isinstance(runtime_controller, OwnerRuntimeController):
             raise ValueError("Only a trusted private runtime controller may be installed")
