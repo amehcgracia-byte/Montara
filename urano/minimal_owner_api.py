@@ -24,6 +24,7 @@ from urano.http_owner_runtime import owner_runtime_blueprint
 from urano.owner_dashboard import owner_dashboard_blueprint
 from urano.stage_source_provenance import StageSourceProvenance
 from urano.private_proxy_inbox import private_proxy_inbox_blueprint
+from urano.companion_receipt_auth import CompanionReceiptVerifier
 
 
 def create_owner_api(private_dir: Path, *, settings: OIDCSettings,
@@ -31,7 +32,8 @@ def create_owner_api(private_dir: Path, *, settings: OIDCSettings,
                      runtime_controller: OwnerRuntimeController | None = None,
                      enable_dashboard: bool = False,
                      stage_provenance: StageSourceProvenance | None = None,
-                     proxy_staging_root: Path | None = None) -> Flask:
+                     proxy_staging_root: Path | None = None,
+                     receipt_verifier: CompanionReceiptVerifier | None = None) -> Flask:
     root = Path(private_dir).resolve()
     if not root.is_dir() or root.is_symlink():
         raise ValueError("Existing private database directory required")
@@ -71,7 +73,8 @@ def create_owner_api(private_dir: Path, *, settings: OIDCSettings,
         app.register_blueprint(private_proxy_inbox_blueprint(
             catalog, session_store, https_origin=allowed_origin,
             staging_root=proxy_staging_root,
-            stage_provenance=stage_provenance))
+            stage_provenance=stage_provenance,
+            receipt_verifier=receipt_verifier))
 
     @app.post("/urano/v1/session/refresh")
     def refresh_csrf():
