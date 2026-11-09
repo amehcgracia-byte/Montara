@@ -91,6 +91,30 @@ class AuthenticatedIngestAttestation(unittest.TestCase):
         with self.assertRaises(UnverifiedSources):
             self.attest()
 
+    def test_docker_workspace_paths_map_only_inside_trusted_owner_mount(self):
+        cache=self.workspace/"Cache"
+        cache.mkdir()
+        normalized=cache/"normalized.mp4"
+        normalized.write_bytes(self.normalized.read_bytes())
+        inner=Path("/workspace")
+        source_relative=self.stage_input.relative_to(self.workspace)
+        self.project_data["inputs"]["videos"][0]["path"]=str(inner/source_relative)
+        self.project_data["inputs"]["videos"][0]["normalized"]["path"]=str(
+            inner/normalized.relative_to(self.workspace))
+        self.engine.write_text(json.dumps(self.project_data))
+        revision=attest_authenticated_inbox(
+            self.provenance,self.binding,self.inbox,"owner-a",self.project.id,
+            engine_project_file=self.engine,container_workspace=inner)
+        self.assertRegex(revision,r"^[a-f0-9]{64}$")
+        self.provenance.invalidate_trusted("owner-a",self.project.id)
+        self.project_data["inputs"]["videos"][0]["path"]=str(
+            Path("/workspace-other")/source_relative)
+        self.engine.write_text(json.dumps(self.project_data))
+        with self.assertRaises(UnverifiedSources):
+            attest_authenticated_inbox(
+                self.provenance,self.binding,self.inbox,"owner-a",self.project.id,
+                engine_project_file=self.engine,container_workspace=inner)
+
     def test_change_or_replay_of_receipt_or_staged_bytes_fails(self):
         self.entry["proxy_sha256"]="f"*64
         self.meta.write_text(json.dumps(self.entry))
