@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 from threading import Thread
 import zipfile
 
@@ -13,8 +14,14 @@ from werkzeug.serving import make_server
 from app import _prepare_environment, create_montara_app
 
 
-def test_stage_save_keeps_other_previews_and_offers_companion_recovery(tmp_path):
+def test_stage_save_keeps_other_previews_and_offers_companion_recovery(tmp_path, monkeypatch):
     data = tmp_path / "data"
+    monkeypatch.chdir(Path.cwd())
+    monkeypatch.setattr(sys, "path", sys.path.copy())
+    monkeypatch.setenv("ZUCKER_DATA_ROOT", str(data))
+    monkeypatch.setenv("MONTARA_LOCAL_DIRECTOR", "1")
+    monkeypatch.setenv("ZUCKER_MIXER_STATE_ROOT", str(data / "Mixer" / "state"))
+    monkeypatch.setenv("MONTARA_RETENTION_USED_GB", "0")
     _prepare_environment(data)
     from core.project import atomic_write_json, create_project, file_record
     from core.shot_continuity import continuous_views
@@ -61,7 +68,6 @@ def test_stage_save_keeps_other_previews_and_offers_companion_recovery(tmp_path)
             page.route("http://127.0.0.1:47820/**", lambda route: route.abort())
             url = f"http://127.0.0.1:{server.server_port}"
             page.goto(url + "/?resume=frames")
-            page.on("pageerror", lambda error: print(f"Browser error: {error}"))
             page.locator("#frames").wait_for()
             page.wait_for_function(
                 "document.querySelectorAll('#frameGrid .frame:not(.busy)').length === 3",
@@ -79,6 +85,8 @@ def test_stage_save_keeps_other_previews_and_offers_companion_recovery(tmp_path)
             with page.expect_response(lambda r: r.request.method == "PATCH" and r.url.endswith("/api/v1/edit/shot")) as saved:
                 dialog.get_by_role("button", name="Save shot").click()
             assert saved.value.ok
+            patch = saved.value.request.post_data_json
+            assert patch["edit_component"] == "movement" and "flat_framing" not in patch
             page.wait_for_function(
                 """old => {
                     const shot = document.querySelector('#frameGrid [data-index="1"]');
