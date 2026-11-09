@@ -1,6 +1,6 @@
 # Montara — portada beta pública de coste cero
 
-**Dominio elegido:** subdominio estable `montara-beta-preview.pages.dev` (pendiente de activación/verificación). Alojamiento estático Cloudflare Pages **separado** de `montara-cloudflare-lab.pages.dev`. El laboratorio anterior no debe cambiar.
+**Dominio elegido y proyecto Pages creado:** subdominio estable `montara-beta-preview.pages.dev` (pendiente de verificar primer despliegue). Alojamiento estático Cloudflare Pages **separado** de `montara-cloudflare-lab.pages.dev`. El laboratorio anterior no debe cambiar.
 
 ## Qué se publica
 
