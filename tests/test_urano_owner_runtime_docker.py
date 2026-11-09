@@ -194,13 +194,22 @@ class OwnerSessionToRealEngine(unittest.TestCase):
             bridge=self.bridges[person]
             pid=self.project_ids[person]
             from urano.trusted_stage_inputs import prepare_trusted_stage_inputs
+            # The real Engine fixture generated inputs/ as UID 10001. Grant
+            # the runner temporary ownership of THIS disposable directory,
+            # perform trusted host-side copy, then return everything to 10001.
+            # Never do this on a shared VM or on user media.
+            inputs=(self.root/person/"Projects"/("Owned"+person.title())/"inputs")
+            fix_parent=subprocess.run(
+                ["sudo","chown",f"{os.getuid()}:{os.getgid()}",str(inputs)],
+                capture_output=True,text=True,timeout=20)
+            self.assertEqual(fix_parent.returncode,0,fix_parent.stderr)
             paths=prepare_trusted_stage_inputs(
                 bridge.guard.bindings,inbox,bridge.owner_id,pid,source_slots={0})
             self.assertEqual(len(paths),1)
             self.assertEqual(hashlib.sha256(paths[0].read_bytes()).hexdigest(),
                              digests[person])
             scoped=paths[0].parent
-            fix=subprocess.run(["sudo","chown","-R","10001:10001",str(scoped)],
+            fix=subprocess.run(["sudo","chown","-R","10001:10001",str(inputs)],
                                 capture_output=True,text=True,timeout=20)
             self.assertEqual(fix.returncode,0,fix.stderr)
         with ThreadPoolExecutor(max_workers=2) as pool:
