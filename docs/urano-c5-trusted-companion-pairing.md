@@ -8,7 +8,7 @@ Companion conserva el vídeo original en el equipo local. Después de generar un
 
 El servidor verifica una firma asociada **al propietario exacto**, a un proyecto UUID, un slot de cámara, nombre/tamaño/huella del original y SHA-256 completo del proxy. Solo entonces escribe en el inbox privado `receipt_authenticated: true` y **`attested: false`**. No existe inscripción de claves por HTTP.
 
-El controlador privado ya dispone de un enlace **opt-in**: el operador llama a `OwnerRuntimeController.configure_trusted_attestation(provenance, inbox_root, container_workspace=Path('/workspace'))` durante el aprovisionamiento del servicio. Cuando ese mismo worker aislado notifica `Ingest DONE`, el controlador invoca automáticamente `attest_authenticated_inbox()` usando únicamente el binding del propietario activo. Si falta un recibo auténtico, el hash no coincide o la carpeta no puede leerse con permisos seguros, **la certificación permanece revocada**; no se presenta un falso `render_ready`.
+El controlador privado ya dispone de un enlace **opt-in**: el operador llama a `OwnerRuntimeController.configure_trusted_attestation(provenance, inbox_root)` durante el aprovisionamiento del servicio. Cuando el worker aislado notifica `Ingest DONE`, el controlador invoca la operación fija `ingest_proof` por su canal privado. **El propio worker, bajo el UID de su Engine, verifica los archivos de entrada y la salida normalizada y devuelve únicamente hashes y slots, nunca rutas**. El backend coteja ese resumen con los recibos autenticados mediante `attest_authenticated_worker_proof()`. Ya no necesita permisos de lectura de `project.json` desde el host. Si falta un recibo auténtico, falla algún hash o desaparece el worker, **la certificación permanece revocada**; no se presenta un falso `render_ready`.
 
 Tras Stage Ingest `done`, `attest_authenticated_inbox()` es una operación **interna del operador**: comprueba que cada vídeo del Engine está en su proyecto privado, que el inbox guarda recibos autenticados, que los bytes coinciden, y que hay una salida Stage finalizada. Solo entonces llama a `StageSourceProvenance.register_trusted()`.
 
@@ -40,3 +40,9 @@ No se debe conectar `original_claim` sin firma a `register_trusted`, aunque coin
 - **Pendiente de integración final:** wiring del servicio que llama a la certificación tras Ingest DONE, aprovisionamiento real por propietario, pruebas en navegador/Companion reales y despliegue HTTPS. No declarar `render_ready` simplemente porque un archivo esté staged o `receipt_authenticated:true`.
 
 `main` y los servicios de la VM permanecen sin cambios. La fusión requiere autorización explícita del usuario y aprobación final de Chema.
+
+### Lectura de proyectos por el UID aislado
+
+La aceptación Docker real mostró que abrir directamente `project.json` desde el proceso host puede fallar con `PermissionError` por el UID 10001 del Engine. **Es un aislamiento correcto y no debe mitigarse con `chmod 777`, `sudo` en producción ni ACL globales**. El nuevo camino de certificación productiva utiliza el comprobante SHA-256 sin rutas del worker `ingest_proof`, verificado por el bridge que mantiene el CID privado. Se conserva `attest_authenticated_inbox()` solo como validador alternativo de pruebas/instalaciones donde un operador tenga un montaje explícito y permisos seguros; el hook del controlador usa `attest_authenticated_worker_proof()`.
+
+Ante varios recibos distintos de la misma cámara se bloquea la certificación hasta una nueva preparación confiable; nunca reutilizar un certificado de una cámara anterior.
