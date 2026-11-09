@@ -56,7 +56,7 @@ if command -v lsof >/dev/null 2>&1; then
   done
 fi
 mkdir -p "$DIR/bin"
-for f in video_recipe.py video_jobs.py windows_support.py; do
+for f in video_recipe.py video_jobs.py windows_support.py urano_local_handoff.py; do
   curl -fsSL "$RAW/$f" -o "$DIR/$f.new"
   mv "$DIR/$f.new" "$DIR/$f"
 done
