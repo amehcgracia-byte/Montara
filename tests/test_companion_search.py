@@ -188,3 +188,47 @@ def test_long_flat_proxy_is_bounded_without_changing_360(tmp_path, monkeypatch):
     assert sphere[sphere.index('-b:v') + 1] == '4M'
     assert '2048' in sphere[sphere.index('-vf') + 1]
     assert flat[flat.index('-b:a')+1] == sphere[sphere.index('-b:a')+1] == '192k'
+
+
+def test_high_rate_proxy_scales_only_frames_it_keeps(tmp_path):
+    src, dst = tmp_path/'original.mp4', tmp_path/'proxy.mp4'
+    for hardware in (False, True):
+        for panorama in (False, True):
+            plan = {**PLAN, 'source_fps': 60, 'panorama': panorama}
+            filters = picture_filters(companion.proxy_command(src, dst, plan, hardware))
+            assert filters.startswith('fps=30,')
+            assert ('2048' in filters) == panorama
+            normal = picture_filters(companion.proxy_command(src, dst, {**plan, 'source_fps': 30}, hardware))
+            assert not normal.startswith('fps=')
+
+
+def test_early_frame_selection_keeps_picture_and_audio_clock(tmp_path):
+    source = tmp_path/'sphere.mp4'
+    subprocess.run([companion.FFMPEG, '-v', 'error', '-y', '-f', 'lavfi', '-i',
+                    'testsrc2=s=640x320:r=60:d=1', '-f', 'lavfi', '-i',
+                    'sine=frequency=440:sample_rate=48000:duration=1', '-c:v', 'libx264',
+                    '-preset', 'ultrafast', '-c:a', 'aac', str(source)], check=True)
+    p = {**companion.plan(companion.probe(source)), 'panorama': True}
+    hashes = []
+    for variant in ({**p, 'source_fps': p['fps']}, p):
+        target = tmp_path/'proxy.mp4'
+        subprocess.run(companion.proxy_command(source, target, variant), check=True, capture_output=True)
+        hashes.append(subprocess.check_output([companion.FFMPEG, '-v', 'error', '-i', str(target),
+                      '-map', '0:v:0', '-map', '0:a:0', '-f', 'framehash', '-']))
+    assert hashes[0] == hashes[1]
+
+
+def test_cpu_first_trial_is_limited_to_long_flat_intel_h264(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    monkeypatch.setattr(companion.sys, 'platform', 'darwin')
+    monkeypatch.setattr(companion.os, 'uname', lambda: SimpleNamespace(machine='x86_64'))
+    for capability in ('HW_H264', 'HW_SCALE', 'SOFT_H264'):
+        monkeypatch.setattr(companion, capability, True)
+    plan = {**PLAN, 'size': [1920, 1080], 'duration': 669.6, 'source_fps': 30}
+    src, dst = tmp_path/'original.mp4', tmp_path/'proxy.mp4'
+    assert 'h264_videotoolbox' in companion.proxy_commands(src, dst, plan)[0]
+    monkeypatch.setenv('MONTARA_PROXY_INTEL_CPU_FIRST', '1')
+    cpu, hardware = companion.proxy_commands(src, dst, plan)
+    assert 'libx264' in cpu and 'h264_videotoolbox' in hardware
+    for changes in ({'panorama': True}, {'source_fps': 60}, {'duration': 60}, {'size': [3840, 2160]}):
+        assert 'h264_videotoolbox' in companion.proxy_commands(src, dst, {**plan, **changes})[0]

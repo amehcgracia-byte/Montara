@@ -341,7 +341,7 @@ def plan(info: dict) -> dict:
     turned = next((d["rotation"] for d in video.get("side_data_list", []) if "rotation" in d), 0)
     if panorama and int(float(turned)) % 360:
         return {"skip": "Rotated 360 layout: export a stitched upright 2:1 panorama first"}
-    return {"fps": fps, "hdr": hdr, "duration": duration, "codec": video.get("codec_name"), "size": [width, height],
+    return {"fps": fps, "source_fps": source_fps, "hdr": hdr, "duration": duration, "codec": video.get("codec_name"), "size": [width, height],
             "pix_fmt": video.get("pix_fmt"), "rotation": int(float(turned)) % 360, "panorama": panorama}
 
 
@@ -363,6 +363,13 @@ def proxy_command(source: Path, target: Path, p: dict, hardware: bool = False) -
             chain += ["zscale=t=linear:npl=100", "format=gbrpf32le", "zscale=p=bt709",
                       "tonemap=tonemap=hable:desat=0", "zscale=t=bt709:m=bt709:r=tv"]
         chain.append("format=yuv420p")
+    # Rotation, scaling and tonemapping are per-frame operations. If the
+    # proxy drops many frames, select the same output timestamps before doing
+    # that work. Keep the normal 24/25/30 fps path exactly as before.
+    if p.get("source_fps", p["fps"]) >= 1.5 * p["fps"]:
+        fps_filter = f"fps={p['fps']}"
+        chain.remove(fps_filter)
+        chain.insert(0, fps_filter)
     if hardware and HW_H264:
         video = ["-c:v", "h264_videotoolbox", "-b:v", "2500k", "-maxrate", "4M", "-bufsize", "8M"]
     else:
@@ -384,11 +391,23 @@ def proxy_command(source: Path, target: Path, p: dict, hardware: bool = False) -
                    "-movflags", "+faststart", "-progress", "pipe:1", "-nostats", str(target)]
 
 
+def prefer_cpu_proxy(p: dict) -> bool:
+    """Trial route for the measured Intel Mac workload; leave other inputs alone."""
+    return (os.environ.get("MONTARA_PROXY_INTEL_CPU_FIRST") == "1"
+            and sys.platform == "darwin" and os.uname().machine == "x86_64"
+            and SOFT_H264 and not p.get("panorama") and not p.get("hdr")
+            and p.get("rotation") == 0 and p.get("size") == [1920, 1080]
+            and p.get("codec") == "h264" and p.get("pix_fmt") == "yuv420p"
+            and 24 <= p.get("source_fps", 0) <= 30.01
+            and p.get("duration", 0) >= 600)
+
+
 def proxy_commands(source: Path, target: Path, p: dict) -> list[list[str]]:
-    """The fastest way first, the software way as a safety net (4K on an Intel MacBook: 5x less CPU, up to twice as fast)."""
+    """Choose the preferred route first and keep the other route as fallback."""
     plain = proxy_command(source, target, p)
     if HW_SCALE and not p["hdr"] and p["codec"] in {"h264", "hevc"} and p["pix_fmt"] in {"yuv420p", "yuvj420p", "nv12"}:
-        return [proxy_command(source, target, p, hardware=True), plain]
+        hardware = proxy_command(source, target, p, hardware=True)
+        return [plain, hardware] if prefer_cpu_proxy(p) else [hardware, plain]
     return [plain]
 
 
@@ -457,7 +476,7 @@ def make_proxy(key: str) -> None:
             job.update(info={k: p[k] for k in ("fps", "hdr", "codec", "size")})
             commands = [proxy_command(source, pending, p)] if cached_picture_failed else proxy_commands(source, pending, p)
             log(f"small version of {source.name} ({p['codec']} {p['size'][0]}x{p['size'][1]}{' HDR' if p['hdr'] else ''}, "
-                f"{'hardware' if HW_H264 else 'software'} encoder)")
+                f"{'VideoToolbox' if 'h264_videotoolbox' in commands[0] else 'software'} encoder)")
         started = time.monotonic()
         for attempt, command in enumerate(commands, 1):
             # Merge FFmpeg progress and diagnostics to avoid a blocked stderr
@@ -478,7 +497,7 @@ def make_proxy(key: str) -> None:
                         diagnostic_tail.pop(0)
             process.stdout.close()
             succeeded = process.wait() == 0
-            if succeeded and not p.get('audio') and 'h264_videotoolbox' in command:
+            if succeeded and not p.get('audio') and ('h264_videotoolbox' in command or prefer_cpu_proxy(p)):
                 try:
                     error = proxy_picture_error(source, pending, p)
                     succeeded = error <= .16
@@ -491,7 +510,8 @@ def make_proxy(key: str) -> None:
             reason = next((line for line in reversed(diagnostic_tail) if line), "FFmpeg failed")
             if attempt == len(commands):
                 raise RuntimeError(reason)
-            log(f"{source.name}: the fast way failed ({reason}); trying the software way")
+            next_encoder = "VideoToolbox" if "h264_videotoolbox" in commands[attempt] else "software"
+            log(f"{source.name}: proxy attempt failed ({reason}); trying {next_encoder}")
             job["progress"] = 0.0
         if p.get("panorama"):
             from spherical_proxy import preserve_panorama
