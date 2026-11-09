@@ -10,6 +10,8 @@ import argparse
 import json
 import os
 import sys
+import re
+import hashlib
 from pathlib import Path
 
 
@@ -64,6 +66,48 @@ def run(stdin, stdout, *, engine_dir: Path, data_root: Path, make_client=make_en
             if packet.get("op") == "stop":
                 emit({"ok": True, "type": "stopped"})
                 return
+            if packet.get("op") == "register_staged_proxies":
+                # Fixed local operation, not generic paths supplied by HTTP.
+                # Trusted operator copies hash-checked proxy bytes into the
+                # dedicated project folder before invoking this command.
+                if set(packet) != {"op"} or active_folder is None:
+                    raise ValueError("Requires opened private Engine project")
+                state = client.application.config.get("ZUCKER_STATE")
+                loaded = getattr(getattr(state, "project", None), "folder", None)
+                if not isinstance(loaded, (str, Path)) or Path(loaded).resolve() != active_folder:
+                    raise ValueError("Active project changed")
+                camera_dir = active_folder / "inputs" / "urano-staged-proxies"
+                if camera_dir.is_symlink() or not camera_dir.is_dir():
+                    raise ValueError("Trusted staged proxy directory missing")
+                paths = []
+                slots = set()
+                for candidate in sorted(camera_dir.iterdir()):
+                    match = re.fullmatch(r"camera-([0-9]|1[0-5])-([0-9a-f]{64})\\.mp4", candidate.name)
+                    if not match:
+                        # Ignore temporary files, never register arbitrary media.
+                        continue
+                    slot, expected = int(match.group(1)), match.group(2)
+                    if slot in slots or candidate.is_symlink() or not candidate.is_file():
+                        raise ValueError("Invalid staged source")
+                    digest = hashlib.sha256()
+                    with candidate.open("rb") as source:
+                        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                            digest.update(chunk)
+                    if digest.hexdigest() != expected:
+                        raise ValueError("Staged source bytes changed")
+                    slots.add(slot)
+                    paths.append((slot, str(candidate)))
+                if not paths or len(paths) > 16 or slots != set(range(len(paths))):
+                    raise ValueError("Stage sources must have contiguous camera slots")
+                result = client.post("/api/v1/inputs/videos",
+                                     json={"paths": [path for _, path in sorted(paths)], "append": False})
+                if result.status_code != 200:
+                    emit({"ok": False, "type": "staged_inputs_rejected",
+                          "http_status": result.status_code})
+                    continue
+                emit({"ok": True, "type": "staged_inputs_registered",
+                      "source_count": len(paths)})
+                continue
             if packet.get("op") in ("ingest_start", "ingest_status"):
                 # Strict fixed operations. No user-supplied paths, media IDs,
                 # filenames, URLs or request bodies; Engine uses inputs that
