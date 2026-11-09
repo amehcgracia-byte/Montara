@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from urllib.parse import urlsplit
 
 from flask import Flask, jsonify, redirect, request
 
@@ -92,7 +91,7 @@ def create_private_owner_beta(
 
 
 def main() -> None:
-    """Gunicorn factory alternative: gunicorn 'urano.owner_beta_wsgi:app'."""
+    """For deployment use a reviewed TLS proxy and Gunicorn factory only."""
     raise SystemExit("Use a reviewed TLS reverse proxy and WSGI factory; no embedded dev server")
 
 
