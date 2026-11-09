@@ -97,7 +97,31 @@ def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
                 dialog.accept()
 
             page.on("dialog", approve_test_original)
+        held = []
+        def hold_first_media(route):
+            if route.request.method == "PUT" or route.request.url.endswith("/wizard/upload"):
+                held.append(route)
+            else:
+                route.continue_()
+        media_routes = ("**/api/v1/wizard/upload", "**/montara/uploads/*")
+        if mode == "stage":
+            for pattern in media_routes:
+                page.route(pattern, hold_first_media)
         page.locator("[data-drop=video] input").set_input_files([str(f) for f in files])
+        if mode == "stage":
+            pending = page.locator("[data-pending-camera]").first
+            pending.wait_for()
+            for _ in range(50):
+                if held: break
+                page.wait_for_timeout(100)
+            assert held, "Expected a pending upload request"
+            pending.select_option("fixed")
+            assert page.locator("#continueFootage").is_disabled()
+            assert page.evaluate("state.files.find(f => f.cameraType === 'fixed').kind") == "uploading"
+            for pattern in media_routes:
+                page.unroute(pattern, hold_first_media)
+            for route in held:
+                route.continue_()
         if mode in {"push", "stage"}:
             page.wait_for_function("document.querySelectorAll('#videoFiles li').length > 0", timeout=30_000)
             assert accepted_originals, "Push test expected explicit original-upload consent"
@@ -117,7 +141,7 @@ def journey(page, url: str, mode: str, media: Path, out: Path) -> dict:
         page.screenshot(path=str(shots/'03d-master-range.png'),full_page=True)
     if page.locator("#cameras").is_visible():
         if mode == "stage" and media != REAL:
-            page.locator("[data-camera-type]").first.select_option("fixed")
+            assert page.locator("[data-camera-type]").first.input_value() == "fixed"
         page.wait_for_timeout(3000)  # 360 frame + preview
         page.screenshot(path=str(shots / "03-cameras.png"), full_page=True)
         page.locator("#continueCameras").click()

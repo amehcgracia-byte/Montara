@@ -19,6 +19,7 @@ from flask import jsonify, request
 from mixer_adapter.session import save
 
 CHUNK = 4 * 1024**2
+PRIVATE_PROXY_CHUNK = 16 * 1024**2
 RESERVE = 128 * 1024**2
 LOSSLESS = ('.wav.flac', '.aif.flac', '.aiff.flac', '.wav.wv', '.aif.wv', '.aiff.wv')  # the companion's lossless copy of a WAV/AIFF original
 PREVIEW = ('.wav.opus', '.aif.opus', '.aiff.opus')  # the companion's light preview of a full-session track
@@ -201,9 +202,12 @@ def register_resumable_upload(app, data_root, classify):
     def load(work):
         return json.loads((work / 'upload.json').read_text())
 
+    def chunk_size(data):
+        return PRIVATE_PROXY_CHUNK if data.get("video_preview") and limit > 256 * 1024**2 else CHUNK
+
     def public(work, data):
         received = (work / 'source.part').stat().st_size if (work / 'source.part').exists() else data['size'] if data.get('complete') else 0
-        return dict(id=work.name, received=received, size=data['size'], complete=data.get('complete', False), chunk_size=CHUNK)
+        return dict(id=work.name, received=received, size=data['size'], complete=data.get('complete', False), chunk_size=chunk_size(data))
 
     @app.get('/montara/uploads')
     def upload_limits():
@@ -287,7 +291,7 @@ def register_resumable_upload(app, data_root, classify):
                 except ValueError:
                     return failure('Invalid upload offset.')
                 length = request.content_length
-                if length is None or not 0 < length <= CHUNK or offset < 0 or offset + length > data['size']:
+                if length is None or not 0 < length <= chunk_size(data) or offset < 0 or offset + length > data['size']:
                     return failure('Invalid upload chunk.')
                 part = work / 'source.part'
                 received = part.stat().st_size
@@ -295,7 +299,7 @@ def register_resumable_upload(app, data_root, classify):
                     return jsonify(**public(work, data), error={'message': 'Resume at the confirmed upload offset.'}), 409
                 if shutil.disk_usage(root).free < length + RESERVE:
                     return failure('Not enough working space to continue this upload.', 507)
-                # Reads are bounded by CHUNK; a disconnected retry never duplicates bytes.
+                # Reads are bounded by the negotiated chunk size; a disconnected retry never duplicates bytes.
                 payload = request.stream.read(length + 1)
                 if len(payload) != length:
                     return failure('Incomplete chunk. Retry this part.')

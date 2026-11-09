@@ -175,3 +175,16 @@ def test_old_healthy_proxy_is_checked_once_without_reencoding(tmp_path,monkeypat
     companion.make_proxy(key);companion.make_proxy(key)
     assert checks==[True] and target.read_bytes()==b'healthy cached video'
     assert companion.jobs[key]['status']=='ready'
+
+
+def test_long_flat_proxy_is_bounded_without_changing_360(tmp_path, monkeypatch):
+    monkeypatch.setattr(companion, 'HW_H264', True)
+    src, dst = tmp_path/'original.mp4', tmp_path/'proxy.mp4'
+    flat = companion.proxy_command(src, dst, {**PLAN, 'duration': 3600}, hardware=True)
+    assert flat[flat.index('-b:v') + 1] == '1250k'
+    cpu = companion.proxy_command(src, dst, {**PLAN, 'duration': 3600})
+    assert cpu[cpu.index('-maxrate') + 1] == '1250k'
+    sphere = companion.proxy_command(src, dst, {**PLAN, 'duration': 3600, 'panorama': True}, hardware=True)
+    assert sphere[sphere.index('-b:v') + 1] == '4M'
+    assert '2048' in sphere[sphere.index('-vf') + 1]
+    assert flat[flat.index('-b:a')+1] == sphere[sphere.index('-b:a')+1] == '192k'

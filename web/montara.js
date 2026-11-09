@@ -471,8 +471,8 @@ async function watchCompanion() {
 // ---------- footage memory: survive a reload ----------
 function remember(entry) {
   if (!entry.memory) return;
-  const { id, name, kind, path, reason, projection, duration, uploadId, small, preview, original, usage } = entry;
-  footageMemory.save({ id, name, kind: kind === "error" ? "uploading" : kind, path, reason, projection, duration, uploadId, small, preview, original, usage, ...entry.memory });
+  const { id, name, kind, path, reason, projection, duration, uploadId, small, preview, original, usage, cameraType } = entry;
+  footageMemory.save({ id, name, kind: kind === "error" ? "uploading" : kind, path, reason, projection, duration, uploadId, small, preview, original, usage, cameraType, ...entry.memory });
 }
 async function offerRestore() {
   const records = (await footageMemory.list(state.platform)).filter(r=>(r.task || 'video')===(state.audioTask || 'video')).filter((r) => !state.files.some((f) => f.id === r.id));
@@ -503,16 +503,22 @@ $("#restoreFiles").addEventListener("click", async () => {
 
 // URANO U3C: local original upload is retained for explicit manual tests.
 // Never silently fall back to an original when Companion is unavailable.
+const companionVideoFiles = new WeakSet();
 function confirmOriginalVideoUpload(file, entry, reason) {
   if (entry.removed) return false;
-  if (entry.manualOriginalUpload) return true;
+  if (entry.manualOriginalUpload === file) return true;
   const size = (file.size / (1024 * 1024)).toFixed(1);
   const approved = window.confirm(
     `${reason}\n\nFor testing only: upload the ORIGINAL video (${size} MiB) to the server?\n` +
     "This may consume considerable bandwidth and server storage.\n\n" +
     "Cancel = do not upload. OK = upload original for this attempt."
   );
-  if (approved) entry.manualOriginalUpload = true;
+  if (approved) {
+    entry.manualOriginalUpload = file;
+    entry.small = false;
+    entry.preview = false;
+    entry.original = null;
+  }
   return approved;
 }
 
@@ -547,7 +553,7 @@ async function uploadSmall(file, entry) {
   if (!entry.removed) {
     entry.phase = small ? (small.preview ? "Uploading preview" : montaraCompanion.isAudio(file) ? "Uploading lossless copy" : "Uploading small version") : montaraCompanion.info ? "Uploading the whole file" : "";
     entry.progress = 0;
-    if (small) { entry.small = true; entry.preview = small.preview; entry.original = small.original; remember(entry); }
+    if (small) { if (montaraCompanion.isVideo(file)) companionVideoFiles.add(small.file); entry.small = true; entry.preview = small.preview; entry.original = small.original; remember(entry); }
     upload(small ? small.file : file, entry);
   }
   state.uploads -= 1;
@@ -556,13 +562,10 @@ async function uploadSmall(file, entry) {
 
 function upload(file, entry) {
   // A local video normally uses Companion; importing its full original is
-  // allowed only after a per-attempt explicit test-only confirmation.
-  // A restored browser handle reopens the ORIGINAL, even if its persisted
-  // entry.small flag was set during an interrupted proxy upload. Only the
-  // derived .small.mp4 file itself is exempt from original-upload consent.
-  const proxyName = entry.original?.name?.replace(/\.[^.]+$/, '') + '.small.mp4';
-  const isCompanionProxy = entry.small && entry.original?.name && file.name === proxyName;
-  if (montaraCompanion.isVideo(file) && !isCompanionProxy && !entry.manualOriginalUpload) {
+  // allowed only after per-file consent. Neither a filename nor restored
+  // metadata proves that these particular bytes came from Companion.
+  const isCompanionProxy = companionVideoFiles.has(file);
+  if (montaraCompanion.isVideo(file) && !isCompanionProxy && entry.manualOriginalUpload !== file) {
     if (montaraCompanion.info) return uploadSmall(file, entry);
     const message = "Open Montara Companion to import a video from your computer.";
     if (!confirmOriginalVideoUpload(file, entry, message)) {
@@ -612,9 +615,11 @@ function upload(file, entry) {
 
 async function uploadInParts(file, entry) {
   state.uploads += 1;
+  const controller = new AbortController();
+  entry.uploadController = controller;
   try {
-    const extra = entry.small && entry.original && montaraCompanion.isVideo(file) ? {video_preview:true,original:{name:entry.original.name,size:entry.original.size,fingerprint:entry.original.fingerprint}} : /\.opus$/i.test(file.name) && entry.original ? {original: {name: entry.original.name, size: entry.original.size, fingerprint: entry.original.fingerprint}, compact_preview:state.platform==='youtube' && state.files.some(f=>f.kind==='video'||/\.(mp4|mov|mkv|mts|m2ts|webm|avi|m4v)$/i.test(f.name))} : {};
-    const data = await sendResumableUpload(file, (progress, phase) => { entry.progress = progress; if(phase)entry.phase=phase; renderFiles(); }, id => {entry.uploadId = id; remember(entry);}, () => entry.removed, extra);
+    const extra = companionVideoFiles.has(file) && entry.original ? {video_preview:true,original:{name:entry.original.name,size:entry.original.size,fingerprint:entry.original.fingerprint}} : entry.manualOriginalUpload === file ? {original_video_consent:true} : /\.opus$/i.test(file.name) && entry.original ? {original: {name: entry.original.name, size: entry.original.size, fingerprint: entry.original.fingerprint}, compact_preview:state.platform==='youtube' && state.files.some(f=>f.kind==='video'||/\.(mp4|mov|mkv|mts|m2ts|webm|avi|m4v)$/i.test(f.name))} : {};
+    const data = await sendResumableUpload(file, (progress, phase) => { entry.progress = progress; if(phase)entry.phase=phase; renderFiles(); }, id => {entry.uploadId = id; remember(entry);}, () => entry.removed, extra, controller.signal);
     const found = ['videos', 'master', 'songs', 'ignored'].map(kind => [kind, (data[kind] || [])[0]]).find(([, item]) => item);
     if (!found) throw new Error('Not a usable media file');
     entry.kind = found[0] === 'videos' ? 'video' : found[0];
@@ -627,7 +632,7 @@ async function uploadInParts(file, entry) {
       return;
     }
     entry.kind = 'error'; entry.error = error.message;
-  } finally { state.uploads -= 1; renderFiles(); }
+  } finally { delete entry.uploadController; state.uploads -= 1; renderFiles(); }
 }
 
 const KIND_LABEL = { video: "VIDEO", master: "AUDIO", songs: "SONGS", ignored: "SKIPPED", uploading: "UPLOAD", error: "ERROR" };
@@ -712,6 +717,7 @@ function fileRow(f, typed = false) {
       <span class="state">${f.kind === "uploading" ? (f.phase ? escapeHtml(f.phase) + " " : "") + Math.round(f.progress * 100) + "%" + uploadEta(f) : state.syncExcluded.has(f.path) ? "No sync" : f.usage === "asset" ? "Ready" : f.small && f.kind === "video" ? "Ready · small version" : f.preview ? "Ready · preview" : f.small ? "Ready · lossless" : f.kind === "error" ? escapeHtml(f.error) : f.kind === "ignored" ? escapeHtml(f.reason || "not used") : "Ready"}</span>
       <button class="remove" data-remove-file="${f.id}" type="button" aria-label="Remove ${escapeHtml(f.name)}" title="Remove">×</button>
       ${f.wholeFile && f.kind === "error" ? `<button class="link whole" data-upload-whole="${f.id}" type="button">Upload the whole file (${(f.wholeFile.size / 1e9).toFixed(1)} GB)</button>` : ""}
+      ${state.platform === 'youtube' && !state.audioTask && f.kind === 'uploading' && !isAudioEntry(f) ? `<label class="track-type">Camera type <select data-pending-camera="${f.id}" aria-label="Camera type for ${escapeHtml(f.name)}"><option value="">Automatic</option>${[['360','360'],['fixed','Fixed camera'],['moving','Moving camera']].map(([value,label])=>`<option value="${value}" ${f.cameraType===value?'selected':''}>${label}</option>`).join('')}</select></label>` : ''}
       ${state.platform === 'youtube' && f.kind === 'video' && !isSphere(f) ? `<label class="track-type">Use as <select data-video-usage="${f.id}" aria-label="Use for ${escapeHtml(f.name)}"><option value="camera" ${!['filler','asset'].includes(f.usage) ? 'selected' : ''}>Camera</option><option value="filler" ${f.usage === 'filler' ? 'selected' : ''}>Insert · optional, no sync</option><option value="asset" ${f.usage === 'asset' ? 'selected' : ''}>Asset / logo · keep out of montage</option></select></label>` : ''}
       ${state.syncExcluded.has(f.path) ? '<span class="source-note">Not used in this song: no reliable audio match. Kept in your library.</span>' : ''}
       ${f.path && (f.kind === "master" || f.kind === "songs") && state.audioTask !== 'master' ? `<span class="track-audition"><button type="button" data-audition="${f.id}" aria-pressed="false" aria-label="Listen to ${escapeHtml(f.name)} for 12 seconds">▶ Listen 12 s</button><button type="button" data-audition-next="${f.id}" aria-label="Listen to another part of ${escapeHtml(f.name)}">Another part</button></span>` : ""}
@@ -730,6 +736,12 @@ document.addEventListener('click', event => {
 });
 
 document.addEventListener('change', event => {
+  const pending = event.target.closest('[data-pending-camera]');
+  if (pending) {
+    const file = state.files.find(f => f.id === pending.dataset.pendingCamera);
+    if (file) { file.cameraType = pending.value || undefined; remember(file); }
+    return;
+  }
   const select = event.target.closest('[data-video-usage]');
   const file = select && state.files.find(f => f.id === select.dataset.videoUsage);
   if (!file) return;
@@ -748,6 +760,7 @@ document.addEventListener('click', event => {
   if (!entry) return;
   if(trackAudition.id===entry.id)stopTrackAudition();
   entry.removed = true;
+  entry.uploadController?.abort();
   footageMemory.forget(entry.id);
   if (entry.xhr && entry.kind === 'uploading') entry.xhr.abort();
   if (entry.uploadId && entry.kind !== 'video' && entry.kind !== 'master' && entry.kind !== 'songs') {
@@ -773,7 +786,9 @@ function renderFiles() {
   if (!document.activeElement?.closest?.("#audioFiles .track-type"))
     $("#audioFiles").innerHTML = state.files.filter(isAudioEntry).map(f => fileRow(f, typed)).join("");
   $("#audioFiles").classList.toggle("compact", state.files.filter(isAudioEntry).length > 4);
-  $("#videoFiles").innerHTML = state.files.filter((f) => !isAudioEntry(f)).map(fileRow).join("");
+  const focusedCamera = document.activeElement?.closest?.('[data-pending-camera]');
+  if (!state.files.some(f => f.id === focusedCamera?.dataset.pendingCamera && f.kind === 'uploading'))
+    $("#videoFiles").innerHTML = state.files.filter((f) => !isAudioEntry(f)).map(fileRow).join("");
   const master = state.files.find((f) => f.kind === "master");
   let hint = "";
   let ready = (videos().length > 0 || audioOnly()) && state.uploads === 0;
@@ -782,7 +797,7 @@ function renderFiles() {
   if (state.platform === "reel" && !master && videos().length > 1) hint = "Tip: add the song so the reel cuts on the music.";
   if (state.platform === "reel" && master) hint = "The reel uses your song master. Camera sound is muted.";
   if (state.platform === "reel" && state.files.some(f=>f.sample) && !master) { hint = "The example song master is missing. Reopen the example."; ready = false; }
-  if (state.uploads) hint = "Uploading…";
+  if (state.uploads) hint = state.platform === "youtube" && !state.audioTask ? "Files are preparing in the background. You can name the project and choose camera types now." : "Uploading…";
   if (state.platform === 'youtube' && $('#fullSessionOn').checked && !state.uploads && audioTracks().length) hint = 'Find and review the songs, then export their mixes. This session step exports audio.';
   const longest = Math.max(0, ...state.files.filter(isAudioEntry).map(f => f.duration || 0));
   if (state.platform === 'youtube' && !$('#fullSessionOn').checked && !state.uploads && longest > 20 * 60) hint = `Your audio is ${Math.round(longest / 60)} min long. If it is a whole session and you want one song, tick Full session to find the songs first, or trim the tracks to that song.`;
@@ -865,6 +880,7 @@ function isWholeSession() {
 }
 
 async function registerProject({mixed = false} = {}) {
+  if (state.uploads) return toast('Wait for the files to finish preparing.');
   if(state.audioTask==='master')return runMasterOnly().catch(fail);
   if(work.cancelling)return toast('Wait for cancellation to finish.');
   if(!mixed){state.mixMaster=null;state.mixDownload=null;state.syncExcluded.clear();}
@@ -1561,7 +1577,7 @@ async function saveCameras() {
   const flat = cameras.filter((f) => !isSphere(f) && f.usage !== "filler");
   const subjects = Object.fromEntries(flat.map((f) => [f.path, state.subjects[f.path] || "general"]));
   if (flat.length) await api("/settings/camera-subjects", { camera_subjects: subjects });
-  const roles = Object.fromEntries(flat.map((f) => [f.path, state.roles[f.path] || guessRole(f)]));
+  const roles = Object.fromEntries(flat.map((f) => [f.path, state.roles[f.path] || (f.cameraType==='fixed' ? 'fixed_rear' : f.cameraType==='moving' ? 'handheld' : guessRole(f))]));
   if (flat.length) await api("/settings/camera-roles", { camera_roles: roles });
   for (const file of cameras.filter(isSphere)) {
     const views = state.viewpoints[file.path] || {};

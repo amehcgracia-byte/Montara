@@ -49,7 +49,7 @@ async function scenario(name, config) {
     send(payload) {recorded.push({route:this.url,name:payload.name,size:payload.size});}
   }
   const ctx = vm.createContext({
-    state, montaraCompanion:companion, XMLHttpRequest:FakeXHR,
+    AbortController, state, montaraCompanion:companion, XMLHttpRequest:FakeXHR,
     window:{confirm:message=>{prompts.push(message);return Boolean(config.approveOriginal);}},
     sendResumableUpload:async (payload,progress,registered,cancelled,extra)=>{
       recorded.push({route:"/montara/uploads",name:payload.name,size:payload.size,extra});
@@ -99,11 +99,13 @@ async function scenario(name, config) {
   await scenario("restored_small_missing_original_300MiB",{companion:true,restoredSmall:true,mb:300,result:"missing",expectedPrompt:1,expected:"none"});
   await scenario("restored_small_no_companion_explicit_test_10MiB",{companion:false,restoredSmall:true,mb:10,approveOriginal:true,expectedPrompt:1,expected:"original",route:"/montara/uploads"});
 
+  await scenario("renamed_proxy_lookalike",{companion:false,name:"camera.small.mp4",mb:1100,restoredSmall:true,expectedPrompt:1,expected:"none"});
+
   // Manual consent must retain the old upload capability, without silent fallback.
   await scenario("manual_no_companion_2MiB",{companion:false,mb:2,approveOriginal:true,expectedPrompt:1,expected:"original",route:"/api/v1/wizard/upload"});
   await scenario("manual_no_companion_300MiB",{companion:false,mb:300,approveOriginal:true,expectedPrompt:1,expected:"original",route:"/montara/uploads"});
   await scenario("manual_failed_proxy_300MiB",{companion:true,mb:300,result:"throw",approveOriginal:true,expectedPrompt:1,expected:"original",route:"/montara/uploads"});
   // Stage audio routing remains unchanged; removing that path needs its own review.
   await scenario("legacy_stage_audio_10MiB",{companion:false,name:"session.wav",mb:10,expected:"original",route:"/montara/uploads"});
-  console.log("URANO_U3C_MANUAL_FALLBACK_PASS: 15 mocked cases; silent original uploads blocked, explicit test consent retains upload.");
+  console.log("URANO_U3C_MANUAL_FALLBACK_PASS: 16 mocked cases; silent original uploads blocked, explicit test consent retains upload.");
 })().catch(error=>{console.error(error);process.exitCode=1;});
