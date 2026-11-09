@@ -55,7 +55,7 @@ class TrustedPrivateStageInputs(unittest.TestCase):
         self.receipt=self.owner_folder/f"slot-0-{self.hash}.json"
         self.receipt.write_text(json.dumps({
             "source_slot":0,"proxy_sha256":self.hash,
-            "original_claim":self.original,"attested":False,"bytes":len(self.proxy)}))
+            "original_claim":self.original,"attested":False,"bytes":len(self.proxy),"receipt_authenticated":False}))
 
     def prepare(self, owner="owner-a", project=None):
         return prepare_trusted_stage_inputs(self.registry,self.inbox,
