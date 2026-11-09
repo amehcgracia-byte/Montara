@@ -124,6 +124,17 @@ class StageIngestAttestation(unittest.TestCase):
         with self.assertRaises(UnverifiedSources):
             self.attest(swapped)
 
+    def test_rejects_stage_source_outside_owner_project_even_with_matching_hash(self):
+        with tempfile.TemporaryDirectory(prefix="montara-foreign-owner-") as remote:
+            outside=Path(remote)/"foreign-camera.mp4"
+            outside.write_bytes(self.proxy.read_bytes())
+            self.snapshot["inputs"]["videos"][0]["path"]=str(outside)
+            self.engine.write_text(json.dumps(self.snapshot))
+            with self.assertRaises(UnverifiedSources):
+                self.attest()
+        with self.assertRaises(UnverifiedSources):
+            self.provenance.verified("owner-a",self.a.id,source_slots={0})
+
     def test_rejects_symlink_proxy(self):
         linked=self.root/"linked.mp4"
         linked.symlink_to(self.proxy)
