@@ -16,13 +16,15 @@ from flask import Flask, jsonify, request
 
 from urano.google_flow import OIDCSettings, GoogleProvider, PendingLogins, google_login_blueprint
 from urano.google_owner import GoogleOwnerStore
+from urano.owner_dashboard import owner_dashboard_blueprint
 from urano.http_projects import project_blueprint
 from urano.project_catalog import ProjectCatalog
 from urano.session_auth import SESSION_COOKIE, SessionStore
 
 
 def create_owner_api(private_dir: Path, *, settings: OIDCSettings,
-                     provider: GoogleProvider | None = None) -> Flask:
+                     provider: GoogleProvider | None = None,
+                     enable_dashboard: bool = False) -> Flask:
     root = Path(private_dir).resolve()
     if not root.is_dir() or root.is_symlink():
         raise ValueError("Existing private database directory required")
@@ -35,12 +37,14 @@ def create_owner_api(private_dir: Path, *, settings: OIDCSettings,
         owners=GoogleOwnerStore(root / "owners.sqlite3"),
         sessions=session_store,
         provider=provider,
-        success_path="/urano/v1/projects",
+        success_path="/urano/v1/dashboard" if enable_dashboard else "/urano/v1/projects",
     ))
-    app.register_blueprint(project_blueprint(
-        ProjectCatalog(root / "projects.sqlite3"), session_store))
+    catalog = ProjectCatalog(root / "projects.sqlite3")
+    app.register_blueprint(project_blueprint(catalog, session_store))
     url = urlsplit(settings.redirect_uri)
     allowed_origin = f"{url.scheme}://{url.netloc}"
+    if enable_dashboard:
+        app.register_blueprint(owner_dashboard_blueprint(session_store, https_origin=allowed_origin))
 
     @app.post("/urano/v1/session/refresh")
     def refresh_csrf():
