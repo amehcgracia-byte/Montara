@@ -12,7 +12,7 @@ class LoginChoice(unittest.TestCase):
         env={"MONTARA_BETA_ORIGIN":"https://beta.example.test", "MONTARA_COMPANION_BETA_ORIGIN":"https://beta.example.test", "MONTARA_GOOGLE_CLIENT_ID":"123456-synthetic.apps.googleusercontent.com", "MONTARA_BETA_ALLOWED_EMAILS":"user@example.test", "MONTARA_GOOGLE_SECRET_FILE":str(key), "MONTARA_OWNER_PRIVATE_DIR":str(private)}
         self.client=create_private_owner_beta(env).test_client()
     def test_login_register_are_real_html_and_google_is_only_available_provider(self):
-        for path in ('/login','/register'):
+        for path in ('/urano/v1/login','/urano/v1/register'):
             response=self.client.get(path,base_url='https://beta.example.test')
             self.assertEqual(response.status_code,200)
             page=response.get_data(as_text=True)
@@ -24,9 +24,13 @@ class LoginChoice(unittest.TestCase):
             self.assertIn("default-src 'none'",response.headers['Content-Security-Policy'])
             self.assertEqual(response.headers['Cache-Control'],'no-store')
     def test_trusted_host_and_antiforwarding_still_applies(self):
-        for path in ('/login','/register'):
+        for path in ('/urano/v1/login','/urano/v1/register'):
             self.assertEqual(self.client.get(path,base_url='http://localhost').status_code,403)
             self.assertEqual(self.client.get(path,base_url='https://beta.example.test',headers={'X-Forwarded-Host':'evil.test'}).status_code,403)
+    def test_edge_compatible_namespaced_paths_only(self):
+        for path in ('/login', '/register'):
+            self.assertEqual(self.client.get(path,base_url='https://beta.example.test').status_code,404)
+
     def test_root_legacy_google_bookmark_still_works(self):
         r=self.client.get('/',base_url='https://beta.example.test')
         self.assertEqual(r.status_code,303)

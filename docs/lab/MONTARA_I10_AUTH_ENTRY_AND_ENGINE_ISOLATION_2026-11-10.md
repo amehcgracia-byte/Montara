@@ -9,8 +9,8 @@ La VM se reinició a las 12:59:58 UTC y los dos servicios FER arrancaron automá
 ## UX minimalista de entrada
 
 La portada enlazará a dos rutas diferenciadas del mismo **Owner público HTTPS**:
-- **Iniciar sesión** → `/login`.
-- **Registrarse** → `/register`.
+- **Iniciar sesión** → `/urano/v1/login`.
+- **Registrarse** → `/urano/v1/register`.
 
 Ambas ofrecen **Continuar con Google** (único método disponible para testers autorizados). Email+contraseña se indica como **en preparación**, sin formularios ni registro falso. Son páginas del backend y comparten su protección de Host/scheme, CSP, cookies y anti-cache. La URL `/` mantiene la redirección Google original por compatibilidad con enlaces ya compartidos. Una sesión existente que visite la elección debe ir directamente a `Mis proyectos`.
 
@@ -33,6 +33,10 @@ Preparar **una PR de integración revisable con Chema** después del flujo míni
 
 ## Validación esperada
 
-- Offline: tests de nuevo HTML de elección y CSP, rutas `/login` y `/register` seguras, compatibilidad `/`, pruebas C8 y build Pages; no OAuth real simulado en producción.
+- Offline: tests de nuevo HTML de elección y CSP, rutas `/urano/v1/login` y `/urano/v1/register` seguras, compatibilidad `/`, pruebas C8 y build Pages; no OAuth real simulado en producción.
 - Despliegue: primero el backend con estas rutas, luego actualizar Pages, evitando enlaces rotos. Comprobar 200/303/401, 20 peticiones de salud, ausencia de fuga de secretos y la recuperación tras reinicio sin detener Chema.
 - Manual: cuenta tester Google → `Mis proyectos` → persistencia después de otra sesión. Todavía **no** se declara recorrido Engine/Companion.
+
+## Revisión de contrato Worker C8
+
+El Worker público filtra explícitamente todas las rutas excepto `/`, `/healthz` y `/urano/v1/*`. La primera prueba local de `/login`/`/register` devolvió **404 en el borde, aunque 200 dentro de la VM**. Se corrigió el contrato sin abrir rutas adicionales en Cloudflare: ahora las páginas de entrada están en `/urano/v1/login` y `/urano/v1/register`, bajo la lista de rutas ya autorizadas. No confundir el 404 de filtrado con una caída de OAuth.

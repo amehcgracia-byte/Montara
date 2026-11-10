@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 SOURCE = ROOT / "deployment" / "cloudflare-beta" / "public"
 TARGET = ROOT / "dist"
 OWNER_BASE = "https://montara-owner.memoriainvalida001.workers.dev"
-ALLOWED_AUTH_URLS = frozenset((OWNER_BASE + "/login", OWNER_BASE + "/register"))
+ALLOWED_AUTH_URLS = frozenset((OWNER_BASE + "/urano/v1/login", OWNER_BASE + "/urano/v1/register"))
 
 
 class _Links(HTMLParser):

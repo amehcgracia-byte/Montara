@@ -6,7 +6,7 @@ import unittest
 
 LANDING = Path(__file__).resolve().parents[1] / 'deployment/cloudflare-beta/public/index.html'
 OWNER = 'https://montara-owner.memoriainvalida001.workers.dev'
-ALLOWED = {OWNER + '/login', OWNER + '/register'}
+ALLOWED = {OWNER + '/urano/v1/login', OWNER + '/urano/v1/register'}
 
 
 class Links(HTMLParser):

@@ -67,19 +67,19 @@ def create_private_owner_beta(
         return redirect("/urano/v1/dashboard" if session else
                         "/urano/v1/google/start", code=303)
 
-    @app.get("/login")
-    @app.get("/register")
+    @app.get("/urano/v1/login")
+    @app.get("/urano/v1/register")
     def owner_auth_choice():
         """Small accessible auth entry. Email/password is deliberately NOT enabled."""
         session = SessionStore(root / "sessions.sqlite3").verify(
             request.cookies.get(SESSION_COOKIE))
         if session:
             return redirect("/urano/v1/dashboard", code=303)
-        registering = request.path == "/register"
+        registering = request.path == "/urano/v1/register"
         heading = "Crear cuenta" if registering else "Iniciar sesión"
-        alternate = ('<p>¿Ya tienes cuenta? <a href="/login">Inicia sesión</a></p>'
+        alternate = ('<p>¿Ya tienes cuenta? <a href="/urano/v1/login">Inicia sesión</a></p>'
                      if registering else
-                     '<p>¿Primera vez en Montara? <a href="/register">Crear cuenta</a></p>')
+                     '<p>¿Primera vez en Montara? <a href="/urano/v1/register">Crear cuenta</a></p>')
         body = """<!doctype html><html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex,nofollow"><title>Montara · %s</title>
@@ -97,7 +97,7 @@ small{color:#aaaab4}footer{margin-top:28px}footer a{margin-right:18px}</style></
 <div class="disabled" aria-label="Acceso con correo y contraseña no disponible">
 <strong>Correo y contraseña</strong><p>En preparación: verificación de email y recuperación segura.</p>
 <small>No crees una contraseña todavía.</small></div>
-%s<footer><a href="/login">Iniciar sesión</a><a href="/register">Registrarse</a></footer>
+%s<footer><a href="/urano/v1/login">Iniciar sesión</a><a href="/urano/v1/register">Registrarse</a></footer>
 </main></body></html>""" % (heading, heading, alternate)
         result = Response(body, mimetype="text/html; charset=utf-8")
         result.headers["Content-Security-Policy"] = (
