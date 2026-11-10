@@ -33,6 +33,21 @@ touch "$LOG_FILE"
 chown "$CONSOLE_USER" "$LOG_FILE"
 exec > >(tee -a "$LOG_FILE") 2>&1
 echo "Montara Companion installer: $(date) · target ${ENGINE_COMMIT:0:8}"
+# Unload the previous LaunchAgent *before* running the updater. Old packages
+# used KeepAlive=true: killing their listener from install.sh caused launchd
+# to spawn a new one immediately, so the installer could never free 47820.
+# Never unload a service while it reports an active local job.
+preflight="$(curl -fsS --max-time 3 http://127.0.0.1:47820/health 2>/dev/null || true)"
+if [ -n "$preflight" ] && ! printf '%s' "$preflight" | run_as_owner python3 -c 'import json,sys;d=json.load(sys.stdin);sys.exit(0 if d.get("app")=="montara-companion" and d.get("busy") is False else 1)' 2>/dev/null; then
+  echo "Companion has active work, or its status is unknown. Finish local jobs before updating." >&2
+  exit 1
+fi
+if lsof -nP -t -iTCP:47820 -sTCP:LISTEN >/dev/null 2>&1 && [ -z "$preflight" ]; then
+  echo "Port 47820 is occupied but its health could not be verified. Aborting safely." >&2
+  exit 1
+fi
+run_as_owner launchctl bootout "gui/$UID_FOR_USER/website.montara.companion" >/dev/null 2>&1 || true
+
 echo "Installing pinned Montara Companion for $CONSOLE_USER..."
 # macOS Installer extracts package scripts in a root-only PKInstallSandbox.
 # After dropping privileges the console user CANNOT read $HERE/install.sh.
