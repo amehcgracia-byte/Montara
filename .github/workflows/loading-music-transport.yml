@@ -1,0 +1,20 @@
+name: Loading music Play Pause
+on:
+  push:
+    branches:
+      - fix/jm-making-music-transport-20261110
+  pull_request:
+    paths:
+      - web/index.html
+      - web/montara.js
+      - web/montara.css
+      - tests/loading-music-transport.test.cjs
+jobs:
+  transport:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test tests/loading-music-transport.test.cjs
