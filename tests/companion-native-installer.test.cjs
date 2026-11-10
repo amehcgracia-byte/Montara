@@ -68,3 +68,10 @@ test('A stale listener can only be stopped if idle and owned by the installing u
   assert.match(installer,/run_as_owner kill -TERM/);
   assert.match(installer,/Old Companion did not stop/);
 });
+
+test('The previous KeepAlive agent is unloaded before touching installed files',()=>{
+  const unload=installer.indexOf('run_as_owner launchctl bootout "gui/$UID_FOR_USER/website.montara.companion"');
+  const install=installer.indexOf('bash "$STAGE/install.sh" --video');
+  assert.ok(unload>0 && install>unload);
+  assert.match(installer,/Finish local jobs before updating/);
+});
