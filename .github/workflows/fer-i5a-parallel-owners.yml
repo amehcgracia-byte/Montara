@@ -1,0 +1,27 @@
+name: FER I5A per-owner concurrency contract (no sandbox claim)
+on:
+  pull_request:
+    paths:
+      - 'tests/test_urano_parallel_owners.py'
+      - '.github/workflows/fer-i5a-parallel-owners.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  no-global-queue:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install test dependencies
+        run: python -m pip install 'Flask>=3,<4' pytest -r requirements-urano-oidc.txt
+      - name: Two real subprocesses, synthetic projects; no global queue
+        run: |
+          python -m pytest -q \
+            tests/test_urano_parallel_owners.py \
+            tests/test_urano_engine_bindings.py \
+            tests/test_urano_runtime_activation.py \
+            tests/test_urano_private_supervisor.py
