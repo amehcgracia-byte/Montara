@@ -18,6 +18,8 @@ jobs:
       NOTARY_ISSUER: ${{ secrets.MONTARA_APPLE_NOTARY_ISSUER }}
     steps:
       - uses: actions/checkout@v4
+      - name: Check native installer and update safety
+        run: node --test tests/companion-native-installer.test.cjs
       - name: Build standard Installer package
         run: |
           MONTARA_PKG_VERSION="1.${GITHUB_RUN_NUMBER}.0" bash companion/macos-installer/build.sh
