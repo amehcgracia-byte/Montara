@@ -409,9 +409,10 @@ function prepareMakingPlayback() {
 function updateMakingPlayback() {
   const audio = $("#rangeAudio"), button = $("#makingAudioToggle");
   const playing = !audio.paused && !audio.ended;
-  button.textContent = playing ? "Pause music" : "Play music";
+  // The visual control is an icon; keep accessible text for screen readers.
   button.setAttribute("aria-pressed", String(playing));
   button.setAttribute("aria-label", playing ? "Pause music while Montara works" : "Play music while Montara works");
+  button.title = playing ? "Pause music" : "Play music";
 }
 $("#makingAudioToggle").addEventListener("click", async () => {
   const audio = $("#rangeAudio");
