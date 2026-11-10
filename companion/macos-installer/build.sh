@@ -14,7 +14,7 @@ sed -e "s/__MONTARA_COMMIT__/$SOURCE/g" -e "s/__ENGINE_COMMIT__/$ENGINE/g" \
   companion/macos-installer/postinstall.in > "$TEMP/scripts/postinstall"
 chmod 755 "$TEMP/scripts/postinstall"
 pkgbuild --nopayload --identifier "website.talesforthetillerman.montara.companion" \
-  --version "1.0.0" --install-location "/" --scripts "$TEMP/scripts" \
+  --version "${MONTARA_PKG_VERSION:-1.0.0}" --install-location "/" --scripts "$TEMP/scripts" \
   "$TEMP/out/component.pkg"
 mkdir -p dist
 # productbuild produces a standard macOS Installer file, not a ZIP or script.
