@@ -492,6 +492,46 @@ $("#rangeBar").addEventListener("click", (e) => {
 // ---------- companion: offer it on a Mac, notice when it starts ----------
 const isDesktopMac = /Macintosh|Mac OS X/.test(navigator.userAgent) && !/iPhone|iPad/.test(navigator.userAgent) && navigator.maxTouchPoints < 2;
 let companionWatch = null;
+let expectedCompanionEngine = null;
+let companionVersionRequest = null;
+// Proactive and read-only. The browser cannot execute an installer; the
+// downloadable .command is explicitly opened by the Mac owner in Terminal.
+async function checkCompanionUpdate({force=false}={}) {
+  if (!isDesktopMac) return;
+  const notice=$("#companionUpdateNotice");
+  try {
+    if (!expectedCompanionEngine || force) {
+      if (!companionVersionRequest || force) companionVersionRequest=fetch("/montara/companion/version",{cache:"no-store"}).then(async response=>{
+        if (!response.ok) throw new Error("Montara Companion version unavailable");
+        return response.json();
+      });
+      const expected=await companionVersionRequest;
+      expectedCompanionEngine=expected.engine;
+    }
+    const info=await montaraCompanion.detect();
+    const installed=info?.local_video?.engine;
+    const needsUpdate=installed!==expectedCompanionEngine;
+    notice.hidden=!needsUpdate;
+    if(needsUpdate){
+      const title=$("#companionUpdateTitle"),message=$("#companionUpdateMessage");
+      title.textContent=!info?"Companion is not running":!installed?"Companion needs the video renderer":"Companion update available";
+      message.textContent=!info
+        ? "Open Montara Companion on your Mac, or download it if it is not installed."
+        : !installed
+          ? "This Companion cannot render original-quality video yet. Install the video update."
+          : "The installed video renderer is older or incompatible with this Montara version. Update it before exporting.";
+    }
+  }catch(error){
+    // If the version endpoint temporarily fails, do not present an unverified
+    // update or disturb editing. Export still checks its recipe version.
+    console.warn("Companion version check failed:",error);
+  }
+}
+$("#companionUpdateRecheck").addEventListener("click",()=>{
+  const b=$("#companionUpdateRecheck");b.disabled=true;
+  checkCompanionUpdate({force:true}).finally(()=>{b.disabled=false;});
+});
+window.addEventListener("focus",()=>{if(!$("#companionUpdateNotice").hidden)checkCompanionUpdate();});
 async function watchCompanion() {
   clearTimeout(companionWatch);
   const info = await montaraCompanion.detect();
@@ -500,6 +540,7 @@ async function watchCompanion() {
   if (!info && !$("#footage").hidden) companionWatch = setTimeout(watchCompanion, 4000);  // starts while the person installs it
   else if (info && renderFiles.companionSeen === false) toast("Companion connected: videos stay on your computer.");
   renderFiles.companionSeen = Boolean(info);
+  void checkCompanionUpdate();
 }
 
 // ---------- footage memory: survive a reload ----------
@@ -2883,6 +2924,7 @@ function fail(error) {
 
 document.addEventListener("DOMContentLoaded", async () => {
 loadBranding();
+void checkCompanionUpdate();
 api("/montara/version").then((v) => { $("#version").textContent = `Montara ${v.version}`; }).catch(() => {});
 let savedEdit=null;
 try {savedEdit=JSON.parse(sessionStorage.getItem('montara-open-edit'));} catch {}
