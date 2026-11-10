@@ -1,0 +1,27 @@
+name: FER I17 independent controller and cgroup cancellation contracts
+on:
+  pull_request:
+    paths:
+      - 'tests/urano_i17_broker_cancel_lab.py'
+      - 'tests/urano_i17_target_entry.sh'
+      - 'tests/test_urano_i17_broker_cancel_lab.py'
+      - '.github/workflows/fer-i17-controller-cancellation-lab.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Audit cancellation safety, no systemd units created
+        env:
+          PYTHONPATH: tests
+        run: |
+          python -m unittest discover -s tests -p 'test_urano_i17_broker_cancel_lab.py' -v
+          python -m py_compile tests/urano_i17_broker_cancel_lab.py
+          bash -n tests/urano_i17_target_entry.sh
