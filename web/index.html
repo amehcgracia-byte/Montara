@@ -21,6 +21,16 @@
 </header>
 
 <main>
+  <div id="companionUpdateNotice" role="status" class="companion-update-notice" hidden>
+    <strong id="companionUpdateTitle">Companion update available</strong>
+    <p id="companionUpdateMessage">Montara needs a newer Companion video renderer on this Mac.</p>
+    <div class="actions">
+      <a class="btn primary small" id="companionUpdateDownload" href="/montara/companion/download" download>Update Companion for Mac</a>
+      <button class="btn ghost small" id="companionUpdateRecheck" type="button">Check again</button>
+    </div>
+    <small>Download the installer, unzip and open “Install Montara Companion” with a double-click. macOS asks permission to run it. Close an idle Companion before installing; active video exports are never interrupted.</small>
+  </div>
+
   <!-- Home -->
   <section class="screen" id="home">
     <h1 class="intro-name" aria-label="Montara"><span aria-hidden="true" style="--letter:0"><svg class="intro-mark" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 100">
@@ -103,15 +113,6 @@
     <p class="lead small" id="taskHelp"></p>
     <div id="stageSessionOptions" class="actions" hidden><details id="stageAudioOptions"><summary>Advanced audio options</summary><label><input id="stageAudioOnly" type="checkbox"> Audio only</label><label><input id="fullSessionOn" type="checkbox"> Full session · audio</label></details><button id="sessionResume" class="btn ghost small" type="button" hidden>Resume latest</button></div>
     <p class="hint" id="sampleNote" hidden>Sample material from a real jam is loaded so you can try Montara right away. <button class="link" id="clearSamples">Use my own files instead</button><span id="variantRow"> · <button class="link" id="switchSample"></button></span></p>
-    <div id="companionUpdateNotice" role="status" class="companion-update-notice" hidden>
-      <strong id="companionUpdateTitle">Companion update available</strong>
-      <p id="companionUpdateMessage">Montara needs a newer Companion video renderer on this Mac.</p>
-      <div class="actions">
-        <a class="btn primary small" id="companionUpdateDownload" href="/montara/companion/download" download>Update Companion for Mac</a>
-        <button class="btn ghost small" id="companionUpdateRecheck" type="button">Check again</button>
-      </div>
-      <small>Download the installer, unzip and open “Install Montara Companion” with a double-click. macOS asks permission to run it. Close an idle Companion before installing; active video exports are never interrupted.</small>
-    </div>
     <p class="hint" id="companionNote" hidden>Companion connected: your videos stay on your computer and only small versions are uploaded. In this test the final video is made from those small versions.</p>
     <p class="hint" id="companionOffer" hidden>Montara is much faster with its companion: your videos stay on your computer and only small versions travel. <a class="link" id="companionDownload" href="/montara/companion/download" download>Download the companion for Mac</a>, open the zip and double-click «Install Montara Companion» (the first time macOS may ask: right-click → Open). Already installed? Open «Montara Companion» with Spotlight.</p>
     <p class="hint" id="restoreNote" hidden><span id="restoreText"></span> <button class="link" id="restoreFiles" type="button">Restore them</button> · <button class="link" id="restoreForget" type="button">Start fresh</button></p>
