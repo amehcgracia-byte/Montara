@@ -27,6 +27,12 @@ El I20 ya probó HTTP firmado → guard del proyecto → Engine Linux real, pero
 
 Pruebas de control: `tests/test_urano_gateway_job_bridge.py` comprueba apertura/rechazo extranjero, segunda apertura del mismo owner preserva el worker activo, dos propietarios separados, bloqueo doble (I13 + I18) ante limpieza no atestada, y huérfanos de reinicio. Suite I21 + I18 + I13 + I19 + U13: **30 tests locales PASS** tras regresiones. CI dedicada **solo ejecuta tests offline**, no invoca systemd ni instala componentes.
 
+## Resultado de inspección de identidad Linux en la VM (sin modificar el host)
+
+En la VM Ubuntu 24.04, el usuario de laboratorio es UID/GID 1006. `unshare --user --map-root-user` muestra un mapa **UID 0 interno → UID 1006 del host (rango 1)**. Existen entradas `subuid/subgid` para ese usuario (rangos de 65.536), pero **no están instaladas `newuidmap` ni `newgidmap`**, necesarias para delegar rangos arbitrarios mediante el modelo rootless tradicional. Un intento inofensivo de ejecutar un servicio temporal `systemd --user` con `DynamicUser=yes` finalizó con `status=217` y sin ejecutar el proceso. No se instaló nada ni se cambió configuración de cuentas/cgroups.
+
+**Conclusión de seguridad:** las pruebas I15–I21 son una demostración real de aislamiento de rutas/red/PIDs y límites por cgroup, pero **no demuestran identidades host segregadas para dos tenants**. Las alternativas que merece comprobar un operador autorizado son: (a) broker mínimo con UIDs reales diferenciados y control de cgroups, (b) un runtime OCI rootless con mapeos subordinados *verificados* y política de recursos; ambas requieren una validación de privilegios, permisos y teardown antes de activar el Owner. La pertenencia del usuario de la VM al grupo `lxd` no es por sí sola una aprobación de usar LXD: ese grupo puede conceder privilegios muy amplios y no se habilitará ningún servicio por esta vía.
+
 ## Bloqueadores concretos antes de Bandera 1 visible al usuario
 
 1. **Broker de producción con aislamiento por tenant**: separar UID host del Owner/tenant o escoger runtime OCI equivalente, límites/cgroup/seguridad de kernel, scopes estrictos y un control-plane que no posea acceso directo indiscriminado al home ajeno. Evaluar el menor coste operacional sin atarnos a GCP ni Docker.
