@@ -44,3 +44,13 @@ test('Installer scripts pass shell parser',()=>{
     assert.equal(result.status,0, file+': '+result.stderr);
   }
 });
+
+test('Installer scripts are readable after dropping privileges and failures are logged',()=>{
+  assert.match(installer,/mktemp -d \/private\/tmp\/montara-companion-install/);
+  assert.match(installer,/chmod 755 "\$STAGE"/);
+  assert.match(installer,/cp "\$HERE\/install\.sh" "\$STAGE\/install\.sh"/);
+  assert.match(installer,/chown root:wheel "\$STAGE\/install\.sh"/);
+  assert.match(installer,/bash "\$STAGE\/install\.sh" --video/);
+  assert.match(installer,/installer\.log/);
+  assert.match(installer,/tee -a "\$LOG_FILE"/);
+});

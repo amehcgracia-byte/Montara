@@ -23,11 +23,30 @@ run_as_owner() {
   launchctl asuser "$UID_FOR_USER" sudo -H -u "$CONSOLE_USER" "$@"
 }
 
+# Persist useful installation diagnostics so macOS Installer's generic failure
+# screen does not hide the actionable error. The log is in the owner's home.
+LOG_DIR="$USER_HOME/.montara-companion"
+mkdir -p "$LOG_DIR"
+chown "$CONSOLE_USER" "$LOG_DIR"
+LOG_FILE="$LOG_DIR/installer.log"
+touch "$LOG_FILE"
+chown "$CONSOLE_USER" "$LOG_FILE"
+exec > >(tee -a "$LOG_FILE") 2>&1
+echo "Montara Companion installer: $(date) · target ${ENGINE_COMMIT:0:8}"
 echo "Installing pinned Montara Companion for $CONSOLE_USER..."
+# macOS Installer extracts package scripts in a root-only PKInstallSandbox.
+# After dropping privileges the console user CANNOT read $HERE/install.sh.
+# Stage a read-only, root-owned copy in an accessible directory first.
+STAGE="$(mktemp -d /private/tmp/montara-companion-install.XXXXXXXX)"
+trap 'rm -rf "$STAGE"' EXIT
+chmod 755 "$STAGE"
+cp "$HERE/install.sh" "$STAGE/install.sh"
+chown root:wheel "$STAGE/install.sh"
+chmod 644 "$STAGE/install.sh"
 run_as_owner env \
   "PATH=$PATH" "MONTARA_REF=$EDITOR_COMMIT" "MONTARA_EXPECTED_ENGINE=$ENGINE_COMMIT" \
   MONTARA_NO_SHELL_SETUP=1 MONTARA_INSTALL_ONLY=1 \
-  bash "$HERE/install.sh" --video
+  bash "$STAGE/install.sh" --video
 
 # Register a real per-user LaunchAgent. A background process spawned from
 # Installer's postinstall may be killed when Installer finishes; launchd owns
