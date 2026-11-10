@@ -1,0 +1,25 @@
+name: FER I16 rootless cgroup and PID namespace lab contracts
+on:
+  pull_request:
+    paths:
+      - 'tests/urano_i16_cgroup_real_engine_lab.py'
+      - 'tests/test_urano_i16_cgroup_lab.py'
+      - '.github/workflows/fer-i16-cgroup-lab-contracts.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  contracts-only:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Check cgroup limits, safe unit selection and fail-closed gating
+        env:
+          PYTHONPATH: tests
+        run: |
+          python -m unittest discover -s tests -p 'test_urano_i16_cgroup_lab.py' -v
+          python -m py_compile tests/urano_i16_cgroup_real_engine_lab.py
