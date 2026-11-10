@@ -53,6 +53,15 @@ fi
 
 # Do not replace code underneath a local mix, proxy or video render.
 if command -v lsof >/dev/null 2>&1; then
+  # The newer Companion reports in-flight jobs even between FFmpeg processes.
+  # Never kill an active render, proxy conversion or local mix during updates.
+  health="$(curl -fsS --max-time 3 http://127.0.0.1:47820/health 2>/dev/null || true)"
+  if lsof -t -iTCP:47820 -sTCP:LISTEN >/dev/null 2>&1 && [ -z "$health" ]; then
+    say "Companion did not respond to the safety check; update cancelled.";exit 1
+  fi
+  if [ -n "$health" ] && printf '%s' "$health" | "$PY" -c 'import json,sys;sys.exit(0 if json.load(sys.stdin).get("busy") else 1)' 2>/dev/null; then
+    say "A Companion job is active. Finish it before updating.";exit 1
+  fi
   for listener in $(lsof -t -iTCP:47820 -sTCP:LISTEN 2>/dev/null || true); do
     if pgrep -P "$listener" >/dev/null 2>&1; then say "Wait for the current Montara work to finish, then run this installer again.";exit 1;fi
   done
