@@ -31,6 +31,18 @@ class AdmissionContracts(unittest.TestCase):
         self.a=self.catalog.create('owner-A','A project')
         self.b=self.catalog.create('owner-B','B project')
 
+    def test_failed_startup_recovery_never_allows_admission(self):
+        from unittest.mock import patch
+        with patch.object(self.ledger,'recover_after_restart',side_effect=OSError('SQLite unavailable')):
+            with self.assertRaises(OSError):
+                self.controller.startup_reconcile()
+        with self.assertRaises(BrokerUnverified):
+            self.controller.admit('owner-A',self.a.id)
+        self.assertEqual(self.broker.calls,[])
+        self.assertEqual(self.controller.startup_reconcile(),())
+        running=self.controller.admit('owner-A',self.a.id)
+        self.assertEqual(running.state,'running')
+
     def test_verified_owner_admits_and_stops_with_real_ledger(self):
         with self.assertRaises(BrokerUnverified):
             self.controller.admit('owner-A',self.a.id)

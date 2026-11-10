@@ -48,8 +48,10 @@ class TrustedJobAdmission:
     def startup_reconcile(self) -> tuple[JobLease, ...]:
         if self._startup_completed:
             raise RuntimeError('Broker startup reconciliation already attempted')
+        pending = self.ledger.recover_after_restart()
+        # A failed SQLite read or failed recovery MUST NOT enable admission.
         self._startup_completed = True
-        return self.ledger.recover_after_restart()
+        return pending
 
     def admit(self, owner_id: str, project_id: str) -> JobAdmission:
         if not self._startup_completed:
