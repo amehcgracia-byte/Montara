@@ -24,7 +24,12 @@ test('Native installer runs pinned video updater as logged-in user, not root',()
   assert.match(installer,/launchctl asuser/);
   assert.match(installer,/sudo -H -u/);
   assert.match(installer,/--video/);
-  assert.match(installer,/MONTARA_BACKGROUND=1/);
+  assert.match(installer,/MONTARA_INSTALL_ONLY=1/);
+  assert.match(installer,/Library\/LaunchAgents/);
+  assert.match(installer,/launchctl bootstrap/);
+  assert.doesNotMatch(installer,/launchctl kickstart -k/);
+  assert.match(installer,/verified.*ENGINE_COMMIT/);
+  assert.match(installer,/exit 1/);
   assert.match(installer,/__ENGINE_COMMIT__/);
   assert.match(installer,/__MONTARA_COMMIT__/);
 });
@@ -38,4 +43,37 @@ test('Installer scripts pass shell parser',()=>{
     const result=spawnSync('bash',['-n',file],{encoding:'utf8'});
     assert.equal(result.status,0, file+': '+result.stderr);
   }
+});
+
+test('Installer scripts are readable after dropping privileges and failures are logged',()=>{
+  assert.match(installer,/mktemp -d \/private\/tmp\/montara-companion-install/);
+  assert.match(installer,/chmod 755 "\$STAGE"/);
+  assert.match(installer,/cp "\$HERE\/install\.sh" "\$STAGE\/install\.sh"/);
+  assert.match(installer,/chown root:wheel "\$STAGE\/install\.sh"/);
+  assert.match(installer,/bash "\$STAGE\/install\.sh" --video/);
+  assert.match(installer,/installer\.log/);
+  assert.match(installer,/tee -a "\$LOG_FILE"/);
+});
+
+test('An already-running matching Companion must not be launched again',()=>{
+  assert.match(installer,/verified.*ENGINE_COMMIT.*managed/);
+  assert.match(installer,/Not starting another Companion/);
+  assert.doesNotMatch(installer,/launchctl kickstart -k/);
+  assert.match(installer,/<key>KeepAlive<\/key><false\/>/);
+});
+test('A stale listener can only be stopped if idle and owned by the installing user',()=>{
+  assert.match(installer,/d\["busy"\] is False/);
+  assert.match(installer,/pgrep -P "\$pid"/);
+  assert.match(installer,/-sTCP:ESTABLISHED/);
+  assert.match(installer,/\$owner" != "\$CONSOLE_USER"/);
+  assert.match(installer,/Port 47820 belongs to another process/);
+  assert.match(installer,/run_as_owner kill -TERM/);
+  assert.match(installer,/Old Companion did not stop/);
+});
+
+test('The previous KeepAlive agent is unloaded before touching installed files',()=>{
+  const unload=installer.indexOf('run_as_owner launchctl bootout "gui/$UID_FOR_USER/website.montara.companion"');
+  const install=installer.indexOf('bash "$STAGE/install.sh" --video');
+  assert.ok(unload>0 && install>unload);
+  assert.match(installer,/Finish local jobs before updating/);
 });
