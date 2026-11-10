@@ -242,6 +242,20 @@ def create_montara_app(data_root: Path = DEFAULT_DATA, samples: bool = True):
             abort(404)
         return send_file(path, conditional=True)
 
+    @app.get("/montara/companion/version")
+    def montara_companion_version():
+        """Expected local video-engine commit; never report secrets or paths."""
+        import re
+        try:
+            sha = os.environ.get("MONTARA_ENGINE_SHA") or subprocess.check_output(
+                ["git", "-C", str(ENGINE), "rev-parse", "HEAD"],
+                text=True, stderr=subprocess.DEVNULL, timeout=5).strip()
+            if not re.fullmatch(r"[a-f0-9]{40}", sha):
+                raise ValueError("Unversioned engine")
+        except (OSError, subprocess.SubprocessError, ValueError):
+            return jsonify(error="Companion version unavailable"), 503
+        return jsonify(engine=sha, download="/montara/companion/download")
+
     @app.get("/montara/companion/download")
     def montara_companion_download():
         """Provide a macOS installer pinned to this exact Montara release."""
