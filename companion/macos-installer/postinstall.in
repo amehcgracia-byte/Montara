@@ -132,7 +132,10 @@ health_engine() {
   local raw
   raw="$(curl -fsS --max-time 3 http://127.0.0.1:47820/health 2>/dev/null || true)"
   [ -n "$raw" ] || return 1
-  printf '%s' "$raw" | run_as_owner python3 -c 'import json,sys;d=json.load(sys.stdin);print((d.get("local_video") or {}).get("engine") or "") if d.get("app")=="montara-companion" else sys.exit(1)' 2>/dev/null
+  # Parsing the read-only localhost health JSON does not need a GUI-user
+  # process. Passing stdin through launchctl asuser + sudo can result in
+  # empty input on macOS Installer and falsely mark a ready daemon as failed.
+  printf '%s' "$raw" | python3 -c 'import json,sys;d=json.load(sys.stdin);print((d.get("local_video") or {}).get("engine") or "") if d.get("app")=="montara-companion" else sys.exit(1)' 2>/dev/null
 }
 if [ -n "$(listener_pids)" ]; then
   echo "Port 47820 was acquired during installation. Not starting another Companion."
