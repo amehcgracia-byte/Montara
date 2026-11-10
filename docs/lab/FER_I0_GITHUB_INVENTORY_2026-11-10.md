@@ -34,3 +34,17 @@
 - ⛔ Ningún cherry-pick, rebase, merge, cierre de PR, deploy ni limpieza hasta completar esa puerta y consultar decisiones divergentes.
 
 **Siguiente orden:** auditar PR C1–C8, Companion Windows, cambios de Chema y submódulos; seleccionar primer bloque pequeño y comprobable para una PR hacia `fernando/integracion`. No conectar todavía Engine multiusuario a la beta pública.
+
+## Actualización: cambio nuevo de Chema #164 detectado durante la auditoría
+
+**PR #164:** [Replace Companion ZIP with macOS native .pkg and safe automatic update](https://github.com/amehcgracia-byte/Montara/pull/164). Afecta a `companion/companion.py`, `companion/install.sh`, `app.py`, `web/montara.js` y empaquetado macOS. **Conflicto funcional potencial importante** con la pila C3 #143 y Windows #74/#79/#81; no es conflicto Git confirmado. **Pausar cualquier integración de Companion** hasta evaluar el instalador nativo y consultar con Chema cuál es el contrato de distribución vigente. Los cambios recientes de Chema no son todos visuales.
+
+### Primer estudio de rutas que se solapan (archivos completos consultados de GitHub)
+- #158: gateway Workers, HTTPS, Pages y pruebas; no necesita copiar `app.py` ni reemplazar Stage.
+- #157: fábrica opt-in OAuth y proyectos; coherente con el C1 #140; puede evaluarse como primer incremento de autenticación sin tocar el editor.
+- #143: `companion/companion.py`, instalador, `app.py` y E2E; superposición de alto riesgo con #164.
+- #74: `companion/companion.py`, localizador Windows y `web/montara.js`; superposición de alto riesgo con Chema.
+- #152: `engine` submodule y `web/cut-editor.js`; no mover pin sin validar el motor.
+- #159: `engine`, `app.py` y `web/montara.js`; requiere sincronizar estado de Chema.
+
+**No hay un PR de código aprobado para integrar todavía.** Siguiente revisión: conflictos exactos de C1/C4/C8 vs main; no incorporar Companion antes de resolver #164.
