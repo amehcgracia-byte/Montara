@@ -24,7 +24,12 @@ test('Native installer runs pinned video updater as logged-in user, not root',()
   assert.match(installer,/launchctl asuser/);
   assert.match(installer,/sudo -H -u/);
   assert.match(installer,/--video/);
-  assert.match(installer,/MONTARA_BACKGROUND=1/);
+  assert.match(installer,/MONTARA_INSTALL_ONLY=1/);
+  assert.match(installer,/Library\/LaunchAgents/);
+  assert.match(installer,/launchctl bootstrap/);
+  assert.match(installer,/launchctl kickstart/);
+  assert.match(installer,/verified.*ENGINE_COMMIT/);
+  assert.match(installer,/exit 1/);
   assert.match(installer,/__ENGINE_COMMIT__/);
   assert.match(installer,/__MONTARA_COMMIT__/);
 });

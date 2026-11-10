@@ -6,23 +6,74 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 EDITOR_COMMIT="__MONTARA_COMMIT__"
 ENGINE_COMMIT="__ENGINE_COMMIT__"
 
-# A per-user service must be installed for the foreground Mac user, not root.
+# Always use the logged-in Mac owner, never root's Companion home.
 CONSOLE_USER="$(stat -f '%Su' /dev/console)"
 if [ -z "$CONSOLE_USER" ] || [ "$CONSOLE_USER" = root ] || [ "$CONSOLE_USER" = loginwindow ]; then
-  echo "Log into your Mac user account to install Montara Companion." >&2
+  echo "Log into your Mac user account before installing Montara Companion." >&2
   exit 1
 fi
 UID_FOR_USER="$(id -u "$CONSOLE_USER")"
-if [ ! -f "$HERE/install.sh" ]; then
-  echo "The Companion installer is incomplete. Download it again." >&2
+USER_HOME="$(dscl . -read "/Users/$CONSOLE_USER" NFSHomeDirectory | sed 's/^NFSHomeDirectory: //')"
+if [ ! -d "$USER_HOME" ] || [ ! -f "$HERE/install.sh" ]; then
+  echo "Companion installer or user home unavailable. Download the installer again." >&2
   exit 1
 fi
-# The shell and network fetch run as the signed-in user. Existing projects,
-# playlists and user-specific preferences stay in their own home directory.
-# The install script refuses live render jobs and foreign port ownership.
-echo "Updating Montara Companion for $CONSOLE_USER..."
-launchctl asuser "$UID_FOR_USER" sudo -H -u "$CONSOLE_USER" env \
+
+run_as_owner() {
+  launchctl asuser "$UID_FOR_USER" sudo -H -u "$CONSOLE_USER" "$@"
+}
+
+echo "Installing pinned Montara Companion for $CONSOLE_USER..."
+run_as_owner env \
   "PATH=$PATH" "MONTARA_REF=$EDITOR_COMMIT" "MONTARA_EXPECTED_ENGINE=$ENGINE_COMMIT" \
-  MONTARA_NO_SHELL_SETUP=1 MONTARA_BACKGROUND=1 \
+  MONTARA_NO_SHELL_SETUP=1 MONTARA_INSTALL_ONLY=1 \
   bash "$HERE/install.sh" --video
-echo "Montara Companion is installed and running."
+
+# Register a real per-user LaunchAgent. A background process spawned from
+# Installer's postinstall may be killed when Installer finishes; launchd owns
+# the lifetime instead, including after reboots and future user logins.
+LABEL="website.montara.companion"
+AGENT_DIR="$USER_HOME/Library/LaunchAgents"
+AGENT="$AGENT_DIR/$LABEL.plist"
+run_as_owner mkdir -p "$AGENT_DIR"
+cat > "$AGENT" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>$LABEL</string>
+  <key>ProgramArguments</key>
+  <array><string>$USER_HOME/.montara-companion/bin/montara-companion</string></array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>EnvironmentVariables</key><dict><key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string></dict>
+  <key>StandardOutPath</key><string>$USER_HOME/.montara-companion/companion.log</string>
+  <key>StandardErrorPath</key><string>$USER_HOME/.montara-companion/companion.log</string>
+</dict>
+</plist>
+EOF
+chown "$CONSOLE_USER" "$AGENT"
+chmod 600 "$AGENT"
+plutil -lint "$AGENT"
+run_as_owner launchctl bootout "gui/$UID_FOR_USER/$LABEL" >/dev/null 2>&1 || true
+run_as_owner launchctl bootstrap "gui/$UID_FOR_USER" "$AGENT"
+run_as_owner launchctl kickstart -k "gui/$UID_FOR_USER/$LABEL"
+
+# The package is NOT successful merely because files were copied.
+# Require that the actual live listener uses the exact pinned engine.
+echo "Verifying that the running Companion matches Montara..."
+for attempt in $(seq 1 35); do
+  health="$(curl -fsS --max-time 2 http://127.0.0.1:47820/health 2>/dev/null || true)"
+  if [ -n "$health" ]; then
+    if printf '%s' "$health" | /usr/bin/grep -q 'montara-companion'; then
+      verified="$(printf '%s' "$health" | run_as_owner python3 -c 'import json,sys;print((json.load(sys.stdin).get("local_video") or {}).get("engine") or "")' 2>/dev/null || true)"
+      if [ "$verified" = "$ENGINE_COMMIT" ]; then
+        echo "Companion updated, connected, and verified: ${ENGINE_COMMIT:0:8}"
+        exit 0
+      fi
+    fi
+  fi
+  sleep 1
+done
+echo "Companion did not start with the expected video engine. Check ~/.montara-companion/companion.log." >&2
+exit 1

@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - feature/companion-macos-pkg-installer-20261110
+      - fix/companion-pkg-launchagent-verify-20261110
   workflow_dispatch:
 permissions:
   contents: write
