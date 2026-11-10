@@ -1989,12 +1989,13 @@ async function updateFrames(first,index) {
     pending = all.length-ready;
   }
   const ready = all.length-pending;
+  const waitingPhotos = all.filter(item => !item.thumbnail && item.thumbnail_status !== "failed").length;
   state.framesPending=Boolean(pending);
   if(state.waitingFrames && (stage || ready || !all.length)){
     state.waitingFrames=false;
     show('frames');
   }
-  $("#framesHint").textContent = pending ? `Preparing shots… ${ready} of ${all.length}` : `${items.length} shots`;
+  $("#framesHint").textContent = waitingPhotos ? `Preparing pictures… ${all.length-waitingPhotos} of ${all.length}` : `${items.length} shots`;
   const grid = $("#frameGrid");
   for(const figure of grid.children)if(Number(figure.dataset.index)>=all.length)figure.remove();
   if (grid.children.length !== items.length) {
@@ -2050,7 +2051,9 @@ async function updateFrames(first,index) {
     fig.querySelector(".src").textContent=label;
     if(!item.thumbnail)img.hidden=true;
     if (unavailable) swapping.delete(item.index);
-    fig.classList.toggle("busy", !unavailable && (!item.thumbnail || !item.preview_ready || swapping.has(item.index)));
+    // A pending hover video is NOT an unloaded shot. Keep all ready pictures
+    // visible while Companion/FFmpeg prepares only the changed video preview.
+    fig.classList.toggle("busy", !unavailable && (!item.thumbnail || swapping.has(item.index)));
     fig.querySelector(".dur").textContent = `${Number(item.duration_sec).toFixed(1)} s`;
     fig.querySelector(".swap").disabled = item.candidate_count !== undefined && item.candidate_count < 2;
   }
