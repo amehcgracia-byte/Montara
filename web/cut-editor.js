@@ -159,12 +159,15 @@ async function openMusicShot(index){
     const buttons=musicians.querySelector('.music-view-buttons');
     const choices=doc.choices || [];
     const viewNames=doc.saved_views || [];
+    let selectedViewName='';
     const applyRemembered=(saved)=>{
       const camera=choices.findIndex(c=>c.source_path===saved.source_path &&
         !!c.spherical===!!saved.spherical_shot);
       if(camera<0){dialog.querySelector('.cut-error').textContent='This musician view is not available at this shot time.';return;}
+      selectedViewName=saved.name;
       field('camera').value=String(camera);
       update();
+      field('movement').checked=saved.motion_enabled===true;
       if(saved.spherical_shot){
         const pose=saved.spherical_shot;
         for(const key of ['yaw','pitch','fov'])field(key).value=Number(pose[key] ?? (key==='fov'?95:0));
@@ -188,7 +191,7 @@ async function openMusicShot(index){
     const update=()=>{const choice=Number(field('camera').value),sphere=doc.choices[choice].spherical;['yaw','pitch','fov'].forEach(n=>field(n).closest('label').hidden=!sphere);dialog.querySelector('.music-flat').hidden=sphere;musicians.hidden=doc.platform!=='youtube';sphereTarget.hidden=!sphere;if(sphere)sphericalImage.src=frameUrl(choice);dialog.querySelector('.music-sphere-hint').hidden=!sphere;
       if(!sphere){flatUI ||= mountFlatCamera(dialog.querySelector('.music-flat'),choice===0?doc.framing:{},{aspect:doc.platform==='reel'?9/16:null,contain:doc.reel_contain});flatUI.setImage(frameUrl(choice));}
     };
-    field('camera').onchange=()=>{
+    field('camera').onchange=()=>{selectedViewName='';
       const selected=choices[Number(field('camera').value)] || {};
       ['yaw','pitch','fov'].forEach(key=>field(key).value=Number(selected.pose?.[key] ?? (key==='fov'?95:0)));
       if(selected.spherical)drawSphere();
@@ -211,6 +214,7 @@ async function openMusicShot(index){
         return;
       }
       const crop=framing(), performers=performerSettings();
+      if(selectedViewName)performers.selected_musician_view=selectedViewName;
       const movementOnly=doc.platform==='youtube' && choice===0 &&
         !Object.keys(performers).length && JSON.stringify(crop)===initialFraming;
       const save=dialog.querySelector('button.primary');
