@@ -170,7 +170,10 @@ async function openMusicShot(index){
       field('movement').checked=saved.motion_enabled===true;
       if(saved.spherical_shot){
         const pose=saved.spherical_shot;
-        for(const key of ['yaw','pitch','fov'])field(key).value=Number(pose[key] ?? (key==='fov'?95:0));
+        for(const key of ['yaw','pitch','fov']){
+          const value=Number(pose[key] ?? (key==='fov'?95:0));
+          field(key).value=key==='yaw' ? (((value+180)%360+360)%360-180) : value;
+        }
         drawSphere();
       }else if(saved.flat_framing){
         flatUI?.set(saved.flat_framing);
@@ -193,7 +196,10 @@ async function openMusicShot(index){
     };
     field('camera').onchange=()=>{selectedViewName='';
       const selected=choices[Number(field('camera').value)] || {};
-      ['yaw','pitch','fov'].forEach(key=>field(key).value=Number(selected.pose?.[key] ?? (key==='fov'?95:0)));
+      ['yaw','pitch','fov'].forEach(key=>{
+        const value=Number(selected.pose?.[key] ?? (key==='fov'?95:0));
+        field(key).value=key==='yaw' ? (((value+180)%360+360)%360-180) : value;
+      });
       field('movement').checked=selected.movement===true;
       if(selected.spherical)drawSphere();
       else flatUI?.set(selected.framing || {zoom:1,x:.5,y:.5});
