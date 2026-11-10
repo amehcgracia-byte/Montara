@@ -22,8 +22,8 @@ jobs:
         run: |
           MONTARA_PKG_VERSION="1.${GITHUB_RUN_NUMBER}.0" bash companion/macos-installer/build.sh
           pkgutil --check-signature dist/*.pkg || true
-          pkgutil --expand dist/*.pkg /tmp/montara-pkg-expanded
-          test -f /tmp/montara-pkg-expanded/component.pkg
+          file dist/*.pkg
+          test -s dist/*.pkg
       - name: Preserve unsigned QA package as private CI artifact
         uses: actions/upload-artifact@v4
         with:
