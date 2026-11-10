@@ -37,16 +37,53 @@ echo "Montara Companion installer: $(date) · target ${ENGINE_COMMIT:0:8}"
 # used KeepAlive=true: killing their listener from install.sh caused launchd
 # to spawn a new one immediately, so the installer could never free 47820.
 # Never unload a service while it reports an active local job.
-preflight="$(curl -fsS --max-time 3 http://127.0.0.1:47820/health 2>/dev/null || true)"
-if [ -n "$preflight" ] && ! printf '%s' "$preflight" | run_as_owner python3 -c 'import json,sys;d=json.load(sys.stdin);sys.exit(0 if d.get("app")=="montara-companion" and d.get("busy") is False else 1)' 2>/dev/null; then
-  echo "Companion has active work, or its status is unknown. Finish local jobs before updating." >&2
-  exit 1
+listener_pids() {
+  lsof -nP -t -iTCP:47820 -sTCP:LISTEN 2>/dev/null | sort -u || true
+}
+check_idle_listener() {
+  local pid="$1" owner cmd raw
+  owner="$(ps -p "$pid" -o user= | xargs || true)"
+  cmd="$(ps -p "$pid" -o command= || true)"
+  if [ "$owner" != "$CONSOLE_USER" ] || [[ "$cmd" != *"$USER_HOME/.montara-companion/companion.py"* ]]; then
+    echo "Port 47820 belongs to another process ($pid). Not stopping it."
+    return 1
+  fi
+  raw="$(curl -fsS --max-time 3 http://127.0.0.1:47820/health 2>/dev/null || true)"
+  # Older Companion builds do not have a busy field. Require a recognized
+  # daemon, then independently check children and established connections.
+  if ! printf '%s' "$raw" | run_as_owner python3 -c 'import json,sys;d=json.load(sys.stdin);sys.exit(0 if d.get("app")=="montara-companion" and ("busy" not in d or d["busy"] is False) else 1)' 2>/dev/null ||
+     pgrep -P "$pid" >/dev/null 2>&1 ||
+     lsof -nP -a -p "$pid" -iTCP -sTCP:ESTABLISHED >/dev/null 2>&1; then
+    echo "Companion has active work, or its status is unknown. Finish local jobs before updating."
+    return 1
+  fi
+  [ "$(listener_pids)" = "$pid" ]
+}
+listeners="$(listener_pids)"
+if [ -n "$listeners" ]; then
+  [[ "$listeners" =~ ^[0-9]+$ ]] && check_idle_listener "$listeners" || exit 1
 fi
-if lsof -nP -t -iTCP:47820 -sTCP:LISTEN >/dev/null 2>&1 && [ -z "$preflight" ]; then
-  echo "Port 47820 is occupied but its health could not be verified. Aborting safely." >&2
-  exit 1
+# Keep a copy of the user's service configuration before touching it.
+OLD_AGENT="$USER_HOME/Library/LaunchAgents/website.montara.companion.plist"
+if [ -f "$OLD_AGENT" ]; then
+  BACKUP="$(run_as_owner mktemp -d "$LOG_DIR/launchagent-backup.XXXXXXXX")"
+  run_as_owner cp -p "$OLD_AGENT" "$BACKUP/"
+  echo "Previous LaunchAgent backed up in $BACKUP."
 fi
 run_as_owner launchctl bootout "gui/$UID_FOR_USER/website.montara.companion" >/dev/null 2>&1 || true
+
+# Check again after unloading; a legacy foreground process can still own
+# the port. The pinned updater must start with the port empty.
+listeners="$(listener_pids)"
+if [ -n "$listeners" ]; then
+  [[ "$listeners" =~ ^[0-9]+$ ]] && check_idle_listener "$listeners" || exit 1
+  run_as_owner kill -TERM "$listeners"
+  for attempt in $(seq 1 30); do
+    [ -z "$(listener_pids)" ] && break
+    sleep .2
+  done
+  [ -z "$(listener_pids)" ] || { echo "Old Companion did not stop."; exit 1; }
+fi
 
 echo "Installing pinned Montara Companion for $CONSOLE_USER..."
 # macOS Installer extracts package scripts in a root-only PKInstallSandbox.
@@ -70,7 +107,8 @@ LABEL="website.montara.companion"
 AGENT_DIR="$USER_HOME/Library/LaunchAgents"
 AGENT="$AGENT_DIR/$LABEL.plist"
 run_as_owner mkdir -p "$AGENT_DIR"
-cat > "$AGENT" <<EOF
+AGENT_STAGE="$(run_as_owner mktemp "$AGENT_DIR/.montara.XXXXXXXX")"
+run_as_owner tee "$AGENT_STAGE" >/dev/null <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -87,62 +125,18 @@ cat > "$AGENT" <<EOF
 </dict>
 </plist>
 EOF
-chown "$CONSOLE_USER" "$AGENT"
-chmod 600 "$AGENT"
-plutil -lint "$AGENT"
-# Check the already-running instance *before* starting a second daemon.
-# The previous installer may have left a healthy foreground Companion or a
-# second older LaunchAgent running. If it has the exact expected engine, keep
-# it running: a duplicate on 47820 is always an error, not a reason to retry.
+run_as_owner chmod 600 "$AGENT_STAGE"
+plutil -lint "$AGENT_STAGE"
+run_as_owner mv -f "$AGENT_STAGE" "$AGENT"
 health_engine() {
   local raw
   raw="$(curl -fsS --max-time 3 http://127.0.0.1:47820/health 2>/dev/null || true)"
   [ -n "$raw" ] || return 1
   printf '%s' "$raw" | run_as_owner python3 -c 'import json,sys;d=json.load(sys.stdin);print((d.get("local_video") or {}).get("engine") or "") if d.get("app")=="montara-companion" else sys.exit(1)' 2>/dev/null
 }
-current_engine="$(health_engine || true)"
-if [ "$current_engine" = "$ENGINE_COMMIT" ]; then
-  echo "Matching Companion already running on port 47820; not starting a duplicate."
-  echo "LaunchAgent will run at the next user login."
-  exit 0
-fi
-
-# Unload the older LaunchAgent first, preventing automatic respawn while we
-# replace its listener. The installer must never forcibly kill a render.
-run_as_owner launchctl bootout "gui/$UID_FOR_USER/$LABEL" >/dev/null 2>&1 || true
-for attempt in $(seq 1 15); do
-  listeners="$(lsof -nP -t -iTCP:47820 -sTCP:LISTEN 2>/dev/null || true)"
-  [ -n "$listeners" ] || break
-  sleep 1
-done
-listeners="$(lsof -nP -t -iTCP:47820 -sTCP:LISTEN 2>/dev/null || true)"
-if [ -n "$listeners" ]; then
-  # An old foreground Companion may remain, even after bootout. Stop it only
-  # when the health API says there are no active local jobs AND the listener
-  # belongs to the same logged-in user and the Montara installation.
-  raw="$(curl -fsS --max-time 3 http://127.0.0.1:47820/health 2>/dev/null || true)"
-  if [ -z "$raw" ] || ! printf '%s' "$raw" | run_as_owner python3 -c 'import json,sys;d=json.load(sys.stdin);sys.exit(0 if d.get("app")=="montara-companion" and d.get("busy") is False else 1)' 2>/dev/null; then
-    echo "Port 47820 is occupied and cannot be safely replaced. Quit Companion after its current jobs finish." >&2
-    exit 1
-  fi
-  for pid in $listeners; do
-    owner="$(ps -p "$pid" -o user= | xargs || true)"
-    cmd="$(ps -p "$pid" -o command= || true)"
-    if [ "$owner" != "$CONSOLE_USER" ] || [[ "$cmd" != *"$USER_HOME/.montara-companion/companion.py"* ]]; then
-      echo "Port 47820 belongs to another process ($pid). Not stopping it." >&2
-      exit 1
-    fi
-  done
-  echo "Stopping the old idle Companion before starting the managed service..."
-  for pid in $listeners; do run_as_owner kill -TERM "$pid"; done
-  for attempt in $(seq 1 15); do
-    [ -z "$(lsof -nP -t -iTCP:47820 -sTCP:LISTEN 2>/dev/null || true)" ] && break
-    sleep 1
-  done
-  if [ -n "$(lsof -nP -t -iTCP:47820 -sTCP:LISTEN 2>/dev/null || true)" ]; then
-    echo "Old Companion did not stop. Installer will not start another copy." >&2
-    exit 1
-  fi
+if [ -n "$(listener_pids)" ]; then
+  echo "Port 47820 was acquired during installation. Not starting another Companion."
+  exit 1
 fi
 run_as_owner launchctl bootstrap "gui/$UID_FOR_USER" "$AGENT"
 # RunAtLoad starts exactly one managed Companion. Do not kickstart -k:
@@ -151,7 +145,8 @@ run_as_owner launchctl bootstrap "gui/$UID_FOR_USER" "$AGENT"
 echo "Verifying the launched Companion uses the expected engine..."
 for attempt in $(seq 1 35); do
   verified="$(health_engine || true)"
-  if [ "$verified" = "$ENGINE_COMMIT" ]; then
+  managed="$(run_as_owner launchctl print "gui/$UID_FOR_USER/$LABEL" 2>/dev/null | awk '$1=="pid" && $2=="=" {print $3; exit}' || true)"
+  if [ "$verified" = "$ENGINE_COMMIT" ] && [ -n "$managed" ] && [ "$(listener_pids)" = "$managed" ]; then
     echo "Companion updated, connected, and verified: ${ENGINE_COMMIT:0:8}"
     exit 0
   fi
