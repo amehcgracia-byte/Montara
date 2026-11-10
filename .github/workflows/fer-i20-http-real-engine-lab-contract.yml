@@ -2,6 +2,7 @@ name: FER I20 HTTP Owner to real Engine lab safety contracts
 on:
   pull_request:
     paths:
+      - 'urano/lab_cgroup_identity.py'
       - 'tests/urano_i20_oidc_to_real_engine_lab.py'
       - 'tests/test_urano_i20_oidc_real_engine_lab_contract.py'
       - '.github/workflows/fer-i20-http-real-engine-lab-contract.yml'

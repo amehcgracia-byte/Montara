@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import select
 import subprocess
 import sys
@@ -18,6 +17,7 @@ import uuid
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
+from urano.lab_cgroup_identity import attested_cgroup_empty
 from urano.engine_bindings import EngineProjectRegistry
 from urano.google_flow import OIDCSettings
 from urano.google_owner import GoogleOwnerStore
@@ -26,23 +26,6 @@ from urano.owner_engine_gateway import OwnerEngineGateway
 from urano.project_catalog import ProjectCatalog
 from urano.runtime_activation import RuntimeActivationGuard
 from test_google_flow_contract import CLIENT, HOST, CALLBACK, SignedFakeGoogle
-
-
-def attested_cgroup_empty(unit: str, group: str) -> bool:
-    """Inspect ONLY an already-attested I20 user service; never cgroup root."""
-    if not re.fullmatch(r'montara-i20-lab-[0-9a-f]{12}', unit):
-        raise ValueError('Unrecognized I20 lab unit')
-    uid = os.getuid()
-    expected = (f'/user.slice/user-{uid}.slice/user@{uid}.service/'
-                f'app.slice/{unit}.service')
-    if group != expected:
-        raise ValueError('Unrecognized target cgroup identity')
-    procs = Path('/sys/fs/cgroup') / group.lstrip('/') / 'cgroup.procs'
-    try:
-        return not procs.read_text().split()
-    except FileNotFoundError:
-        # systemd has unloaded the attested unit and removed its cgroup.
-        return True
 
 
 class CgroupLabExecutor:

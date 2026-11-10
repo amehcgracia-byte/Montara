@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from urano_i20_oidc_to_real_engine_lab import attested_cgroup_empty
+from urano.lab_cgroup_identity import attested_cgroup_empty
 
 
 class I20LabSafety(unittest.TestCase):

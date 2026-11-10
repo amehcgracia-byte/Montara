@@ -27,7 +27,7 @@ Previamente hubo un **fallo de atestación de limpieza** tras desaparecer el cam
 
 ## Tests y compatibilidad
 
-- `tests/test_urano_i20_oidc_real_engine_lab_contract.py`: nombres de unidades válidos, rechazo de ruta vacía/raíz/otro servicio, estado live no vacío, cgroup eliminado con identidad previamente validada, script explícitamente opt-in. CI offline no arranca systemd ni consulta Google.
+- `tests/test_urano_i20_oidc_real_engine_lab_contract.py` usa exclusivamente `urano/lab_cgroup_identity.py` (stdlib, sin importar Google/Engine), para que los workflows antiguos sin dependencias de OIDC puedan descubrirlo: nombres de unidades válidos, rechazo de ruta vacía/raíz/otro servicio, estado live no vacío, cgroup eliminado con identidad previamente validada, script explícitamente opt-in. CI offline no arranca systemd ni consulta Google.
 - Pruebas locales I20 + I13 + I19: **17 tests, 10 subtests PASS**. La prueba física I20 requiere ejecución manual por operador en VM y no está incluida en el workflow general Linux.
 - El protocolo HTTP solo revela `{project_id, state, generation}` sin UIDs, rutas, PID ni nombres de unidad. El navegador no decide un owner, worker, ruta o tecnología de infraestructura.
 
