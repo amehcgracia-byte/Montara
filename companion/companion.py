@@ -613,7 +613,12 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply(200, {"app": "montara-companion", "version": VERSION, "ffmpeg": bool(FFMPEG and FFPROBE),
                                     "hardware_encoder": HW_H264, "tonemap": TONEMAP, "lossless_audio": True,
                                     "audio_preview": OPUS, "segment_formats": ["lossless"] + (["opus"] if OPUS else []),
-                                    "local_mix": local_mixer(), "mix_progress": True, "local_video": video_jobs.runtime()})
+                                    "local_mix": local_mixer(), "mix_progress": True, "local_video": video_jobs.runtime(),
+                                    "busy": any(
+                                        row.get("status") not in {"ready", "done", "failed", "cancelled", "skipped"}
+                                        for row in list(video_jobs.jobs.values()) + list(jobs.values()) + list(mix_jobs.values())
+                                        if isinstance(row, dict)
+                                    )})
         native = re.fullmatch(r'/video-renders/([a-f0-9]{32})(/file)?(?:\?download=1)?',self.path)
         if native:
             token=native.group(1)
