@@ -6,23 +6,151 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 EDITOR_COMMIT="__MONTARA_COMMIT__"
 ENGINE_COMMIT="__ENGINE_COMMIT__"
 
-# A per-user service must be installed for the foreground Mac user, not root.
+# Always use the logged-in Mac owner, never root's Companion home.
 CONSOLE_USER="$(stat -f '%Su' /dev/console)"
 if [ -z "$CONSOLE_USER" ] || [ "$CONSOLE_USER" = root ] || [ "$CONSOLE_USER" = loginwindow ]; then
-  echo "Log into your Mac user account to install Montara Companion." >&2
+  echo "Log into your Mac user account before installing Montara Companion." >&2
   exit 1
 fi
 UID_FOR_USER="$(id -u "$CONSOLE_USER")"
-if [ ! -f "$HERE/install.sh" ]; then
-  echo "The Companion installer is incomplete. Download it again." >&2
+USER_HOME="$(dscl . -read "/Users/$CONSOLE_USER" NFSHomeDirectory | sed 's/^NFSHomeDirectory: //')"
+if [ ! -d "$USER_HOME" ] || [ ! -f "$HERE/install.sh" ]; then
+  echo "Companion installer or user home unavailable. Download the installer again." >&2
   exit 1
 fi
-# The shell and network fetch run as the signed-in user. Existing projects,
-# playlists and user-specific preferences stay in their own home directory.
-# The install script refuses live render jobs and foreign port ownership.
-echo "Updating Montara Companion for $CONSOLE_USER..."
-launchctl asuser "$UID_FOR_USER" sudo -H -u "$CONSOLE_USER" env \
+
+run_as_owner() {
+  launchctl asuser "$UID_FOR_USER" sudo -H -u "$CONSOLE_USER" "$@"
+}
+
+# Persist useful installation diagnostics so macOS Installer's generic failure
+# screen does not hide the actionable error. The log is in the owner's home.
+LOG_DIR="$USER_HOME/.montara-companion"
+mkdir -p "$LOG_DIR"
+chown "$CONSOLE_USER" "$LOG_DIR"
+LOG_FILE="$LOG_DIR/installer.log"
+touch "$LOG_FILE"
+chown "$CONSOLE_USER" "$LOG_FILE"
+exec > >(tee -a "$LOG_FILE") 2>&1
+echo "Montara Companion installer: $(date) · target ${ENGINE_COMMIT:0:8}"
+# Unload the previous LaunchAgent *before* running the updater. Old packages
+# used KeepAlive=true: killing their listener from install.sh caused launchd
+# to spawn a new one immediately, so the installer could never free 47820.
+# Never unload a service while it reports an active local job.
+listener_pids() {
+  lsof -nP -t -iTCP:47820 -sTCP:LISTEN 2>/dev/null | sort -u || true
+}
+check_idle_listener() {
+  local pid="$1" owner cmd raw
+  owner="$(ps -p "$pid" -o user= | xargs || true)"
+  cmd="$(ps -p "$pid" -o command= || true)"
+  if [ "$owner" != "$CONSOLE_USER" ] || [[ "$cmd" != *"$USER_HOME/.montara-companion/companion.py"* ]]; then
+    echo "Port 47820 belongs to another process ($pid). Not stopping it."
+    return 1
+  fi
+  raw="$(curl -fsS --max-time 3 http://127.0.0.1:47820/health 2>/dev/null || true)"
+  # Older Companion builds do not have a busy field. Require a recognized
+  # daemon, then independently check children and established connections.
+  if ! printf '%s' "$raw" | run_as_owner python3 -c 'import json,sys;d=json.load(sys.stdin);sys.exit(0 if d.get("app")=="montara-companion" and ("busy" not in d or d["busy"] is False) else 1)' 2>/dev/null ||
+     pgrep -P "$pid" >/dev/null 2>&1 ||
+     lsof -nP -a -p "$pid" -iTCP -sTCP:ESTABLISHED >/dev/null 2>&1; then
+    echo "Companion has active work, or its status is unknown. Finish local jobs before updating."
+    return 1
+  fi
+  [ "$(listener_pids)" = "$pid" ]
+}
+listeners="$(listener_pids)"
+if [ -n "$listeners" ]; then
+  [[ "$listeners" =~ ^[0-9]+$ ]] && check_idle_listener "$listeners" || exit 1
+fi
+# Keep a copy of the user's service configuration before touching it.
+OLD_AGENT="$USER_HOME/Library/LaunchAgents/website.montara.companion.plist"
+if [ -f "$OLD_AGENT" ]; then
+  BACKUP="$(run_as_owner mktemp -d "$LOG_DIR/launchagent-backup.XXXXXXXX")"
+  run_as_owner cp -p "$OLD_AGENT" "$BACKUP/"
+  echo "Previous LaunchAgent backed up in $BACKUP."
+fi
+run_as_owner launchctl bootout "gui/$UID_FOR_USER/website.montara.companion" >/dev/null 2>&1 || true
+
+# Check again after unloading; a legacy foreground process can still own
+# the port. The pinned updater must start with the port empty.
+listeners="$(listener_pids)"
+if [ -n "$listeners" ]; then
+  [[ "$listeners" =~ ^[0-9]+$ ]] && check_idle_listener "$listeners" || exit 1
+  run_as_owner kill -TERM "$listeners"
+  for attempt in $(seq 1 30); do
+    [ -z "$(listener_pids)" ] && break
+    sleep .2
+  done
+  [ -z "$(listener_pids)" ] || { echo "Old Companion did not stop."; exit 1; }
+fi
+
+echo "Installing pinned Montara Companion for $CONSOLE_USER..."
+# macOS Installer extracts package scripts in a root-only PKInstallSandbox.
+# After dropping privileges the console user CANNOT read $HERE/install.sh.
+# Stage a read-only, root-owned copy in an accessible directory first.
+STAGE="$(mktemp -d /private/tmp/montara-companion-install.XXXXXXXX)"
+trap 'rm -rf "$STAGE"' EXIT
+chmod 755 "$STAGE"
+cp "$HERE/install.sh" "$STAGE/install.sh"
+chown root:wheel "$STAGE/install.sh"
+chmod 644 "$STAGE/install.sh"
+run_as_owner env \
   "PATH=$PATH" "MONTARA_REF=$EDITOR_COMMIT" "MONTARA_EXPECTED_ENGINE=$ENGINE_COMMIT" \
-  MONTARA_NO_SHELL_SETUP=1 MONTARA_BACKGROUND=1 \
-  bash "$HERE/install.sh" --video
-echo "Montara Companion is installed and running."
+  MONTARA_NO_SHELL_SETUP=1 MONTARA_INSTALL_ONLY=1 \
+  bash "$STAGE/install.sh" --video
+
+# Register a real per-user LaunchAgent. A background process spawned from
+# Installer's postinstall may be killed when Installer finishes; launchd owns
+# the lifetime instead, including after reboots and future user logins.
+LABEL="website.montara.companion"
+AGENT_DIR="$USER_HOME/Library/LaunchAgents"
+AGENT="$AGENT_DIR/$LABEL.plist"
+run_as_owner mkdir -p "$AGENT_DIR"
+AGENT_STAGE="$(run_as_owner mktemp "$AGENT_DIR/.montara.XXXXXXXX")"
+run_as_owner tee "$AGENT_STAGE" >/dev/null <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>$LABEL</string>
+  <key>ProgramArguments</key>
+  <array><string>$USER_HOME/.montara-companion/bin/montara-companion</string></array>
+  <key>RunAtLoad</key><true/>
+  <!-- Avoid a rapid relaunch loop when an old Companion already owns 47820. -->
+  <key>KeepAlive</key><false/>
+  <key>EnvironmentVariables</key><dict><key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string></dict>
+  <key>StandardOutPath</key><string>$USER_HOME/.montara-companion/companion.log</string>
+  <key>StandardErrorPath</key><string>$USER_HOME/.montara-companion/companion.log</string>
+</dict>
+</plist>
+EOF
+run_as_owner chmod 600 "$AGENT_STAGE"
+plutil -lint "$AGENT_STAGE"
+run_as_owner mv -f "$AGENT_STAGE" "$AGENT"
+health_engine() {
+  local raw
+  raw="$(curl -fsS --max-time 3 http://127.0.0.1:47820/health 2>/dev/null || true)"
+  [ -n "$raw" ] || return 1
+  printf '%s' "$raw" | run_as_owner python3 -c 'import json,sys;d=json.load(sys.stdin);print((d.get("local_video") or {}).get("engine") or "") if d.get("app")=="montara-companion" else sys.exit(1)' 2>/dev/null
+}
+if [ -n "$(listener_pids)" ]; then
+  echo "Port 47820 was acquired during installation. Not starting another Companion."
+  exit 1
+fi
+run_as_owner launchctl bootstrap "gui/$UID_FOR_USER" "$AGENT"
+# RunAtLoad starts exactly one managed Companion. Do not kickstart -k:
+# that can race a just-started process and create port conflicts.
+
+echo "Verifying the launched Companion uses the expected engine..."
+for attempt in $(seq 1 35); do
+  verified="$(health_engine || true)"
+  managed="$(run_as_owner launchctl print "gui/$UID_FOR_USER/$LABEL" 2>/dev/null | awk '$1=="pid" && $2=="=" {print $3; exit}' || true)"
+  if [ "$verified" = "$ENGINE_COMMIT" ] && [ -n "$managed" ] && [ "$(listener_pids)" = "$managed" ]; then
+    echo "Companion updated, connected, and verified: ${ENGINE_COMMIT:0:8}"
+    exit 0
+  fi
+  sleep 1
+done
+echo "Companion could not bind to 47820 with the expected engine. See $LOG_FILE and $USER_HOME/.montara-companion/companion.log." >&2
+exit 1
