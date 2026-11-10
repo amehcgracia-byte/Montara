@@ -247,9 +247,14 @@ def create_montara_app(data_root: Path = DEFAULT_DATA, samples: bool = True):
         """Expected local video-engine commit; never report secrets or paths."""
         import re
         try:
-            sha = os.environ.get("MONTARA_ENGINE_SHA") or subprocess.check_output(
-                ["git", "-C", str(ENGINE), "rev-parse", "HEAD"],
-                text=True, stderr=subprocess.DEVNULL, timeout=5).strip()
+            # The running checkout is authoritative when Git is available:
+            # service environment variables can contain a pre-update SHA.
+            try:
+                sha = subprocess.check_output(
+                    ["git", "-C", str(ENGINE), "rev-parse", "HEAD"],
+                    text=True, stderr=subprocess.DEVNULL, timeout=5).strip()
+            except (OSError, subprocess.SubprocessError):
+                sha = os.environ.get("MONTARA_ENGINE_SHA", "")
             if not re.fullmatch(r"[a-f0-9]{40}", sha):
                 raise ValueError("Unversioned engine")
         except (OSError, subprocess.SubprocessError, ValueError):
@@ -265,12 +270,13 @@ def create_montara_app(data_root: Path = DEFAULT_DATA, samples: bool = True):
         from flask import send_file
 
         def release_sha(variable, folder):
-            value = os.environ.get(variable)
-            if not value:
+            try:
                 value = subprocess.check_output(
                     ['git', '-C', str(folder), 'rev-parse', 'HEAD'],
                     text=True, stderr=subprocess.DEVNULL, timeout=5,
                 ).strip()
+            except (OSError, subprocess.SubprocessError):
+                value = os.environ.get(variable)
             if not re.fullmatch(r'[a-f0-9]{40}', value):
                 raise ValueError("Missing full release SHA")
             return value
