@@ -1,0 +1,24 @@
+name: FER I9 Pages Google-owner static build
+on:
+  pull_request:
+    paths:
+      - 'tools/cloudflare-beta/build.py'
+      - 'deployment/cloudflare-beta/public/**'
+      - 'tests/test_c8_pages_integrated_build.py'
+      - '.github/workflows/fer-i9-pages-static-build.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify-static-site-only:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m unittest discover -s tests -p test_c8_pages_integrated_build.py -v
+      - run: python -m unittest discover -s tests -p test_c8_public_owner_entry.py -v
+      - run: python3 tools/cloudflare-beta/build.py
+      - run: test "$(find dist -type f | wc -l)" -eq 2
