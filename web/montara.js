@@ -139,6 +139,7 @@ function rememberOpenEdit(id){
   }));} catch {}
 }
 function show(id) {
+  if (id !== "making" && !$("#making").hidden) $("#rangeAudio").pause();
   if (id !== 'footage' && trackAudition.audio) stopTrackAudition();
   rememberOpenEdit(id);
   clearTimeout(introTimer);
@@ -173,6 +174,7 @@ function show(id) {
     span.classList.toggle("done", position < current);
   });
   if(['showSetup','showStyle'].includes(id)&&typeof renderShowModeInputs==='function'){const anchor=$('#'+(id==='showSetup'?'showSetupInputs':'showStyleInputs'));anchor.append($('#showModeInputs'));renderShowModeInputs();}
+  if (id === "making") prepareMakingPlayback();
   window.scrollTo({ top: 0 });
 }
 $("#home").addEventListener("click", finishIntro);
@@ -391,6 +393,38 @@ setInterval(()=>{
 const range = { start: 0, end: null, duration: 0 };
 let rangeSourcesList = [];
 const clock = (t) => { t = Math.max(0, Math.floor(t || 0)); const h = Math.floor(t / 3600), m = Math.floor(t / 60) % 60, s = String(t % 60).padStart(2, "0"); return h ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`; };
+// The song-range player remains alive under the progress screen. Its music
+// can continue from the user's previous Play action; the render never depends
+// on or controls this playback.
+function prepareMakingPlayback() {
+  const audio = $("#rangeAudio"), button = $("#makingAudioToggle");
+  if (!audio.getAttribute("src")) {
+    const track = state.mixMaster ? {path:state.mixMaster} :
+      audioTracks().length === 1 ? audioTracks()[0] : null;
+    if (track) audio.src = audioUrl(track);
+  }
+  button.hidden = !audio.getAttribute("src");
+  updateMakingPlayback();
+}
+function updateMakingPlayback() {
+  const audio = $("#rangeAudio"), button = $("#makingAudioToggle");
+  const playing = !audio.paused && !audio.ended;
+  button.textContent = playing ? "Pause music" : "Play music";
+  button.setAttribute("aria-pressed", String(playing));
+  button.setAttribute("aria-label", playing ? "Pause music while Montara works" : "Play music while Montara works");
+}
+$("#makingAudioToggle").addEventListener("click", async () => {
+  const audio = $("#rangeAudio");
+  if (audio.paused || audio.ended) {
+    try { await audio.play(); }
+    catch { toast("Could not play the music. Check the audio source.", true); }
+  } else audio.pause();
+  updateMakingPlayback();
+});
+for (const event of ["play","pause","ended","error"]) {
+  $("#rangeAudio").addEventListener(event, updateMakingPlayback);
+}
+
 function audioUrl(f) {
   if (f.localFile) return (f.objectUrl ||= URL.createObjectURL(f.localFile));
   return f.path ? `/montara/audio?path=${encodeURIComponent(f.path)}` : "";
