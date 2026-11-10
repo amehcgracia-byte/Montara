@@ -17,6 +17,7 @@ from flask import Flask, jsonify, request
 from urano.google_flow import OIDCSettings, GoogleProvider, PendingLogins, google_login_blueprint
 from urano.google_owner import GoogleOwnerStore
 from urano.owner_dashboard import owner_dashboard_blueprint
+from urano.owner_engine_gateway import OwnerEngineGateway, owner_engine_blueprint
 from urano.http_projects import project_blueprint
 from urano.project_catalog import ProjectCatalog
 from urano.session_auth import SESSION_COOKIE, SessionStore
@@ -24,7 +25,8 @@ from urano.session_auth import SESSION_COOKIE, SessionStore
 
 def create_owner_api(private_dir: Path, *, settings: OIDCSettings,
                      provider: GoogleProvider | None = None,
-                     enable_dashboard: bool = False) -> Flask:
+                     enable_dashboard: bool = False,
+                     engine_gateway: OwnerEngineGateway | None = None) -> Flask:
     root = Path(private_dir).resolve()
     if not root.is_dir() or root.is_symlink():
         raise ValueError("Existing private database directory required")
@@ -45,6 +47,13 @@ def create_owner_api(private_dir: Path, *, settings: OIDCSettings,
     allowed_origin = f"{url.scheme}://{url.netloc}"
     if enable_dashboard:
         app.register_blueprint(owner_dashboard_blueprint(session_store, https_origin=allowed_origin))
+    if engine_gateway is not None:
+        # Avoid wiring an Engine gate belonging to another SQLite catalog.
+        if engine_gateway.catalog.db_path.resolve() != catalog.db_path.resolve():
+            raise ValueError("Engine gateway and catalog must share the owner database")
+        # Explicit injection only. The public C8 app does not pass a gateway.
+        app.register_blueprint(owner_engine_blueprint(
+            engine_gateway, session_store, https_origin=allowed_origin))
 
     @app.post("/urano/v1/session/refresh")
     def refresh_csrf():
