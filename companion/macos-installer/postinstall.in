@@ -24,10 +24,19 @@ run_as_owner() {
 }
 
 echo "Installing pinned Montara Companion for $CONSOLE_USER..."
+# macOS Installer extracts package scripts in a root-only PKInstallSandbox.
+# After dropping privileges the console user CANNOT read $HERE/install.sh.
+# Stage a read-only, root-owned copy in an accessible directory first.
+STAGE="$(mktemp -d /private/tmp/montara-companion-install.XXXXXXXX)"
+trap 'rm -rf "$STAGE"' EXIT
+chmod 755 "$STAGE"
+cp "$HERE/install.sh" "$STAGE/install.sh"
+chown root:wheel "$STAGE/install.sh"
+chmod 644 "$STAGE/install.sh"
 run_as_owner env \
   "PATH=$PATH" "MONTARA_REF=$EDITOR_COMMIT" "MONTARA_EXPECTED_ENGINE=$ENGINE_COMMIT" \
   MONTARA_NO_SHELL_SETUP=1 MONTARA_INSTALL_ONLY=1 \
-  bash "$HERE/install.sh" --video
+  bash "$STAGE/install.sh" --video
 
 # Register a real per-user LaunchAgent. A background process spawned from
 # Installer's postinstall may be killed when Installer finishes; launchd owns
