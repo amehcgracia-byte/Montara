@@ -65,13 +65,10 @@ export default {
       const value = request.headers.get(key);
       if (value !== null) headers.set(key, value);
     }
-    // Reject attempts to supply a fake proxy/origin chain. The proxy must
-    // NOT pass any X-Forwarded/Forwarded or X-Real-IP to the WSGI boundary.
-    for (const [key] of request.headers) {
-      if (/^(x-forwarded-|forwarded$|x-real-ip$|cf-connecting-ip$|proxy-)/i.test(key)) {
-        return denied(403, "Forwarded origin not accepted");
-      }
-    }
+    // Cloudflare may itself add CF-Connecting-IP and X-Forwarded-*
+    // headers on genuine requests. Ignore them COMPLETELY: only headers
+    // from the explicit allowlist above go to our local WSGI boundary.
+    // Never let browser- or edge-supplied origin metadata assert HTTPS.
     if (headers.has("origin") && headers.get("origin") !== OWNER_ORIGIN) {
       return denied(403, "Cross-origin writes unavailable");
     }
