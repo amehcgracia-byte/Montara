@@ -16,10 +16,13 @@ test('Switching cameras resets the preview from the selected camera, not the pri
   const part=editor.slice(start,end+15);
   assert.match(part,/selected\.pose/);
   assert.match(part,/selected\.framing/);
+  assert.match(part,/field\('movement'\)\.checked=selected\.movement===true/);
+  assert.match(part,/value\+180/);
 });
 test('Saved musician buttons apply a view only to the current selected shot',()=>{
   assert.match(editor,/applyRemembered/);
   assert.match(editor,/button\.onclick=\(\)=>applyRemembered\(saved\)/);
   assert.match(editor,/apply_to_source:false/);
+  assert.match(editor,/selected_musician_view/);
   assert.doesNotMatch(editor,/apply_to_source:true/);
 });
