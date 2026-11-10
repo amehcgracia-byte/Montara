@@ -7,6 +7,7 @@ HTTP. Every state mutation verifies a generation to fence stale controllers.
 from __future__ import annotations
 
 import secrets
+import re
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
@@ -63,6 +64,13 @@ class JobRecoveryLedger:
             db.execute('''CREATE UNIQUE INDEX IF NOT EXISTS urano_one_unverified_job_per_owner
                 ON urano_engine_jobs(owner_id)
                 WHERE state IN ('starting','running','stopping','orphaned')''')
+
+            # Versioned and non-destructive schema migration for existing I18 DBs.
+            columns = {row[1] for row in db.execute('PRAGMA table_info(urano_engine_jobs)')}
+            if 'target_unit' not in columns:
+                db.execute('ALTER TABLE urano_engine_jobs ADD COLUMN target_unit TEXT')
+            db.execute('''CREATE UNIQUE INDEX IF NOT EXISTS urano_unique_target_unit
+                ON urano_engine_jobs(target_unit) WHERE target_unit IS NOT NULL''')
 
     def _connect(self):
         db=sqlite3.connect(str(self.db_path),timeout=10)
@@ -140,6 +148,46 @@ class JobRecoveryLedger:
         if verified_cgroup_empty is not True:
             raise ValueError('Never release an unverified cgroup')
         return self._transition(lease,('stopping','orphaned'),'stopped')
+
+    @staticmethod
+    def _target_unit_for(lease: JobLease) -> str:
+        # Not from HTTP: derived only from the server-side random job identity.
+        if not re.fullmatch(r'job-[0-9a-f]{32}', lease.job_id):
+            raise ValueError('Unrecognized broker job id')
+        return 'montara-i24-job-' + lease.job_id[4:]
+
+    def reserve_target_unit(self, lease: JobLease) -> str:
+        """Persist exact, non-user-controlled service identity BEFORE launch.
+
+        A crash before launch leaves an orphan whose unit can be checked.
+        Reject stale generations and any attempt to reassociate it.
+        """
+        unit = self._target_unit_for(lease)
+        with self._connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            row = db.execute('''SELECT owner_id,project_id,generation,state,target_unit
+                FROM urano_engine_jobs WHERE job_id=?''', (lease.job_id,)).fetchone()
+            if (row is None or row['owner_id'] != lease.owner_id or
+                row['project_id'] != lease.project_id or
+                row['generation'] != lease.generation or row['state'] != 'starting'):
+                raise StaleJob('Target reservation requires current starting job')
+            if row['target_unit'] not in (None, unit):
+                raise StaleJob('Job target has already changed')
+            db.execute('UPDATE urano_engine_jobs SET target_unit=? WHERE job_id=?',
+                       (unit, lease.job_id))
+        return unit
+
+    def target_for_trusted(self, lease: JobLease) -> str | None:
+        with self._connect() as db:
+            row = db.execute('''SELECT owner_id,project_id,generation,target_unit
+                FROM urano_engine_jobs WHERE job_id=?''', (lease.job_id,)).fetchone()
+        if (row is None or row['owner_id'] != lease.owner_id or
+            row['project_id'] != lease.project_id or row['generation'] != lease.generation):
+            raise StaleJob('Wrong job identity for target lookup')
+        unit = row['target_unit']
+        if unit is not None and unit != self._target_unit_for(lease):
+            raise StaleJob('Stored target identity corrupt')
+        return unit
 
     def unverified_for_owner(self, owner_id: str) -> tuple[JobLease, ...]:
         """Trusted read: only a proven-empty worker can clear an owner fence."""
