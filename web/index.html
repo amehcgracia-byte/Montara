@@ -21,6 +21,16 @@
 </header>
 
 <main>
+  <div id="companionUpdateNotice" role="status" class="companion-update-notice" hidden>
+    <strong id="companionUpdateTitle">Companion update available</strong>
+    <p id="companionUpdateMessage">Montara needs a newer Companion video renderer on this Mac.</p>
+    <div class="actions">
+      <a class="btn primary small" id="companionUpdateDownload" href="/montara/companion/download" download>Update Companion for Mac</a>
+      <button class="btn ghost small" id="companionUpdateRecheck" type="button">Check again</button>
+    </div>
+    <small>Download the installer, unzip and open “Install Montara Companion” with a double-click. macOS asks permission to run it. Close an idle Companion before installing; active video exports are never interrupted.</small>
+  </div>
+
   <!-- Home -->
   <section class="screen" id="home">
     <h1 class="intro-name" aria-label="Montara"><span aria-hidden="true" style="--letter:0"><svg class="intro-mark" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 100">
@@ -243,6 +253,7 @@
 </svg><b id="pct">0%</b></div></div>
       <h2 id="stageMsg">Starting…</h2>
       <p class="hint" id="stageDetail"></p>
+      <button class="btn ghost making-audio" id="makingAudioToggle" type="button" hidden aria-pressed="false" aria-label="Play music while Montara works">Play music</button>
       <div class="render-bars" id="renderBars" hidden aria-hidden="true" title="Shots being rendered"></div>
       <button class="btn ghost" id="cancel">Cancel</button>
     </div>

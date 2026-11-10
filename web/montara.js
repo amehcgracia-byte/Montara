@@ -139,6 +139,7 @@ function rememberOpenEdit(id){
   }));} catch {}
 }
 function show(id) {
+  if (id !== "making" && !$("#making").hidden) $("#rangeAudio").pause();
   if (id !== 'footage' && trackAudition.audio) stopTrackAudition();
   rememberOpenEdit(id);
   clearTimeout(introTimer);
@@ -173,6 +174,7 @@ function show(id) {
     span.classList.toggle("done", position < current);
   });
   if(['showSetup','showStyle'].includes(id)&&typeof renderShowModeInputs==='function'){const anchor=$('#'+(id==='showSetup'?'showSetupInputs':'showStyleInputs'));anchor.append($('#showModeInputs'));renderShowModeInputs();}
+  if (id === "making") prepareMakingPlayback();
   window.scrollTo({ top: 0 });
 }
 $("#home").addEventListener("click", finishIntro);
@@ -391,6 +393,38 @@ setInterval(()=>{
 const range = { start: 0, end: null, duration: 0 };
 let rangeSourcesList = [];
 const clock = (t) => { t = Math.max(0, Math.floor(t || 0)); const h = Math.floor(t / 3600), m = Math.floor(t / 60) % 60, s = String(t % 60).padStart(2, "0"); return h ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`; };
+// The song-range player remains alive under the progress screen. Its music
+// can continue from the user's previous Play action; the render never depends
+// on or controls this playback.
+function prepareMakingPlayback() {
+  const audio = $("#rangeAudio"), button = $("#makingAudioToggle");
+  if (!audio.getAttribute("src")) {
+    const track = state.mixMaster ? {path:state.mixMaster} :
+      audioTracks().length === 1 ? audioTracks()[0] : null;
+    if (track) audio.src = audioUrl(track);
+  }
+  button.hidden = !audio.getAttribute("src");
+  updateMakingPlayback();
+}
+function updateMakingPlayback() {
+  const audio = $("#rangeAudio"), button = $("#makingAudioToggle");
+  const playing = !audio.paused && !audio.ended;
+  button.textContent = playing ? "Pause music" : "Play music";
+  button.setAttribute("aria-pressed", String(playing));
+  button.setAttribute("aria-label", playing ? "Pause music while Montara works" : "Play music while Montara works");
+}
+$("#makingAudioToggle").addEventListener("click", async () => {
+  const audio = $("#rangeAudio");
+  if (audio.paused || audio.ended) {
+    try { await audio.play(); }
+    catch { toast("Could not play the music. Check the audio source.", true); }
+  } else audio.pause();
+  updateMakingPlayback();
+});
+for (const event of ["play","pause","ended","error"]) {
+  $("#rangeAudio").addEventListener(event, updateMakingPlayback);
+}
+
 function audioUrl(f) {
   if (f.localFile) return (f.objectUrl ||= URL.createObjectURL(f.localFile));
   return f.path ? `/montara/audio?path=${encodeURIComponent(f.path)}` : "";
@@ -458,6 +492,46 @@ $("#rangeBar").addEventListener("click", (e) => {
 // ---------- companion: offer it on a Mac, notice when it starts ----------
 const isDesktopMac = /Macintosh|Mac OS X/.test(navigator.userAgent) && !/iPhone|iPad/.test(navigator.userAgent) && navigator.maxTouchPoints < 2;
 let companionWatch = null;
+let expectedCompanionEngine = null;
+let companionVersionRequest = null;
+// Proactive and read-only. The browser cannot execute an installer; the
+// downloadable .command is explicitly opened by the Mac owner in Terminal.
+async function checkCompanionUpdate({force=false}={}) {
+  if (!isDesktopMac) return;
+  const notice=$("#companionUpdateNotice");
+  try {
+    if (!expectedCompanionEngine || force) {
+      if (!companionVersionRequest || force) companionVersionRequest=fetch("/montara/companion/version",{cache:"no-store"}).then(async response=>{
+        if (!response.ok) throw new Error("Montara Companion version unavailable");
+        return response.json();
+      });
+      const expected=await companionVersionRequest;
+      expectedCompanionEngine=expected.engine;
+    }
+    const info=await montaraCompanion.detect();
+    const installed=info?.local_video?.engine;
+    const needsUpdate=installed!==expectedCompanionEngine;
+    notice.hidden=!needsUpdate;
+    if(needsUpdate){
+      const title=$("#companionUpdateTitle"),message=$("#companionUpdateMessage");
+      title.textContent=!info?"Companion is not running":!installed?"Companion needs the video renderer":"Companion update available";
+      message.textContent=!info
+        ? "Open Montara Companion on your Mac, or download it if it is not installed."
+        : !installed
+          ? "This Companion cannot render original-quality video yet. Install the video update."
+          : "The installed video renderer is older or incompatible with this Montara version. Update it before exporting.";
+    }
+  }catch(error){
+    // If the version endpoint temporarily fails, do not present an unverified
+    // update or disturb editing. Export still checks its recipe version.
+    console.warn("Companion version check failed:",error);
+  }
+}
+$("#companionUpdateRecheck").addEventListener("click",()=>{
+  const b=$("#companionUpdateRecheck");b.disabled=true;
+  checkCompanionUpdate({force:true}).finally(()=>{b.disabled=false;});
+});
+window.addEventListener("focus",()=>{if(!$("#companionUpdateNotice").hidden)checkCompanionUpdate();});
 async function watchCompanion() {
   clearTimeout(companionWatch);
   const info = await montaraCompanion.detect();
@@ -466,6 +540,7 @@ async function watchCompanion() {
   if (!info && !$("#footage").hidden) companionWatch = setTimeout(watchCompanion, 4000);  // starts while the person installs it
   else if (info && renderFiles.companionSeen === false) toast("Companion connected: videos stay on your computer.");
   renderFiles.companionSeen = Boolean(info);
+  void checkCompanionUpdate();
 }
 
 // ---------- footage memory: survive a reload ----------
@@ -1955,12 +2030,13 @@ async function updateFrames(first,index) {
     pending = all.length-ready;
   }
   const ready = all.length-pending;
+  const waitingPhotos = all.filter(item => !item.thumbnail && item.thumbnail_status !== "failed").length;
   state.framesPending=Boolean(pending);
   if(state.waitingFrames && (stage || ready || !all.length)){
     state.waitingFrames=false;
     show('frames');
   }
-  $("#framesHint").textContent = pending ? `Preparing shots… ${ready} of ${all.length}` : `${items.length} shots`;
+  $("#framesHint").textContent = waitingPhotos ? `Preparing pictures… ${all.length-waitingPhotos} of ${all.length}` : `${items.length} shots`;
   const grid = $("#frameGrid");
   for(const figure of grid.children)if(Number(figure.dataset.index)>=all.length)figure.remove();
   if (grid.children.length !== items.length) {
@@ -2016,7 +2092,9 @@ async function updateFrames(first,index) {
     fig.querySelector(".src").textContent=label;
     if(!item.thumbnail)img.hidden=true;
     if (unavailable) swapping.delete(item.index);
-    fig.classList.toggle("busy", !unavailable && (!item.thumbnail || !item.preview_ready || swapping.has(item.index)));
+    // A pending hover video is NOT an unloaded shot. Keep all ready pictures
+    // visible while Companion/FFmpeg prepares only the changed video preview.
+    fig.classList.toggle("busy", !unavailable && (!item.thumbnail || swapping.has(item.index)));
     fig.querySelector(".dur").textContent = `${Number(item.duration_sec).toFixed(1)} s`;
     fig.querySelector(".swap").disabled = item.candidate_count !== undefined && item.candidate_count < 2;
   }
@@ -2846,6 +2924,7 @@ function fail(error) {
 
 document.addEventListener("DOMContentLoaded", async () => {
 loadBranding();
+void checkCompanionUpdate();
 api("/montara/version").then((v) => { $("#version").textContent = `Montara ${v.version}`; }).catch(() => {});
 let savedEdit=null;
 try {savedEdit=JSON.parse(sessionStorage.getItem('montara-open-edit'));} catch {}

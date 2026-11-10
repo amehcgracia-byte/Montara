@@ -1,0 +1,31 @@
+name: JM shot preview isolation and loading music
+on:
+  push:
+    branches:
+      - fix/jm-making-music-transport-20261110
+  pull_request:
+    paths:
+      - engine
+      - web/index.html
+      - web/montara.js
+      - web/montara.css
+      - tests/loading-music-transport.test.cjs
+      - tests/stage-preview-isolation.test.cjs
+jobs:
+  transport-and-isolation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: node --test tests/loading-music-transport.test.cjs tests/stage-preview-isolation.test.cjs
+      - run: |
+          cd engine
+          python -m pip install pytest numpy 'opencv-python-headless>=4.9,<4.12' pillow scipy flask
+          python -m pytest -q tests/test_stage_shot_continuity_isolation.py
