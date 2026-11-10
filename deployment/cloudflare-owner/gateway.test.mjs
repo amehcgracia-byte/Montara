@@ -8,7 +8,7 @@ function upstreamMock(onRequest, response) {
   return {
     OWNER_PRIVATE_API: {
       async fetch(request) {
-        onRequest(request);
+        await onRequest(request);
         return response || new Response("private", {
           status: 200,
           headers: {"content-type": "text/plain"}
