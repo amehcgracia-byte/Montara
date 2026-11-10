@@ -52,6 +52,14 @@ async function load() {
       detail.textContent = 'Proyecto privado · ' + project.id;
       li.append(label, detail);
       if (document.body.dataset.engineBeta === '1') {
+        const editorLink = document.createElement('a');
+        editorLink.href = '/urano/v1/workspace?project=' + encodeURIComponent(project.id);
+        editorLink.textContent = 'Entrar al estudio';
+        editorLink.className = 'editor-link';
+        editorLink.style.cssText = 'display:inline-block;margin-top:14px;margin-right:12px;color:#ff9e80;font-weight:700';
+        li.append(editorLink);
+      }
+      if (document.body.dataset.engineBeta === '1') {
         const open = document.createElement('button');
         open.textContent = 'Abrir Engine (beta)';
         open.type = 'button'; open.style.marginTop = '12px';

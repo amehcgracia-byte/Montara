@@ -18,6 +18,7 @@ from urano.google_flow import OIDCSettings, GoogleProvider, PendingLogins, googl
 from urano.google_owner import GoogleOwnerStore
 from urano.owner_dashboard import owner_dashboard_blueprint
 from urano.owner_broker_preview import owner_engine_preview_blueprint
+from urano.owner_editor_workspace import workspace_blueprint
 from urano.http_projects import project_blueprint
 from urano.project_catalog import ProjectCatalog
 from urano.session_auth import SESSION_COOKIE, SessionStore
@@ -62,6 +63,8 @@ def create_owner_api(private_dir: Path, *, settings: OIDCSettings,
         if not enable_dashboard or engine_gateway is not None:
             raise ValueError("Owner I27 beta preview requires dashboard and no legacy executor")
         app.register_blueprint(owner_engine_preview_blueprint(
+            catalog,session_store,https_origin=allowed_origin))
+        app.register_blueprint(workspace_blueprint(
             catalog,session_store,https_origin=allowed_origin))
 
     @app.post("/urano/v1/session/refresh")
