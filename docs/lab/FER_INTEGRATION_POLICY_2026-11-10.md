@@ -30,3 +30,11 @@ Esta rama será la **referencia estable de integración revisada de Fernando**, 
 - **I5:** PR pequeñas y revisadas hacia `main`, coordinadas con Chema.
 
 **Referencias:** docs/COLLABORATION.md, docs/lab/INVENTORY-FER.md, PR #138 y auditoría de consolidación issue #163. El plan de PR #138 es histórico y debe refrescarse contra cambios recientes de Chema antes de integraciones.
+
+## Decisión de producto acordada el 10-11-2026: Companion y orden de integración
+
+- **macOS:** adoptar como fuente de referencia la versión más reciente y validada de Chema en `main` y, cuando se apruebe/incorpore, su instalador nativo y actualizador automático (PR #164 a fecha de la decisión). No portar sobre ella implementaciones Mac antiguas de Fernando ni congelar versiones mientras Chema continúe su evolución. Si la PR está abierta, **no confundir propuesta con versión ya incorporada a main**.
+- **Windows:** conservar las contribuciones específicas de Fernando (#74/#79/#81 y pruebas Windows) como candidatos; integrar solo deltas necesarios sobre el Companion más moderno, con pruebas reales Windows. No sustituir el archivo completo `companion/companion.py` ni copiar un instalador Mac al flujo Windows.
+- **Orden de análisis:** partir de la solución/código más reciente y retroceder en el historial para identificar qué fue superado, duplicado o permanece único; leer completos los documentos pertinentes a cada decisión.
+- **Orden de integración:** desde `main` actual hacia adelante en dependencias y bloques mínimos (catálogo/identidad → permisos/runtime → Companion/proxies → aceptación). Portar la versión final coherente de cada familia; no encadenar todas las PR históricas ni actualizar los submódulos al azar.
+- **Condición de parada:** divergencia de producto o incompatibilidad real sin resolución inequívoca → consultar a Fernando antes de decidir. Nada de merge a `main` ni limpieza destructiva sin revisión.
