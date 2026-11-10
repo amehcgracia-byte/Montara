@@ -132,7 +132,10 @@ health_engine() {
   local raw
   raw="$(curl -fsS --max-time 3 http://127.0.0.1:47820/health 2>/dev/null || true)"
   [ -n "$raw" ] || return 1
-  printf '%s' "$raw" | run_as_owner python3 -c 'import json,sys;d=json.load(sys.stdin);print((d.get("local_video") or {}).get("engine") or "") if d.get("app")=="montara-companion" else sys.exit(1)' 2>/dev/null
+  # Parsing the read-only localhost health JSON does not need a GUI-user
+  # process. Passing stdin through launchctl asuser + sudo can result in
+  # empty input on macOS Installer and falsely mark a ready daemon as failed.
+  printf '%s' "$raw" | python3 -c 'import json,sys;d=json.load(sys.stdin);print((d.get("local_video") or {}).get("engine") or "") if d.get("app")=="montara-companion" else sys.exit(1)' 2>/dev/null
 }
 if [ -n "$(listener_pids)" ]; then
   echo "Port 47820 was acquired during installation. Not starting another Companion."
@@ -142,15 +145,33 @@ run_as_owner launchctl bootstrap "gui/$UID_FOR_USER" "$AGENT"
 # RunAtLoad starts exactly one managed Companion. Do not kickstart -k:
 # that can race a just-started process and create port conflicts.
 
-echo "Verifying the launched Companion uses the expected engine..."
+# Verify the actual process answering /health, not a brittle parse of
+# launchctl's human-readable `print` output. Installer previously reported
+# failure while companion.log showed the new listener ready on the port.
+# The live port listener must belong to this user and run from their install.
+verify_live_companion() {
+  local pid="$1" owner cmd
+  [ -n "$pid" ] && [[ "$pid" =~ ^[0-9]+$ ]] || return 1
+  owner="$(ps -p "$pid" -o user= | xargs || true)"
+  cmd="$(ps -p "$pid" -o command= || true)"
+  [ "$owner" = "$CONSOLE_USER" ] && [[ "$cmd" == *"$USER_HOME/.montara-companion/companion.py"* ]]
+}
+echo "Verifying the running Companion uses the expected engine..."
+last_engine="" last_listener="" last_managed=""
 for attempt in $(seq 1 35); do
   verified="$(health_engine || true)"
+  listener="$(listener_pids)"
+  # launchctl print is diagnostic only: the exact PID formatting varies by
+  # OS version and state. A valid bootstrap + owned, responding listener is
+  # the installation success condition.
   managed="$(run_as_owner launchctl print "gui/$UID_FOR_USER/$LABEL" 2>/dev/null | awk '$1=="pid" && $2=="=" {print $3; exit}' || true)"
-  if [ "$verified" = "$ENGINE_COMMIT" ] && [ -n "$managed" ] && [ "$(listener_pids)" = "$managed" ]; then
-    echo "Companion updated, connected, and verified: ${ENGINE_COMMIT:0:8}"
+  if [ "$verified" = "$ENGINE_COMMIT" ] && verify_live_companion "$listener"; then
+    echo "Companion installed and verified: engine ${ENGINE_COMMIT:0:8}, listener PID $listener, launchctl PID ${managed:-unreported}."
     exit 0
   fi
+  last_engine="$verified" last_listener="$listener" last_managed="$managed"
   sleep 1
 done
-echo "Companion could not bind to 47820 with the expected engine. See $LOG_FILE and $USER_HOME/.montara-companion/companion.log." >&2
+echo "Companion verification failed: expected engine ${ENGINE_COMMIT:0:8}; reported engine ${last_engine:0:8}; port PID ${last_listener:-none}; launchctl PID ${last_managed:-none}." >&2
+echo "See $LOG_FILE and $USER_HOME/.montara-companion/companion.log." >&2
 exit 1

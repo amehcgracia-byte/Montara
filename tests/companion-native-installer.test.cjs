@@ -56,7 +56,7 @@ test('Installer scripts are readable after dropping privileges and failures are 
 });
 
 test('An already-running matching Companion must not be launched again',()=>{
-  assert.match(installer,/verified.*ENGINE_COMMIT.*managed/);
+  assert.match(installer,/verified.*ENGINE_COMMIT/);
   assert.match(installer,/Not starting another Companion/);
   assert.doesNotMatch(installer,/launchctl kickstart -k/);
   assert.match(installer,/<key>KeepAlive<\/key><false\/>/);
@@ -76,4 +76,18 @@ test('The previous KeepAlive agent is unloaded before touching installed files',
   const install=installer.indexOf('bash "$STAGE/install.sh" --video');
   assert.ok(unload>0 && install>unload);
   assert.match(installer,/Finish local jobs before updating/);
+});
+
+test('Verification uses read-only health JSON without launchctl/sudo stdin forwarding',()=>{
+  const check=installer.slice(installer.indexOf('health_engine() {'),installer.indexOf('if [ -n "$(listener_pids)" ]; then',installer.indexOf('health_engine() {')));
+  assert.match(check,/printf '%s' "\$raw" \| python3 -c/);
+  assert.doesNotMatch(check,/printf '%s' "\$raw" \| run_as_owner python3/);
+});
+test('Real listener and exact engine determine success, not launchctl print PID string',()=>{
+  const check=installer.slice(installer.indexOf('verify_live_companion() {'));
+  assert.match(check,/ps -p "\$pid" -o user=/);
+  assert.match(check,/companion\.py/);
+  assert.match(check,/verified" = "\$ENGINE_COMMIT" \] && verify_live_companion "\$listener"/);
+  assert.doesNotMatch(check,/\[ "\$\(listener_pids\)" = "\$managed" \]/);
+  assert.match(check,/Companion verification failed: expected engine/);
 });
