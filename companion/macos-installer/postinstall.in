@@ -70,6 +70,16 @@ if [ -f "$OLD_AGENT" ]; then
   run_as_owner cp -p "$OLD_AGENT" "$BACKUP/"
   echo "Previous LaunchAgent backed up in $BACKUP."
 fi
+# Snapshot only program files, never project metadata, media or caches.
+PROGRAM_BACKUP="$(run_as_owner mktemp -d "$LOG_DIR/runtime-backup.XXXXXXXX")"
+PROGRAM_FILES=(companion.py video_recipe.py video_jobs.py windows_support.py spherical_proxy.py spatialmedia bin/montara-companion video/engine video/local_video.py video/video_recipe.py video/brand video/ENGINE_COMMIT video/venv video/INSTALLING)
+for item in "${PROGRAM_FILES[@]}"; do
+  if [ -e "$LOG_DIR/$item" ]; then
+    run_as_owner mkdir -p "$PROGRAM_BACKUP/$(dirname "$item")"
+    run_as_owner cp -cRp "$LOG_DIR/$item" "$PROGRAM_BACKUP/$item"
+  fi
+done
+echo "Program backup: $PROGRAM_BACKUP"
 run_as_owner launchctl bootout "gui/$UID_FOR_USER/website.montara.companion" >/dev/null 2>&1 || true
 
 # Check again after unloading; a legacy foreground process can still own
@@ -85,12 +95,49 @@ if [ -n "$listeners" ]; then
   [ -z "$(listener_pids)" ] || { echo "Old Companion did not stop."; exit 1; }
 fi
 
+STAGE=""
+restore_on_failure() {
+  local rc=$? listener item
+  trap - EXIT
+  if [ -n "$STAGE" ]; then rm -rf "$STAGE"; fi
+  [ "$rc" -ne 0 ] || return 0
+  set +e
+  listener="$(listener_pids)"
+  if [ -n "$listener" ] && ! check_idle_listener "$listener"; then
+    echo "Cannot restore while the port is in use. Previous program: $PROGRAM_BACKUP."
+    exit "$rc"
+  fi
+  run_as_owner launchctl bootout "gui/$UID_FOR_USER/website.montara.companion" >/dev/null 2>&1
+  if [ -n "$(listener_pids)" ]; then
+    echo "Port still occupied; saved rollback at $PROGRAM_BACKUP."
+    exit "$rc"
+  fi
+  for item in "${PROGRAM_FILES[@]}"; do
+    if [ -e "$LOG_DIR/$item" ]; then
+      run_as_owner mkdir -p "$PROGRAM_BACKUP/failed/$(dirname "$item")"
+      run_as_owner mv "$LOG_DIR/$item" "$PROGRAM_BACKUP/failed/$item" || exit "$rc"
+    fi
+    if [ -e "$PROGRAM_BACKUP/$item" ]; then
+      run_as_owner mkdir -p "$LOG_DIR/$(dirname "$item")"
+      run_as_owner mv "$PROGRAM_BACKUP/$item" "$LOG_DIR/$item" || exit "$rc"
+    fi
+  done
+  if [ -n "${BACKUP:-}" ] && [ -f "$BACKUP/$(basename "$OLD_AGENT")" ]; then
+    run_as_owner cp -p "$BACKUP/$(basename "$OLD_AGENT")" "$OLD_AGENT"
+    # Do not restart a known crashing legacy interpreter automatically.
+    echo "Previous files and LaunchAgent restored; no legacy daemon restarted."
+  elif [ -f "$OLD_AGENT" ]; then
+    run_as_owner mv "$OLD_AGENT" "$PROGRAM_BACKUP/failed-launchagent.plist"
+  fi
+  exit "$rc"
+}
+trap restore_on_failure EXIT
+
 echo "Installing pinned Montara Companion for $CONSOLE_USER..."
 # macOS Installer extracts package scripts in a root-only PKInstallSandbox.
 # After dropping privileges the console user CANNOT read $HERE/install.sh.
 # Stage a read-only, root-owned copy in an accessible directory first.
 STAGE="$(mktemp -d /private/tmp/montara-companion-install.XXXXXXXX)"
-trap 'rm -rf "$STAGE"' EXIT
 chmod 755 "$STAGE"
 cp "$HERE/install.sh" "$STAGE/install.sh"
 chown root:wheel "$STAGE/install.sh"
@@ -132,7 +179,10 @@ health_engine() {
   local raw
   raw="$(curl -fsS --max-time 3 http://127.0.0.1:47820/health 2>/dev/null || true)"
   [ -n "$raw" ] || return 1
-  printf '%s' "$raw" | run_as_owner python3 -c 'import json,sys;d=json.load(sys.stdin);print((d.get("local_video") or {}).get("engine") or "") if d.get("app")=="montara-companion" else sys.exit(1)' 2>/dev/null
+  # Parsing the read-only localhost health JSON does not need a GUI-user
+  # process. Passing stdin through launchctl asuser + sudo can result in
+  # empty input on macOS Installer and falsely mark a ready daemon as failed.
+  printf '%s' "$raw" | python3 -c 'import json,sys;d=json.load(sys.stdin);print((d.get("local_video") or {}).get("engine") or "") if d.get("app")=="montara-companion" else sys.exit(1)' 2>/dev/null
 }
 if [ -n "$(listener_pids)" ]; then
   echo "Port 47820 was acquired during installation. Not starting another Companion."
@@ -142,15 +192,36 @@ run_as_owner launchctl bootstrap "gui/$UID_FOR_USER" "$AGENT"
 # RunAtLoad starts exactly one managed Companion. Do not kickstart -k:
 # that can race a just-started process and create port conflicts.
 
-echo "Verifying the launched Companion uses the expected engine..."
-for attempt in $(seq 1 35); do
+# Verify the actual process answering /health, not a brittle parse of
+# launchctl's human-readable `print` output. Installer previously reported
+# failure while companion.log showed the new listener ready on the port.
+# The live port listener must belong to this user and run from their install.
+verify_live_companion() {
+  local pid="$1" owner cmd
+  [ -n "$pid" ] && [[ "$pid" =~ ^[0-9]+$ ]] || return 1
+  owner="$(ps -p "$pid" -o user= | xargs || true)"
+  cmd="$(ps -p "$pid" -o command= || true)"
+  [ "$owner" = "$CONSOLE_USER" ] && [[ "$cmd" == *"$USER_HOME/.montara-companion/companion.py"* ]]
+}
+echo "Verifying the running Companion uses the expected engine..."
+last_engine="" last_listener="" last_managed="" stable_pid="" stable_count=0
+for attempt in $(seq 1 65); do
   verified="$(health_engine || true)"
+  listener="$(listener_pids)"
+  # Require the managed process to keep answering, not just a one-off response.
   managed="$(run_as_owner launchctl print "gui/$UID_FOR_USER/$LABEL" 2>/dev/null | awk '$1=="pid" && $2=="=" {print $3; exit}' || true)"
-  if [ "$verified" = "$ENGINE_COMMIT" ] && [ -n "$managed" ] && [ "$(listener_pids)" = "$managed" ]; then
-    echo "Companion updated, connected, and verified: ${ENGINE_COMMIT:0:8}"
+  if [ "$verified" = "$ENGINE_COMMIT" ] && [ "$managed" = "$listener" ] && verify_live_companion "$listener"; then
+    if [ "$stable_pid" = "$listener" ]; then stable_count=$((stable_count+1)); else stable_pid="$listener"; stable_count=1; fi
+  else
+    stable_pid="" stable_count=0
+  fi
+  if [ "$stable_count" -ge 20 ]; then
+    echo "Companion installed and verified: engine ${ENGINE_COMMIT:0:8}, listener PID $listener, launchctl PID ${managed:-unreported}."
     exit 0
   fi
+  last_engine="$verified" last_listener="$listener" last_managed="$managed"
   sleep 1
 done
-echo "Companion could not bind to 47820 with the expected engine. See $LOG_FILE and $USER_HOME/.montara-companion/companion.log." >&2
+echo "Companion verification failed: expected engine ${ENGINE_COMMIT:0:8}; reported engine ${last_engine:0:8}; port PID ${last_listener:-none}; launchctl PID ${last_managed:-none}." >&2
+echo "See $LOG_FILE and $USER_HOME/.montara-companion/companion.log." >&2
 exit 1
