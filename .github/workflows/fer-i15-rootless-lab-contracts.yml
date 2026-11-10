@@ -1,0 +1,27 @@
+name: FER I15 opt-in namespace isolation lab contracts
+on:
+  pull_request:
+    paths:
+      - 'tests/urano_i15_namespace_entry.sh'
+      - 'tests/urano_i15_namespace_real_open_lab.py'
+      - 'tests/test_urano_i15_namespace_lab.py'
+      - '.github/workflows/fer-i15-rootless-lab-contracts.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Confirm safe-by-default lab scripts (no namespace execution in CI)
+        env:
+          PYTHONPATH: tests
+        run: |
+          python -m unittest discover -s tests -p 'test_urano_i15_namespace_lab.py' -v
+          python -m py_compile tests/urano_i15_namespace_real_open_lab.py
+          bash -n tests/urano_i15_namespace_entry.sh
