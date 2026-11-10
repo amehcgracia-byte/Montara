@@ -21,3 +21,16 @@ test('targeted shot save still sends the requested index',()=>{
  assert.match(edit,/async function refreshMusicReview\(index\)/);
  assert.match(edit,/await refreshFrames\(true,index\)/);
 });
+
+test('Companion update reminder checks version on entry without launching native code',()=>{
+ const html=fs.readFileSync('web/index.html','utf8');
+ const app=fs.readFileSync('app.py','utf8');
+ assert.match(html, /id="companionUpdateNotice"/);
+ assert.match(html, /id="companionUpdateDownload"[^>]*href="\/montara\/companion\/download"/);
+ assert.match(source, /void checkCompanionUpdate\(\);/);
+ assert.match(source, /info\?\.local_video\?\.engine/);
+ assert.match(source, /installed!==expectedCompanionEngine/);
+ assert.match(source, /fetch\("\/montara\/companion\/version"/);
+ assert.match(app, /@app\.get\("\/montara\/companion\/version"\)/);
+ assert.doesNotMatch(source.slice(source.indexOf('async function checkCompanionUpdate'),source.indexOf('async function watchCompanion')), /exec\(|Terminal\.app|osascript|new Function|eval\(/);
+});
