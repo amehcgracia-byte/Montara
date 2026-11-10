@@ -190,6 +190,13 @@ else
   say "installed in $DIR · next time just type:  montara-companion"
 fi
 echo
+# The native macOS .pkg registers a LaunchAgent after this script returns.
+# Never leave a background process attached to Installer's own lifecycle.
+if [ "${MONTARA_INSTALL_ONLY:-0}" = 1 ]; then
+  say "Installed files. macOS Installer will register and verify Companion."
+  exit 0
+fi
+
 if [ "${MONTARA_BACKGROUND:-0}" = 1 ]; then
   nohup "$PY" "$DIR/companion.py" > "$DIR/companion.log" 2>&1 < /dev/null &
   for attempt in $(seq 30); do
