@@ -18,3 +18,11 @@ Offline policy tests: owner/project/generation mismatch, stale job, malformed or
 Then connect that broker to I21 `GatewayJobBridge`, validate physical restart cleanup, isolate real Engine/FFmpeg, and enable feature flag for user's private beta. Thereafter inspect Windows Companion install/version and complete Stage -> MP4 local.
 
 Do not touch `main`, PR #189, Owner 8115, Cloudflare, Chema 8101/8102/8103. TryGateway retired. Auto-shutdown change deferred.
+
+## Private Unix IPC policy (not deployed)
+
+Added `urano/restricted_broker_ipc.py`: a Linux AF_UNIX request parser that verifies the connecting process via kernel `SO_PEERCRED` (not an untrusted claimed owner), requires an explicitly configured non-root trusted UID **different from the web account UID**, and accepts ONLY `{op: stop, job_id: job-<hex32>, generation: positive integer}` with strict size and exact keys. It resolves the canonical owner/project from the server-side ledger rather than the wire and invokes the restricted target policy; any failure retains ledger `stopping` and prevents reuse. No generic command execution, new-unit creation, shell, path, PID, UID or systemd-property fields.
+
+Tests use real AF_UNIX `socketpair` and kernel peer credentials, check foreign UID rejection, malformed/oversized requests, fake unit/path/command fields, successful isolated stop and fail-closed PIDs. Together **18 tests + 24 subtests PASS** (IPC + policy + I24) on VM.
+
+**Security boundary not yet installed**: there is no root daemon, socket listener, root-owned permissions/configuration or dedicated broker Unix account. This module must NOT be imported into the public Owner process. Need a system administrator-approved installation that verifies real Owner UID cannot reach the socket, checks root-owned readonly runtime and ledger integrity, and supplies a fixed launch API with attestation before real beta.
