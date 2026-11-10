@@ -146,29 +146,56 @@ function renderMusicCuts(){
   const host=$('#musicCuts');if(!musicTimeline?.shots.length)return;host.replaceChildren(makeCutTrack(musicTimeline,{start:musicTimeline.shots[0].start,end:musicTimeline.shots.at(-1).end},'Video cuts',shot=>openMusicShot(shot.index)));
 }
 async function openMusicShot(index){
-  try{const doc=await api('/edit/shot?index='+index),dialog=document.createElement('dialog');dialog.className='cut-dialog';dialog.innerHTML='<form><h3>Camera / viewpoint</h3><label>Shot<select name="camera"></select></label><div class="music-flat" hidden></div><div class="music-performers" hidden></div><img class="music-spherical" alt="Drag the 360 picture to aim this shot" draggable="false" hidden style="width:100%;cursor:grab;touch-action:none"><label>Look left / right<input name="yaw" type="range" min="-180" max="180" step="1"></label><label>Look up / down<input name="pitch" type="range" min="-85" max="85" step="1"></label><label>Field of view<input name="fov" type="range" min="30" max="120" step="1"></label><label><input type="checkbox" name="movement"> Movimiento</label><label>Shot speed <output class="music-shot-speed-value">1×</output><input name="playback_speed" type="range" min="0.5" max="2" step="0.05" value="1"></label><p class="hint">Speed changes only this camera shot; the master song stays in time. Faster motion requires enough source footage.</p><p class="hint music-sphere-hint">360 controls affect this shot only. Preview or render after saving.</p><p class="cut-error"></p><div class="actions"><button type="button">Cancel</button><button class="btn primary">Save shot</button></div></form>';
+  try{const doc=await api('/edit/shot?index='+index),dialog=document.createElement('dialog');dialog.className='cut-dialog';dialog.innerHTML='<form><h3>Camera / viewpoint</h3><label>Shot<select name="camera"></select></label><div class="music-flat" hidden></div><div class="music-performers" hidden></div><img class="music-spherical" alt="Drag the 360 picture to aim this shot" draggable="false" hidden style="width:100%;cursor:grab;touch-action:none"><label>Look left / right<input name="yaw" type="range" min="-180" max="180" step="1"></label><label>Look up / down<input name="pitch" type="range" min="-85" max="85" step="1"></label><label>Field of view<input name="fov" type="range" min="30" max="120" step="1"></label><label><input type="checkbox" name="movement"> Movement</label><label>Shot speed <output class="music-shot-speed-value">1×</output><input name="playback_speed" type="range" min="0.5" max="2" step="0.05" value="1"></label><p class="hint">Speed changes only this camera shot; the master song stays in time. Faster motion requires enough source footage.</p><p class="hint music-sphere-hint">360 controls affect this shot only. Preview or render after saving.</p><p class="cut-error"></p><div class="actions"><button type="button">Cancel</button><button class="btn primary">Save shot</button></div></form>';
     const field=n=>dialog.querySelector(`[name="${n}"]`);doc.choices.forEach((c,i)=>field('camera').add(new Option(c.label,i)));field('yaw').value=(((Number(doc.pose.yaw)||0)+180)%360+360)%360-180;field('pitch').value=doc.pose.pitch||0;field('fov').value=doc.pose.fov||95;field('movement').checked=doc.movement !== false;field('playback_speed').value=doc.playback_speed ?? 1;field('playback_speed').oninput=()=>{dialog.querySelector('.music-shot-speed-value').textContent=Number(field('playback_speed').value).toFixed(2).replace(/0+$/,'').replace(/\.$/,'')+'×';};field('playback_speed').oninput();let flatUI=null;const sphericalImage=new Image(),sphereTarget=dialog.querySelector('.music-spherical');
     const drawSphere=()=>{if(!doc.choices[Number(field('camera').value)].spherical || !sphericalImage.naturalWidth)return;try{sphereTarget.src=webSphericalStill(sphericalImage,{yaw:Number(field('yaw').value),pitch:Number(field('pitch').value),fov:Number(field('fov').value)});}catch(error){dialog.querySelector('.cut-error').textContent=error.message;}};
     sphericalImage.onload=drawSphere;['yaw','pitch','fov'].forEach(n=>field(n).oninput=drawSphere);
     sphereTarget.onpointerdown=e=>{if(e.button!==0)return;e.preventDefault();sphereTarget.setPointerCapture(e.pointerId);const start={x:e.clientX,y:e.clientY,yaw:Number(field('yaw').value),pitch:Number(field('pitch').value)};sphereTarget.onpointermove=move=>{field('yaw').value=((start.yaw-(move.clientX-start.x)*.35+540)%360)-180;field('pitch').value=Math.max(-85,Math.min(85,start.pitch+(move.clientY-start.y)*.25));drawSphere();};sphereTarget.onpointerup=sphereTarget.onpointercancel=()=>{sphereTarget.onpointermove=null;};};sphereTarget.onwheel=e=>{e.preventDefault();field('fov').value=Math.max(30,Math.min(120,Number(field('fov').value)+(e.deltaY>0?3:-3)));drawSphere();};
+    // Saved musicians are reusable shot-local viewpoints, never a command
+    // to redistribute the rest of the song. Labels are visible UI: English.
     const musicians=dialog.querySelector('.music-performers');
-    const roles=[['unknown','Unassigned'],['pianist','Piano'],['bassist','Bass'],['saxophonist','Sax'],['guitarist','Guitar'],['drummer','Drums'],['singer','Voice']];
-    const options=value=>roles.map(([key,label])=>`<option value="${key}" ${value===key?'selected':''}>${label}</option>`).join('');
-    musicians.innerHTML=(doc.performers||[]).map((p,i)=>`<label>Musician ${i+1} · left to right<select data-person="${escapeHtml(p.id)}">${options(p.role)}</select></label>`).join('')+'<label>Remember this crop as a musician<select name="rememberMusician"><option value="">No</option>'+options('unknown').replace(/<option value="unknown"[^>]*>.*?<\/option>/,'')+'</select></label>';
-    const roleFields=[...musicians.querySelectorAll('[data-person]')];
-    const initialRoles=roleFields.map(field=>field.value);
-    const performerSettings=()=>{
-      if(musicians.hidden)return {};
-      const assignments=Object.fromEntries(roleFields.flatMap((field,i)=>
-        field.value===initialRoles[i]?[]:[[field.dataset.person,field.value]]));
-      return {...(Object.keys(assignments).length?{performer_roles:assignments}:{}),
-        ...(field('rememberMusician').value?{remember_musician:field('rememberMusician').value}:{})};
+    musicians.innerHTML='<label><input type="checkbox" name="markMusician"> Mark this view as a musician</label><label class="music-name" hidden>Musician or instrument name<input name="rememberMusician" type="text" maxlength="40" placeholder="Guitar, piano, singer…"></label><div class="music-view-buttons"></div>';
+    field('markMusician').onchange=()=>{musicians.querySelector('.music-name').hidden=!field('markMusician').checked;};
+    const buttons=musicians.querySelector('.music-view-buttons');
+    const choices=doc.choices || [];
+    const viewNames=doc.saved_views || [];
+    const applyRemembered=(saved)=>{
+      const camera=choices.findIndex(c=>c.source_path===saved.source_path &&
+        !!c.spherical===!!saved.spherical_shot);
+      if(camera<0){dialog.querySelector('.cut-error').textContent='This musician view is not available at this shot time.';return;}
+      field('camera').value=String(camera);
+      update();
+      if(saved.spherical_shot){
+        const pose=saved.spherical_shot;
+        for(const key of ['yaw','pitch','fov'])field(key).value=Number(pose[key] ?? (key==='fov'?95:0));
+        drawSphere();
+      }else if(saved.flat_framing){
+        flatUI?.set(saved.flat_framing);
+      }
+      dialog.querySelector('.cut-error').textContent='';
     };
+    for(const saved of viewNames){
+      const button=document.createElement('button');
+      button.type='button';button.className='btn ghost small';
+      button.textContent=saved.name;
+      button.title='Use this saved view in this shot only';
+      button.onclick=()=>applyRemembered(saved);
+      buttons.append(button);
+    }
+    const performerSettings=()=>field('markMusician').checked && field('rememberMusician').value.trim()
+      ? {remember_musician:field('rememberMusician').value.trim()} : {};
     const frameUrl=choice=>'/api/v1/edit/shot/frame?'+new URLSearchParams({index,choice,revision:doc.revision});
-    const update=()=>{const choice=Number(field('camera').value),sphere=doc.choices[choice].spherical;['yaw','pitch','fov'].forEach(n=>field(n).closest('label').hidden=!sphere);dialog.querySelector('.music-flat').hidden=sphere;musicians.hidden=doc.platform!=='youtube'||choice!==0||doc.choices[choice].kind!=='fixed';sphereTarget.hidden=!sphere;if(sphere)sphericalImage.src=frameUrl(choice);dialog.querySelector('.music-sphere-hint').hidden=!sphere;
+    const update=()=>{const choice=Number(field('camera').value),sphere=doc.choices[choice].spherical;['yaw','pitch','fov'].forEach(n=>field(n).closest('label').hidden=!sphere);dialog.querySelector('.music-flat').hidden=sphere;musicians.hidden=doc.platform!=='youtube';sphereTarget.hidden=!sphere;if(sphere)sphericalImage.src=frameUrl(choice);dialog.querySelector('.music-sphere-hint').hidden=!sphere;
       if(!sphere){flatUI ||= mountFlatCamera(dialog.querySelector('.music-flat'),choice===0?doc.framing:{},{aspect:doc.platform==='reel'?9/16:null,contain:doc.reel_contain});flatUI.setImage(frameUrl(choice));}
     };
-    field('camera').onchange=()=>{flatUI?.set(Number(field('camera').value)===0?doc.framing:{});update();};
+    field('camera').onchange=()=>{
+      const selected=choices[Number(field('camera').value)] || {};
+      ['yaw','pitch','fov'].forEach(key=>field(key).value=Number(selected.pose?.[key] ?? (key==='fov'?95:0)));
+      if(selected.spherical)drawSphere();
+      else flatUI?.set(selected.framing || {zoom:1,x:.5,y:.5});
+      // Never copy the previously selected camera's position to a new one.
+      update();
+    };
     update();
     const framing=()=>doc.choices[Number(field('camera').value)].spherical
       ? {yaw:Number(field('yaw').value),pitch:Number(field('pitch').value),fov:Number(field('fov').value)}
@@ -179,6 +206,10 @@ async function openMusicShot(index){
     dialog.querySelector('form').onsubmit=async e=>{
       e.preventDefault();
       const choice=Number(field('camera').value);
+      if(field('markMusician').checked && !field('rememberMusician').value.trim()){
+        dialog.querySelector('.cut-error').textContent='Enter a musician or instrument name.';
+        return;
+      }
       const crop=framing(), performers=performerSettings();
       const movementOnly=doc.platform==='youtube' && choice===0 &&
         !Object.keys(performers).length && JSON.stringify(crop)===initialFraming;
