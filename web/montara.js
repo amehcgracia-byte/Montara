@@ -2753,6 +2753,26 @@ async function finishOriginalVideo(s) {
     if(!state.localProject)state.localProject=await montaraCompanion.projectFolder($('#videoName').value.trim()||todayName(),state.files.filter(f=>f.original).map(f=>f.original));
     if(job.cancelled)return;
     if(!state.localProject)throw new Error('Choose a project folder to save the original-quality video.');
+    // The browser may have remembered a Companion project ID from a process
+    // that was replaced during an update. Never discard the saved edit:
+    // reselect its local destination only when Companion confirms that ID
+    // is unknown, then retry the one failed asset exactly once.
+    const saveNativeAsset = async (name, blob) => {
+      if (!blob?.size) throw new Error('The video asset "' + name + '" is empty. Check the master and retry.');
+      try {
+        return await montaraCompanion.saveInProject(state.localProject.id, name, blob);
+      } catch (error) {
+        if (error.status !== 404 || error.companionError !== 'unknown project' || job.cancelled) throw error;
+        setProgress(0,'Reconnect local project…','Companion was restarted and lost the saved project folder. Choose where to save your video.');
+        const selected = await montaraCompanion.projectFolder(
+          $('#videoName').value.trim() || todayName(), state.files.filter(f => f.original).map(f => f.original));
+        if (!selected) throw new Error('Companion lost the saved project folder. Choose a local folder to continue without losing your edits.');
+        state.localProject = selected;
+        rememberOpenEdit('making');
+        if (job.cancelled) return;
+        return montaraCompanion.saveInProject(selected.id, name, blob);
+      }
+    };
     const savedOriginals = await footageMemory.list(state.platform).catch(()=>[]);
     const candidates = [...state.files, ...savedOriginals];
     const identities = new Map();
@@ -2811,7 +2831,7 @@ async function finishOriginalVideo(s) {
         const name='montara-render-source-'+crypto.randomUUID().replaceAll('-','')+'.mp4';
         const blob=await response.blob();
         if(job.cancelled)return;
-        await montaraCompanion.saveInProject(state.localProject.id,name,blob);sources.push({source:source.key,asset:name});
+        await saveNativeAsset(name,blob);sources.push({source:source.key,asset:name});
         transferredBytes+=blob.size;fallbackSources++;
       }
       connectedSources++;
@@ -2823,14 +2843,14 @@ async function finishOriginalVideo(s) {
     const master='montara-render-audio-'+crypto.randomUUID().replaceAll('-','')+'.audio';
     const masterBlob=await response.blob();
     if(job.cancelled)return;
-    await montaraCompanion.saveInProject(state.localProject.id,master,masterBlob);
+    await saveNativeAsset(master,masterBlob);
     console.info('[Montara native timing]', {phase:'connect export assets', seconds:(performance.now()-transferStarted)/1000, fallback_sources:fallbackSources, fallback_bytes:transferredBytes, master_bytes:masterBlob.size});
     if(job.cancelled)return;
     let logo=null;
     if(state.branding==='mine'){
       const image=await fetch('/montara/logo');if(!image.ok)throw new Error('Your logo is unavailable. Choose it again.');
       logo='montara-render-logo-'+crypto.randomUUID().replaceAll('-','')+'.png';
-      await montaraCompanion.saveInProject(state.localProject.id,logo,await image.blob());
+      await saveNativeAsset(logo,await image.blob());
       if(job.cancelled)return;
     }
     job.startRequest=montaraCompanion.startVideo({project:state.localProject.id,recipe,master,originals:sources,logo,branding:state.branding||'none',name:projectDownloadName().slice(0,-4)});
