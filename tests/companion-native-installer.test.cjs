@@ -83,11 +83,25 @@ test('Verification uses read-only health JSON without launchctl/sudo stdin forwa
   assert.match(check,/printf '%s' "\$raw" \| python3 -c/);
   assert.doesNotMatch(check,/printf '%s' "\$raw" \| run_as_owner python3/);
 });
-test('Real listener and exact engine determine success, not launchctl print PID string',()=>{
+test('Exact engine and stable managed listener determine success',()=>{
   const check=installer.slice(installer.indexOf('verify_live_companion() {'));
   assert.match(check,/ps -p "\$pid" -o user=/);
   assert.match(check,/companion\.py/);
-  assert.match(check,/verified" = "\$ENGINE_COMMIT" \] && verify_live_companion "\$listener"/);
+  assert.match(check,/verified" = "\$ENGINE_COMMIT".*managed.*verify_live_companion "\$listener"/);
   assert.doesNotMatch(check,/\[ "\$\(listener_pids\)" = "\$managed" \]/);
+  assert.match(check,/stable_count.*-ge 20/);
   assert.match(check,/Companion verification failed: expected engine/);
+});
+
+test('macOS validates the actual threaded HTTP date formatter before selecting Python',()=>{
+  const match=updater.match(/  python311_ok\(\) \{\n([\s\S]*?)\n  \}/);
+  assert.ok(match);
+  const shell='arch="$(uname -m)"\npython311_ok() {\n'+match[1]+'\n}\npython311_ok "$1"';
+  const wrong=spawnSync('bash',['-c',shell,'probe','/usr/bin/false'],{encoding:'utf8'});
+  assert.notEqual(wrong.status,0);
+  const python=spawnSync('python3.11',['-V'],{encoding:'utf8'});
+  if (!python.error) {
+    const verified=spawnSync('bash',['-c',shell,'probe','python3.11'],{encoding:'utf8'});
+    assert.equal(verified.status,0,verified.stderr);
+  }
 });
