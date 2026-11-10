@@ -263,43 +263,29 @@ def create_montara_app(data_root: Path = DEFAULT_DATA, samples: bool = True):
 
     @app.get("/montara/companion/download")
     def montara_companion_download():
-        """Provide a macOS installer pinned to this exact Montara release."""
-        import io
+        """Download a single native macOS .pkg, not a ZIP or shell script.
+
+        Only serve a package pinned to the engine currently used by JM.
+        A notarized package may replace the beta package at this path later;
+        installation always requires the Mac owner's explicit OS consent.
+        """
         import re
-        import zipfile
         from flask import send_file
-
-        def release_sha(variable, folder):
-            try:
-                value = subprocess.check_output(
-                    ['git', '-C', str(folder), 'rev-parse', 'HEAD'],
-                    text=True, stderr=subprocess.DEVNULL, timeout=5,
-                ).strip()
-            except (OSError, subprocess.SubprocessError):
-                value = os.environ.get(variable)
-            if not re.fullmatch(r'[a-f0-9]{40}', value):
-                raise ValueError("Missing full release SHA")
-            return value
-
         try:
-            source = release_sha("MONTARA_BUILD_SHA", ROOT)
-            engine = release_sha("MONTARA_ENGINE_SHA", ENGINE)
+            engine = subprocess.check_output(
+                ["git", "-C", str(ENGINE), "rev-parse", "HEAD"],
+                text=True, stderr=subprocess.DEVNULL, timeout=5,
+            ).strip()
+            if not re.fullmatch(r"[a-f0-9]{40}", engine):
+                raise ValueError("No versioned video engine")
         except (OSError, subprocess.SubprocessError, ValueError):
-            return jsonify(error="This Montara build has no versioned Companion installer."), 503
+            return jsonify(error="Companion engine version is unavailable."), 503
+        package = data_root / "Installers" / f"Montara-Companion-{engine[:8]}.pkg"
+        if not package.is_file() or package.stat().st_size < 1024:
+            return jsonify(error="The matching Mac installer has not been published yet."), 503
+        return send_file(package, mimetype="application/octet-stream", as_attachment=True,
+                         download_name=f"Montara-Companion-{engine[:8]}.pkg", max_age=0)
 
-        buffer = io.BytesIO()
-        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
-            for name, mode in (("Install Montara Companion.command", 0o755), ("install.sh", 0o644)):
-                info = zipfile.ZipInfo(f"Montara Companion/{name}")
-                info.create_system = 3
-                info.external_attr = (0o100000 | mode) << 16
-                info.compress_type = zipfile.ZIP_DEFLATED
-                archive.writestr(info, (ROOT / "companion" / name).read_bytes())
-            archive.writestr('Montara Companion/SOURCE_COMMIT', source + '\n')
-            archive.writestr('Montara Companion/EDITOR_COMMIT', engine + '\n')
-        buffer.seek(0)
-        return send_file(buffer, mimetype="application/zip", as_attachment=True,
-                         download_name=f"Montara Companion-{source[:8]}.zip", max_age=0)
     _apply_branding(str(load_global_config().get("montara_branding_mode") or "montara"), data_root)
 
     @app.get("/montara/samples")

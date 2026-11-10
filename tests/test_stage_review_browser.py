@@ -1,11 +1,9 @@
 """Real browser, HTTP, saved plan and FFmpeg, with a synthetic project."""
-import io
 import json
 import os
 from pathlib import Path
 import subprocess
 from threading import Thread
-import zipfile
 
 from playwright.sync_api import sync_playwright
 from werkzeug.serving import make_server
@@ -41,6 +39,15 @@ def test_stage_save_keeps_other_previews_and_offers_companion_recovery(tmp_path)
     plan = project.artifacts_dir / "edit_plan.json"
     atomic_write_json(plan, {"platform": "youtube", "segments": initial})
     save_global_config({**load_global_config(), "last_project_path": str(project.folder)})
+
+    # The download endpoint serves a version-pinned native macOS .pkg now.
+    # This is a MIME/routing fixture, not a signed Apple package.
+    engine_sha = subprocess.check_output(
+        ["git", "-C", str(Path(__file__).resolve().parents[1] / "engine"),
+         "rev-parse", "HEAD"], text=True).strip()
+    installer = data / "Installers" / f"Montara-Companion-{engine_sha[:8]}.pkg"
+    installer.parent.mkdir(parents=True, exist_ok=True)
+    installer.write_bytes(b"xar!" + bytes(2048))
 
     app = create_montara_app(data, samples=False)
     # The fixture skips ingest and sync. Reconciliation may mark that
@@ -102,13 +109,12 @@ def test_stage_save_keeps_other_previews_and_offers_companion_recovery(tmp_path)
             page.locator("#companionRecovery").wait_for()
             assert "could not reach Companion" in page.locator("#errorText").inner_text()
             assert page.get_by_role("button", name="Check Companion and retry").is_visible()
-            archive = page.request.get(url + page.locator("#companionRecoveryDownload").get_attribute("href"))
-            assert archive.ok
-            with zipfile.ZipFile(io.BytesIO(archive.body())) as bundle:
-                folder = "Montara Companion/"
-                assert len(bundle.read(folder + "SOURCE_COMMIT").strip()) == 40
-                assert len(bundle.read(folder + "EDITOR_COMMIT").strip()) == 40
-                assert bundle.getinfo(folder + "Install Montara Companion.command").external_attr >> 16 & 0o111
+            installer_download = page.request.get(
+                url + page.locator("#companionRecoveryDownload").get_attribute("href"))
+            assert installer_download.ok
+            assert ".pkg" in installer_download.headers["content-disposition"]
+            assert "application/octet-stream" in installer_download.headers["content-type"]
+            assert installer_download.body().startswith(b"xar!")
             if screenshot_dir:
                 page.screenshot(path=str(Path(screenshot_dir) / "companion-recovery.png"))
             browser.close()

@@ -2913,9 +2913,9 @@ function fail(error) {
   if (error.companion) {
     const download = $("#companionRecoveryDownload");
     download.hidden = !isDesktopMac;
-    download.textContent = error.companion.needsUpdate ? "Download Companion update" : "Download Companion for Mac";
+    download.textContent = error.companion.needsUpdate ? "Update Companion (.pkg)" : "Install Companion (.pkg)";
     $("#companionRecoveryHelp").textContent = isDesktopMac
-      ? "Unzip the download and open Install Montara Companion. If updating, wait for local work to finish and close Companion first."
+      ? "Open the downloaded .pkg using macOS Installer. Do not interrupt active local renders. This testing installer is not yet Apple-notarized."
       : "Ask your Montara administrator for the matching video renderer for this computer.";
     $("#companionRecoveryRetry").onclick = error.companion.retry;
   }

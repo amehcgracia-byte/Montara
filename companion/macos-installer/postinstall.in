@@ -1,0 +1,28 @@
+#!/bin/bash
+# Executed by macOS Installer as root, never from a web page.
+set -euo pipefail
+export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
+HERE="$(cd "$(dirname "$0")" && pwd)"
+EDITOR_COMMIT="__MONTARA_COMMIT__"
+ENGINE_COMMIT="__ENGINE_COMMIT__"
+
+# A per-user service must be installed for the foreground Mac user, not root.
+CONSOLE_USER="$(stat -f '%Su' /dev/console)"
+if [ -z "$CONSOLE_USER" ] || [ "$CONSOLE_USER" = root ] || [ "$CONSOLE_USER" = loginwindow ]; then
+  echo "Log into your Mac user account to install Montara Companion." >&2
+  exit 1
+fi
+UID_FOR_USER="$(id -u "$CONSOLE_USER")"
+if [ ! -f "$HERE/install.sh" ]; then
+  echo "The Companion installer is incomplete. Download it again." >&2
+  exit 1
+fi
+# The shell and network fetch run as the signed-in user. Existing projects,
+# playlists and user-specific preferences stay in their own home directory.
+# The install script refuses live render jobs and foreign port ownership.
+echo "Updating Montara Companion for $CONSOLE_USER..."
+launchctl asuser "$UID_FOR_USER" sudo -H -u "$CONSOLE_USER" env \
+  "PATH=$PATH" "MONTARA_REF=$EDITOR_COMMIT" "MONTARA_EXPECTED_ENGINE=$ENGINE_COMMIT" \
+  MONTARA_NO_SHELL_SETUP=1 MONTARA_BACKGROUND=1 \
+  bash "$HERE/install.sh" --video
+echo "Montara Companion is installed and running."
