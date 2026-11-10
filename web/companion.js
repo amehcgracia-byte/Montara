@@ -69,7 +69,14 @@ const montaraCompanion = (() => {
     },
     async saveInProject(projectId, name, blob) {
       const response = await call(`/projects/${projectId}/save?name=${encodeURIComponent(name)}`, {method: 'POST', headers: {'Content-Type': 'application/octet-stream'}, body: blob});
-      if (!response.ok) throw new Error('The companion could not save the video.');
+      if (!response.ok) {
+        const detail = await response.json().catch(() => ({}));
+        const message = typeof detail.error === 'string' ? detail.error : 'Could not save the video';
+        const error = new Error('Companion could not save the video (' + response.status + '): ' + message);
+        error.status = response.status;
+        error.companionError = message;
+        throw error;
+      }
       return (await response.json()).saved;
     },
     async locateOriginal(original) {
