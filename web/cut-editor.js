@@ -194,6 +194,7 @@ async function openMusicShot(index){
     field('camera').onchange=()=>{selectedViewName='';
       const selected=choices[Number(field('camera').value)] || {};
       ['yaw','pitch','fov'].forEach(key=>field(key).value=Number(selected.pose?.[key] ?? (key==='fov'?95:0)));
+      field('movement').checked=selected.movement===true;
       if(selected.spherical)drawSphere();
       else flatUI?.set(selected.framing || {zoom:1,x:.5,y:.5});
       // Never copy the previously selected camera's position to a new one.
