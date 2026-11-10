@@ -1,45 +1,70 @@
 #!/usr/bin/env bash
-# Powers the lab VM off when nobody uses Montara (no compute charge while off; the disk stays).
-# Runs every 5 minutes from a systemd timer (install_idle_shutdown.sh). It stops the VM only if:
-#   - the machine has been up for at least GRACE minutes,
-#   - no Montara of any lab user saw real activity for IDLE minutes (~/montara-data/.last-activity),
-#     60 by default: no upload or step should take longer,
-#   - no engine work is running (ffmpeg, ffprobe, the mixer worker),
-#   - no benchmark holds the lab lock (montara-bench),
-#   - nobody typed in an interactive SSH terminal for SSH_IDLE minutes, 120 by default
-#     (a forgotten open terminal does not count; jobs longer than that run under montara-bench).
-# Start it again from the Mac with: montara-start
-set -u
-IDLE_MIN="${MONTARA_IDLE_MINUTES:-60}"
-SSH_IDLE_MIN="${MONTARA_SSH_IDLE_MINUTES:-120}"
-GRACE_MIN="${MONTARA_IDLE_GRACE_MINUTES:-15}"
+# Montara lab auto-stop: protect real SSH connections, web activity and engine work.
+# Runs via systemd every 20 min; requires 120 min idle and 120 min boot grace.
+set -euo pipefail
+IDLE_MIN="${MONTARA_IDLE_MINUTES:-120}"
+GRACE_MIN="${MONTARA_IDLE_GRACE_MINUTES:-120}"
 now=$(date +%s)
 up=$(cut -d. -f1 /proc/uptime)
-[ "$up" -ge $((GRACE_MIN * 60)) ] || { echo "just started (${up}s): keep"; exit 0; }
+boot=$((now - up))
+state_dir=/var/lib/montara-idle
+state_file="$state_dir/last-active"
+mkdir -p -m 700 "$state_dir"
+remember_activity() {
+  printf '%s\n' "$now" > "$state_file.tmp.$$"
+  mv -f "$state_file.tmp.$$" "$state_file"
+}
+keep() { echo "$1: keep"; exit 0; }
+if (( up < GRACE_MIN * 60 )); then keep "boot grace $((up / 60)) min of $GRACE_MIN"; fi
+
+# Real engine work or a held lab benchmark lock must never be interrupted.
 if pgrep -x ffmpeg >/dev/null || pgrep -x ffprobe >/dev/null || pgrep -f "mixer_adapter.session" >/dev/null; then
-  echo "engine busy: keep"; exit 0
+  remember_activity
+  keep "engine active"
 fi
-if [ -e /var/lock/montara/bench.lock ] && ! flock -n /var/lock/montara/bench.lock true; then
-  echo "benchmark running: keep"; exit 0
+if [[ -e /var/lock/montara/bench.lock ]] && ! flock -n /var/lock/montara/bench.lock true; then
+  remember_activity
+  keep "benchmark lock held"
 fi
-typed=0
-for tty in $(who | awk '{print $2}' | sort -u); do
-  t=$(stat -c %X "/dev/$tty" 2>/dev/null || echo 0)   # last keystroke on that terminal
-  [ "$t" -gt "$typed" ] 2>/dev/null && typed=$t
-done
-if [ "$typed" -gt 0 ] && [ $(( (now - typed) / 60 )) -lt "$SSH_IDLE_MIN" ]; then
-  echo "typed in SSH $(( (now - typed) / 60 )) min ago (limit ${SSH_IDLE_MIN}): keep"; exit 0
+
+# Connected SSH sessions count as activity even when nobody is typing.
+# If the query fails, retain the VM (fail safe).
+if ! ssh_sessions=$(ss -H -tn state established '( sport = :22 )'); then
+  keep "SSH status unavailable (fail safe)"
 fi
-latest=0
-for f in ${MONTARA_IDLE_HOMES:-/home/*}/montara-data/.last-activity; do
-  [ -f "$f" ] || continue
-  t=$(cat "$f" 2>/dev/null || echo 0)
-  [ "$t" -gt "$latest" ] 2>/dev/null && latest=$t
-done
-idle=$(( (now - latest) / 60 ))
-if [ "$latest" -gt 0 ] && [ "$idle" -lt "$IDLE_MIN" ]; then
-  echo "web activity ${idle} min ago (limit ${IDLE_MIN}): keep"; exit 0
+if [[ -n "$ssh_sessions" ]]; then
+  remember_activity
+  keep "SSH connection established"
 fi
-echo "web idle ${idle} min (limit ${IDLE_MIN}), no SSH typing for ${SSH_IDLE_MIN} min, engine quiet: powering off"
-logger -t montara-idle "powering off after ${idle} min without activity"
-${MONTARA_IDLE_POWEROFF:-systemctl poweroff}
+
+# Remember the last moment of SSH or engine activity across checks, but
+# never use an activity timestamp older than the present boot.
+latest=$boot
+if [[ -f "$state_file" ]]; then
+  last=$(cat "$state_file" 2>/dev/null || echo 0)
+  if [[ "$last" =~ ^[0-9]+$ ]] && (( last > latest )); then latest=$last; fi
+fi
+
+# Each Montara instance writes its own .last-activity marker.
+# New layouts include /home/montara-main/data and *-data, not just montara-data.
+web_paths=0
+while IFS= read -r -d '' f; do
+  web_paths=$((web_paths+1))
+  stamp=$(cat "$f" 2>/dev/null || echo 0)
+  if [[ ! "$stamp" =~ ^[0-9]+$ ]]; then
+    stamp=$(stat -c %Y "$f" 2>/dev/null || echo 0)
+  fi
+  if [[ "$stamp" =~ ^[0-9]+$ ]] && (( stamp > latest )); then latest=$stamp; fi
+done < <(find /home -mindepth 2 -maxdepth 4 -type f -name .last-activity -print0 2>/dev/null)
+if (( latest > now )); then latest=$now; fi
+inactive=$(((now - latest) / 60))
+if (( inactive < IDLE_MIN )); then
+  keep "no SSH/engine; last activity $inactive min ago (<$IDLE_MIN); web markers $web_paths"
+fi
+echo "inactive $inactive min (>=$IDLE_MIN), no SSH, engine or benchmark: poweroff"
+if [[ "${MONTARA_IDLE_DRY_RUN:-0}" == "1" ]]; then
+  echo "DRY RUN: no poweroff"
+  exit 0
+fi
+logger -t montara-idle "powering off after $inactive min of total inactivity"
+systemctl poweroff
