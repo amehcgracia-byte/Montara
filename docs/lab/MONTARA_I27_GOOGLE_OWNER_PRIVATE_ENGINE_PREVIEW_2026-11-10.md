@@ -1,0 +1,36 @@
+# Montara I27 — Google Owner -> session authorization -> private Engine broker
+
+**10 November 2026 — private beta flag enabled; first authentic owner click not yet tested.**
+
+## Scope
+Connect the real Cloudflare HTTPS C8 Google Owner frontend to the installed I26 root-managed Engine broker through a second, narrow Unix socket. Preserve and independently verify the Google-owner session and CSRF. No arbitrary systemd commands, units, paths, PIDs, owner IDs or runtime IDs are accepted from HTTP. The Engine runs with DynamicUser, restricted systemd properties and a root-owned version-pinned readonly bundle. This is a browser-visible **Engine-opening preview**, not the video editor or a persistent media/recipe session.
+
+## Installation on VM (actually performed)
+- Remote path: ChatGPT -> Desktop Commander Remote -> Oracle instance-20261001-0035 -> `ssh montara` -> GCP montara-test. TryGateway retired.
+- C8 Owner existing service on 127.0.0.1:8115 updated from `fernando/integracion`-derived I27 source; feature flag `MONTARA_I27_OWNER_ENGINE_FLAG=private` is set as a **reversible systemd --user drop-in** `~/.config/systemd/user/montara-owner-beta.service.d/20-i27-private-preview.conf`. Only the Owner beta was restarted. Backup of three original source files in `~/.local/share/montara-owner-backups/i27-20261110-220037/`.
+- Root systemd `montara-i26-broker.service` keeps original technical socket `/run/montara-i26-broker/control.sock` root:montara-i26-client 0660 and now offers SECOND socket `/run/montara-i27-admission/control.sock` root:fgardel00 0660 within directory root:fgardel00 0710. Root-owned drop-in `/etc/systemd/system/montara-i26-broker.service.d/20-i27-admission.conf` adds readonly bind of real Owner private databases to `/run/montara-i27-owner-ro` and the separate admission socket directory. No public TCP listener. The original technical socket remains inaccessible to Owner UID 1006.
+- Root-installed I27 code in `/opt/montara/broker/urano/private_owner_admission.py`, plus updated root-owned `private_broker_service.py` and `private_broker_worker.py`. Versioned Engine bundle `b5e48317ef85225f901adc69af8cc17aa8146880` remains shared, root-owned readonly.
+
+## Authorization and operation
+1. The `/urano/v1/dashboard` page, after a real Google login, shows `Abrir Engine (beta)` and `Cerrar Engine` beside each catalog project UUID if the flag is enabled. HTTP `POST /urano/v1/projects/<uuid>/open` or `/close` requires Origin equal to the pinned HTTPS origin, an opaque revocable session cookie and valid freshly rotated `X-Urano-CSRF`, a bodyless POST and verified ownership via `ProjectCatalog.get`. No client-supplied owner or worker ID.
+2. Owner forwards ONLY `{op,session,csrf,project_id}` over the dedicated Unix admission socket. The broker verifies kernel `SO_PEERCRED` UID 1006, the **actual live session hash/expiry and CSRF hash** from C8 `sessions.sqlite3` in readonly mode, and the owner/project match from `projects.sqlite3` in readonly mode. Foreign, revoked, stale, malformed or extra-field requests are denied. It never treats owner ID from the wire as trusted.
+3. The broker reserves I18/I24 job by verified owner/project, persists exact job->systemd unit before launch, starts the authentic Engine with DynamicUser, and verifies the opened folder **named after the canonical UUID**. The worker currently generates a temporary valid Engine project document in its isolated RuntimeDirectory; this proves project-scoped Engine startup but **does not yet import saved recipe, video sources, edit state or media**. Browser receives only `{state:'ready',project_id,generation}`, without process IDs/paths/units. The broker refuses a second open for an already running owner. `close` reauthorizes the same project and reaps the exact cgroup; the Owner can never issue arbitrary stop operations.
+4. Startup reconciliation of the root broker maintains I24 fail-closed behavior. A failed cleanup cannot release the owner job. Opening may return 409 if a previous Engine is still active or 503 if backend is unavailable. The UI exposes a Close action to avoid idle workers.
+
+## Evidence and limits
+- First test using read-only bind with `ProtectHome=yes`: both real Owner SQLite schemas readable; no Owner HOME access granted otherwise.
+- 18 offline tests + 14 subtests for session/CSRF/catalog/Unix peer and 21 tests + 9 subtests for Owner HTTP and broker contracts; C1/C8 integration compatibility: **33 tests + 9 subtests PASS**. No Google mock inserted into the live portal.
+- Public owner and Pages `HTTP 200`; new open and close routes **401 without session**; fake-session direct Unix message returns `OwnerAdmissionDenied`; both systemd services active; original technical socket ping returns OK; port 8101-8103 Chema unchanged. `main` not modified.
+- On first beta Owner restart a dependency mismatch was detected: production release lacked the optional I13 `owner_engine_gateway` module. Resolved by lazy import **only when its optional controller is actually injected**. Owner restored to `active`, HTTP 200; no auth bypass.
+- The browser-visible positive case still requires **Fernando's real Google session**. No one has impersonated the user or manufactured a session in production. Do NOT claim a real user has clicked.
+- **Not the complete Windows Companion, Stage or MP4 flow**. Currently opening a catalog UUID provisions a *temporary synthetic Engine workspace*, not its existing saved recipe. This is precisely the first real human smoke of authenticated Engine admission; no original media is uploaded.
+- Host Owner process runs with `NoNewPrivileges=1` and zero effective capabilities but UID 1006 is also a human operator with passwordless sudo outside the user service. Not certified for multi-tenant production, and the private feature flag must remain constrained to beta. No cloud-wide networking or root delegation to HTTP.
+
+## Initial human test
+From Windows, open `https://montara-owner.memoriainvalida001.workers.dev/`, sign in with real Google as previously, choose one existing project and click **Abrir Engine (beta)**. Expected `Engine abierto y verificado · generación N`. Click **Cerrar Engine**, expected `Engine cerrado correctamente`. If a 409/503/error occurs, send only the displayed error/screenshot; do not share tokens or secrets. No Companion install/cleaning yet.
+
+## Rollback
+Disable Owner flag by removing `~/.config/systemd/user/montara-owner-beta.service.d/20-i27-private-preview.conf`, `systemctl --user daemon-reload`, `systemctl --user restart montara-owner-beta.service`; the route and buttons then disappear, while login/catalog continue to work. To restore original source files, copy the 3 backed-up originals, remove `owner_broker_preview.py`, restart. The root broker can retain its second socket behind no public route, or remove its own `20-i27-admission.conf` and restore previously saved I26 root-owned service/worker if required. Never remove the active root daemon or its SQLite ledger without a verified cleanup and backup.
+
+## Project boundaries
+`main` belongs to Chema and stays untouched; PR #189 remains draft; GCP Chema services 8101/8102/8103, Cloudflare Page/Worker, originals on local Windows and Companion installations remain unchanged. VM automatic shutdown is outside this task.

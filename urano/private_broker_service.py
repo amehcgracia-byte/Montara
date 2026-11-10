@@ -12,12 +12,15 @@ import os
 import pwd
 import re
 import socket
+import select
+import sqlite3
 import stat
 import stat
 import subprocess
 import time
 from pathlib import Path
 
+from urano.private_owner_admission import verify_owner_and_project,OwnerAdmissionDenied
 from urano.job_recovery_ledger import JobRecoveryLedger,BusyOwner,StaleJob
 from urano.restricted_broker_ipc import authenticate_peer,parse_stop
 from urano.restricted_systemd_broker import (
@@ -27,6 +30,7 @@ from urano.restricted_systemd_broker import (
 OWNER="i26-demo-owner"
 PROJECT="i26-demo-project"
 SOCKET=Path("/run/montara-i26-broker/control.sock")
+OWNER_SOCKET=Path("/run/montara-i27-admission/control.sock")
 LEDGER=Path("/var/lib/montara-i26-broker/jobs.sqlite3")
 READY_FILE="ready.json"
 
@@ -64,8 +68,8 @@ class DemoBroker:
             except Exception:
                 pass  # retain orphaned/stopping state; deny new launch
 
-    def demo_start(self):
-        lease=self.ledger.start_trusted(OWNER,PROJECT)
+    def demo_start(self, owner_id=OWNER, project_id=PROJECT):
+        lease=self.ledger.start_trusted(owner_id,project_id)
         unit=self.ledger.reserve_target_unit(lease)
         try:
             props=fixed_launch_properties(unit,self.bundle)
@@ -77,6 +81,7 @@ class DemoBroker:
                 "/usr/bin/env","/opt/montara-engine/python/bin/python3.11",
                 "-u","/opt/montara/broker/private_broker_worker.py",
                 "/opt/montara-engine",unit,
+                *([project_id] if project_id!=PROJECT else []),
             ])
             cmd(command,timeout=14)
             ready_path=Path("/run")/unit/READY_FILE
@@ -91,7 +96,9 @@ class DemoBroker:
                         marker=json.loads(ready_path.read_text())
                     except (FileNotFoundError,json.JSONDecodeError,PermissionError):
                         marker=None
-                    if marker and marker.get("ready") is True:
+                    if (marker and marker.get("ready") is True and
+                        marker.get("folder")==(
+                            "I26-Synthetic" if project_id==PROJECT else project_id)):
                         uid=marker.get("uid")
                         if isinstance(uid,int) and uid not in (0,os.getuid()):
                             self.ledger.mark_running(lease)
@@ -112,6 +119,20 @@ class DemoBroker:
             except Exception:
                 pass
             raise
+
+    def stop_owner(self, owner_id, project_id):
+        jobs=self.ledger.unverified_for_owner(owner_id)
+        if len(jobs)!=1 or jobs[0].project_id!=project_id:
+            raise StaleJob("No matching project session")
+        current=jobs[0]
+        if current.state in ("starting","running","orphaned"):
+            current=self.ledger.request_stop(current)
+        elif current.state!="stopping":
+            raise StaleJob("Job already stopped")
+        if not self.control.stop_verified(current):
+            raise UnverifiedTarget("Cgroup not empty")
+        self.ledger.confirm_stopped(current,verified_cgroup_empty=True)
+        return {"ok":True,"state":"stopped","project_id":project_id}
 
     def stop(self,payload):
         job_id,generation=parse_stop(payload)
@@ -148,11 +169,34 @@ def dispatch(conn: socket.socket, trusted_uid: int, web_uid: int,
     raise ValueError("Operation not allowed")
 
 
+def dispatch_owner(conn, web_uid:int, owner_db_root:Path, broker:DemoBroker):
+    """Independent session, CSRF and project verification in the root broker."""
+    import struct
+    raw=conn.getsockopt(socket.SOL_SOCKET,socket.SO_PEERCRED,struct.calcsize("3i"))
+    pid,uid,gid=struct.unpack("3i",raw)
+    if pid<=0 or uid!=web_uid:
+        raise PermissionError("Unauthorized browser service account")
+    data=conn.recv(513)
+    if not data or len(data)>384:
+        raise ValueError("Owner frame denied")
+    op,owner_id,project_id=verify_owner_and_project(data,owner_db_root=owner_db_root)
+    if op=="open_owner":
+        result=broker.demo_start(owner_id,project_id)
+        # Do not disclose systemd/worker/unit identifiers to HTTP.
+        return {"ok":True,"project_id":project_id,"state":"ready",
+                "generation":result["generation"]}
+    if op=="close_owner":
+        return broker.stop_owner(owner_id,project_id)
+    raise ValueError("Invalid owner operation")
+
+
 def main():
     parser=argparse.ArgumentParser()
     parser.add_argument("--bundle",required=True)
     parser.add_argument("--trusted-uid",required=True,type=int)
     parser.add_argument("--web-uid",required=True,type=int)
+    parser.add_argument("--web-gid",type=int)
+    parser.add_argument("--owner-db-root")
     args=parser.parse_args()
     if os.geteuid()!=0:
         raise RuntimeError("Only root-owned service may manage the isolated systemd units")
@@ -171,23 +215,52 @@ def main():
     if SOCKET.exists():
         SOCKET.unlink()
     srv=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
+    owner_srv=None
     try:
         srv.bind(str(SOCKET))
         os.chmod(SOCKET,0o660)
         srv.listen(8)
+        if args.owner_db_root:
+            if (args.web_gid is None or args.web_uid<=0 or args.web_gid<=0
+                or Path(args.owner_db_root).is_symlink()):
+                raise ValueError("Invalid owner identity or readonly DB mount")
+            if OWNER_SOCKET.parent.is_symlink():
+                raise RuntimeError("Owner socket path linked")
+            OWNER_SOCKET.parent.mkdir(mode=0o710,parents=True,exist_ok=True)
+            os.chown(OWNER_SOCKET.parent,0,args.web_gid)
+            os.chmod(OWNER_SOCKET.parent,0o710)
+            if OWNER_SOCKET.is_symlink():
+                raise RuntimeError("Owner socket symlink forbidden")
+            OWNER_SOCKET.unlink(missing_ok=True)
+            owner_srv=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
+            owner_srv.bind(str(OWNER_SOCKET))
+            os.chown(OWNER_SOCKET,0,args.web_gid)
+            os.chmod(OWNER_SOCKET,0o660)
+            owner_srv.listen(8)
+        listeners=[srv]+([owner_srv] if owner_srv is not None else [])
         while True:
-            conn,_=srv.accept()
-            with conn:
-                conn.settimeout(5)
-                try:
-                    reply=dispatch(conn,args.trusted_uid,args.web_uid,broker)
-                except (ValueError,TypeError,PermissionError,BusyOwner,StaleJob,UnverifiedTarget,
-                        RuntimeError,subprocess.SubprocessError,TimeoutError,KeyError) as exc:
-                    reply={"ok":False,"error":type(exc).__name__}
-                try:conn.sendall(json.dumps(reply,separators=(",",":")).encode()+b"\n")
-                except (BrokenPipeError,ConnectionResetError):pass
+            ready,_,_=select.select(listeners,[],[])
+            for listener in ready:
+                conn,_=listener.accept()
+                with conn:
+                    conn.settimeout(6)
+                    try:
+                        if listener is srv:
+                            reply=dispatch(conn,args.trusted_uid,args.web_uid,broker)
+                        else:
+                            reply=dispatch_owner(conn,args.web_uid,
+                                Path(args.owner_db_root),broker)
+                    except (ValueError,TypeError,PermissionError,BusyOwner,StaleJob,
+                            UnverifiedTarget,RuntimeError,subprocess.SubprocessError,
+                            TimeoutError,KeyError,sqlite3.Error) as exc:
+                        reply={"ok":False,"error":type(exc).__name__}
+                    try:conn.sendall(json.dumps(reply,separators=(",",":")).encode()+b"\n")
+                    except (BrokenPipeError,ConnectionResetError):pass
     finally:
         srv.close()
+        if owner_srv is not None:
+            owner_srv.close()
+            OWNER_SOCKET.unlink(missing_ok=True)
         SOCKET.unlink(missing_ok=True)
 
 

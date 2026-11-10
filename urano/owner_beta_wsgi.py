@@ -47,6 +47,7 @@ def create_private_owner_beta(
     app = create_owner_api(
         root, settings=preflight.settings, provider=provider,
         enable_dashboard=True,
+        enable_engine_preview=config.get("MONTARA_I27_OWNER_ENGINE_FLAG")=="private",
     )
     origin = preflight.origin
 

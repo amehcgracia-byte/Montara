@@ -22,7 +22,7 @@ input{flex:1;min-width:220px;background:#1b2735;color:white;border:1px solid #64
 ul{list-style:none;padding:0;display:grid;gap:12px}li{padding:18px;border:1px solid #344054;border-radius:12px;background:#1a2635}
 small{display:block;color:#a7b8ce;margin-top:7px}#status[role=alert]{color:#ffd49a}
 </style></head>
-<body><header><strong>MONTARA</strong><button id="logout" type="button">Cerrar sesión</button></header>
+<body data-engine-beta="__ENGINE_BETA__"><header><strong>MONTARA</strong><button id="logout" type="button">Cerrar sesión</button></header>
 <main><h1>Mis proyectos</h1><p>Tu espacio privado. Cada proyecto pertenece a tu cuenta.</p>
 <form id="create"><input id="title" maxlength="120" required aria-label="Nombre del proyecto" placeholder="Nombre del proyecto">
 <button class="primary" type="submit">Crear proyecto</button></form>
@@ -50,7 +50,36 @@ async function load() {
       label.textContent = project.title;
       const detail = document.createElement('small');
       detail.textContent = 'Proyecto privado · ' + project.id;
-      li.append(label, detail); list.append(li);
+      li.append(label, detail);
+      if (document.body.dataset.engineBeta === '1') {
+        const open = document.createElement('button');
+        open.textContent = 'Abrir Engine (beta)';
+        open.type = 'button'; open.style.marginTop = '12px';
+        open.addEventListener('click', async () => {
+          open.disabled = true;
+          status.textContent = 'Abriendo Engine aislado…';
+          try {
+            const result = await api('projects/' + encodeURIComponent(project.id) + '/open',
+              {method:'POST',headers:{Origin:location.origin,'X-Urano-CSRF':await csrf()}});
+            status.textContent = 'Engine abierto y verificado · generación ' + result.generation;
+          } catch (e) { status.textContent = e.message; }
+          finally { open.disabled = false; }
+        });
+        const close = document.createElement('button');
+        close.textContent = 'Cerrar Engine';
+        close.type = 'button'; close.style.marginLeft = '8px';
+        close.addEventListener('click', async () => {
+          close.disabled = true;
+          try {
+            await api('projects/' + encodeURIComponent(project.id) + '/close',
+              {method:'POST',headers:{Origin:location.origin,'X-Urano-CSRF':await csrf()}});
+            status.textContent = 'Engine cerrado correctamente';
+          } catch (e) { status.textContent = e.message; }
+          finally { close.disabled = false; }
+        });
+        li.append(open,close);
+      }
+      list.append(li);
     }
     status.textContent = projects.length ? '' : 'Todavía no tienes proyectos.';
   } catch (e) {
@@ -80,7 +109,8 @@ document.querySelector('#logout').addEventListener('click', async () => {
 load();"""
 
 
-def owner_dashboard_blueprint(sessions: SessionStore, *, https_origin: str) -> Blueprint:
+def owner_dashboard_blueprint(sessions: SessionStore, *, https_origin: str,
+                              enable_engine_preview: bool = False) -> Blueprint:
     bp = Blueprint("urano_owner_dashboard", __name__, url_prefix="/urano/v1")
     @bp.before_request
     def protect():
@@ -91,7 +121,8 @@ def owner_dashboard_blueprint(sessions: SessionStore, *, https_origin: str) -> B
 
     @bp.get("/dashboard")
     def dashboard():
-        response = Response(PAGE, content_type="text/html; charset=utf-8")
+        response = Response(PAGE.replace("__ENGINE_BETA__","1" if enable_engine_preview else "0"),
+                            content_type="text/html; charset=utf-8")
         response.headers["Content-Security-Policy"] = "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["X-Content-Type-Options"] = "nosniff"
