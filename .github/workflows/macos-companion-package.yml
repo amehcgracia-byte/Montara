@@ -1,0 +1,68 @@
+name: Companion native macOS installer
+on:
+  push:
+    branches:
+      - feature/companion-macos-pkg-installer-20261110
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  package:
+    runs-on: macos-15
+    env:
+      INSTALLER_P12: ${{ secrets.MONTARA_APPLE_INSTALLER_P12_B64 }}
+      INSTALLER_PASSWORD: ${{ secrets.MONTARA_APPLE_INSTALLER_P12_PASSWORD }}
+      INSTALLER_IDENTITY: ${{ secrets.MONTARA_APPLE_INSTALLER_IDENTITY }}
+      NOTARY_KEY: ${{ secrets.MONTARA_APPLE_NOTARY_KEY_B64 }}
+      NOTARY_KEY_ID: ${{ secrets.MONTARA_APPLE_NOTARY_KEY_ID }}
+      NOTARY_ISSUER: ${{ secrets.MONTARA_APPLE_NOTARY_ISSUER }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build standard Installer package
+        run: |
+          MONTARA_PKG_VERSION="1.${GITHUB_RUN_NUMBER}.0" bash companion/macos-installer/build.sh
+          pkgutil --check-signature dist/*.pkg || true
+          pkgutil --expand dist/*.pkg /tmp/montara-pkg-expanded
+          test -f /tmp/montara-pkg-expanded/component.pkg
+      - name: Preserve unsigned QA package as private CI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: montara-companion-qa-pkg
+          path: dist/*.pkg
+          retention-days: 7
+      - name: Import Apple Developer ID Installer identity
+        if: env.INSTALLER_P12 != '' && env.INSTALLER_PASSWORD != '' && env.INSTALLER_IDENTITY != '' && env.NOTARY_KEY != '' && env.NOTARY_KEY_ID != '' && env.NOTARY_ISSUER != ''
+        env:
+          KEYCHAIN_PASSWORD: ${{ secrets.MONTARA_BUILD_KEYCHAIN_PASSWORD }}
+        run: |
+          test -n "$KEYCHAIN_PASSWORD"
+          printf '%s' "$INSTALLER_P12" | base64 --decode > /tmp/installer.p12
+          security create-keychain -p "$KEYCHAIN_PASSWORD" /tmp/montara-build.keychain-db
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" /tmp/montara-build.keychain-db
+          security import /tmp/installer.p12 -k /tmp/montara-build.keychain-db -P "$INSTALLER_PASSWORD" -T /usr/bin/productsign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" /tmp/montara-build.keychain-db
+          security list-keychains -d user -s /tmp/montara-build.keychain-db
+          rm -f /tmp/installer.p12
+      - name: Sign notarize and staple distributable package
+        if: env.INSTALLER_P12 != '' && env.INSTALLER_PASSWORD != '' && env.INSTALLER_IDENTITY != '' && env.NOTARY_KEY != '' && env.NOTARY_KEY_ID != '' && env.NOTARY_ISSUER != ''
+        run: |
+          set -euo pipefail
+          original="$(echo dist/*.pkg)"
+          productsign --sign "$INSTALLER_IDENTITY" "$original" "dist/Montara-Companion-signed.pkg"
+          rm "$original"
+          printf '%s' "$NOTARY_KEY" | base64 --decode > /tmp/montara-notary.p8
+          xcrun notarytool submit "dist/Montara-Companion-signed.pkg" \
+            --key /tmp/montara-notary.p8 --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER" --wait
+          rm -f /tmp/montara-notary.p8
+          xcrun stapler staple "dist/Montara-Companion-signed.pkg"
+          spctl --assess --verbose --type install "dist/Montara-Companion-signed.pkg"
+      - name: Publish only signed and notarized release
+        if: env.INSTALLER_P12 != '' && env.INSTALLER_PASSWORD != '' && env.INSTALLER_IDENTITY != '' && env.NOTARY_KEY != '' && env.NOTARY_KEY_ID != '' && env.NOTARY_ISSUER != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="companion-macos-${GITHUB_SHA}"
+          gh release create "$tag" dist/Montara-Companion-signed.pkg \
+            --title "Montara Companion ${GITHUB_SHA:0:8}" \
+            --notes "Developer ID Installer-signed and Apple-notarized macOS Companion for Montara commit ${GITHUB_SHA}. This package runs the version-pinned per-user installer."
