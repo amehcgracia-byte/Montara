@@ -21,13 +21,13 @@ test('Stage framing Save explicitly restricts the patch to one shot', () => {
 test('musician memory remains explicit and opt-in', () => {
   const edit = source.slice(source.indexOf('async function openMusicShot('), source.indexOf('function previewMusicShot('));
   assert.match(edit, /name="rememberMusician"/);
-  assert.match(edit, /field\('rememberMusician'\)\.value\?\{remember_musician:/);
+  assert.match(edit, /field\('markMusician'\)\.checked && field\('rememberMusician'\)\.value\.trim\(\)/);
 });
 
 test('each Stage shot has a movement checkbox, saved without touching siblings', () => {
   const edit = source.slice(source.indexOf('async function openMusicShot('), source.indexOf('function previewMusicShot('));
   assert.match(edit, /type="checkbox" name="movement"/);
-  assert.match(edit, /field\('movement'\)\.checked=doc\.movement !== false/);
+  assert.match(edit, /field\('movement'\)\.checked=doc\.movement===true/);
   assert.match(edit, /movement:field\('movement'\)\.checked/);
 });
 
