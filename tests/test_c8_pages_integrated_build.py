@@ -19,7 +19,8 @@ class PagesBuildContract(unittest.TestCase):
             module.TARGET = target
             module.build()
             self.assertEqual({p.name for p in target.iterdir()}, {'index.html','_headers'})
-            self.assertIn(module.OWNER_URL, (target / 'index.html').read_text())
+            self.assertIn(module.OWNER_BASE + '/login', (target / 'index.html').read_text())
+            self.assertIn(module.OWNER_BASE + '/register', (target / 'index.html').read_text())
             self.assertIn("default-src 'none'", (target / '_headers').read_text())
             with self.assertRaises(RuntimeError):
                 module.build()  # never overwrite an existing output directory

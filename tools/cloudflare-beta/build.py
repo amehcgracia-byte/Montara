@@ -13,7 +13,8 @@ import shutil
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = ROOT / "deployment" / "cloudflare-beta" / "public"
 TARGET = ROOT / "dist"
-OWNER_URL = "https://montara-owner.memoriainvalida001.workers.dev/"
+OWNER_BASE = "https://montara-owner.memoriainvalida001.workers.dev"
+ALLOWED_AUTH_URLS = frozenset((OWNER_BASE + "/login", OWNER_BASE + "/register"))
 
 
 class _Links(HTMLParser):
@@ -35,12 +36,12 @@ def build():
     html = (SOURCE / "index.html").read_text(encoding="utf-8")
     headers = (SOURCE / "_headers").read_text(encoding="utf-8")
     links = _Links(); links.feed(html)
-    parsed = urlsplit(OWNER_URL)
-    if parsed.scheme != "https" or parsed.path != "/" or parsed.query or parsed.fragment:
+    parsed = urlsplit(OWNER_BASE)
+    if parsed.scheme != "https" or parsed.path != "" or parsed.query or parsed.fragment:
         raise RuntimeError("Unsafe pinned owner URL")
-    if links.anchors.count(OWNER_URL) < 2:
-        raise RuntimeError("Visible Google beta entry must point to the approved Owner")
-    if any(link and not link.startswith("#") and link != OWNER_URL for link in links.anchors):
+    if not ALLOWED_AUTH_URLS.issubset(set(links.anchors)):
+        raise RuntimeError("Visible Login and registration must point to the approved Owner routes")
+    if any(link and not link.startswith("#") and link not in ALLOWED_AUTH_URLS for link in links.anchors):
         raise RuntimeError("External link points outside the verified Owner portal")
     if ("Acceso con Google próximamente" in html or "<form" in html or
             "<input" in html or "/api/v1/" in html or
@@ -51,7 +52,7 @@ def build():
     TARGET.mkdir()
     shutil.copyfile(SOURCE / "index.html", TARGET / "index.html")
     shutil.copyfile(SOURCE / "_headers", TARGET / "_headers")
-    print("Montara static landing ready: Google beta entry (no editor or original uploads)")
+    print("Montara static landing ready: login choice entry (no editor or original uploads)")
 
 
 if __name__ == "__main__":

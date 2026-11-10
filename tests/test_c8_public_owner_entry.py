@@ -5,7 +5,8 @@ from urllib.parse import urlsplit
 import unittest
 
 LANDING = Path(__file__).resolve().parents[1] / 'deployment/cloudflare-beta/public/index.html'
-OWNER = 'https://montara-owner.memoriainvalida001.workers.dev/'
+OWNER = 'https://montara-owner.memoriainvalida001.workers.dev'
+ALLOWED = {OWNER + '/login', OWNER + '/register'}
 
 
 class Links(HTMLParser):
@@ -20,17 +21,17 @@ class Links(HTMLParser):
 
 
 class PublicOwnerEntryContract(unittest.TestCase):
-    def test_google_ctas_use_exact_trusted_owner_https_origin(self):
+    def test_login_and_register_ctas_use_exact_trusted_owner_https_origin(self):
         text = LANDING.read_text(encoding='utf8')
         links = Links(); links.feed(text)
         url = urlsplit(OWNER)
-        self.assertEqual((url.scheme, url.path, url.query, url.fragment), ('https', '/', '', ''))
-        google = [a for a in links.anchors if a.get('href') == OWNER]
-        self.assertGreaterEqual(len(google), 2)
+        self.assertEqual((url.scheme, url.path, url.query, url.fragment), ('https', '', '', ''))
+        google = [a.get('href') for a in links.anchors if a.get('href') in ALLOWED]
+        self.assertEqual(set(google), ALLOWED)
         for a in links.anchors:
             href = a.get('href', '')
             self.assertFalse('8101' in href or '8102' in href or '8103' in href or '8114' in href)
-            if not href.startswith('#'): self.assertEqual(href, OWNER)
+            if not href.startswith('#'): self.assertIn(href, ALLOWED)
         self.assertNotIn('Acceso con Google próximamente', text)
         self.assertNotIn('montara-tau.vercel.app', text)
 

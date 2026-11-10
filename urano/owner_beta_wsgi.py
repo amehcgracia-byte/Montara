@@ -13,7 +13,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from flask import Flask, jsonify, redirect, request
+from flask import Flask, Response, jsonify, redirect, request
 
 from urano.c6_beta_preflight import validate_beta_settings
 from urano.minimal_owner_api import create_owner_api
@@ -66,6 +66,45 @@ def create_private_owner_beta(
             request.cookies.get(SESSION_COOKIE))
         return redirect("/urano/v1/dashboard" if session else
                         "/urano/v1/google/start", code=303)
+
+    @app.get("/login")
+    @app.get("/register")
+    def owner_auth_choice():
+        """Small accessible auth entry. Email/password is deliberately NOT enabled."""
+        session = SessionStore(root / "sessions.sqlite3").verify(
+            request.cookies.get(SESSION_COOKIE))
+        if session:
+            return redirect("/urano/v1/dashboard", code=303)
+        registering = request.path == "/register"
+        heading = "Crear cuenta" if registering else "Iniciar sesión"
+        alternate = ('<p>¿Ya tienes cuenta? <a href="/login">Inicia sesión</a></p>'
+                     if registering else
+                     '<p>¿Primera vez en Montara? <a href="/register">Crear cuenta</a></p>')
+        body = """<!doctype html><html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><title>Montara · %s</title>
+<style>:root{color-scheme:dark;font-family:system-ui,sans-serif;background:#0c0d11;color:#f8f6f2}
+*{box-sizing:border-box}body{min-height:100vh;display:grid;place-items:center;margin:0;padding:24px}
+main{width:min(100%%,430px);background:#17171d;border:1px solid #34343c;border-radius:20px;padding:34px}
+h1{font-size:34px;letter-spacing:-.05em;margin:14px 0}p{color:#b3b3bd;line-height:1.5}
+a{color:#ff9b88}a.primary{display:block;background:#ff593e;color:#121218;border-radius:9px;
+text-decoration:none;font-weight:700;padding:15px;text-align:center;margin:24px 0}
+.disabled{padding:16px;border:1px solid #43434d;border-radius:9px;color:#babac3;font-size:14px}
+small{color:#aaaab4}footer{margin-top:28px}footer a{margin-right:18px}</style></head>
+<body><main><strong>MONTARA</strong><h1>%s</h1>
+<p>Accede a tu espacio privado y continúa con tus proyectos.</p>
+<a class="primary" href="/urano/v1/google/start">Continuar con Google</a>
+<div class="disabled" aria-label="Acceso con correo y contraseña no disponible">
+<strong>Correo y contraseña</strong><p>En preparación: verificación de email y recuperación segura.</p>
+<small>No crees una contraseña todavía.</small></div>
+%s<footer><a href="/login">Iniciar sesión</a><a href="/register">Registrarse</a></footer>
+</main></body></html>""" % (heading, heading, alternate)
+        result = Response(body, mimetype="text/html; charset=utf-8")
+        result.headers["Content-Security-Policy"] = (
+            "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; "
+            "form-action 'none'; frame-ancestors 'none'"
+        )
+        return result
 
     @app.get("/healthz")
     def owner_healthz():
