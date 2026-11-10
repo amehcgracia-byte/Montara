@@ -141,6 +141,16 @@ class JobRecoveryLedger:
             raise ValueError('Never release an unverified cgroup')
         return self._transition(lease,('stopping','orphaned'),'stopped')
 
+    def unverified_for_owner(self, owner_id: str) -> tuple[JobLease, ...]:
+        """Trusted read: only a proven-empty worker can clear an owner fence."""
+        owner_id = self._principal(owner_id)
+        with self._connect() as db:
+            rows = db.execute("""SELECT owner_id,project_id,job_id,generation,state
+                FROM urano_engine_jobs WHERE owner_id=?
+                AND state IN ('starting','running','stopping','orphaned')
+                ORDER BY generation""", (owner_id,)).fetchall()
+        return tuple(JobLease(**dict(row)) for row in rows)
+
     def get_trusted(self,job_id:str)->JobLease|None:
         with self._connect() as db:
             row=db.execute('''SELECT owner_id,project_id,job_id,generation,state
