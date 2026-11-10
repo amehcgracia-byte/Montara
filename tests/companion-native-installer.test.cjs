@@ -56,13 +56,15 @@ test('Installer scripts are readable after dropping privileges and failures are 
 });
 
 test('An already-running matching Companion must not be launched again',()=>{
-  assert.match(installer,/if \[ "\$current_engine" = "\$ENGINE_COMMIT" \]; then/);
-  assert.match(installer,/Matching Companion already running on port 47820/);
+  assert.match(installer,/verified.*ENGINE_COMMIT.*managed/);
+  assert.match(installer,/Not starting another Companion/);
   assert.doesNotMatch(installer,/launchctl kickstart -k/);
   assert.match(installer,/<key>KeepAlive<\/key><false\/>/);
 });
 test('A stale listener can only be stopped if idle and owned by the installing user',()=>{
-  assert.match(installer,/d\.get\("busy"\) is False/);
+  assert.match(installer,/d\["busy"\] is False/);
+  assert.match(installer,/pgrep -P "\$pid"/);
+  assert.match(installer,/-sTCP:ESTABLISHED/);
   assert.match(installer,/\$owner" != "\$CONSOLE_USER"/);
   assert.match(installer,/Port 47820 belongs to another process/);
   assert.match(installer,/run_as_owner kill -TERM/);
