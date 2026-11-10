@@ -26,7 +26,10 @@ def test_update_stops_only_its_idle_companion_before_replacing_program(tmp_path,
     command(bin_,'lsof',f'echo {process.pid}')
     command(bin_,'pgrep','exit 1')
     if not own:command(bin_,'ps','echo /another/application.py')
-    command(bin_,'curl',f'touch "{tmp_path}/download-started"; exit 22')
+    command(bin_,'curl',f'''case "$*" in
+  */health*) echo '{{"app":"montara-companion","busy":false}}'; exit 0;;
+esac
+touch "{tmp_path}/download-started"; exit 22''')
     env={**os.environ,'HOME':str(home),'PATH':str(bin_)+os.pathsep+os.environ['PATH'],'MONTARA_NO_SHELL_SETUP':'1'}
     try:
         result=subprocess.run(['bash',str(INSTALLER)],env=env,text=True,capture_output=True,timeout=15)

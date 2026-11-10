@@ -10,7 +10,7 @@ from playwright.sync_api import sync_playwright
 WEB=Path(__file__).resolve().parents[1]/'web'
 
 
-def test_first_three_ready_cards_single_request_and_append_without_rebinding():
+def test_stage_ready_cards_single_request_and_placeholders_without_rebinding():
     entered,release=threading.Event(),threading.Event()
     status={'ready':0,'active':0,'max_active':0,'calls':0,'swaps':0}
     lock=threading.Lock()
@@ -55,7 +55,8 @@ def test_first_three_ready_cards_single_request_and_append_without_rebinding():
             assert page.locator('#making').is_visible() and page.locator('#frameGrid .frame').count()==0
             release.set();page.wait_for_function('framesRequest===null')
             status['ready']=3;page.evaluate('refreshFrames(false)')
-            assert page.locator('#frames').is_visible() and page.locator('#frameGrid .frame').count()==3
+            assert page.locator('#frames').is_visible() and page.locator('#frameGrid .frame').count()==6
+            assert page.locator('#frameGrid .frame:not(.busy)').count()==3
             page.evaluate('window.firstReadyCard=document.querySelector("#frameGrid .frame")')
             status['ready']=6;page.evaluate('refreshFrames(false)')
             assert page.locator('#frameGrid .frame').count()==6
