@@ -598,3 +598,11 @@ body.is-intro .top,body.is-intro footer,body.is-intro #version{visibility:hidden
 .source-note{flex-basis:100%;font-size:12px;color:var(--muted);line-height:1.5}
 
 #resultInfo{overflow-wrap:anywhere}
+
+/* Version-aware Companion installer prompt, visible before any export. */
+.companion-update-notice{border:1px solid var(--accent);border-radius:12px;padding:16px 18px;margin:10px auto 22px;max-width:900px;background:var(--panel);color:var(--text)}
+.companion-update-notice[hidden]{display:none!important}
+.companion-update-notice strong{display:block;margin-bottom:6px}
+.companion-update-notice p{margin:0 0 12px}
+.companion-update-notice .actions{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 10px}
+.companion-update-notice small{display:block;color:var(--muted);line-height:1.5}
