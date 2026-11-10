@@ -19,7 +19,7 @@ class DynamicUserBundleContracts(unittest.TestCase):
         for token in ("DynamicUser=yes","ProtectHome=yes","PrivateNetwork=yes",
                       "NoNewPrivileges=yes","BindReadOnlyPaths=",
                       "MemoryMax=768M","TasksMax=64","CPUQuota=100%",
-                      "RuntimeDirectoryMode=0700","actual!=pinned",
+                      "RuntimeDirectoryMode=0700","sha!=pinned",
                       "production_sandbox_certified"):
             self.assertIn(token,src)
         for forbidden in ("useradd","apt install","systemctl enable","chmod -R 777"):

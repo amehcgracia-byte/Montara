@@ -94,8 +94,15 @@ def test_service(dest, unit):
           "-p","MemoryMax=768M","-p","TasksMax=64","-p","CPUQuota=100%",
           "-p","RuntimeDirectory="+unit,"-p","RuntimeDirectoryMode=0700",
           "-p",f"BindReadOnlyPaths={dest}:/opt/montara-i23",
-          "/opt/montara-i23/python/bin/python3.11","-u","-c",ENGINE_DRIVER,unit]
-    result=command(args,capture_output=True,text=True,timeout=120)
+          "/usr/bin/env","/opt/montara-i23/python/bin/python3.11","-u","-c",ENGINE_DRIVER,unit]
+    result=subprocess.run(args,capture_output=True,text=True,timeout=120)
+    if result.returncode:
+        # Never echo command args (can include sensitive paths). Print bounded
+        # errors from synthetic lab only; no real credentials enter the job.
+        print("I23_SERVICE_EXIT", result.returncode, flush=True)
+        print("I23_SERVICE_STDERR", result.stderr[-2000:], flush=True)
+        print("I23_SERVICE_STDOUT", result.stdout[-1200:], flush=True)
+        raise RuntimeError("DynamicUser Engine service did not complete")
     reports=[x.partition("I23_REPORT:")[2] for x in result.stdout.splitlines()
              if "I23_REPORT:" in x]
     if len(reports)!=1:
