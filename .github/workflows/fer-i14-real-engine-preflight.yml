@@ -1,0 +1,25 @@
+name: FER I14 offline real Engine lab preflight
+on:
+  pull_request:
+    paths:
+      - 'tests/urano_i14_real_engine_lab.py'
+      - 'tests/test_urano_i14_real_engine_lab.py'
+      - '.github/workflows/fer-i14-real-engine-preflight.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  safety-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install pytest 'Flask>=3,<4'
+      - name: Validate opt-in lab and pinned-Engine gates (no actual Engine download)
+        env:
+          PYTHONPATH: tests
+        run: python -m pytest -q tests/test_urano_i14_real_engine_lab.py
+      - run: python -m py_compile tests/urano_i14_real_engine_lab.py
