@@ -12,7 +12,7 @@ test('Music camera editor uses English labels and one name field, never musician
 });
 test('Switching cameras resets the preview from the selected camera, not the prior shot',()=>{
   const start=editor.indexOf("field('camera').onchange");
-  const end=editor.indexOf('    update();',start);
+  const end=editor.indexOf('    const framing=',start);
   const part=editor.slice(start,end+15);
   assert.match(part,/selected\.pose/);
   assert.match(part,/selected\.framing/);
