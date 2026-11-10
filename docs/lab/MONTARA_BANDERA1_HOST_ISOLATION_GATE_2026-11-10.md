@@ -42,3 +42,19 @@ D. Solamente después habilitar el botón «Abrir proyecto» en beta restringida
 El E2E general Linux de I20 falla en el job `session` por test Companion C6 que espera `trusted_signed_receipt_origin`, ausente también en I19 anterior con archivos Companion idénticos. No corregir de forma lateral el Companion de Chema sin coordinarlo. I21 tiene CI propia success. La CI general de I21 seguía in_progress en la última comprobación.
 
 > Esta nota documenta una frontera de seguridad aún no demostrada, **no un sandbox certificado**. `main` y la PR #189 continúan sin fusionar.
+
+## Resultado de I22 — prueba física mínima de UIDs separados (10/11/2026)
+
+**Resultado: PASS de identidad host y acceso cruzado con el núcleo de proyectos REAL; NO es todavía PASS del worker Engine entero.** La VM había sido apagada automáticamente; el usuario la encendió y Gateway volvió a conectar. Owner/Che­ma seguían activos.
+
+- En Ubuntu 24.04, `sudo -n systemd-run --system --pipe --wait --collect --quiet --property=DynamicUser=yes` funciona con servicios **transitorios**, aunque `DynamicUser` en el servicio **systemd --user** había fallado. Este matiz elimina la aparente contradicción de las pruebas anteriores: hay que usar un controlador privilegiado bien delimitado, no exponer `sudo` al servidor web.
+- Dos servicios simultáneos utilizaron **UID host diferentes, 65075 y 62267**, con `ProtectHome=yes`, `NoNewPrivileges=yes`, `ProtectSystem=strict`, `PrivateTmp`, `PrivateDevices`, `PrivateNetwork`, `RestrictSUIDSGID`, `MemoryMax=192M`, `TasksMax=12`, `CPUQuota=100%` y `RuntimeDirectoryMode=0700`.
+- En ambos se montó de forma **read-only exclusivamente una copia temporal (4.2 MiB)** del paquete `engine/core` y se ejecutó `core.project.new_project_document` real con Python de sistema. Ambos escribieron `project.json` en su propio `RuntimeDirectory`.
+- **Prueba adversarial:** propietario A no puede leer el `project.json` de B y viceversa; ningún servicio puede acceder al HOME de operador (Linux responde `PermissionError`, no necesariamente `False`). Ambos servicios terminaron con código 0, se borraron las unidades efímeras. Los originales de Companion y las DB reales no se montaron.
+- **No instalamos** `newuidmap`, `newgidmap`, Docker, LXD, usuarios permanentes ni cambiamos los puertos 8101–8103/8115 o Cloudflare.
+
+**Descubrimiento de empaquetado:** montar directamente con `BindReadOnlyPaths` las carpetas existentes del Engine/venv en HOME a una unidad `DynamicUser` no funciona porque sus permisos son **0700**, correctamente. **No aflojar permisos del HOME ni del venv**. La prueba que sí pasó usó una copia mínima temporal de código sin credenciales, permisos de lectura y un montaje read-only. El runtime completo (Python 3.11, wheels, Engine worker/FFmpeg) aún necesita una distribución compartida readonly, segura y versionada, con carpetas de trabajo individuales bajo `RuntimeDirectory` o workspace asignado al UID del servicio.
+
+**Decisión tras I22:** priorizar **systemd system-level transient services con `DynamicUser`** como candidato práctico sin imagen OCI para la beta pequeña, sujeto a verificación final de worker Engine completo + FFmpeg y su cgroup y a broker de mínimo privilegio. OCI queda alternativa si no supera esta última puerta; no hacer más estudios abstractos. La prueba sintética no autoriza abrir I13 al público. El broker real debe persistir la identidad de la unidad y su generación para reconciliar `I18/I21` tras caída de la VM.
+
+**Único movimiento siguiente (sin eternizar):** montar un bundle ejecutable readonly del Engine con Python y dependencias, lanzar el worker real con `DynamicUser` + sandbox, atestación del UID host/cgroup y cese completo; después unir el broker durable y habilitar con feature flag el botón `Abrir proyecto` para la cuenta Google de FER en beta privada. E2E Companion→Stage→MP4 continúa aparte.
