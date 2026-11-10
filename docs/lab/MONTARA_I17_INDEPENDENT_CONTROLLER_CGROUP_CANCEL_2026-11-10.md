@@ -4,7 +4,7 @@
 
 ## Problema descubierto
 
-En I16 se había demostrado la apertura real del Engine en `systemd-run --user --pipe --wait` con PID namespace, pero al ejecutar un `systemctl --user stop` bloqueante desde el mismo flujo de trabajo el controlador no lograba certificar el final. Se comprobó que **el PID 1 del espacio de procesos no manejaba SIGTERM**; la unidad entraba en `stop-sigterm`, esperaba su timeout por defecto y la llamada `stop` acababa agostando su plazo. La primera prueba de `stop --no-block` también superó el plazo del controlador mientras la unidad seguía en espera.
+En I16 se había demostrado la apertura real del Engine en `systemd-run --user --pipe --wait` con PID namespace, pero al ejecutar un `systemctl --user stop` bloqueante desde el mismo flujo de trabajo el controlador no lograba certificar el final. Se comprobó que **el PID 1 del espacio de procesos no manejaba SIGTERM**; la unidad entraba en `stop-sigterm`, esperaba su timeout por defecto y la llamada `stop` acababa agotando su plazo. La primera prueba de `stop --no-block` también superó el plazo del controlador mientras la unidad seguía en espera.
 
 Una primera prueba concreta con FFmpeg ejecutado sin limitación de hilos provocó un fallo tipo `SEGV` de la unidad antes de completar el Engine; esto **no se considera un éxito**, y se conservaron como observaciones las incidencias. La siguiente prueba utilizó una fuente de audio sintético a velocidad real con FFmpeg y un solo hilo, evitando cargas artificiales de CPU/memoria.
 
@@ -26,6 +26,8 @@ El controlador solo admite detener unidades `montara-i17-target-` + 12 caractere
 - **Tiempo hasta apertura:** ~2,28 segundos; **duración total incluyendo cancelación y confirmación:** ~5,50 segundos.
 - **Memoria pico leída hasta antes de cancelar:** ~94,27 MiB de cgroup; no representa exportaciones/FFmpeg reales ni p95.
 - `forced_cancel_certified=true`, `engine_pids_reaped=true`, `ffmpeg_descendant_reaped=true`, `controller_survived_cancel=true`. No quedó ninguna unidad de target activa.
+
+**Segunda repetición física PASS:** Engine real, FFmpeg detectado (`ffmpeg_processes_before_cancel=1`), 3 PIDs en cgroup antes de detener, `controller_survived_cancel=true`, `engine_pids_reaped=true`, `ffmpeg_descendant_reaped=true`, `cgroup_empty_after_cancel=true`, `forced_cancel_certified=true`. Apertura ~2,95 s, ciclo total ~6,10 s, MemoryPeak 94,15 MiB medido antes de cancelar. Nada persistente.
 
 Se ejecutaron pruebas anteriores con un hijo `sleep` en lugar de FFmpeg, pasando la cancelación completa (~5,82 s), así como dos pruebas que no pudieron certificar la parada con el timeout incorrecto. En el informe se separan explícitamente los fallos previos del resultado PASS.
 
