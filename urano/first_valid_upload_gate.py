@@ -50,7 +50,13 @@ def valid_first_upload(environ, *, max_proxy_bytes: int = 256 * 1024**2,
             return reject("invalid_or_oversize_direct_media")
         if environ.get("CONTENT_TYPE", "").split(";")[0].strip() != "application/octet-stream":
             return reject("invalid_direct_content_type")
-        name = unquote(environ.get("HTTP_X_ZUCKER_FILENAME", ""))
+        raw_name = environ.get("HTTP_X_ZUCKER_FILENAME", "")
+        if not raw_name:
+            return reject("missing_media_filename_header")
+        try:
+            name = unquote(raw_name, errors="strict")
+        except (UnicodeDecodeError, TypeError, ValueError):
+            return reject("invalid_media_filename_encoding")
         if not _FILE_NAME.fullmatch(name):
             return reject("invalid_media_name")
         if Path(name).suffix.lower() not in _SUPPORTED:
