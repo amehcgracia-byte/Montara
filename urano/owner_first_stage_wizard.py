@@ -111,8 +111,14 @@ class OwnerFirstStageWizard:
     def __call__(self, environ, start_response):
         path = environ.get("PATH_INFO")
         method = environ.get("REQUEST_METHOD")
-        if method != "POST" or path not in (
-                "/api/v1/wizard/projects/new", "/api/v1/wizard/draft"):
+        guarded = {
+            "/api/v1/wizard/projects/new",
+            "/api/v1/wizard/draft",
+            "/api/v1/wizard/prepare",
+            "/api/v1/wizard/start",
+            "/api/v1/settings/fillers",
+        }
+        if method != "POST" or path not in guarded:
             return self.app(environ, start_response)
         project = self._opened()
         if project is None:
@@ -138,6 +144,28 @@ class OwnerFirstStageWizard:
             body = json.loads(raw)
             if not isinstance(body, dict):
                 raise ValueError("Invalid editor request")
+            if path == "/api/v1/settings/fillers":
+                source_set = {
+                    str(item.get("path")) for item in
+                    project.data.get("inputs", {}).get("videos", [])
+                    if isinstance(item, dict)
+                }
+                for key in ("fillers", "cutaways"):
+                    provided = body.get(key, [])
+                    if (not isinstance(provided, list)
+                            or len(provided) > 200
+                            or any(not isinstance(item, str)
+                                   or item not in source_set
+                                   for item in provided)):
+                        raise ValueError("Unregistered private Stage filler")
+                # The original Engine owns how filler/role settings work;
+                # only the per-worker source identity is protected here.
+                rewritten = json.dumps(body, separators=(",", ":")).encode()
+                from io import BytesIO
+                env = dict(environ)
+                env["wsgi.input"] = BytesIO(rewritten)
+                env["CONTENT_LENGTH"] = str(len(rewritten))
+                return self.app(env, start_response)
             supplied_id = body.get("project_id")
             if supplied_id not in (None, "", str(self.folder)):
                 raise ValueError("Foreign JM Engine project")
@@ -160,10 +188,35 @@ class OwnerFirstStageWizard:
                     continue
                 if not _vetted_stage_video(supplied, self.folder.parent.parent):
                     raise ValueError("Stage audio must be verified worker uploads")
-            # Initial browser draft supplies null. Once media has been saved,
-            # only an explicit resume of this same physical project is safe.
-            if supplied_id in (None, "") and not self._empty(project):
-                raise ValueError("Existing Owner project must be resumed, not overwritten")
+            # Prepare/start must use only video/audio paths already
+            # registered by this same Owner's verified first Stage draft.
+            if path in ("/api/v1/wizard/prepare", "/api/v1/wizard/start"):
+                if supplied_id != str(self.folder):
+                    raise ValueError("Stage operation requires Owner project")
+                registered = {
+                    str(item.get("path")) for item in
+                    project.data.get("inputs", {}).get("videos", [])
+                    if isinstance(item, dict)
+                }
+                if not registered or not set(videos).issubset(registered):
+                    raise ValueError("Unregistered private Stage camera")
+                registered_audio = set()
+                inp = project.data.get("inputs", {})
+                for key in ("master", "songs"):
+                    item = inp.get(key)
+                    if isinstance(item, dict) and isinstance(item.get("path"), str):
+                        registered_audio.add(item["path"])
+                if any(path not in registered_audio
+                       for path in (body.get("master"), body.get("songs"))
+                       if path):
+                    raise ValueError("Unregistered Stage audio source")
+                if body.get("spherical_source_path"):
+                    raise ValueError("360 source not part of Stage pilot")
+            if path == "/api/v1/wizard/draft":
+                # Initial browser draft supplies null. Once media has been
+                # saved, only resume of this physical project is safe.
+                if supplied_id in (None, "") and not self._empty(project):
+                    raise ValueError("Existing Owner project must be resumed, not overwritten")
         except (TypeError, ValueError, KeyError, UnicodeError):
             return _json_error(start_response, "Invalid private Stage draft", 400)(environ,start_response)
         body["project_id"] = str(self.folder)
