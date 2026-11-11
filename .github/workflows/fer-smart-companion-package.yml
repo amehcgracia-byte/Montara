@@ -126,7 +126,20 @@ jobs:
               throw ('Companion failed exact renderer matching: ' + ($status | ConvertTo-Json -Compress))
             }
             if ($status.busy) { throw 'Companion incorrectly reports active work' }
-            Write-Host 'SMART_WINDOWS_COMPANION_FULL_RENDERER_HEALTH_PASS'
+            $target = 'http://127.0.0.1:47820/not-a-route'
+            $accepted = Invoke-WebRequest -Uri $target -Headers @{
+              Origin = 'https://montara-owner.memoriainvalida001.workers.dev'
+            } -SkipHttpErrorCheck -TimeoutSec 5
+            if ([int]$accepted.StatusCode -ne 404) {
+              throw 'Official Montara beta origin rejected by Companion'
+            }
+            $rejected = Invoke-WebRequest -Uri $target -Headers @{
+              Origin = 'https://untrusted.example'
+            } -SkipHttpErrorCheck -TimeoutSec 5
+            if ([int]$rejected.StatusCode -ne 403) {
+              throw 'Untrusted browser origin incorrectly accepted'
+            }
+            Write-Host 'SMART_WINDOWS_COMPANION_FULL_RENDERER_HEALTH_AND_CORS_PASS'
           } finally {
             if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force }
             $process.Dispose()
