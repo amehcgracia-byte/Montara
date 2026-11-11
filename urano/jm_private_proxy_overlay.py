@@ -53,7 +53,7 @@ def patched_original_resumable_upload(original: str) -> str:
         "limits": ('        return jsonify(max_file_bytes=proxy_limit, '
                    'max_original_file_bytes=limit, chunk_bytes=CHUNK, '
                    'free_bytes=shutil.disk_usage(root).free)'),
-        "size": """        # Large files are admitted only when they are Companion previews.
+        "size": r"""        # Large files are admitted only when they are Companion previews.
         # Manual original uploads keep the standard JM remote 256 MiB limit.
         # A Companion lossless derivative keeps the source audio extension
         # (e.g. song.mp3.flac / song.wav.wv). This is audio, not an
