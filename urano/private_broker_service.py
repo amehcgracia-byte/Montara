@@ -81,7 +81,7 @@ class DemoBroker:
                 "/usr/bin/env","/opt/montara-engine/python/bin/python3.11",
                 "-u","/opt/montara/broker/private_broker_worker.py",
                 "/opt/montara-engine",unit,
-                *([project_id] if project_id!=PROJECT else []),
+                *([project_id,str(lease.generation)] if project_id!=PROJECT else []),
             ])
             cmd(command,timeout=14)
             ready_path=Path("/run")/unit/READY_FILE
