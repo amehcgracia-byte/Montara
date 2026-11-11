@@ -12,7 +12,7 @@ from typing import Protocol
 
 from urano.job_recovery_ledger import JobRecoveryLedger
 from urano.project_catalog import ProjectCatalog, ProjectNotFound
-from urano.editor_project_bridge import project_mode
+from urano.editor_mode import project_mode
 from urano.private_engine_route_contract import (
     PrivateEngineRouteDenied, VerifiedEngineBinding, plan_private_engine_request,
 )
