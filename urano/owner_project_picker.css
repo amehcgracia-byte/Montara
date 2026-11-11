@@ -18,3 +18,12 @@
 .montara-owner-new{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;align-items:center}
 .montara-owner-new input{flex:1 1 180px}
 .montara-owner-new select{flex:0 1 100px}
+
+/* Owner controls belong to the existing Chema header, not a second toolbar. */
+header.top #montaraOwnerProjectsButton{flex-shrink:0}
+header.top #montaraOwnerAccount{margin-left:auto;flex-shrink:0}
+.montara-owner-account{max-width:330px}
+body #sessionResume{display:none!important}
+/* The original global Latest recovery bypasses Owner project authorization.
+   Keep Chema's element and handlers intact but expose only Owner Projects. */
+body #newVideo{display:none!important}
