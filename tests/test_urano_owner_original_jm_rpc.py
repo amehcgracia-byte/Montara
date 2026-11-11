@@ -139,6 +139,37 @@ class JMRealHTTPRPCContracts(unittest.TestCase):
         self.assertEqual(self.ensured,[])
         self.assertEqual(self.connected,[])
 
+    def test_opt_in_large_companion_proxy_but_never_large_original(self):
+        # Reuses the same private lab worker callbacks; no multi-GB bytes
+        # are materialized, only a bounded JSON metadata request.
+        from urano.owner_original_jm_rpc import initial_stage_gateway_blueprint
+        app=Flask("larger-private-proxy")
+        app.register_blueprint(initial_stage_gateway_blueprint(
+            self.catalog,self.sessions,https_origin=ORIGIN,
+            ensure_worker=lambda op,session,csrf,project:{
+                "ok":True,"state":"ready","generation":9,"project_id":project},
+            connect_worker=lambda *args: (_ for _ in ()).throw(
+                RuntimeError("no media transfer in metadata policy test")),
+            private_preview_limit_mib=2048))
+        test=app.test_client()
+        test.set_cookie(
+            SESSION_COOKIE,self.session.token,domain="montara.test")
+        url="/urano/v1/media/"+self.a.id+"/uploads"
+        limits=test.get(url,base_url=ORIGIN,headers=self.headers)
+        self.assertEqual(limits.status_code,200)
+        self.assertEqual(limits.json["max_file_bytes"],2048*1024**2)
+        self.assertEqual(limits.json["max_original_file_bytes"],256*1024**2)
+        accepted=test.post(url,base_url=ORIGIN,headers=self.headers,json={
+            "name":"camera.small.mp4","size":650*1024**2,
+            "fingerprint":"f"*64,"video_preview":True,
+            "original":{"name":"camera.mp4","size":4*1024**3,
+                        "fingerprint":"e"*64}})
+        self.assertEqual(accepted.status_code,503)  # passed metadata gate
+        original=test.post(url,base_url=ORIGIN,headers=self.headers,json={
+            "name":"camera.mp4","size":650*1024**2,
+            "fingerprint":"f"*64,"original_video_consent":True})
+        self.assertEqual(original.status_code,400)
+
     def test_resumable_limits_do_not_start_engine_and_bad_metadata_denied(self):
         limits=self.client.get(self.url("uploads"),
             base_url=ORIGIN,headers=self.headers)
