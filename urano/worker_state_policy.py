@@ -22,10 +22,3 @@ def owner_state_directory(owner_id: str) -> str:
         raise ValueError("Invalid Owner state namespace")
     digest=hashlib.sha256(owner.encode("utf-8")).hexdigest()[:40]
     return "montara-owner-"+digest
-
-
-def owner_state_path(owner_id: str) -> str:
-    """StateDirectory Linux private path; no runtime/lease generation inside."""
-    return "/var/lib/montara-owner-"+hashlib.sha256(
-        ProjectCatalog._principal(owner_id).encode("utf-8")
-    ).hexdigest()[:40]
