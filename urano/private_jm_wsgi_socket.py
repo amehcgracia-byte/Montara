@@ -52,6 +52,12 @@ class VerifiedJMUnixConnection(HTTPConnection):
         self._expected_uid = expected_uid
         super().__init__("localhost", timeout=timeout)
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        self.close()
+
     def connect(self):
         path = self._socket_path
         if path.is_symlink() or path.parent.is_symlink():
