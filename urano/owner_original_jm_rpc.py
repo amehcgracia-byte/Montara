@@ -239,13 +239,25 @@ def initial_stage_gateway_blueprint(
                 # environ, not on a copy whose underlying input was drained.
                 original_path=request.environ["PATH_INFO"]
                 request.environ["PATH_INFO"]=path
+                reject_codes=[]
                 try:
                     valid=valid_first_upload(
-                        request.environ, max_proxy_bytes=preview_limit)
+                        request.environ, max_proxy_bytes=preview_limit,
+                        rejection_codes=reject_codes)
                 finally:
                     request.environ["PATH_INFO"]=original_path
-                if (not valid or content_length>_MAX_VIDEO):
-                    return jsonify(error="Invalid private upload"),400
+                if not valid:
+                    # Policy codes are deliberately bounded: no filenames,
+                    # private paths, fingerprints or raw JSON in responses.
+                    return jsonify(error={
+                        "message":"Private upload rejected ("+
+                                  (reject_codes[0] if reject_codes else "invalid_metadata")+")",
+                        "code":reject_codes[0] if reject_codes else "invalid_metadata"
+                    }),400
+                if content_length>_MAX_VIDEO:
+                    return jsonify(error={
+                        "message":"Private upload metadata exceeds limit",
+                        "code":"oversized_upload_request"}),400
             elif request.method=="PUT":
                 offset=request.headers.get("Upload-Offset","")
                 if (not upload_part or upload_part.group(2)
