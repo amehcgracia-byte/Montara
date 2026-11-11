@@ -131,13 +131,31 @@
   async function csrf(){
     return (await api('session/refresh',{method:'POST'})).csrf;
   }
-  function openProject(p,newProject=false){
+  async function openProject(p,newProject=false){
     const mode=modeOf(p);
     if(mode!=='stage') {message('This project type is not yet available in the Owner beta.');return;}
-    if(!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(p.id))throw Error('Invalid project ID');
+    if(!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(p.id))
+      throw Error('Invalid project ID');
     if(isEditor) {
       const current=location.pathname.match(/\/projects\/([0-9a-f-]{36})\//i)?.[1];
       if(current===p.id){dialog.close();return;}
+    }
+    // A project switch must be admitted BEFORE navigating into Chema's
+    // recovery UI. A 409 stays in this readable modal; never stop an
+    // existing Engine or pretend the network disconnected.
+    if(!newProject) {
+      message('Opening private project…');
+      try {
+        await api('projects/'+encodeURIComponent(p.id)+'/ensure', {
+          method:'POST',
+          headers:{'X-Urano-CSRF':await csrf(),Origin:location.origin}
+        });
+      } catch (error) {
+        message(error.message === 'Engine already busy'
+          ? 'Another project is active. Finish or safely close that project before switching. Nothing has been stopped.'
+          : error.message);
+        return;
+      }
     }
     location.assign('/urano/v1/editor/projects/'+encodeURIComponent(p.id)+'/'+
       (newProject?'?start=stage':'?resume=footage'));
@@ -153,7 +171,7 @@
       const strong=document.createElement('strong');strong.textContent=p.title || 'Untitled project';
       const meta=document.createElement('small');
       meta.textContent=(modes[modeOf(p)]||'Legacy')+(i===0?' · Latest':'');
-      button.append(strong,meta);button.addEventListener('click',()=>openProject(p));
+      button.append(strong,meta);button.addEventListener('click',()=>{openProject(p).catch(error=>message(error.message))});
       li.append(button);list.append(li);
     }
     message(filtered.length?'':'No projects in this area yet.');
@@ -179,7 +197,7 @@
       const result=await api('editor/projects',{method:'POST',
         headers:{'Content-Type':'application/json','X-Urano-CSRF':await csrf()},
         body:JSON.stringify({title:name.value,mode})});
-      openProject(result.project,true);
+      await openProject(result.project,true);
     }catch(error){message(error.message)}
     finally{state.busy=false;create.disabled=false}
   });
