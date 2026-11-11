@@ -119,14 +119,14 @@ def initial_stage_gateway_blueprint(
             elif (request.method=="GET" and operation=="edit/native-recipe"
                   and set(request.args)=={"project_id"}
                   and len(request.args.getlist("project_id"))==1
-                  and request.args["project_id"]):
+                  and request.args["project_id"]=="owner-worker"):
                 # Fixed alias; only the isolated worker resolves its
                 # private physical project. Never echo a browser path.
                 path+="?project_id=owner-worker"
             elif (request.method=="GET" and operation=="edit/native-master"
                   and set(request.args)=={"project_id","revision"}
                   and all(len(request.args.getlist(k))==1 for k in request.args)
-                  and request.args["project_id"]
+                  and request.args["project_id"]=="owner-worker"
                   and re.fullmatch(r"[0-9]{1,10}",request.args["revision"])):
                 # The local isolated worker alone resolves owner-worker into
                 # its trusted physical project directory.
