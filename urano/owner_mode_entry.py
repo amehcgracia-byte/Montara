@@ -74,7 +74,24 @@ async function stage() {
       // storage as an authorization source.
       let selected=null;
       try {selected=sessionStorage.getItem('montara-owner-selected-stage');}catch {}
-      const current=result.projects.find(p=>p.id===selected) || result.projects[0];
+      let current=result.projects.find(p=>p.id===selected) || result.projects[0];
+      // A broker-owned worker takes precedence over tab memory or Latest.
+      // This read-only check does not launch or stop any Engine process.
+      const engine=await api('projects/'+encodeURIComponent(current.id)+'/engine-state',{
+        headers:{'X-Urano-CSRF':await csrf()}
+      });
+      if(engine.state==='unknown') {
+        notice('The private Engine could not be verified. No project was switched.');
+        return;
+      }
+      if(engine.state==='on' && engine.active_project?.id) {
+        const active=result.projects.find(p=>p.id===engine.active_project.id);
+        if(!active) {
+          notice('The active Engine project is not available in your Stage catalog.');
+          return;
+        }
+        current=active;
+      }
       openEditor(current.id, true);
       return;
     }
