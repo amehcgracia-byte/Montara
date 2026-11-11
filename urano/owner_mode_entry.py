@@ -67,6 +67,9 @@ document.querySelectorAll('[data-intent]').forEach(button => {
   button.addEventListener('click', () => choices(button.dataset.intent));
 });
 document.querySelector('#modeQuestionBack').addEventListener('click', ()=>choices('root'));
+document.querySelector('header.top .brand').addEventListener('click', event => {
+  event.preventDefault(); choices('root'); notice('');
+});
 document.querySelectorAll('[data-platform]').forEach(button => {
   button.addEventListener('click', () => {
     if (button.dataset.platform === 'youtube') stage();
@@ -122,7 +125,7 @@ def owner_mode_entry_blueprint(*, sessions: SessionStore, https_origin: str,
     if header.count(new_project) != 1:
         raise ValueError("Pinned Chema header action changed")
     header = header.replace(new_project,
-        '<button class="btn ghost small" id="ownerLogout" type="button">Salir</button>')
+        '<button class="btn ghost small" id="ownerLogout" type="button">Sign out</button>')
     # Project button is inserted by the shared picker, not duplicated here.
 
     page = ('''<!doctype html><html lang="es"><head><meta charset="utf-8">
