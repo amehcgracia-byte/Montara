@@ -112,6 +112,35 @@ class VerifiedJMUnixConnection(HTTPConnection):
             connection.close()
             raise
 
+    def post_first_stage_json(self, path: str, body: dict):
+        """Initially only the original JM first Stage wizard handoff.
+
+        Still requires *outer* verified Owner, project and active generation.
+        Videos must already be vetted proxy paths inside this worker's root.
+        Never accept a client-supplied worker address or arbitrary JM route.
+        """
+        if path not in ("/api/v1/wizard/projects/new", "/api/v1/wizard/draft"):
+            raise PermissionError("JM mutation not admitted")
+        if not isinstance(body, dict):
+            raise ValueError("Invalid Stage draft payload")
+        import json
+        try:
+            encoded = json.dumps(
+                body, separators=(",", ":"), allow_nan=False).encode()
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Invalid JM editor JSON") from exc
+        if len(encoded) > 256_000:
+            raise ValueError("Stage draft metadata too large")
+        self.request("POST", path, body=encoded, headers={
+            "Content-Type": "application/json",
+            "Cache-Control": "no-store",
+        })
+        response = self.getresponse()
+        data = response.read(1_000_001)
+        if len(data) > 1_000_000:
+            raise ValueError("Unbounded private JM response")
+        return response.status, response.getheader("Content-Type"), data
+
     def get_safe_read(self, path: str):
         # This first bridge deliberately does not tunnel mutating JM requests,
         # media uploads, previews or arbitrary paths. Add reviewed policies
