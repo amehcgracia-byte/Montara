@@ -220,11 +220,31 @@
         if (!response.ok) {
           const failure = await response.json().catch(() => ({}));
           const status = response.status;
+          let activeTitle = null;
+          if(status === 409) {
+            // Only read the authoritative broker state for this Google owner.
+            // Never attempt a stop, switch or implicit worker creation.
+            try {
+              const info = await nativeFetch(
+                '/urano/v1/projects/' + project + '/engine-state', {
+                  method:'GET',credentials:'same-origin',
+                  headers:{'X-Urano-CSRF':token}
+                });
+              if(info.ok) {
+                const observed = await info.json();
+                if(observed.state==='on' && observed.active_project?.title)
+                  activeTitle=observed.active_project.title;
+              }
+            }catch{}
+          }
           const message = status === 409
-            ? 'Este usuario ya tiene otro proyecto abierto en el Engine privado. El trabajo activo no se cerrará automáticamente.'
+            ? (activeTitle
+                ? 'The private Engine is working on “'+activeTitle+
+                  '”. Open that Stage from the Engine indicator. No work was stopped.'
+                : 'Another Stage owns this private Engine. No work was stopped.')
             : status === 401 || status === 403
-            ? 'La sesión privada ha caducado o cambiado. Vuelve a entrar con Google y abre el proyecto.'
-            : 'El Engine privado no ha podido abrir este proyecto. No se han modificado sus archivos.';
+            ? 'Your private session needs to be refreshed. Sign in with Google again.'
+            : 'The private Engine could not open this project. No files were modified.';
           const error = new Error(message);
           error.status = status >= 400 && status <= 599 ? status : 503;
           error.ownerReason = typeof failure.error === 'string' ? failure.error : '';
