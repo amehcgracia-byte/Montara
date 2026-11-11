@@ -8,6 +8,7 @@ Only original static assets; NO media, JM API or public upload is exposed here.
 """
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 from flask import Blueprint, Response, abort, make_response, request, send_from_directory
@@ -26,6 +27,13 @@ def original_editor_assets_blueprint(
     if not root.is_dir() or not (root / "index.html").is_file():
         raise ValueError("Original JM web bundle is unavailable")
     manifest = pinned_jm_static_assets(root)
+    # The native Plans preview is HTML and intentionally absent from the
+    # generic static manifest. Pin its bytes and serve it ONLY via one
+    # authenticated Owner-scoped route.
+    plans_path = root / "plans.html"
+    plans_sha = (hashlib.sha256(plans_path.read_bytes()).hexdigest()
+                 if plans_path.is_file() and not plans_path.is_symlink()
+                 else None)
     if "/montara.js" not in manifest or "/companion.js" not in manifest:
         raise ValueError("Not a complete original Chema editor bundle")
     bp = Blueprint("urano_original_jm_owner_assets", __name__,
@@ -88,7 +96,7 @@ def original_editor_assets_blueprint(
         # asset scope; the global /montara/plans endpoint is intentionally
         # NOT exposed to anonymous users.
         plans_link = 'href="/montara/plans"'
-        if original.count(plans_link) == 1 and "/plans.html" in manifest:
+        if original.count(plans_link) == 1 and plans_sha is not None:
             original = original.replace(plans_link, 'href="plans.html"', 1)
         # Owner has its own catalog title; this field names the exported video.
         output_name = 'Project name <input id="videoName"'
@@ -106,6 +114,27 @@ def original_editor_assets_blueprint(
         response.headers["X-Content-Type-Options"]="nosniff"
         response.headers["X-Frame-Options"]="DENY"
         return response
+
+    @bp.get("/<project_id>/plans.html")
+    def plans_preview(project_id: str):
+        authorize(project_id)
+        if (not enable_browser_pilot or plans_sha is None
+                or plans_path.is_symlink() or not plans_path.is_file()):
+            abort(404)
+        content = plans_path.read_bytes()
+        if hashlib.sha256(content).hexdigest() != plans_sha:
+            abort(503)
+        # Keep Chema's original simulator, but its links and script must
+        # remain scoped to the authenticated Owner project. No billing,
+        # shared worker operation or public HTML route is introduced.
+        page=content.decode("utf-8")
+        page=page.replace('src="/plans.js"', 'src="plans.js"')
+        page=page.replace('href="https://montara-tau.vercel.app/"',
+                          'href="./"')
+        return Response(page, mimetype="text/html",
+                        headers={"Cache-Control":"private, no-store",
+                                 "X-Frame-Options":"DENY",
+                                 "X-Content-Type-Options":"nosniff"})
 
     @bp.get("/<project_id>/owner-bridge.js")
     def bridge(project_id: str):
