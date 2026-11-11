@@ -56,7 +56,7 @@ _MAX_RESULT = 1_000_000
 _UPLOAD_PART = re.compile(r"uploads/([a-f0-9]{32})(/finish)?\Z")
 _MAX_CHUNK = 16 * 1024 * 1024
 _PREVIEW = re.compile(r"wizard/review/preview/([0-9]{1,5})\\Z")
-_THUMB = re.compile(r"wizard/review/thumbnail/([0-9a-f]{16,128})/([A-Za-z0-9_.-]{1,180})\\Z")
+_THUMB = re.compile(r"wizard/review/thumbnail/(assets-v2|[0-9a-f]{16,128})/([A-Za-z0-9_.-]{1,180})\\Z")
 _MAX_PREVIEW = 128 * 1024 * 1024
 
 
@@ -114,6 +114,12 @@ def initial_stage_gateway_blueprint(
                   and len(request.args.getlist("project_id"))==1
                   and request.args["project_id"]):
                 # Do not expose actual worker filesystem paths.
+                pass
+            elif (request.method=="GET" and bool(preview_part)
+                  and set(request.args)=={"v"}
+                  and len(request.args.getlist("v"))==1
+                  and re.fullmatch(r"[A-Za-z0-9_.-]{0,80}",request.args["v"])):
+                # Cache-busting parameters are never used as file paths.
                 pass
             else:
                 return jsonify(error="Unsupported private project query"),404
