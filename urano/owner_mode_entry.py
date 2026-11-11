@@ -45,24 +45,7 @@ function choices(kind) {
     kind === 'music' ? 'What does your music need?' : 'What would you like to make?';
 }
 async function stage() {
-  modeSection.hidden = true;
-  projectSection.hidden = false;
-  notice('Cargando tus proyectos Stage…');
-  try {
-    const result = await api('editor/projects?mode=stage');
-    projectList.replaceChildren();
-    for (const project of result.projects) {
-      const row = document.createElement('li');
-      const button = document.createElement('button');
-      button.type='button';
-      button.className='btn ghost';
-      button.textContent = project.title;
-      button.addEventListener('click', () => openEditor(project.id));
-      row.append(button);
-      projectList.append(row);
-    }
-    notice(result.projects.length ? '' : 'Aún no tienes proyectos Stage.');
-  } catch (error) { notice(error.message); }
+  window.MontaraProjectPicker.open('stage');
 }
 document.querySelectorAll('[data-intent]').forEach(button => {
   button.addEventListener('click', () => choices(button.dataset.intent));
@@ -80,7 +63,7 @@ document.querySelectorAll('[data-audio-task]').forEach(button => {
 document.querySelector('#ownerBack').addEventListener('click', () => {
   projectSection.hidden=true; modeSection.hidden=false; choices('video'); notice('');
 });
-document.querySelector('#ownerShowProjects').addEventListener('click', stage);
+// Shared picker owns the header button and all contextual project lists.
 document.querySelector('#ownerCreateForm').addEventListener('submit', async event => {
   event.preventDefault();
   createButton.disabled=true; notice('Creando proyecto privado…');
@@ -124,7 +107,7 @@ def owner_mode_entry_blueprint(*, sessions: SessionStore, https_origin: str,
         raise ValueError("Pinned Chema header action changed")
     header = header.replace(new_project,
         '<button class="btn ghost small" id="ownerLogout" type="button">Salir</button>')
-    header = header.replace('</a>', '</a><button class="btn ghost small" id="ownerShowProjects" type="button">Mis proyectos</button>', 1)
+    // Project button is inserted by the shared picker, not duplicated here.
 
     page = ('''<!doctype html><html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -132,6 +115,7 @@ def owner_mode_entry_blueprint(*, sessions: SessionStore, https_origin: str,
 <link rel="icon" href="/urano/v1/entry/assets/mark.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/urano/v1/entry/assets/montara.css">
 <link rel="stylesheet" href="/urano/v1/entry/assets/push-pack.css">
+<link rel="stylesheet" href="/urano/v1/entry/picker.css">
 </head><body><header class="top">''' + header + '''</header>
 <main><section class="screen" id="mode">''' + mode + '''</section>
 <section class="screen" id="ownerProjects" hidden>
@@ -144,6 +128,7 @@ def owner_mode_entry_blueprint(*, sessions: SessionStore, https_origin: str,
 </form>
 <button class="btn ghost" id="ownerBack" type="button">Volver a modalidades</button>
 </section><p class="hint" role="status" id="ownerMessage" aria-live="polite"></p></main>
+<script src="/urano/v1/entry/picker.js"></script>
 <script src="/urano/v1/entry.js"></script></body></html>''')
 
     bp = Blueprint("urano_owner_mode_entry", __name__)
@@ -167,6 +152,17 @@ def owner_mode_entry_blueprint(*, sessions: SessionStore, https_origin: str,
     def entry_js():
         allowed()
         return Response(SCRIPT, content_type="application/javascript; charset=utf-8")
+
+    @bp.get("/urano/v1/entry/picker.js")
+    @bp.get("/urano/v1/entry/picker.css")
+    def picker_asset():
+        allowed()
+        name = "owner_project_picker.js" if request.path.endswith(".js") else "owner_project_picker.css"
+        source = Path(__file__).with_name(name)
+        response = Response(source.read_bytes(),
+            mimetype="application/javascript" if name.endswith(".js") else "text/css")
+        response.headers["Cache-Control"] = "private, no-store"
+        return response
 
     @bp.get("/urano/v1/entry/assets/<filename>")
     def entry_asset(filename: str):
