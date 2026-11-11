@@ -96,7 +96,7 @@ def patched_reviewed_private_audio_overlay(reviewed: str) -> str:
         # before .flac/.wv. Match the existing configured PRIVATE proxy cap;
         # standalone audio files and video originals retain remote limit.
         lossless_audio = bool(isinstance(name, str) and re.search(
-            r"\\.(?:wav|aif|aiff|mp3|m4a|flac|ogg|opus|wv)\\.(?:flac|wv)\\Z",
+            r"\.(?:wav|aif|aiff|mp3|m4a|flac|ogg|opus|wv)\.(?:flac|wv)\Z",
             name, re.IGNORECASE))
         video_proxy = bool(body.get('video_preview') is True
             and isinstance(name, str) and name.lower().endswith('.small.mp4'))
