@@ -8,6 +8,7 @@ on:
       - 'companion/windows_video_jobs_compat.py'
       - 'companion/windows_tray_smart.ps1'
       - 'companion/INSTALAR-RENDER-SMART.ps1'
+      - 'tests/test_smart_windows_native_render_smoke.py'
       - '.github/workflows/fer-smart-companion-package.yml'
   workflow_dispatch:
 
@@ -17,7 +18,7 @@ permissions:
 jobs:
   package-windows-companion:
     runs-on: windows-latest
-    timeout-minutes: 18
+    timeout-minutes: 24
     steps:
       - uses: actions/checkout@v4
         with:
@@ -143,6 +144,16 @@ jobs:
           } finally {
             if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force }
             $process.Dispose()
+          }
+      - name: Render an actual 1080p MP4 on Windows from local originals
+        shell: pwsh
+        run: |
+          $env:LOCALAPPDATA = Join-Path $env:RUNNER_TEMP 'montara-localappdata'
+          $env:PATH = "C:\\ProgramData\\chocolatey\\bin;" + $env:PATH
+          $env:MONTARA_SMART_PACKAGE_ROOT = Join-Path $env:RUNNER_TEMP 'smart-unpacked\\Montara-SMART-Beta'
+          python tests/test_smart_windows_native_render_smoke.py
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Native Windows original-to-MP4 render failed'
           }
       - name: Upload complete private beta ZIP
         uses: actions/upload-artifact@v4
