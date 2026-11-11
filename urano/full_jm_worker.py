@@ -24,13 +24,18 @@ from urano.private_stage_unix_transport import serve_stage_socket
 def serve_original_jm_worker(
     *, engine_root: Path, jm_root: Path, data_root: Path,
     project_id: str, generation: int, on_ready,
+    runtime_root: Path | None = None,
 ):
     """Blocking private WSGI worker; invoked only after root-broker launch."""
     engine_root = Path(engine_root).resolve(strict=True)
     jm_root = Path(jm_root).resolve(strict=True)
     data_root = Path(data_root).resolve(strict=True)
+    runtime_root = (data_root if runtime_root is None
+                    else Path(runtime_root).resolve(strict=True))
     if (type(generation) is not int or generation < 1
             or jm_root.is_symlink() or data_root.is_symlink()
+            or runtime_root.is_symlink()
+            or (runtime_root.stat().st_mode & 0o077)
             or (data_root.stat().st_mode & 0o077)
             or (jm_root / "engine").resolve(strict=True)
                  != (engine_root / "engine").resolve(strict=True)):
@@ -67,14 +72,14 @@ def serve_original_jm_worker(
     # All original UI/Engine routes stay inside this process. The broker hands
     # the authorized gateway one connected descriptor per request.
     app_wsgi = OwnerFirstStageWizard(app, owner_project_folder=folder)
-    server, sock_path = create_private_jm_wsgi_server(app_wsgi, data_root)
+    server, sock_path = create_private_jm_wsgi_server(app_wsgi, runtime_root)
     status_ready = threading.Event()
     status_errors = []
 
     def status_server():
         try:
             serve_stage_socket(
-                data_root, project_id=project_id, generation=generation,
+                runtime_root, project_id=project_id, generation=generation,
                 trusted_broker_uid=0,
                 read_snapshot=lambda: private_stage_snapshot(
                     app.test_client(), folder),
