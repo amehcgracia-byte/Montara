@@ -62,8 +62,21 @@ class SystemdDirect:
 
 
 class DemoBroker:
-    def __init__(self,bundle,*,jm_bundle=None,resources=None,private_preview_limit_mib=256):
+    def __init__(self,bundle,*,jm_bundle=None,resources=None,private_preview_limit_mib=256,worker_script=None):
         self.bundle=Path(bundle)
+        # Fixed operator runner; never taken from an HTTP or owner frame.
+        if worker_script is None:
+            worker_script="/opt/montara/broker/private_broker_worker.py"
+        if worker_script not in (
+            "/opt/montara/broker/private_broker_worker.py",
+            "/opt/montara/broker-smart-candidate/private_broker_worker.py",
+        ):
+            raise ValueError("Unapproved root-owned worker runner")
+        selected=Path(worker_script)
+        if (selected.is_symlink() or not selected.is_file()
+                or selected.stat().st_uid!=0 or selected.stat().st_mode & 0o022):
+            raise ValueError("Untrusted private worker runner")
+        self.worker_script=worker_script
         self.jm_bundle=Path(jm_bundle) if jm_bundle is not None else None
         from urano.jm_private_proxy_overlay import private_proxy_limit_mib
         self.private_preview_limit_mib=private_proxy_limit_mib(private_preview_limit_mib)
@@ -94,7 +107,7 @@ class DemoBroker:
                 command.extend(["-p",prop])
             command.extend([
                 "/usr/bin/env","/opt/montara-engine/python/bin/python3.11",
-                "-u","/opt/montara/broker/private_broker_worker.py",
+                "-u",self.worker_script,
                 "/opt/montara-engine",unit,
                 *([project_id,str(lease.generation)] if project_id!=PROJECT else []),
                 *(["--jm-bundle","/opt/montara-jm",
@@ -296,6 +309,7 @@ def main():
     parser.add_argument("--worker-cpu-percent",type=int,default=100)
     parser.add_argument("--worker-tasks-max",type=int,default=64)
     parser.add_argument("--private-proxy-limit-mib",type=int,default=256)
+    parser.add_argument("--worker-script")
     args=parser.parse_args()
     if os.geteuid()!=0:
         raise RuntimeError("Only root-owned service may manage the isolated systemd units")
@@ -339,7 +353,8 @@ def main():
     resources=WorkerResourceProfile(args.worker_memory_mb,args.worker_cpu_percent,
                                     args.worker_tasks_max)
     broker=DemoBroker(args.bundle,jm_bundle=args.jm_bundle,resources=resources,
-                      private_preview_limit_mib=args.private_proxy_limit_mib)
+                      private_preview_limit_mib=args.private_proxy_limit_mib,
+                      worker_script=args.worker_script)
     if SOCKET.is_symlink():
         raise RuntimeError("Socket symlink forbidden")
     if SOCKET.exists():
