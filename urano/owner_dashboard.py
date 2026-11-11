@@ -22,7 +22,7 @@ input{flex:1;min-width:220px;background:#1b2735;color:white;border:1px solid #64
 ul{list-style:none;padding:0;display:grid;gap:12px}li{padding:18px;border:1px solid #344054;border-radius:12px;background:#1a2635}
 small{display:block;color:#a7b8ce;margin-top:7px}#status[role=alert]{color:#ffd49a}
 </style></head>
-<body data-engine-beta="__ENGINE_BETA__"><header><strong>MONTARA</strong><button id="logout" type="button">Cerrar sesión</button></header>
+<body data-engine-beta="__ENGINE_BETA__" data-original-editor="__ORIGINAL_JM__"><header><strong>MONTARA</strong><button id="logout" type="button">Cerrar sesión</button></header>
 <main><h1>Mis proyectos</h1><p>Tu espacio privado. Cada proyecto pertenece a tu cuenta.</p>
 <form id="create"><input id="title" maxlength="120" required aria-label="Nombre del proyecto" placeholder="Nombre del proyecto">
 <button class="primary" type="submit">Crear proyecto</button></form>
@@ -51,7 +51,20 @@ async function load() {
       const detail = document.createElement('small');
       detail.textContent = 'Proyecto privado · ' + project.id;
       li.append(label, detail);
-      if (document.body.dataset.engineBeta === '1') {
+      if (document.body.dataset.originalEditor === '1') {
+        if (project.recipe?.montara_beta_workspace?.mode === 'stage') {
+          const editorLink = document.createElement('a');
+          editorLink.href = '/urano/v1/editor/projects/' + encodeURIComponent(project.id) + '/';
+          editorLink.textContent = 'Abrir Stage';
+          editorLink.className = 'editor-link';
+          editorLink.style.cssText = 'display:inline-block;margin-top:14px;margin-right:12px;color:#ff9e80;font-weight:700';
+          li.append(editorLink);
+        } else {
+          const note = document.createElement('small');
+          note.textContent = 'Proyecto anterior conservado; no se convertirá automáticamente en Stage.';
+          li.append(note);
+        }
+      } else if (document.body.dataset.engineBeta === '1') {
         const editorLink = document.createElement('a');
         editorLink.href = '/urano/v1/workspace?project=' + encodeURIComponent(project.id);
         editorLink.textContent = 'Entrar al estudio';
@@ -59,7 +72,7 @@ async function load() {
         editorLink.style.cssText = 'display:inline-block;margin-top:14px;margin-right:12px;color:#ff9e80;font-weight:700';
         li.append(editorLink);
       }
-      if (document.body.dataset.engineBeta === '1') {
+      if (document.body.dataset.engineBeta === '1' && document.body.dataset.originalEditor !== '1') {
         const open = document.createElement('button');
         open.textContent = 'Abrir Engine (beta)';
         open.type = 'button'; open.style.marginTop = '12px';
@@ -103,9 +116,18 @@ document.querySelector('#create').addEventListener('submit', async event => {
   const title = document.querySelector('#title');
   const button = event.submitter; button.disabled = true;
   try {
-    await api('projects',{method:'POST',headers:{'Content-Type':'application/json','X-Urano-CSRF':await csrf()},
-      body:JSON.stringify({title:title.value})});
-    title.value = ''; await load();
+    const pilot = document.body.dataset.originalEditor === '1';
+    const created = await api(pilot ? 'editor/projects' : 'projects',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','X-Urano-CSRF':await csrf(),Origin:location.origin},
+      body:JSON.stringify(pilot ? {title:title.value,mode:'stage'} : {title:title.value}),
+    });
+    title.value = '';
+    if (pilot) {
+      location.assign('/urano/v1/editor/projects/' + encodeURIComponent(created.project.id) + '/');
+      return;
+    }
+    await load();
   } catch (e) {status.textContent = e.message;} finally {button.disabled = false;}
 });
 document.querySelector('#logout').addEventListener('click', async () => {
@@ -118,7 +140,8 @@ load();"""
 
 
 def owner_dashboard_blueprint(sessions: SessionStore, *, https_origin: str,
-                              enable_engine_preview: bool = False) -> Blueprint:
+                              enable_engine_preview: bool = False,
+                              original_jm_pilot: bool = False) -> Blueprint:
     bp = Blueprint("urano_owner_dashboard", __name__, url_prefix="/urano/v1")
     @bp.before_request
     def protect():
@@ -129,7 +152,8 @@ def owner_dashboard_blueprint(sessions: SessionStore, *, https_origin: str,
 
     @bp.get("/dashboard")
     def dashboard():
-        response = Response(PAGE.replace("__ENGINE_BETA__","1" if enable_engine_preview else "0"),
+        response = Response(PAGE.replace("__ENGINE_BETA__","1" if enable_engine_preview else "0")
+                            .replace("__ORIGINAL_JM__","1" if original_jm_pilot else "0"),
                             content_type="text/html; charset=utf-8")
         response.headers["Content-Security-Policy"] = "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
         response.headers["X-Frame-Options"] = "DENY"
