@@ -32,7 +32,8 @@ from urano.private_editor_fd_handoff import (
 from urano.job_recovery_ledger import JobRecoveryLedger,BusyOwner,StaleJob
 from urano.restricted_broker_ipc import authenticate_peer,parse_stop
 from urano.restricted_systemd_broker import (
-    RestrictedTargetControl,expected_cgroup,fixed_launch_properties,UnverifiedTarget
+    RestrictedTargetControl,expected_cgroup,fixed_launch_properties,UnverifiedTarget,
+    WorkerResourceProfile
 )
 
 OWNER="i26-demo-owner"
@@ -61,9 +62,10 @@ class SystemdDirect:
 
 
 class DemoBroker:
-    def __init__(self,bundle,*,jm_bundle=None):
+    def __init__(self,bundle,*,jm_bundle=None,resources=None):
         self.bundle=Path(bundle)
         self.jm_bundle=Path(jm_bundle) if jm_bundle is not None else None
+        self.resources=resources if resources is not None else WorkerResourceProfile()
         self.ledger=JobRecoveryLedger(LEDGER)
         self.control=RestrictedTargetControl(self.ledger,SystemdDirect())
         # Recover ONLY exact I24 names recorded before a crash. No TTL.
@@ -81,7 +83,8 @@ class DemoBroker:
         lease=self.ledger.start_trusted(owner_id,project_id)
         unit=self.ledger.reserve_target_unit(lease)
         try:
-            props=fixed_launch_properties(unit,self.bundle,jm_bundle=self.jm_bundle)
+            props=fixed_launch_properties(unit,self.bundle,jm_bundle=self.jm_bundle,
+                                          resources=self.resources)
             command=["/usr/bin/systemd-run","--system","--no-block","--collect",
                 "--quiet","--unit="+unit]
             for prop in props:
@@ -100,8 +103,8 @@ class DemoBroker:
                 details=self.control.systemd.show(unit)
                 if details.get("ControlGroup")==expected_cgroup(unit) and (
                     details.get("ActiveState")=="active" and
-                    details.get("MemoryMax")==str(768*1048576) and
-                    details.get("TasksMax")=="64"):
+                    details.get("MemoryMax")==str(self.resources.memory_mb*1048576) and
+                    details.get("TasksMax")==str(self.resources.tasks_max)):
                     try:
                         marker=json.loads(ready_path.read_text())
                     except (FileNotFoundError,json.JSONDecodeError,PermissionError):
@@ -284,6 +287,9 @@ def main():
     parser.add_argument("--web-gid",type=int)
     parser.add_argument("--owner-db-root")
     parser.add_argument("--jm-bundle")
+    parser.add_argument("--worker-memory-mb",type=int,default=768)
+    parser.add_argument("--worker-cpu-percent",type=int,default=100)
+    parser.add_argument("--worker-tasks-max",type=int,default=64)
     args=parser.parse_args()
     if os.geteuid()!=0:
         raise RuntimeError("Only root-owned service may manage the isolated systemd units")
@@ -306,7 +312,9 @@ def main():
                 or not (jm/"web/montara.js").is_file()
                 or not (jm/"web/companion.js").is_file()):
             raise ValueError("Private JM bundle must be root-owned and complete")
-    broker=DemoBroker(args.bundle,jm_bundle=args.jm_bundle)
+    resources=WorkerResourceProfile(args.worker_memory_mb,args.worker_cpu_percent,
+                                    args.worker_tasks_max)
+    broker=DemoBroker(args.bundle,jm_bundle=args.jm_bundle,resources=resources)
     if SOCKET.is_symlink():
         raise RuntimeError("Socket symlink forbidden")
     if SOCKET.exists():
