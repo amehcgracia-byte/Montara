@@ -30,3 +30,11 @@
 ## Comandos de laboratorio (solo autorizados)
 
 Ejemplo en VM, con Python del bundle y checkout temporal de la rama, `PYTHONPATH` apuntando al código de la rama, `--execute` y bundle pinneado. **No utilizar en servicios activos ni en ordenadores de usuarios.** Los scripts fallan sin `--execute`; usan `TemporaryDirectory` para no modificar proyectos de verdad.
+
+## I37: integración física completa del camino de lectura (verificado después)
+
+Se ejecutó `tests/urano_i37_real_owner_to_stage_lab.py --execute` en la VM con el Engine pinneado `b5e48317ef85225f901adc69af8cc17aa8146880`, sin iniciar servicios de producción y sin vídeo. **PASS:** cliente HTTPS de Flask con sesión Owner local y CSRF -> socket Unix de broker auténtico en `/tmp` -> revalidación de Owner y catálogo readonly -> ledger real -> socket Unix de worker -> motor JM auténtico -> HTTP 200 con Ingest/Sync/Cut/Edit/Export en `pending`. Proyecto de otro propietario devuelve **HTTP 404** sin hablar con el broker.
+
+Salida de laboratorio: `real_engine_open=true`, `private_owner_session_verified=true`, `foreign_project_http_denied=true`, `broker_unix_socket_verified=true`, `worker_unix_socket_verified=true`, `physical_multiuser_isolation_verified=false`, `google_oauth_verified_in_this_lab=false`, `companion_video_export_verified=false`.
+
+**La prueba I37 usa una sesión de laboratorio y todos los procesos bajo el mismo UID:** no equivale a Google OAuth real desde navegador ni a systemd DynamicUser real, y aún falta el transporte de las operaciones **de escritura** del editor Chema, proxies y exportación a Companion. Ninguna parte de la beta pública se ha desplegado.
