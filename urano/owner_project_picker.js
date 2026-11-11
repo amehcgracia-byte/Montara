@@ -73,6 +73,12 @@
     switchKnob.className = 'montara-owner-engine-knob';
     engineSwitch.append(switchKnob);
     engineControl.append(engineLed, engineLabel, engineSwitch);
+    const engineIssue = document.createElement('span');
+    engineIssue.id = 'montaraOwnerEngineIssue';
+    engineIssue.className = 'montara-owner-engine-issue';
+    engineIssue.hidden = true;
+    engineIssue.setAttribute('role', 'alert');
+    engineControl.append(engineIssue);
     engineControl.dataset.status = 'unknown'; // A running worker MUST NOT be shown as off without verification.
     const ownProject = location.pathname.match(/\/projects\/([0-9a-f-]{36})\//i)?.[1];
     function engineState(status) {
@@ -94,6 +100,8 @@
       const wasOn = engineControl.dataset.status==='on';
       engineState('checking');
       accountStatus.textContent='';
+      engineIssue.hidden = true;
+      engineIssue.textContent = '';
       try {
         const token = await csrf();
         const admission=await api('projects/'+encodeURIComponent(ownProject)+'/ensure',{
@@ -127,8 +135,13 @@
         accountStatus.textContent='Engine closed. Saved projects are preserved.';
       }catch(error){
         engineState('unknown');
-        accountStatus.textContent=error.message||'Engine state not verified.';
-        accountDialog.showModal();
+        const reason=error.message||'Engine state not verified.';
+        // Engine state is not an account-settings error. Keep the user in
+        // Stage and show a small diagnostic beside the switch instead of
+        // unexpectedly opening the Account dialog.
+        engineIssue.textContent=reason;
+        engineIssue.hidden=false;
+        engineControl.title=reason;
       }finally{engineSwitch.disabled=false}
     });
     document.body.append(accountDialog);
