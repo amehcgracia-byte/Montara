@@ -7,6 +7,8 @@ on:
       - 'urano/owner_original_jm_rpc.py'
       - 'urano/full_jm_worker.py'
       - 'urano/private_broker_worker.py'
+      - 'urano/jm_bundle_manifest.py'
+      - 'tests/test_urano_jm_bundle_manifest.py'
       - 'tests/test_urano_jm_private_proxy_overlay.py'
       - 'tests/test_urano_jm_original_private_proxy_http.py'
       - '.github/workflows/fer-i55-original-jm-long-proxy.yml'
@@ -37,6 +39,7 @@ jobs:
       - name: Execute immutable overlay contracts and actual reviewed Chema HTTP
         run: |
           python -m unittest discover -s tests -p test_urano_jm_private_proxy_overlay.py -v
+          MONTARA_REVIEWED_JM_GIT_REPO="$GITHUB_WORKSPACE" python -m unittest discover -s tests -p test_urano_jm_bundle_manifest.py -v
           python -m unittest discover -s tests -p test_urano_jm_original_private_proxy_http.py -v
           python -m unittest discover -s tests -p test_urano_first_valid_upload_gate.py -v
           python -m unittest discover -s tests -p test_urano_owner_original_jm_rpc.py -v
