@@ -196,7 +196,13 @@
     }
     const method = String(init.method || input?.method || 'GET').toUpperCase();
     const token = await csrf();
-    if (uploadOperation(target.operation, method)) await ensure();
+    // Chema's native ?resume=footage needs the existing private worker to
+    // answer its initial wizard/status lookup. Do not start for normal visits.
+    if (uploadOperation(target.operation, method) ||
+        (method === 'GET' && target.operation === 'wizard/status' &&
+         new URL(location.href).searchParams.get('resume') === 'footage')) {
+      await ensure();
+    }
     const headers = new Headers(init.headers || input?.headers || {});
     metadata(headers, token);
     const options = { ...init, method, headers, credentials: 'same-origin' };
