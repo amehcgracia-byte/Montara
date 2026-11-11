@@ -195,9 +195,12 @@ def initial_stage_gateway_blueprint(
         if request.host_url.rstrip("/") != https_origin:
             return jsonify(error="Trusted HTTPS host required"),403
         supplied_origin=request.headers.get("Origin")
-        if ((request.method!="GET" and supplied_origin!=https_origin)
-                or (request.method=="GET" and supplied_origin not in
-                    (None,https_origin))):
+        # Browsers normally omit Origin on same-origin GET and HEAD.
+        # The independent Owner cookie + CSRF header is still mandatory.
+        if ((request.method not in ("GET","HEAD")
+             and supplied_origin!=https_origin)
+                or (request.method in ("GET","HEAD")
+                    and supplied_origin not in (None,https_origin))):
             # Browsers need not include Origin on same-origin GET; CSRF on
             # every read blocks cross-origin JS, since the token is not in a
             # readable cookie and custom headers trigger CORS preflight.
