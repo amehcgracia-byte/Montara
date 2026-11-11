@@ -124,6 +124,43 @@ class DemoBroker:
                 pass
             raise
 
+    def ensure_owner(self, owner_id, project_id):
+        """Idempotent admission for first valid proxy upload and later edits.
+
+        Repeat calls only reuse a verified active worker for the SAME project.
+        Never replace or release an uncertain owner unit/cgroup.
+        """
+        jobs=self.ledger.unverified_for_owner(owner_id)
+        if not jobs:
+            result=self.demo_start(owner_id,project_id)
+            return {"ok":True,"project_id":project_id,
+                    "state":"ready","generation":result["generation"]}
+        if len(jobs)!=1 or jobs[0].project_id!=project_id or jobs[0].state!="running":
+            raise BusyOwner("Owner Engine worker not safely reusable")
+        lease=jobs[0]
+        unit=self.ledger.target_for_trusted(lease)
+        if unit is None:
+            raise StaleJob("No pinned Engine worker")
+        details=self.control.systemd.show(unit)
+        try:
+            pid=int(details.get("MainPID","0"))
+        except (ValueError,TypeError):
+            pid=0
+        if (details.get("ActiveState")!="active"
+            or details.get("ControlGroup")!=expected_cgroup(unit)
+            or pid<=1):
+            raise UnverifiedTarget("Owner worker is no longer verified")
+        marker=Path("/run")/unit/READY_FILE
+        try:
+            data=json.loads(marker.read_text())
+        except (OSError,ValueError) as exc:
+            raise UnverifiedTarget("Owner worker readiness unavailable") from exc
+        if (data.get("ready") is not True or data.get("folder")!=project_id
+            or type(data.get("uid")) is not int or data["uid"]<=0):
+            raise UnverifiedTarget("Owner worker project mismatch")
+        return {"ok":True,"project_id":project_id,
+                "state":"ready","generation":lease.generation}
+
     def stage_snapshot_owner(self, owner_id, project_id, generation, owner_db_root):
         """Broker-owned trusted read: no browser-supplied worker endpoint."""
         snapshot = trusted_stage_snapshot(
@@ -210,6 +247,8 @@ def dispatch_owner(conn, web_uid:int, owner_db_root:Path, broker:DemoBroker):
         return broker.stage_snapshot_owner(
             owner_id,project_id,generation,owner_db_root)
     op,owner_id,project_id=verify_owner_and_project(data,owner_db_root=owner_db_root)
+    if op=="ensure_owner":
+        return broker.ensure_owner(owner_id,project_id)
     if op=="open_owner":
         result=broker.demo_start(owner_id,project_id)
         # Do not disclose systemd/worker/unit identifiers to HTTP.
