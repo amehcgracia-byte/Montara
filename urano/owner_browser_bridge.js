@@ -14,7 +14,9 @@
   // Native Chema recovery briefly renders the technical "Opening your edit"
   // screen. For Owner, keep the existing Montara logo visible while the real
   // restore proceeds. Never replace or fake the response from Chema.
-  if (new URL(location.href).searchParams.get('resume') === 'footage') {
+  if (new URL(location.href).searchParams.get('resume') === 'footage' &&
+      typeof MutationObserver !== 'undefined' &&
+      typeof document.createElement === 'function') {
     const splash = document.createElement('div');
     splash.id = 'montaraOwnerResumeSplash';
     splash.setAttribute('aria-label', 'Opening Montara');
