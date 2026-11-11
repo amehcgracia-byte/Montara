@@ -33,6 +33,8 @@ class JMRealHTTPRPCContracts(unittest.TestCase):
             "montara_beta_workspace":{"mode":"stage","version":1}})
         self.b=self.catalog.create("owner-b","Stage B",recipe={
             "montara_beta_workspace":{"mode":"stage","version":1}})
+        self.same_owner=self.catalog.create("owner-a","Other Stage",recipe={
+            "montara_beta_workspace":{"mode":"stage","version":1}})
         self.push=self.catalog.create("owner-a","Push",recipe={
             "montara_beta_workspace":{"mode":"push","version":1}})
         self.session=self.sessions.issue("owner-a")
@@ -138,6 +140,35 @@ class JMRealHTTPRPCContracts(unittest.TestCase):
         def status():
             self.events.append(("status",None))
             return jsonify(stages={"ingest":{"status":"pending"}})
+        # The real Chema session subsystem returns a random 12-digit job
+        # identifier and uses project-private media paths. Exercise that
+        # contract over an actual AF_UNIX worker without any original files.
+        @worker.post("/montara/session")
+        def session_start():
+            self.events.append(("session_start",request.get_json()))
+            return jsonify(id="c"*12,status="detecting"),202
+
+        @worker.get("/montara/session/<job_id>")
+        def session_progress(job_id):
+            self.events.append(("session_progress",job_id))
+            return jsonify(id=job_id,status="review",songs=[],results=[])
+
+        @worker.get("/montara/session/<job_id>/video-source")
+        def session_video_source(job_id):
+            self.events.append(("session_video_source",job_id))
+            return jsonify(master="/private/mock/session/guide.webm")
+
+        @worker.get("/montara/session/<job_id>/listen")
+        def session_listen(job_id):
+            self.events.append(("session_listen",job_id))
+            return b"webm-audio",200,{"Content-Type":"audio/webm",
+                                    "Accept-Ranges":"bytes"}
+
+        @worker.post("/montara/session/<job_id>/cancel")
+        def session_cancel(job_id):
+            self.events.append(("session_cancel",job_id))
+            return jsonify(id=job_id,status="cancelled"),202
+
         directory=root/"worker"
         directory.mkdir(mode=0o700)
         self.server,self.socket=create_private_jm_wsgi_server(worker,directory)
@@ -183,6 +214,60 @@ class JMRealHTTPRPCContracts(unittest.TestCase):
             self.url(operation,project),
             data=data,headers=headers or self.headers,
             content_type=content_type,base_url=ORIGIN)
+
+    def test_full_session_over_real_unix_relay_remains_project_private(self):
+        payload=json.dumps({"tracks":["/private/mock/song.mp3"],
+                             "for_video":True})
+        result=self.post("session",payload,self.headers)
+        self.assertEqual(result.status_code,202,result.get_data(as_text=True))
+        self.assertEqual(result.json["id"],"c"*12)
+        get_headers={**self.headers,"X-Montara-Engine-Generation":"9"}
+        status=self.client.get(self.url("session/"+"c"*12),headers=get_headers,
+                               base_url=ORIGIN)
+        self.assertEqual(status.status_code,200)
+        self.assertEqual(status.json["status"],"review")
+        latest=self.client.get(self.url("session/latest"),headers=get_headers,
+                               base_url=ORIGIN)
+        self.assertEqual(latest.status_code,200)
+        guide=self.client.get(self.url("session/"+"c"*12+"/video-source"),
+                              headers=get_headers,base_url=ORIGIN)
+        self.assertEqual(guide.status_code,200)
+        listen=self.client.get(self.url("session/"+"c"*12+"/listen"),
+                               headers=get_headers,base_url=ORIGIN)
+        self.assertEqual(listen.status_code,200)
+        self.assertEqual(listen.data,b"webm-audio")
+        self.assertEqual(listen.content_type,"audio/webm")
+        head=self.client.head(self.url("session/"+"c"*12+"/listen"),
+                              headers=get_headers,base_url=ORIGIN)
+        self.assertEqual(head.status_code,200)
+        cancel=self.post("session/"+"c"*12+"/cancel","{}",
+                         get_headers)
+        self.assertEqual(cancel.status_code,202)
+        hits=len(self.events)
+        cross=self.client.get(self.url("session/"+"c"*12,
+                                        self.same_owner.id),
+                              headers=get_headers,base_url=ORIGIN)
+        self.assertEqual(cross.status_code,404)
+        self.assertEqual(len(self.events),hits)
+        for path in (
+            self.url("session/"+"d"*12),
+            self.url("session/"+"c"*12+"/listen")+"?start=../../etc&end=3",
+            self.url("session/"+"c"*12+"/originals")+"?song=1&path=/root",
+            self.url("session/"+"c"*12+"/result/1")+"?download=../bad",
+        ):
+            with self.subTest(path=path):
+                self.assertEqual(self.client.get(
+                    path,headers=get_headers,base_url=ORIGIN).status_code,
+                    404)
+        self.assertEqual(len(self.events),hits)
+
+    def test_session_start_refuses_nonstage_and_unauthorized(self):
+        body='{"tracks":["/private/mock/song.mp3"]}'
+        self.assertEqual(self.post("session",body,
+            project=self.push.id).status_code,404)
+        self.assertEqual(self.post("session",body,
+            headers={**self.headers,"X-Urano-CSRF":"x"*64}).status_code,403)
+        self.assertFalse(any(event[0]=="session_start" for event in self.events))
 
     def test_actual_companion_proxy_metadata_without_media_files(self):
         # Mirror the two file names and byte schemas used by Chema's
