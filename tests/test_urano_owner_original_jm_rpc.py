@@ -52,6 +52,31 @@ class JMRealHTTPRPCContracts(unittest.TestCase):
             body=request.get_json()
             self.events.append(("draft",body))
             return jsonify(project_id="/private/mock/project")
+        @worker.post("/api/v1/wizard/prepare")
+        def prepare():
+            self.events.append(("prepare",request.get_json()))
+            return jsonify(status="running"),202
+
+        @worker.post("/api/v1/wizard/start")
+        def start():
+            self.events.append(("start",request.get_json()))
+            return jsonify(status="running"),202
+
+        @worker.post("/api/v1/settings/fillers")
+        def fillers():
+            self.events.append(("fillers",request.get_json()))
+            return jsonify(ok=True)
+
+        @worker.get("/api/v1/wizard/status")
+        def poll():
+            self.events.append(("poll",dict(request.args)))
+            return jsonify(status="waiting_choice")
+
+        @worker.get("/api/v1/artifacts/sync")
+        def sync():
+            self.events.append(("sync",None))
+            return jsonify(clips={},status="done")
+
         @worker.get("/api/v1/project")
         def status():
             self.events.append(("status",None))
@@ -169,6 +194,36 @@ class JMRealHTTPRPCContracts(unittest.TestCase):
             "name":"camera.mp4","size":650*1024**2,
             "fingerprint":"f"*64,"original_video_consent":True})
         self.assertEqual(original.status_code,400)
+
+    def test_real_chema_continue_sync_status_is_fenced_to_owner(self):
+        headers=dict(self.headers,**{"X-Montara-Engine-Generation":"9"})
+        for operation,body,expected in (
+            ("settings/fillers",{"fillers":[],"cutaways":[]},200),
+            ("wizard/prepare",{"platform":"youtube","videos":["private"]},202),
+            ("wizard/start",{"platform":"youtube","videos":["private"]},202),
+        ):
+            with self.subTest(operation=operation):
+                reply=self.client.post(self.url(operation),
+                    base_url=ORIGIN,headers=headers,json=body)
+                self.assertEqual(reply.status_code,expected)
+        poll=self.client.get(
+            self.url("wizard/status")+"?project_id=%2Ftmp%2Fother-owner",
+            base_url=ORIGIN,headers=headers)
+        self.assertEqual(poll.status_code,200)
+        self.assertEqual(self.events[-1],("poll",{}))
+        sync=self.client.get(self.url("artifacts/sync"),
+            base_url=ORIGIN,headers=headers)
+        self.assertEqual(sync.status_code,200)
+        self.assertEqual(self.events[-1][0],"sync")
+        self.assertEqual(self.ensured,[])
+        denied=self.client.get(
+            self.url("wizard/status")+"?project_id=x&project_id=y",
+            base_url=ORIGIN,headers=headers)
+        self.assertEqual(denied.status_code,404)
+        foreign=self.client.get(
+            self.url("artifacts/sync",self.b.id),
+            base_url=ORIGIN,headers=headers)
+        self.assertEqual(foreign.status_code,404)
 
     def test_resumable_limits_do_not_start_engine_and_bad_metadata_denied(self):
         limits=self.client.get(self.url("uploads"),
