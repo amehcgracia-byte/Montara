@@ -15,18 +15,18 @@ def verified_jm_upload_fixture() -> str:
     # Minimal executable structure of Chema's reviewed source anchors.
     # The full original branch source is tested in a separate real JM lab.
     return (
-        "def register_resumable_upload(app, data_root, classify):\\n"
-        + _MARKERS["limit"] + "\\n"
-        + "    def chunk_size(data):\\n"
-        + _MARKERS["chunk"] + "\\n"
-        + "    def upload_limits():\\n"
-        + _MARKERS["limits"] + "\\n"
-        + "    def upload_create():\\n"
-        + "        name = 'camera.small.mp4'\\n"
-        + "        size = 1\\n"
-        + "        body = {}\\n"
-        + _MARKERS["size"] + "\\n"
-        + _MARKERS["error"] + "\\n"
+        "def register_resumable_upload(app, data_root, classify):\n"
+        + _MARKERS["limit"] + "\n"
+        + "    def chunk_size(data):\n"
+        + _MARKERS["chunk"] + "\n"
+        + "    def upload_limits():\n"
+        + _MARKERS["limits"] + "\n"
+        + "    def upload_create():\n"
+        + "        name = 'camera.small.mp4'\n"
+        + "        size = 1\n"
+        + "        body = {}\n"
+        + _MARKERS["size"] + "\n"
+        + _MARKERS["error"] + "\n"
     )
 
 
