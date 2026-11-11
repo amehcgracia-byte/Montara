@@ -60,9 +60,10 @@ class OwnerModeEntryTest(unittest.TestCase):
         result = self.get("/urano/v1/entry")
         self.assertEqual(result.status_code, 200)
         for marker in (b"data-platform=\"youtube\"", b"data-platform=\"reel\"",
-                       b"data-platform=\"show\"", b"ownerProjects", b"ownerLogout"):
+                       b"data-platform=\"show\"", b"ownerLogout"):
             self.assertIn(marker, result.data)
         self.assertNotIn(b"Engine (beta)", result.data)
+        self.assertNotIn(b"id=\"ownerProjects\"", result.data)
         self.assertEqual(self.client.get("/urano/v1/entry",
             base_url="https://attacker.test").status_code, 403)
 
