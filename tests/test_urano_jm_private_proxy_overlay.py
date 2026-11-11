@@ -75,7 +75,7 @@ class ChemaProxyOverlayTests(unittest.TestCase):
         # the newest build overlay already contains the updated policy.
         begin=current.index("        # Large files are admitted")
         end=current.index("        if isinstance(size, bool)",begin)
-        first=current[:begin]+_REVIEWED_AUDIO_SIZE_ANCHOR+"\\n"+current[end:]
+        first=current[:begin]+_REVIEWED_AUDIO_SIZE_ANCHOR+"\n"+current[end:]
         with self.assertRaises(ValueError):
             patched_reviewed_private_audio_overlay(current)
         upgraded=patched_reviewed_private_audio_overlay(first)
