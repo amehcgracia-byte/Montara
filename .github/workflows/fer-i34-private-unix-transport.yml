@@ -1,0 +1,35 @@
+name: FER I34 private Unix Stage transport lab
+on:
+  pull_request:
+    paths:
+      - 'urano/private_stage_unix_transport.py'
+      - 'urano/private_stage_payload.py'
+      - 'urano/private_broker_worker.py'
+      - 'urano/private_broker_service.py'
+      - 'urano/private_stage_snapshot_bridge.py'
+      - 'tests/test_urano_private_stage_unix_transport.py'
+      - 'tests/test_urano_private_stage_socket_bridge.py'
+      - '.github/workflows/fer-i34-private-unix-transport.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  local-ipc-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install local contract dependencies
+        run: python -m pip install 'Flask>=3,<4'
+      - name: Verify real local socket and broker-ledger bridge
+        run: |
+          python -m unittest discover -s tests -p test_urano_private_stage_socket_bridge.py -v
+          python -m unittest discover -s tests -p test_urano_private_stage_unix_transport.py -v
+          python -m unittest discover -s tests -p test_urano_private_stage_snapshot_bridge.py -v
+          python -m unittest discover -s tests -p test_urano_private_engine_route_contract.py -v
+          python -m py_compile urano/private_broker_service.py urano/private_broker_worker.py urano/private_stage_payload.py urano/private_stage_unix_transport.py
