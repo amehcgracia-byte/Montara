@@ -34,12 +34,17 @@ _ALLOWED = {
     ("GET", "wizard/status"): "/api/v1/wizard/status",
     ("GET", "project"): "/api/v1/project",
     ("POST", "branding"): "/montara/branding",
+    ("GET", "uploads"): "/montara/uploads",
+    ("POST", "uploads"): "/montara/uploads",
 }
 _GEN = re.compile(r"[1-9][0-9]{0,9}\Z")
 _FILE = re.compile(r"[^\\/\x00-\x1f]{1,200}\Z")
 _MAX_JSON = 256_000
 _MAX_VIDEO = 256 * 1024 * 1024
 _MAX_RESULT = 1_000_000
+_UPLOAD_PART = re.compile(r"uploads/([a-f0-9]{32})(/finish)?\\Z")
+_MAX_CHUNK = 16 * 1024 * 1024
+
 
 
 def initial_stage_gateway_blueprint(
@@ -52,9 +57,16 @@ def initial_stage_gateway_blueprint(
     bp=Blueprint("urano_i51_original_jm_rpc", __name__,
                  url_prefix="/urano/v1/media")
 
-    @bp.route("/<project_id>/<path:operation>", methods=["GET", "POST"])
+    @bp.route("/<project_id>/<path:operation>",
+              methods=["GET", "POST", "PUT", "DELETE"])
     def relay(project_id: str, operation: str):
         path=_ALLOWED.get((request.method,operation))
+        upload_part=_UPLOAD_PART.fullmatch(operation)
+        if path is None and upload_part:
+            uid, finishing=upload_part.groups()
+            if (not finishing and request.method in ("GET","PUT","DELETE")
+                    or finishing and request.method=="POST"):
+                path="/montara/uploads/"+uid+("/finish" if finishing else "")
         if path is None or request.query_string:
             return jsonify(error="Unsupported original editor operation"),404
         if request.host_url.rstrip("/") != https_origin:
@@ -81,26 +93,47 @@ def initial_stage_gateway_blueprint(
                 raise ProjectNotFound("Not a Stage project")
         except (ProjectNotFound, ValueError):
             return jsonify(error="Private Stage project unavailable"),404
+        if operation=="uploads" and request.method=="GET":
+            # Original JM upload limits normally need a running worker.
+            # This read-only preflight intentionally doesn't activate Engine.
+            # Free space is not asserted: original JM checks it on POST.
+            reply=jsonify(max_file_bytes=_MAX_VIDEO,
+                          chunk_bytes=4*1024*1024,free_bytes=None)
+            reply.headers["Cache-Control"]="no-store"
+            return reply
         content_length=request.content_length
         if request.headers.get("Transfer-Encoding") or (
                 request.method=="GET" and content_length not in (None,0)):
             return jsonify(error="Unsupported request framing"),400
-        if request.method=="POST":
+        if request.method in ("POST","PUT"):
             if type(content_length) is not int or content_length<=0:
                 return jsonify(error="Expected bounded request body"),400
-            if operation=="wizard/upload":
-                # Validate as the ORIGINAL JM path, not the Owner URL
-                # prefix. Copy metadata only; never mutate the Flask request
-                # or consume the streamed media here.
-                upload_environ=dict(request.environ)
-                upload_environ["PATH_INFO"]=path
-                if (not valid_first_upload(upload_environ)
-                        or content_length>_MAX_VIDEO):
-                    return jsonify(error="Invalid private video upload"),400
+            if operation in ("wizard/upload","uploads"):
+                # The resumable JSON validator restores wsgi.input after
+                # reading; keep that restored stream on Flask's ACTUAL
+                # environ, not on a copy whose underlying input was drained.
+                original_path=request.environ["PATH_INFO"]
+                request.environ["PATH_INFO"]=path
+                try:
+                    valid=valid_first_upload(request.environ)
+                finally:
+                    request.environ["PATH_INFO"]=original_path
+                if (not valid or content_length>_MAX_VIDEO):
+                    return jsonify(error="Invalid private upload"),400
+            elif request.method=="PUT":
+                offset=request.headers.get("Upload-Offset","")
+                if (not upload_part or upload_part.group(2)
+                        or content_length>_MAX_CHUNK
+                        or request.mimetype!="application/octet-stream"
+                        or not offset.isascii() or not offset.isdecimal()
+                        or len(offset)>16):
+                    return jsonify(error="Invalid upload chunk"),400
             elif (content_length>_MAX_JSON
                   or request.mimetype!="application/json"):
                 return jsonify(error="Invalid original editor JSON"),400
-        if operation=="wizard/upload":
+        elif request.method=="DELETE" and content_length not in (None,0):
+            return jsonify(error="DELETE body unsupported"),400
+        if request.method=="POST" and operation in ("wizard/upload","uploads"):
             try:
                 admitted=ensure_worker("ensure_owner",token,csrf,project_id)
             except (OSError,ValueError,RuntimeError,TimeoutError):
@@ -120,7 +153,7 @@ def initial_stage_gateway_blueprint(
         try:
             with closing(connect_worker(token,csrf,project_id,generation)) as conn:
                 headers={"Cache-Control":"no-store"}
-                if request.method=="POST":
+                if request.method in ("POST","PUT"):
                     headers["Content-Type"]=request.content_type
                     headers["Content-Length"]=str(content_length)
                     if operation=="wizard/upload":
@@ -129,6 +162,8 @@ def initial_stage_gateway_blueprint(
                         if not _FILE.fullmatch(unquote(filename)):
                             return jsonify(error="Invalid media filename"),400
                         headers["X-Zucker-Filename"]=filename
+                    if request.method=="PUT":
+                        headers["Upload-Offset"]=request.headers["Upload-Offset"]
                     body=request.stream
                 else:
                     body=None
