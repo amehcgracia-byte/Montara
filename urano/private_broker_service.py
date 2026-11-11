@@ -84,7 +84,8 @@ class DemoBroker:
         unit=self.ledger.reserve_target_unit(lease)
         try:
             props=fixed_launch_properties(unit,self.bundle,jm_bundle=self.jm_bundle,
-                                          resources=self.resources)
+                                          resources=self.resources,
+                                          owner_id=owner_id if self.jm_bundle is not None else None)
             command=["/usr/bin/systemd-run","--system","--no-block","--collect",
                 "--quiet","--unit="+unit]
             for prop in props:
