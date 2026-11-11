@@ -71,6 +71,11 @@ def original_editor_assets_blueprint(
         # Keep Chema's native Home intro when the logo is clicked.
         # Suppress only the redundant first intro when Stage is launched
         # from the already-authenticated Home/Video chooser.
+        # Owner has its own catalog title; this field names the exported video.
+        output_name = 'Project name <input id="videoName"'
+        if original.count(output_name) == 1:
+            original = original.replace(output_name,
+                'Output video name <input id="videoName"', 1)
         if request.args.get("start") == "stage":
             original = original.replace(
                 "<html lang=\"en\">",
