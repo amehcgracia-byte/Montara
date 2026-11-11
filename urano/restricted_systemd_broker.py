@@ -117,7 +117,8 @@ class RestrictedTargetControl:
         return False
 
 
-def fixed_launch_properties(unit: str, bundle_path: Path) -> tuple[str, ...]:
+def fixed_launch_properties(unit: str, bundle_path: Path,
+                            *, jm_bundle: Path | None = None) -> tuple[str, ...]:
     """Build safe properties only from trusted operator bundle config."""
     expected_cgroup(unit)
     path = Path(bundle_path)
@@ -127,6 +128,12 @@ def fixed_launch_properties(unit: str, bundle_path: Path) -> tuple[str, ...]:
     if (not path.is_absolute() or path.parent != base or
             not re.fullmatch(r"engine-[0-9a-f]{40}",path.name)):
         raise ValueError("Bundle must be version-pinned under /opt/montara/bundles")
-    return (*SYSTEMD_PROPS, "RuntimeDirectory="+unit,
-            "BindReadOnlyPaths="+str(path)+":/opt/montara-engine")
+    binds = ["BindReadOnlyPaths="+str(path)+":/opt/montara-engine"]
+    if jm_bundle is not None:
+        jm = Path(jm_bundle)
+        if (not jm.is_absolute() or jm.parent != base
+                or not re.fullmatch(r"jm-[0-9a-f]{40}", jm.name)):
+            raise ValueError("JM bundle must be version-pinned")
+        binds.append("BindReadOnlyPaths="+str(jm)+":/opt/montara-jm")
+    return (*SYSTEMD_PROPS, "RuntimeDirectory="+unit, *binds)
 
