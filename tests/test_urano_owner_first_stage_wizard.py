@@ -21,6 +21,11 @@ class OwnerFirstWizardContracts(unittest.TestCase):
         self.folder = Path(t.name) / "Projects" / PROJECT
         self.folder.mkdir(parents=True)
         (self.folder / "project.json").write_text("{}")
+        uploads = self.folder.parent.parent / "WizardUploads"
+        uploads.mkdir()
+        self.proxy = uploads / "proxy-0.mp4"
+        self.proxy.write_bytes(b"synthetic-proxy")
+
         self.current = SimpleNamespace(
             folder=self.folder,
             data={
@@ -60,7 +65,7 @@ class OwnerFirstWizardContracts(unittest.TestCase):
     def draft(self, **kwargs):
         return self.client.post("/api/v1/wizard/draft", json={
             "name": "Stage", "platform": "youtube",
-            "project_id": None, "videos": ["proxy-0.mp4"], **kwargs,
+            "project_id": None, "videos": [str(self.proxy)], **kwargs,
         })
 
     def test_original_new_and_first_draft_stay_on_same_owner_uuid(self):
@@ -71,7 +76,7 @@ class OwnerFirstWizardContracts(unittest.TestCase):
         self.assertEqual(result.json["project_id"], str(self.folder))
         self.assertEqual(self.calls[0][0], "draft")
         self.assertEqual(self.calls[0][1]["project_id"], str(self.folder))
-        self.assertEqual(self.current.data["inputs"]["videos"], ["proxy-0.mp4"])
+        self.assertEqual(self.current.data["inputs"]["videos"], [str(self.proxy)])
 
     def test_saved_project_can_resume_but_not_be_silently_replaced(self):
         self.new()
@@ -92,6 +97,22 @@ class OwnerFirstWizardContracts(unittest.TestCase):
         self.app.config["ZUCKER_STATE"].project = None
         self.assertEqual(self.draft().status_code, 409)
         self.assertEqual(self.calls, [])
+
+    def test_rejects_external_video_and_unfinished_resumable_upload(self):
+        self.new()
+        foreign = self.folder.parent.parent.parent / "outside.mp4"
+        foreign.write_bytes(b"private-original")
+        self.assertEqual(self.draft(videos=[str(foreign)]).status_code, 400)
+        upload = self.folder.parent.parent / "Uploads" / ("a" * 32)
+        upload.mkdir(parents=True)
+        media = upload / "proxy.small.mp4"
+        media.write_bytes(b"partial")
+        (upload / "upload.json").write_text(
+            '{"name":"proxy.small.mp4","complete":false}')
+        self.assertEqual(self.draft(videos=[str(media)]).status_code, 400)
+        (upload / "upload.json").write_text(
+            '{"name":"proxy.small.mp4","complete":true}')
+        self.assertEqual(self.draft(videos=[str(media)]).status_code, 200)
 
     def test_no_private_data_leaked_on_error(self):
         self.current.data["inputs"]["videos"] = ["private-original.mp4"]
