@@ -16,6 +16,7 @@ on:
       - 'tests/test_urano_owner_first_stage_wizard.py'
       - 'tests/test_urano_worker_resource_profile.py'
       - 'tests/test_owner_browser_bridge.cjs'
+      - 'tests/test_owner_review_bridge.cjs'
       - '.github/workflows/fer-i54-owner-browser-resumable.yml'
   workflow_dispatch:
 permissions:
@@ -40,6 +41,7 @@ jobs:
         run: |
           node --check urano/owner_browser_bridge.js
           node tests/test_owner_browser_bridge.cjs
+          node tests/test_owner_review_bridge.cjs
       - name: Private Owner HTTP, media and persisted Stage contracts
         run: |
           python -m unittest discover -s tests -p test_urano_owner_original_jm_rpc.py -v
