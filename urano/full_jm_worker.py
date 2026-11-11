@@ -41,6 +41,12 @@ def serve_original_jm_worker(
     # imported only from its reviewed immutable bundle, not from main/global.
     if str(jm_root) not in sys.path:
         sys.path.insert(0, str(jm_root))
+    # Treat this cloud-managed private worker as a remote JM runtime,
+    # not an unrestricted desktop installation. The ORIGINAL JM uploader
+    # applies its 256 MiB remote file ceiling when this marker exists.
+    # Generate a per-worker nonreusable token, never accept one from HTTP.
+    import secrets
+    os.environ["MONTARA_SESSION_TOKEN"] = secrets.token_hex(32)
     from app import create_montara_app
 
     folder = data_root / "Projects" / project_id
