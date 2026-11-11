@@ -35,7 +35,14 @@ CACHE = HOME / "proxies"
 EDGE = 65536
 VIDEO_SUFFIXES = {".mp4", ".mov", ".m4v", ".mts", ".mkv", ".avi", ".webm"}
 AUDIO_SUFFIXES = {".wav", ".aif", ".aiff"}
-DEFAULT_ORIGINS = r"https://[a-z0-9-]+\.trycloudflare\.com|https?://(127\.0\.0\.1|localhost)(:\d+)?|https://[a-z0-9-]+\.vercel\.app"
+DEFAULT_ORIGINS = (
+    r"https://[a-z0-9-]+\.trycloudflare\.com"
+    r"|https?://(127\.0\.0\.1|localhost)(:\d+)?"
+    r"|https://[a-z0-9-]+\.vercel\.app"
+    # Exact beta origins; never trust every third-party *.pages.dev or *.workers.dev.
+    r"|https://montara-beta-preview\.pages\.dev"
+    r"|https://montara-owner\.memoriainvalida001\.workers\.dev"
+)
 ORIGINS = re.compile("^(" + os.environ.get("MONTARA_COMPANION_ORIGINS", DEFAULT_ORIGINS) + ")$")
 SEARCH_BUDGET_SEC = 180   # a sleeping external disk takes about a minute to walk the first time
 SKIP_DIRS = {"Library", "node_modules", "site-packages", "__pycache__", "Backups.backupdb"}
