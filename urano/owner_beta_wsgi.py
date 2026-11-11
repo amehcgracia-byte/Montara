@@ -44,10 +44,52 @@ def create_private_owner_beta(
             or receipt_verifier is not None or stage_provenance is not None):
         raise ValueError("Private Engine and proxy inbox require a later trusted integration")
 
+    private_engine = config.get("MONTARA_I27_OWNER_ENGINE_FLAG") == "private"
+    editor_pilot = config.get("MONTARA_JM_EDITOR_PILOT") == "private"
+    original_web_root = None
+    proxy_limit = 256
+    if editor_pilot:
+        if not private_engine:
+            raise ValueError("Original JM beta requires Owner private Engine")
+        from urano.jm_bundle_manifest import (
+            verify_jm_bundle_files, verify_pinned_chema_manifest
+        )
+        from urano.jm_private_proxy_overlay import private_proxy_limit_mib
+        import json
+        import re
+        requested = config.get("MONTARA_JM_BUNDLE", "")
+        if not re.fullmatch(r"/opt/montara/bundles/jm-[0-9a-f]{40}", requested):
+            raise ValueError("Original JM beta requires pinned bundle")
+        bundle = Path(requested)
+        if (bundle.is_symlink() or not bundle.is_dir()
+                or bundle.stat().st_uid != 0
+                or bundle.stat().st_mode & 0o022):
+            raise ValueError("Original JM beta bundle not immutable")
+        proxy_limit = private_proxy_limit_mib(int(
+            config.get("MONTARA_PRIVATE_PREVIEW_LIMIT_MIB", "256")))
+        manifest_path = bundle / "montara-jm-bundle.json"
+        if (manifest_path.is_symlink() or not manifest_path.is_file()
+                or manifest_path.stat().st_size > 8192):
+            raise ValueError("Original JM beta manifest missing")
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        engine_pin = config.get("MONTARA_JM_ENGINE_PIN", "")
+        if not re.fullmatch(r"[a-f0-9]{40}", engine_pin):
+            raise ValueError("Original JM beta Engine revision required")
+        verify_pinned_chema_manifest(
+            manifest, expected_editor_commit=bundle.name[3:],
+            expected_engine_commit=engine_pin,
+            expected_private_preview_limit_mib=proxy_limit)
+        verify_jm_bundle_files(bundle, manifest)
+        original_web_root = bundle / "web"
+
     app = create_owner_api(
         root, settings=preflight.settings, provider=provider,
         enable_dashboard=True,
-        enable_engine_preview=config.get("MONTARA_I27_OWNER_ENGINE_FLAG")=="private",
+        enable_engine_preview=private_engine,
+        original_jm_web_root=original_web_root,
+        enable_original_jm_rpc=editor_pilot,
+        enable_original_jm_browser_pilot=editor_pilot,
+        private_preview_limit_mib=proxy_limit,
     )
     origin = preflight.origin
 
