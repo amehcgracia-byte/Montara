@@ -33,7 +33,8 @@ def main():
             or not (bundle / "engine/server/api.py").is_file()
             or not (bundle / "site").is_dir()):
         parser.error("Not a pinned Engine bundle")
-    sys.path[:0] = [str(bundle / "site"), str(bundle / "app"),
+    repo_root = Path(__file__).resolve().parents[1]
+    sys.path[:0] = [str(repo_root), str(bundle / "site"), str(bundle / "app"),
                     str(bundle / "engine"), str(bundle)]
     from core.project import new_project_document
     from urano.engine_worker_process import make_engine_client
