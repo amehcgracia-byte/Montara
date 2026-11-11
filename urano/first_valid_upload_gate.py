@@ -10,16 +10,20 @@ the same root broker I27 admission already implemented.
 """
 from __future__ import annotations
 
+import io
 import json
 import re
+from pathlib import Path
+from urllib.parse import unquote
 
 from werkzeug.wrappers import Response
 
 _FILE_NAME = re.compile(r"[^\\/\x00-\x1f]{1,200}\Z")
 _DIGEST = re.compile(r"[a-f0-9]{64}\Z")
-_SUPPORTED = frozenset({".mp4", ".mov", ".m4v", ".mts", ".mkv",
-                        ".avi", ".webm", ".wav", ".aif", ".aiff",
-                        ".mp3", ".flac", ".opus", ".wv"})
+_SUPPORTED = frozenset({".mp4", ".mov", ".m4v", ".mts", ".m2ts",
+                        ".mkv", ".avi", ".webm", ".wav", ".aif",
+                        ".aiff", ".mp3", ".flac", ".opus", ".wv",
+                        ".m4a", ".ogg"})
 
 
 def valid_first_upload(environ) -> bool:
@@ -35,14 +39,37 @@ def valid_first_upload(environ) -> bool:
             return False
         if environ.get("CONTENT_TYPE", "").split(";")[0].strip() != "application/octet-stream":
             return False
-        from urllib.parse import unquote
         name = unquote(environ.get("HTTP_X_ZUCKER_FILENAME", ""))
-        return bool(_FILE_NAME.fullmatch(name))
+        return bool(_FILE_NAME.fullmatch(name)
+                    and Path(name).suffix.lower() in _SUPPORTED)
     if method == "POST" and path == "/montara/uploads":
-        # This endpoint's small metadata body is validated by the real JM
-        # upload implementation. Do not consume its WSGI input here.
-        return 0 < length <= 8192 and environ.get(
-            "CONTENT_TYPE", "").split(";")[0].strip() == "application/json"
+        # Parse only bounded metadata, NEVER media bytes. Replace the WSGI
+        # stream so Chema's original resumable handler still receives the
+        # exact same JSON even when admission fails.
+        if (not 0 < length <= 8192
+                or environ.get("CONTENT_TYPE", "").split(";")[0].strip()
+                     != "application/json"):
+            return False
+        raw = environ["wsgi.input"].read(length)
+        environ["wsgi.input"] = io.BytesIO(raw)
+        if len(raw) != length:
+            return False
+        try:
+            record = json.loads(raw)
+        except (ValueError, UnicodeError):
+            return False
+        if not isinstance(record, dict):
+            return False
+        name = record.get("name")
+        size = record.get("size")
+        fingerprint = record.get("fingerprint")
+        return bool(
+            isinstance(name, str) and _FILE_NAME.fullmatch(name)
+            and Path(name).suffix.lower() in _SUPPORTED
+            and type(size) is int and 0 < size <= 256 * 1024**2
+            and isinstance(fingerprint, str) and
+            _DIGEST.fullmatch(fingerprint)
+        )
     return False
 
 
@@ -60,8 +87,17 @@ class FirstValidUploadEngineGate:
         self.ensure = ensure_private_worker
 
     def __call__(self, environ, start_response):
-        if not valid_first_upload(environ):
+        upload_route = (environ.get("REQUEST_METHOD") == "POST"
+                        and environ.get("PATH_INFO") in
+                        ("/api/v1/wizard/upload", "/montara/uploads"))
+        if not upload_route:
             return self.upstream(environ, start_response)
+        if not valid_first_upload(environ):
+            response = Response(
+                '{"error":{"message":"Invalid private media upload"}}',
+                status=400, mimetype="application/json",
+                headers={"Cache-Control":"no-store"})
+            return response(environ, start_response)
         try:
             outcome = self.ensure()
             if (not isinstance(outcome, dict)
