@@ -266,6 +266,34 @@ class JMRealHTTPRPCContracts(unittest.TestCase):
                          "media_exceeds_private_transfer_limit")
         self.assertEqual(self.ensured,[])
 
+    def test_native_xhr_filename_diagnostic_without_exposing_original(self):
+        from urano.first_valid_upload_gate import valid_first_upload
+        from io import BytesIO
+
+        def accepted(raw):
+            headers={"PATH_INFO":"/api/v1/wizard/upload",
+                     "REQUEST_METHOD":"POST",
+                     "CONTENT_LENGTH":"32",
+                     "CONTENT_TYPE":"application/octet-stream",
+                     "wsgi.input":BytesIO(b"x"*32)}
+            if raw is not None:
+                headers["HTTP_X_ZUCKER_FILENAME"]=raw
+            reasons=[]
+            valid=valid_first_upload(headers,rejection_codes=reasons)
+            return valid,reasons
+
+        for candidate in ("5._Second.mp3","5._Second.mp3.flac",
+                          "5.%5FSecond.mp3"):
+            with self.subTest(candidate=candidate):
+                valid,reasons=accepted(candidate)
+                self.assertTrue(valid,reasons)
+        valid,reasons=accepted(None)
+        self.assertFalse(valid)
+        self.assertEqual(reasons,["missing_media_filename_header"])
+        valid,reasons=accepted("bad/path.mp3")
+        self.assertFalse(valid)
+        self.assertEqual(reasons,["invalid_media_name"])
+
     def test_mp3_first_upload_and_readable_error_for_native_chema_xhr(self):
         # No private media or live user project; one synthetic MP3 wire request.
         audio=b"fake-mp3-test-bytes"*9000
