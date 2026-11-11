@@ -602,7 +602,7 @@
       if(!link)return;
       const original=link.getAttribute('href')||'';
       const target=resolve(original);
-      if(!target || target.blocked || !/^session\/[a-f0-9]{12}\/(?:results\\.zip|result\/[0-9]{1,6})$/.test(target.operation))return;
+      if(!target || target.blocked || !/^session\/[a-f0-9]{12}\/(?:results\.zip|result\/[0-9]{1,6})$/.test(target.operation))return;
       event.preventDefault();
       try {
         const response=await window.fetch(original,{cache:'no-store'});
