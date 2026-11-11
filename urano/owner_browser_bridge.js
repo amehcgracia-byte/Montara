@@ -175,7 +175,7 @@
     const sessionQuery = sessionPart && (
       ((sessionPart[2] === 'listen') &&
         parsed.searchParams.size===2 &&
-        ['start','end'].every(k=>/^[0-9]{1,9}(?:\\.[0-9]{1,6})?$/.test(parsed.searchParams.get(k)||''))) ||
+        ['start','end'].every(k=>/^[0-9]{1,9}(?:\.[0-9]{1,6})?$/.test(parsed.searchParams.get(k)||''))) ||
       (['originals','local-plan'].includes(sessionPart[2]) &&
         parsed.searchParams.has('song') &&
         parsed.searchParams.size<=4 &&
@@ -197,9 +197,8 @@
     return { path: base + operation +
       (isStatusPoll || recipeQuery ? '?project_id=owner-worker' :
        masterQuery ? '?project_id=owner-worker&revision=' + encodeURIComponent(parsed.searchParams.get('revision')) :
-       reviewQuery || timelineQuery || shotQuery || frameQuery || videoVersion ?
-       reviewQuery || timelineQuery || shotQuery || frameQuery || videoVersion ||
-       sessionQuery ? parsed.search : ''), operation };
+       reviewQuery || timelineQuery || shotQuery || frameQuery ||
+       videoVersion || sessionQuery ? parsed.search : ''), operation };
   };
 
   const csrf = async () => {
