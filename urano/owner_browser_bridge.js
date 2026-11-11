@@ -306,6 +306,25 @@
     }
   }
 
+  // A newly created Stage opens on Footage without asking the same mode twice.
+  // Existing projects never receive this hint: preserve Chema recovery/edits.
+  if (typeof window !== 'undefined' && typeof window.addEventListener === 'function'
+      && typeof location !== 'undefined'
+      && new URL(location.href).searchParams.get('start') === 'stage') {
+    window.addEventListener('load', () => {
+      const home = document.querySelector('#home');
+      if (!home || home.hidden) return;  // Original JM already restored a step.
+      const newProject = document.querySelector('#newVideo');
+      const video = document.querySelector('[data-intent="video"]');
+      const stage = document.querySelector('.mode[data-platform="youtube"]');
+      if (newProject && video && stage) {
+        newProject.click();
+        video.click();
+        stage.click();
+      }
+    }, { once: true });
+  }
+
   // Stable exposed inspection data (not an authentication credential).
   Object.defineProperty(window, 'MontaraOwnerBridge', {
     value: Object.freeze({ projectId: project, reviewedStagePilot: true }),
