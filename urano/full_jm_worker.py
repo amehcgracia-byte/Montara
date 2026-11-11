@@ -31,9 +31,12 @@ def pinned_native_session_site(engine_root: Path) -> str:
     pip install, untrusted PYTHONPATH entry, user-home venv or global site.
     """
     site = (Path(engine_root) / "site").resolve(strict=True)
-    if not site.is_dir() or not all((site / module).is_dir() for module in
-            ("numpy", "scipy", "numba", "librosa", "soundfile",
-             "pyloudnorm", "matchering")):
+    # Some vendored wheels are single-file modules (soundfile.py), not
+    # package directories. Validate both forms against the pinned site.
+    if not site.is_dir() or not all(
+            (site / module).is_dir() or (site / (module + ".py")).is_file()
+            for module in ("numpy", "scipy", "numba", "librosa", "soundfile",
+                           "pyloudnorm", "matchering")):
         raise RuntimeError("Pinned JM mixer libraries unavailable")
     return str(site)
 
