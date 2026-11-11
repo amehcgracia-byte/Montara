@@ -55,9 +55,39 @@
     cancel.textContent = 'Close';
     const accountStatus = document.createElement('p');
     accountStatus.setAttribute('role', 'alert');
+    const closeEngine = document.createElement('button');
+    closeEngine.type = 'button'; closeEngine.className = 'btn ghost small';
+    closeEngine.textContent = 'Close idle Engine';
     const actions = document.createElement('div'); actions.className = 'actions';
-    actions.append(signOut, cancel);
+    actions.append(closeEngine, signOut, cancel);
     accountDialog.append(accountTitle, actions, accountStatus);
+    closeEngine.addEventListener('click', async () => {
+      const ownProject = location.pathname.match(/\/projects\/([0-9a-f-]{36})\//i)?.[1];
+      if(!ownProject) return;
+      closeEngine.disabled = true;
+      accountStatus.textContent = 'Checking current project activity…';
+      try {
+        // The Owner-bound bridge retrieves only this project's state.
+        // Refuse to stop on any unavailable or uncertain status.
+        const current = await fetch('/api/v1/wizard/status', {
+          credentials: 'same-origin', cache: 'no-store'
+        });
+        if(!current.ok) throw Error('Project status is not verified. Nothing has been stopped.');
+        const state = await current.json();
+        if(state.status !== 'idle')
+          throw Error('Project is not idle ('+String(state.status||'unknown')+'). Finish or cancel its work first.');
+        if(!window.confirm('Close the idle Engine for this project? Project files will remain saved.')) {
+          accountStatus.textContent = 'Engine was not closed.';
+          return;
+        }
+        const result=await api('projects/'+encodeURIComponent(ownProject)+'/close',{
+          method:'POST',headers:{'X-Urano-CSRF':await csrf(),Origin:location.origin}
+        });
+        if(result.state!=='stopped')throw Error('Engine closure was not confirmed.');
+        accountStatus.textContent='Engine closed. Project files remain saved. You may open another project.';
+      }catch(error){accountStatus.textContent=error.message}
+      finally{closeEngine.disabled=false}
+    });
     document.body.append(accountDialog);
     oldHeader.append(account);
     account.addEventListener('click', () => accountDialog.showModal());
@@ -163,7 +193,17 @@
       throw Error('Invalid project ID');
     if(isEditor) {
       const current=location.pathname.match(/\/projects\/([0-9a-f-]{36})\//i)?.[1];
-      if(current===p.id){dialog.close();return;}
+      if(current===p.id){
+        dialog.close();
+        // Same Owner project, but the native Chema Home/Mode screen is
+        // showing: re-enter Stage instead of silently doing nothing.
+        const home=document.getElementById('home');
+        const mode=document.getElementById('mode');
+        if((home&&!home.hidden)||(mode&&!mode.hidden)){
+          location.assign('/urano/v1/editor/projects/'+encodeURIComponent(p.id)+'/?start=stage');
+        }
+        return;
+      }
     }
     // A project switch must be admitted BEFORE navigating into Chema's
     // recovery UI. A 409 stays in this readable modal; never stop an
