@@ -68,6 +68,26 @@ class OwnerNavigationConsistencyTests(unittest.TestCase):
         self.assertIn(b'data-go="home"', recovery.data)
         self.assertIn(b'/urano/v1/entry/picker.js', recovery.data)
 
+    def test_chema_plans_preview_remains_private_and_link_is_functional(self):
+        result=self.get(f"/urano/v1/editor/projects/{self.project.id}/")
+        self.assertEqual(result.status_code,200)
+        self.assertIn(b'href="plans.html"',result.data)
+        plans=self.get(
+            f"/urano/v1/editor/projects/{self.project.id}/plans.html")
+        self.assertEqual(plans.status_code,200)
+        self.assertIn(b'src="plans.js"',plans.data)
+        self.assertIn(b'href="./"',plans.data)
+        self.assertIn(b'SIMULADOR',plans.data)
+        js=self.get(
+            f"/urano/v1/editor/projects/{self.project.id}/plans.js")
+        self.assertEqual(js.status_code,200)
+
+    def test_engine_off_error_does_not_open_account_dialog(self):
+        script=self.get("/urano/v1/entry/picker.js").data
+        self.assertIn(b"montaraOwnerEngineIssue",script)
+        self.assertIn(b"engineIssue.hidden=false",script)
+        self.assertNotIn(b"accountDialog.showModal();\n      }finally",script)
+
     def test_engine_indicator_is_private_owner_only(self):
         picker = self.get("/urano/v1/entry/picker.js")
         self.assertEqual(picker.status_code, 200)
