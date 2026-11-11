@@ -77,6 +77,53 @@ def patched_original_resumable_upload(original: str) -> str:
     return result
 
 
+
+# Upgrade ONLY the already-reviewed, immutable I56 Owner proxy overlay.
+# Do not rebuild from older Chema code, overwrite main or mutate a live bundle.
+_REVIEWED_AUDIO_SIZE_ANCHOR = """        preview_file = body.get('video_preview') is True or (
+            isinstance(name, str) and name.lower().endswith(PREVIEW))
+        admitted_limit = proxy_limit if preview_file else limit"""
+
+
+def patched_reviewed_private_audio_overlay(reviewed: str) -> str:
+    """Produce a separate JM candidate with a matching audio-proxy ceiling."""
+    if (not isinstance(reviewed, str)
+            or reviewed.count(_REVIEWED_AUDIO_SIZE_ANCHOR) != 1
+            or "MONTARA_PRIVATE_PROXY_LIMIT_MIB" not in reviewed
+            or "max_original_file_bytes=limit" not in reviewed):
+        raise ValueError("Reviewed JM Owner proxy bundle does not match I56")
+    replacement = r"""        # Companion-derived lossless audio keeps the source audio suffix
+        # before .flac/.wv. Match the existing configured PRIVATE proxy cap;
+        # standalone audio files and video originals retain remote limit.
+        lossless_audio = bool(isinstance(name, str) and re.search(
+            r"\\.(?:wav|aif|aiff|mp3|m4a|flac|ogg|opus|wv)\\.(?:flac|wv)\\Z",
+            name, re.IGNORECASE))
+        video_proxy = bool(body.get('video_preview') is True
+            and isinstance(name, str) and name.lower().endswith('.small.mp4'))
+        audio_preview = bool(isinstance(name, str)
+            and name.lower().endswith(PREVIEW))
+        admitted_limit = proxy_limit if (video_proxy or
+            lossless_audio or audio_preview) else limit"""
+    candidate = reviewed.replace(_REVIEWED_AUDIO_SIZE_ANCHOR, replacement, 1)
+    compile(candidate, "reviewed-private-audio-JM-candidate.py", "exec")
+    return candidate
+
+
+def stage_reviewed_private_audio_overlay(
+    reviewed_path: Path, destination_path: Path
+) -> None:
+    """Write a NEW candidate file, preserving Chema's live I56 bundle."""
+    reviewed_path = Path(reviewed_path).resolve(strict=True)
+    target = Path(destination_path)
+    if reviewed_path == target.resolve() or target.is_symlink() or target.exists():
+        raise ValueError("Review and candidate paths must be separate")
+    content = patched_reviewed_private_audio_overlay(
+        reviewed_path.read_text(encoding="utf-8"))
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with target.open("x", encoding="utf-8") as handle:
+        handle.write(content)
+
+
 def stage_private_jm_resumable(
     original_path: Path, destination_path: Path, *,
     configured_mib: int = DEFAULT_PRIVATE_PROXY_MIB,
