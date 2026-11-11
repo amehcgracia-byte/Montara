@@ -200,6 +200,7 @@
     if(mode!=='stage') {message('This project type is not yet available in the Owner beta.');return;}
     if(!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(p.id))
       throw Error('Invalid project ID');
+    try {sessionStorage.setItem('montara-owner-selected-stage',p.id);}catch {}
     if(isEditor) {
       const current=location.pathname.match(/\/projects\/([0-9a-f-]{36})\//i)?.[1];
       if(current===p.id){
@@ -226,7 +227,7 @@
         });
       } catch (error) {
         message(error.message === 'Engine already busy'
-          ? 'Another project is active. Finish or safely close that project before switching. Nothing has been stopped.'
+          ? 'Another project has an active Engine. Open that Stage, then use Account → Close idle Engine after finishing its work. Nothing has been stopped.'
           : error.message);
         return;
       }
