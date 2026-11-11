@@ -1,0 +1,71 @@
+"""Owner-only original Chema editor assets, without starting any Engine.
+
+The original HTML and scripts can be served from a reviewed read-only JM web
+bundle while the user's Engine is OFF. A separate authorized gateway will
+later admit the first valid proxy upload and start the private worker.
+
+Only original static assets; NO media, JM API or public upload is exposed here.
+"""
+from __future__ import annotations
+
+from pathlib import Path
+
+from flask import Blueprint, abort, make_response, request, send_from_directory
+
+from urano.project_catalog import ProjectCatalog, ProjectNotFound
+from urano.session_auth import SESSION_COOKIE, SessionStore
+from urano.private_jm_wsgi_socket import pinned_jm_static_assets
+
+
+def original_editor_assets_blueprint(
+    catalog: ProjectCatalog, sessions: SessionStore, *,
+    https_origin: str, web_root: Path,
+) -> Blueprint:
+    root = Path(web_root).resolve(strict=True)
+    if not root.is_dir() or not (root / "index.html").is_file():
+        raise ValueError("Original JM web bundle is unavailable")
+    manifest = pinned_jm_static_assets(root)
+    if "/montara.js" not in manifest or "/companion.js" not in manifest:
+        raise ValueError("Not a complete original Chema editor bundle")
+    bp = Blueprint("urano_original_jm_owner_assets", __name__,
+                   url_prefix="/urano/v1/editor/projects")
+
+    def authorize(project_id: str):
+        if request.host_url.rstrip("/") != https_origin:
+            abort(403)
+        session = sessions.verify(request.cookies.get(SESSION_COOKIE))
+        if session is None:
+            abort(401)
+        try:
+            return catalog.get(session.owner_id, project_id)
+        except (ValueError, ProjectNotFound):
+            abort(404)
+
+    def deliver(relative: str):
+        response = make_response(send_from_directory(root, relative))
+        response.headers["Cache-Control"] = "private, no-store"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        return response
+
+    @bp.get("/<project_id>/")
+    def index(project_id: str):
+        authorize(project_id)
+        return deliver("index.html")
+
+    @bp.get("/<project_id>/<path:filename>")
+    def static(project_id: str, filename: str):
+        authorize(project_id)
+        path = "/" + filename
+        if path not in manifest:
+            abort(404)
+        # Root and every reviewed asset are pinned by the manifest. Detect
+        # substitutions since startup rather than following new symlinks.
+        selected = root / filename
+        if (selected.is_symlink() or not selected.is_file()
+                or any(part.is_symlink() for part in selected.parents if part == root
+                       or root in part.parents)):
+            abort(404)
+        return deliver(filename)
+
+    return bp
