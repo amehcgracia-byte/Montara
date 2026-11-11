@@ -80,8 +80,21 @@ def valid_first_upload(environ, *, max_proxy_bytes: int = 256 * 1024**2,
             return reject("unsupported_media_extension")
         if type(size) is not int or size <= 0:
             return reject("invalid_media_size")
-        allowed_size = (max_proxy_bytes if record.get("video_preview") is True
-                        or name.lower().endswith((".wav.opus",".aif.opus",".aiff.opus"))
+        # Companion's lossless audio output retains the source audio
+        # extension before .flac/.wv. Apply the already-configured private
+        # proxy ceiling to those bounded derivatives as well as to video
+        # previews. Raw .mp4/.mov without video_preview remain at 256 MiB;
+        # this never authorizes an implicit original-video upload.
+        lossless_audio_derivative = bool(re.search(
+            r"\.(?:wav|aif|aiff|mp3|m4a|flac|ogg|opus|wv)\.(?:flac|wv)\Z",
+            name, re.IGNORECASE))
+        compact_audio_derivative = name.lower().endswith(
+            (".wav.opus", ".aif.opus", ".aiff.opus"))
+        is_video_proxy = (record.get("video_preview") is True
+                          and name.lower().endswith(".small.mp4")
+                          and isinstance(record.get("original"), dict))
+        allowed_size = (max_proxy_bytes if is_video_proxy
+                        or lossless_audio_derivative or compact_audio_derivative
                         else 256 * 1024**2)
         if size > allowed_size:
             return reject("media_exceeds_private_transfer_limit")
