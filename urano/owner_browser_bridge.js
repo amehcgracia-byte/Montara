@@ -30,14 +30,17 @@
     };
     const toast = document.getElementById('toast');
     let observer;
+    let attemptedRecovery = false;
     const clear = () => {observer?.disconnect();splash.remove();};
     const inspect = () => {
+      if (visible('making')) attemptedRecovery = true;
       if (['footage','mode','frames','failed','result'].some(visible) ||
+          (attemptedRecovery && visible('home')) ||
           (toast && !toast.hidden && toast.classList.contains('err')))
         clear();
     };
     observer = new MutationObserver(inspect);
-    for (const id of ['footage','mode','frames','failed','result','toast']) {
+    for (const id of ['home','making','footage','mode','frames','failed','result','toast']) {
       const element = document.getElementById(id);
       if (element) observer.observe(element,{
         attributes:true,attributeFilter:['hidden','class']
