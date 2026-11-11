@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import io
 import json
+import re
 from pathlib import Path
 from urllib.parse import parse_qs, urlencode
 
@@ -51,7 +52,7 @@ class OwnerStageNativeExport:
                     ("owner-worker",str(self.folder))):
                 return _reject(environ,start_response)
             if "revision" in q and (not q["revision"][0].isascii()
-                 or not __import__("re").fullmatch(r"[a-f0-9]{20}",q["revision"][0])):
+                 or not re.fullmatch(r"[a-f0-9]{20}",q["revision"][0])):
                 return _reject(environ,start_response)
             rewrite=dict((key,value[0]) for key,value in q.items())
             rewrite["project_id"]=str(self.folder)
