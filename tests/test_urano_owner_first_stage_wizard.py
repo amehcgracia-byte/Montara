@@ -85,7 +85,7 @@ class OwnerFirstWizardContracts(unittest.TestCase):
         self.assertEqual(self.draft().status_code, 400)
         resumed = self.client.post("/api/v1/wizard/draft", json={
             "name": "Stage", "platform": "youtube",
-            "project_id": str(self.folder), "videos": ["proxy-0.mp4"],
+            "project_id": str(self.folder), "videos": [str(self.proxy)],
         })
         self.assertEqual(resumed.status_code, 200)
         self.assertEqual(len(self.calls), 2)
