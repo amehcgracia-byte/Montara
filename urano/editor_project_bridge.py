@@ -50,6 +50,26 @@ def editor_project_bridge_blueprint(
             "updated_at": project.updated_at,
         }
 
+    @bp.post("/projects")
+    def create():
+        # Only the existing same-origin authenticated editor may create a
+        # project. Never infer ownership from JSON/headers supplied by browser.
+        session = sessions.verify(request.cookies.get(SESSION_COOKIE))
+        if (request.headers.get("Origin") != https_origin or session is None
+                or not session.matches_csrf(request.headers.get("X-Urano-CSRF"))):
+            return jsonify(error="Trusted editor session and CSRF required"), 403
+        body = request.get_json(silent=True)
+        if (not isinstance(body, dict) or set(body) != {"title", "mode"}
+                or body.get("mode") not in MODES):
+            return jsonify(error="Choose a title and Stage, Push or Show"), 400
+        try:
+            project = catalog.create(owner(), body["title"], recipe={
+                "montara_beta_workspace": {"version": 1, "mode": body["mode"]}
+            })
+        except ValueError:
+            return jsonify(error="Invalid project title"), 400
+        return jsonify(project=public(project)), 201
+
     @bp.get("/projects")
     def choices():
         mode = request.args.get("mode", "")
