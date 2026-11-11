@@ -45,6 +45,12 @@ def authenticated_private_jm_connection(
         )
     # The connected worker descriptor is owned by the HTTPConnection. It can
     # stream large requests/responses directly; no video buffering in root.
+    # SCM_RIGHTS duplicates the broker's socket file description, which
+    # inherits O_NONBLOCK. The new Python socket wrapper has timeout=None;
+    # without synchronizing its timeout state, http.client sees an empty
+    # response before Werkzeug's worker replies (false HTTP 503).
+    # Keep a bounded timeout rather than disabling broker isolation.
+    worker.settimeout(timeout)
     connection = HTTPConnection("localhost", timeout=timeout)
     connection.sock = worker
     return connection
