@@ -27,6 +27,18 @@
   const list = document.createElement('ul');list.className='montara-owner-list';
   const hint = document.createElement('p');
   hint.className='hint';hint.setAttribute('role','status');hint.setAttribute('aria-live','polite');
+  const activeShortcut = document.createElement('button');
+  activeShortcut.type='button';
+  activeShortcut.className='btn ghost small';
+  activeShortcut.id='montaraOwnerReturnActive';
+  activeShortcut.hidden=true;
+  let activeShortcutId=null;
+  activeShortcut.addEventListener('click',()=>{
+    if(!activeShortcutId)return;
+    try {sessionStorage.setItem('montara-owner-selected-stage',activeShortcutId)}catch{}
+    location.assign('/urano/v1/editor/projects/'+
+      encodeURIComponent(activeShortcutId)+'/?resume=footage');
+  });
   const form = document.createElement('form');form.className='montara-owner-new';
   const name = document.createElement('input');name.required=true;name.maxLength=120;
   name.placeholder='Project name';name.setAttribute('aria-label','New project name');
@@ -34,7 +46,7 @@
   const modeSelect = document.createElement('select');modeSelect.setAttribute('aria-label','Project type');
   for(const mode of ['stage','push','show']){const o=document.createElement('option');o.value=mode;o.textContent=modes[mode];modeSelect.append(o)}
   form.append(modeSelect,name,create);
-  dialog.append(top,search,list,hint,form);
+  dialog.append(top,search,list,hint,activeShortcut,form);
   document.body.append(dialog);
   // One consistent layout: Montara + Projects left, editor steps centre, Account right.
   const brand = oldHeader.querySelector('.brand');
@@ -242,19 +254,46 @@
         return;
       }
     }
-    // A project switch must be admitted BEFORE navigating into Chema's
-    // recovery UI. A 409 stays in this readable modal; never stop an
-    // existing Engine or pretend the network disconnected.
+    // Read-only status before admission: never present a different active
+    // Owner worker as if the new project had failed to upload.
+    activeShortcut.hidden=true;
+    activeShortcutId=null;
+    message('Checking private Engine…');
+    let engine;
+    try {
+      engine=await api('projects/'+encodeURIComponent(p.id)+'/engine-state',{
+        headers:{'X-Urano-CSRF':await csrf()}
+      });
+    } catch(error) {
+      message('Engine state unavailable: '+error.message+
+        '. No worker was started or stopped.');
+      return;
+    }
+    if(engine.state==='unknown') {
+      message('Engine cannot be verified. No worker was started or stopped.');
+      return;
+    }
+    const active=engine.active_project;
+    if(engine.state==='on' && active?.id && active.id!==p.id) {
+      message('Engine belongs to “'+active.title+
+        '”. Open the active Stage to continue. No work was interrupted.');
+      activeShortcutId=active.id;
+      activeShortcut.textContent='Open '+active.title;
+      activeShortcut.hidden=false;
+      return;
+    }
     if(!newProject) {
+      // Idempotent admission for the SAME verified project; never
+      // implicitly replace the worker of a different Stage.
       message('Opening private project…');
       try {
-        await api('projects/'+encodeURIComponent(p.id)+'/ensure', {
+        await api('projects/'+encodeURIComponent(p.id)+'/ensure',{
           method:'POST',
           headers:{'X-Urano-CSRF':await csrf(),Origin:location.origin}
         });
-      } catch (error) {
-        message(error.message === 'Engine already busy'
-          ? 'Another project has an active Engine. Open that Stage, then use Account → Close idle Engine after finishing its work. Nothing has been stopped.'
+      } catch(error) {
+        message(error.message==='Engine already busy'
+          ? 'Another Stage owns this Engine. Reopen its project; no worker was stopped.'
           : error.message);
         return;
       }
@@ -284,7 +323,8 @@
   async function open(scope){
     if(scope)setScope(scope);
     if(!dialog.open)dialog.showModal();
-    state.open=true;search.value='';message('Loading projects…');
+    state.open=true;search.value='';activeShortcut.hidden=true;
+    activeShortcutId=null;message('Loading projects…');
     try { state.projects=(await api('projects')).projects||[];render(); }
     catch(error){message(error.message)}
   }
