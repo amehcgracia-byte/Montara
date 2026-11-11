@@ -61,6 +61,41 @@ class OriginalJMOwningAssetsTests(unittest.TestCase):
         self.sessions.revoke(self.auth.token)
         self.assertEqual(self.get().status_code, 401)
 
+    def test_opt_in_bootstrap_rewrites_only_served_html_not_chema_source(self):
+        original = (self.web / "index.html")
+        original.write_text(
+            '<html><nav id="steps"></nav>'
+            '<script src="mix-levels.js"></script>'
+            '<script src="montara.js"></script></html>')
+        before = original.read_bytes()
+        app = Flask("pilot-original-jm-ui")
+        app.register_blueprint(original_editor_assets_blueprint(
+            self.catalog, self.sessions, https_origin=ORIGIN,
+            web_root=self.web, enable_browser_pilot=True))
+        browser = app.test_client()
+        browser.set_cookie(
+            SESSION_COOKIE, self.auth.token, domain="montara-owner.test")
+        url = f"/urano/v1/editor/projects/{self.project.id}/"
+        served = browser.get(url, base_url=ORIGIN)
+        self.assertEqual(served.status_code, 200)
+        html = served.get_data(as_text=True)
+        self.assertIn(
+            f'owner-bridge.js" data-owner-project="{self.project.id}"',
+            html)
+        self.assertLess(html.index("owner-bridge.js"),
+                        html.index("mix-levels.js"))
+        self.assertEqual(original.read_bytes(), before)
+        served.close()
+        js = browser.get(url+"owner-bridge.js",base_url=ORIGIN)
+        self.assertEqual(js.status_code,200)
+        self.assertIn(b"Owner project",js.data)
+        js.close()
+        blocked=browser.get(
+            f"/urano/v1/editor/projects/{self.other.id}/owner-bridge.js",
+            base_url=ORIGIN)
+        self.assertEqual(blocked.status_code,404)
+        blocked.close()
+
     def test_only_reviewed_static_bundle_assets(self):
         self.assertEqual(self.get("hidden.txt").status_code, 404)
         self.assertEqual(self.get("missing.js").status_code, 404)
