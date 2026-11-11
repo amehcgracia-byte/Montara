@@ -196,7 +196,15 @@ def dispatch_owner(conn, web_uid:int, owner_db_root:Path, broker:DemoBroker):
         raise ValueError("Owner frame denied")
     # The read path has a separate strict schema including the worker
     # generation. It rechecks the existing broker-side Google session+CSRF.
-    if b'"stage_snapshot_owner"' in data:
+    # Dispatch on the parsed operation, not a substring inside raw JSON.
+    # An encoded string or unrelated field cannot select a privileged route.
+    try:
+        envelope=json.loads(data)
+    except (ValueError,UnicodeError) as exc:
+        raise ValueError("Invalid private owner frame") from exc
+    if not isinstance(envelope,dict):
+        raise ValueError("Invalid private owner frame")
+    if envelope.get("op")=="stage_snapshot_owner":
         owner_id,project_id,generation=verify_stage_owner_request(
             data,owner_db_root=owner_db_root)
         return broker.stage_snapshot_owner(
