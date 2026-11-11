@@ -129,7 +129,19 @@
             method: 'POST', credentials: 'same-origin',
             headers: { 'X-Urano-CSRF': token },
           });
-        if (!response.ok) throw new Error('Montara private Engine unavailable');
+        if (!response.ok) {
+          const failure = await response.json().catch(() => ({}));
+          const status = response.status;
+          const message = status === 409
+            ? 'Este usuario ya tiene otro proyecto abierto en el Engine privado. El trabajo activo no se cerrará automáticamente.'
+            : status === 401 || status === 403
+            ? 'La sesión privada ha caducado o cambiado. Vuelve a entrar con Google y abre el proyecto.'
+            : 'El Engine privado no ha podido abrir este proyecto. No se han modificado sus archivos.';
+          const error = new Error(message);
+          error.status = status >= 400 && status <= 599 ? status : 503;
+          error.ownerReason = typeof failure.error === 'string' ? failure.error : '';
+          throw error;
+        }
         const body = await response.json();
         if (body.project_id !== project || body.state !== 'ready'
             || !Number.isSafeInteger(body.generation)
@@ -201,7 +213,23 @@
     if (uploadOperation(target.operation, method) ||
         (method === 'GET' && target.operation === 'wizard/status' &&
          new URL(location.href).searchParams.get('resume') === 'footage')) {
-      await ensure();
+      try {
+        await ensure();
+      } catch (error) {
+        if (method === 'GET' && target.operation === 'wizard/status') {
+          // Chema's API retries rejected fetches as lost network connections.
+          // Return a bounded same-origin HTTP error instead, preserving the
+          // actual admission failure and leaving all active workers untouched.
+          return new Response(JSON.stringify({
+            error: { code: 'OWNER_STAGE_RECOVERY',
+                     message: error.message || 'No se puede recuperar el proyecto privado.' }
+          }), {
+            status: Number.isInteger(error.status) ? error.status : 503,
+            headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+          });
+        }
+        throw error;
+      }
     }
     const headers = new Headers(init.headers || input?.headers || {});
     metadata(headers, token);
