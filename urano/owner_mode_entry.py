@@ -38,6 +38,7 @@ async function csrf() {
 }
 function openEditor(id, newlyCreated=false) {
   if (!/^[0-9a-f-]{36}$/i.test(id)) throw Error('Invalid project ID');
+  try {sessionStorage.setItem('montara-owner-selected-stage',id);} catch {}
   location.assign('/urano/v1/editor/projects/' + encodeURIComponent(id) + '/' +
                   (newlyCreated ? '?start=stage' : '?resume=footage'));
 }
@@ -62,9 +63,13 @@ async function stage() {
   try {
     const result = await api('editor/projects?mode=stage');
     if (result.projects?.length) {
-      // Stage card starts the original Footage flow; selecting a saved edit
-      // explicitly from Projects remains the native recovery path.
-      openEditor(result.projects[0].id, true);
+      // Remember an explicitly chosen Owner project, but only if the server's
+      // authenticated Stage catalog still contains it. Never trust local
+      // storage as an authorization source.
+      let selected=null;
+      try {selected=sessionStorage.getItem('montara-owner-selected-stage');}catch {}
+      const current=result.projects.find(p=>p.id===selected) || result.projects[0];
+      openEditor(current.id, true);
       return;
     }
     notice('');
