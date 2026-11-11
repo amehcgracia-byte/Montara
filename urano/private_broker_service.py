@@ -235,7 +235,8 @@ class DemoBroker:
                     marker.get("folder")!=lease.project_id or
                     type(marker.get("uid")) is not int or marker["uid"]<=0):
                 raise UnverifiedTarget("Worker identity not verified")
-        except (ValueError,TypeError,OSError,UnverifiedTarget):
+        except (ValueError,TypeError,OSError,UnverifiedTarget,
+                subprocess.SubprocessError):
             return {"ok":True,"state":"unknown",
                     "active_project_id":lease.project_id}
         return {"ok":True,"state":"on","active_project_id":lease.project_id}
