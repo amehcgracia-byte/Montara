@@ -9,7 +9,6 @@ from __future__ import annotations
 import re
 import uuid
 from dataclasses import dataclass
-from urllib.parse import urlsplit
 
 # Deliberately tiny first Stage handshake. Add individual operations only after
 # inspecting the JM routes and proving isolation and request-body validation.
@@ -72,7 +71,7 @@ def plan_private_engine_request(
         raise PrivateEngineRouteDenied("Engine generation mismatch")
     if not isinstance(binding.engine_sha, str) or not _HEX_SHA.fullmatch(binding.engine_sha):
         raise PrivateEngineRouteDenied("Unverified Engine bundle")
-    if binding.mode not in _ALLOWED:
+    if not isinstance(binding.mode, str) or binding.mode not in _ALLOWED:
         raise PrivateEngineRouteDenied("Unsupported project mode")
     if not isinstance(method, str) or not isinstance(path, str):
         raise PrivateEngineRouteDenied("Invalid route")
