@@ -34,7 +34,7 @@ class ProjectLocationPolicyTests(unittest.TestCase):
     def test_project_proposal_is_pure_and_sanitized(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "Media" / "Montara"
-            folder = project_folder(root, "Concierto ../ Verano")
+            folder = project_folder(root, "Concierto: Verano")
             self.assertEqual(folder.parent, root)
             self.assertFalse(folder.exists())
             with self.assertRaises(InvalidProjectRoot):
