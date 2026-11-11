@@ -41,6 +41,8 @@
   if (brand) brand.after(trigger);
   else oldHeader.prepend(trigger);
   if (isEditor) {
+    // Engine state is informational. A separate ON/OFF widget cannot safely
+    // manage a worker shared by multiple browser tabs and Owner projects.
     const account = document.createElement('button');
     account.type = 'button'; account.className = 'btn ghost small';
     account.id = 'montaraOwnerAccount'; account.textContent = 'Account';
@@ -54,105 +56,76 @@
     cancel.type = 'button'; cancel.className = 'btn ghost small';
     cancel.textContent = 'Close';
     const accountStatus = document.createElement('p');
-    accountStatus.setAttribute('role', 'alert');
+    accountStatus.setAttribute('role','alert');
+    const actions = document.createElement('div'); actions.className = 'actions';
+    actions.append(signOut,cancel);
+    accountDialog.append(accountTitle,actions,accountStatus);
+    document.body.append(accountDialog);
     const engineControl = document.createElement('div');
     engineControl.id = 'montaraOwnerEngineControl';
     engineControl.className = 'montara-owner-engine';
+    engineControl.dataset.status = 'unknown';
     const engineLed = document.createElement('span');
     engineLed.className = 'montara-owner-engine-led';
     engineLed.setAttribute('aria-hidden','true');
     const engineLabel = document.createElement('span');
-    engineLabel.textContent = 'Engine';
-    const engineSwitch = document.createElement('button');
-    engineSwitch.type = 'button';
-    engineSwitch.className = 'montara-owner-engine-switch';
-    engineSwitch.id = 'montaraOwnerEngineSwitch';
-    engineSwitch.setAttribute('aria-label','Verify or start private Engine');
-    engineSwitch.setAttribute('aria-pressed','false');
-    const switchKnob = document.createElement('span');
-    switchKnob.className = 'montara-owner-engine-knob';
-    engineSwitch.append(switchKnob);
-    engineControl.append(engineLed, engineLabel, engineSwitch);
-    const engineIssue = document.createElement('span');
-    engineIssue.id = 'montaraOwnerEngineIssue';
-    engineIssue.className = 'montara-owner-engine-issue';
-    engineIssue.hidden = true;
-    engineIssue.setAttribute('role', 'alert');
-    engineControl.append(engineIssue);
-    engineControl.dataset.status = 'unknown'; // A running worker MUST NOT be shown as off without verification.
-    const ownProject = location.pathname.match(/\/projects\/([0-9a-f-]{36})\//i)?.[1];
-    function engineState(status) {
-      engineControl.dataset.status = status;
-      engineSwitch.setAttribute('aria-pressed',String(status==='on'));
-      engineSwitch.setAttribute('aria-label',status==='on'
-        ? 'Close verified idle Engine' : 'Verify or start private Engine');
-      engineControl.title = status==='unknown' ? 'Engine status not checked' :
-        status==='on' ? 'Private Engine verified running' :
-        status==='off' ? 'Private Engine confirmed stopped' : 'Checking Engine';
-    }
-    window.addEventListener('montara-owner-engine-ready',()=>engineState('on'));
-    const actions = document.createElement('div'); actions.className = 'actions';
-    actions.append(signOut, cancel);
-    accountDialog.append(accountTitle, actions, accountStatus);
-    engineSwitch.addEventListener('click', async () => {
-      if(!ownProject || engineSwitch.disabled)return;
-      engineSwitch.disabled = true;
-      const wasOn = engineControl.dataset.status==='on';
-      let verifiedRunning = false;
-      let closeAttempted = false;
-      engineState('checking');
-      accountStatus.textContent='';
-      engineIssue.hidden = true;
-      engineIssue.textContent = '';
-      try {
-        const token = await csrf();
-        const admission=await api('projects/'+encodeURIComponent(ownProject)+'/ensure',{
-          method:'POST',headers:{'X-Urano-CSRF':token,Origin:location.origin}
-        });
-        if(admission.state!=='ready' || !Number.isSafeInteger(admission.generation))
-          throw Error('Private Engine verification failed.');
-        verifiedRunning = true;
-        if(!wasOn) {
-          engineState('on');
-          return;
-        }
-        // No switch-off unless the exact, authenticated worker reports idle.
-        const current=await fetch('/urano/v1/media/'+encodeURIComponent(ownProject)+'/wizard/status',{
-          credentials:'same-origin',cache:'no-store',
-          headers:{'X-Urano-CSRF':token,
-                   'X-Montara-Engine-Generation':String(admission.generation)}
-        });
-        if(!current.ok)throw Error('Project status is not verified. Nothing was stopped.');
-        const state=await current.json();
-        if(state.status!=='idle')
-          throw Error('Editor is in state '+String(state.status||'unknown')+
-            '. The Engine is running, but it cannot be safely stopped from here.');
-        if(!window.confirm('Close this idle Engine? Saved project files will remain.')){
-          engineState('on');
-          return;
-        }
-        closeAttempted = true;
-        const result=await api('projects/'+encodeURIComponent(ownProject)+'/close',{
-          method:'POST',headers:{'X-Urano-CSRF':token,Origin:location.origin}
-        });
-        if(result.state!=='stopped')throw Error('Engine shutdown was not confirmed.');
-        engineState('off');
-        accountStatus.textContent='Engine closed. Saved projects are preserved.';
-      }catch(error){
-        // A confirmed worker admission remains ON even if editing is busy;
-        // amber means an unknown worker state, not "busy".
-        engineState(verifiedRunning && !closeAttempted ? 'on' : 'unknown');
-        const reason=error.message||'Engine state not verified.';
-        // Engine state is not an account-settings error. Keep the user in
-        // Stage and show a small diagnostic beside the switch instead of
-        // unexpectedly opening the Account dialog.
-        engineIssue.textContent=reason;
-        engineIssue.hidden=false;
-        engineControl.title=reason;
-      }finally{engineSwitch.disabled=false}
-    });
-    document.body.append(accountDialog);
+    engineLabel.textContent = 'Engine · Checking…';
+    engineLabel.id = 'montaraOwnerEngineLabel';
+    engineLabel.setAttribute('role','status');
+    const openActive = document.createElement('button');
+    openActive.type = 'button'; openActive.className = 'btn ghost small';
+    openActive.id = 'montaraOwnerOpenActive';
+    openActive.textContent = 'Open active Stage';
+    openActive.hidden = true;
+    engineControl.append(engineLed,engineLabel,openActive);
     oldHeader.append(engineControl,account);
+    const ownProject = location.pathname.match(/\/projects\/([0-9a-f-]{36})\//i)?.[1];
+    let activeProjectId = null;
+    let statusJob = null;
+    function renderEngineState(result) {
+      const status = result?.state;
+      const active = result?.active_project;
+      engineControl.dataset.status = status==='on'?'on':
+        status==='off'?'off':'unknown';
+      if(status==='on' && active?.id && active?.title) {
+        engineLabel.textContent='Engine · '+active.title;
+        activeProjectId=active.id;
+        openActive.hidden = activeProjectId===ownProject;
+        engineControl.title='Engine running for '+active.title;
+      } else {
+        activeProjectId=null;
+        openActive.hidden=true;
+        engineLabel.textContent=status==='off'
+          ? 'Engine · Off' : 'Engine · Status unavailable';
+        engineControl.title=status==='off'
+          ? 'No private Engine running' : 'Could not verify the private Engine';
+      }
+    }
+    function refreshEngineState() {
+      if(!ownProject || statusJob)return statusJob;
+      statusJob=(async()=>{
+        try {
+          const result=await api('projects/'+encodeURIComponent(ownProject)+'/engine-state',{
+            headers:{'X-Urano-CSRF':await csrf()}
+          });
+          renderEngineState(result);
+        } catch {
+          renderEngineState({state:'unknown'});
+        }
+      })().finally(()=>{statusJob=null});
+      return statusJob;
+    }
+    openActive.addEventListener('click',()=>{
+      if(!activeProjectId || activeProjectId===ownProject)return;
+      try {sessionStorage.setItem('montara-owner-selected-stage',activeProjectId)}catch{}
+      location.assign('/urano/v1/editor/projects/'+
+        encodeURIComponent(activeProjectId)+'/?resume=footage');
+    });
+    window.addEventListener('montara-owner-engine-ready',refreshEngineState);
+    window.addEventListener('pageshow',refreshEngineState);
+    queueMicrotask(refreshEngineState);
+    // Read-only polling, no Engine admission or shutdown operations.
+    setInterval(()=>{if(!document.hidden)refreshEngineState()},30000);
     account.addEventListener('click', () => accountDialog.showModal());
     cancel.addEventListener('click', () => accountDialog.close());
     signOut.addEventListener('click', async () => {
