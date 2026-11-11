@@ -92,6 +92,7 @@ def owner_engine_preview_blueprint(catalog:ProjectCatalog,sessions:SessionStore,
         response.headers["Cache-Control"]="no-store"
         return response
 
+    @bp.post("/projects/<project_id>/ensure")
     @bp.post("/projects/<project_id>/open")
     @bp.post("/projects/<project_id>/close")
     def dispatch(project_id:str):
@@ -112,7 +113,8 @@ def owner_engine_preview_blueprint(catalog:ProjectCatalog,sessions:SessionStore,
             catalog.get(user.owner_id,project_id)
         except (ProjectNotFound,ValueError):
             return jsonify(error="Project not found"),404
-        op="open_owner" if request.path.endswith("/open") else "close_owner"
+        op=("ensure_owner" if request.path.endswith("/ensure") else
+            "open_owner" if request.path.endswith("/open") else "close_owner")
         try:
             outcome=broker_request(op,token,csrf,project_id)
         except (ValueError,OSError,RuntimeError,TimeoutError,json.JSONDecodeError):
