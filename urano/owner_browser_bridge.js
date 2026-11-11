@@ -15,6 +15,10 @@
     '/api/v1/wizard/upload': 'wizard/upload',
     '/api/v1/wizard/projects/new': 'wizard/projects/new',
     '/api/v1/wizard/draft': 'wizard/draft',
+    '/api/v1/wizard/prepare': 'wizard/prepare',
+    '/api/v1/wizard/start': 'wizard/start',
+    '/api/v1/settings/fillers': 'settings/fillers',
+    '/api/v1/artifacts/sync': 'artifacts/sync',
     '/api/v1/wizard/status': 'wizard/status',
     '/api/v1/project': 'project',
     '/montara/branding': 'branding',
@@ -37,10 +41,18 @@
     const uploadPart = new RegExp("^/montara/uploads/([a-f0-9]{32})(/finish)?$").exec(path);
     const operation = routes[path] || (uploadPart
       ? 'uploads/' + uploadPart[1] + (uploadPart[2] || '') : null);
-    if (!operation || parsed.search || parsed.hash) {
+    const isStatusPoll = operation === 'wizard/status' &&
+      parsed.searchParams.size === 1 &&
+      parsed.searchParams.has('project_id') &&
+      parsed.searchParams.get('project_id').length > 0;
+    // Status is intentionally bound to this worker; discard the browser's
+    // physical path query rather than forwarding it to a global JM catalog.
+    if (!operation || parsed.hash ||
+        (parsed.search && !isStatusPoll)) {
       return { blocked: true };
     }
-    return { path: base + operation, operation };
+    return { path: base + operation +
+      (isStatusPoll ? '?project_id=owner-worker' : ''), operation };
   };
 
   const csrf = async () => {
