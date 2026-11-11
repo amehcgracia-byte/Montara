@@ -26,7 +26,7 @@ _SUPPORTED = frozenset({".mp4", ".mov", ".m4v", ".mts", ".m2ts",
                         ".m4a", ".ogg"})
 
 
-def valid_first_upload(environ) -> bool:
+def valid_first_upload(environ, *, max_proxy_bytes: int = 256 * 1024**2) -> bool:
     """Only recognized new-upload calls, never dragenter, listing or polling."""
     path = environ.get("PATH_INFO")
     method = environ.get("REQUEST_METHOD")
@@ -66,7 +66,10 @@ def valid_first_upload(environ) -> bool:
         return bool(
             isinstance(name, str) and _FILE_NAME.fullmatch(name)
             and Path(name).suffix.lower() in _SUPPORTED
-            and type(size) is int and 0 < size <= 256 * 1024**2
+            and type(size) is int and 0 < size <= (
+                max_proxy_bytes if record.get("video_preview") is True
+                or name.lower().endswith((".wav.opus", ".aif.opus", ".aiff.opus"))
+                else 256 * 1024**2)
             and isinstance(fingerprint, str) and
             _DIGEST.fullmatch(fingerprint)
         )
