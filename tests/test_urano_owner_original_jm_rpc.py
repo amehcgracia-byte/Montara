@@ -77,6 +77,38 @@ class JMRealHTTPRPCContracts(unittest.TestCase):
             self.events.append(("sync",None))
             return jsonify(clips={},status="done")
 
+        @worker.get("/api/v1/wizard/review")
+        def review():
+            self.events.append(("review",dict(request.args)))
+            return jsonify(items=[{
+                "index":0, "thumbnail":"/api/v1/wizard/review/thumbnail/assets-v2/frame-0.jpg",
+                "preview":"/api/v1/wizard/review/preview/0?v=abcdef00",
+                "duration_sec":3.0}], platform="youtube")
+
+        @worker.post("/api/v1/wizard/review/replace")
+        def replace_shot():
+            self.events.append(("replace",request.get_json()))
+            return jsonify(replaced=[0])
+
+        @worker.post("/api/v1/wizard/review/render")
+        def render_review():
+            self.events.append(("render",request.get_json()))
+            return jsonify(status="running"),202
+
+        @worker.get("/api/v1/wizard/review/thumbnail/assets-v2/frame-0.jpg")
+        def thumbnail():
+            self.events.append(("thumbnail",None))
+            return b"jpeg-thumbnail",200,{"Content-Type":"image/jpeg"}
+
+        @worker.get("/api/v1/wizard/review/preview/0")
+        def preview():
+            self.events.append(("preview",request.headers.get("Range")))
+            if request.headers.get("Range")=="bytes=0-1":
+                return b"mp",206,{
+                    "Content-Type":"video/mp4","Content-Range":"bytes 0-1/10",
+                    "Accept-Ranges":"bytes"}
+            return b"mp4-preview",200,{"Content-Type":"video/mp4"}
+
         @worker.get("/api/v1/project")
         def status():
             self.events.append(("status",None))
@@ -237,6 +269,45 @@ class JMRealHTTPRPCContracts(unittest.TestCase):
             self.url("artifacts/sync",self.b.id),
             base_url=ORIGIN,headers=headers)
         self.assertEqual(foreign.status_code,404)
+
+    def test_authenticated_review_images_video_range_and_render(self):
+        headers={**self.headers,"X-Montara-Engine-Generation":"9"}
+        review=self.client.get(self.url("wizard/review")+"?render=1&shot=0",
+                               base_url=ORIGIN,headers=headers)
+        self.assertEqual(review.status_code,200,review.get_data(as_text=True))
+        self.assertEqual(self.events[-1],("review",{"render":"1","shot":"0"}))
+        self.assertEqual(review.json["items"][0]["index"],0)
+        thumb=self.client.get(
+            self.url("wizard/review/thumbnail/assets-v2/frame-0.jpg"),
+            base_url=ORIGIN,headers=headers)
+        self.assertEqual(thumb.status_code,200)
+        self.assertEqual(thumb.data,b"jpeg-thumbnail")
+        preview=self.client.get(self.url("wizard/review/preview/0?v=abcdef00"),
+            base_url=ORIGIN,headers={**headers,"Range":"bytes=0-1"})
+        self.assertEqual(preview.status_code,206)
+        self.assertEqual(preview.headers["Content-Range"],"bytes 0-1/10")
+        self.assertEqual(preview.data,b"mp")
+        swapped=self.client.post(self.url("wizard/review/replace"),
+            base_url=ORIGIN,headers=headers,json={"rejected":[0]})
+        self.assertEqual(swapped.status_code,200)
+        render=self.client.post(self.url("wizard/review/render"),
+            base_url=ORIGIN,headers=headers,json={})
+        self.assertEqual(render.status_code,202)
+        self.assertEqual(self.events[-1][0],"render")
+        for url in (
+            self.url("wizard/review")+"?render=1&shot=../../etc/passwd",
+            self.url("wizard/review")+"?render=1&render=0",
+            self.url("wizard/review/preview/0?path=/tmp/other"),
+            self.url("wizard/review/thumbnail/other-file/foreign.jpg"),
+        ):
+            with self.subTest(url=url):
+                result=self.client.get(url,base_url=ORIGIN,headers=headers)
+                self.assertEqual(result.status_code,404)
+        forbidden=self.client.get(
+            self.url("wizard/review/preview/0",self.b.id),
+            base_url=ORIGIN,headers=headers)
+        self.assertEqual(forbidden.status_code,404)
+        self.assertEqual(self.ensured,[])
 
     def test_resumable_limits_do_not_start_engine_and_bad_metadata_denied(self):
         limits=self.client.get(self.url("uploads"),
