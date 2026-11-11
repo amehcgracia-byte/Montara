@@ -118,6 +118,8 @@
     '/api/v1/edit/shot': 'edit/shot',
     '/api/v1/edit/shot/frame': 'edit/shot/frame',
     '/montara/uploads': 'uploads',
+    '/montara/session': 'session',
+    '/montara/session/latest': 'session/latest',
   });
   const nativeFetch = window.fetch.bind(window);
   const base = '/urano/v1/media/' + project + '/';
@@ -134,10 +136,13 @@
     const path = parsed.pathname;
     if (!path.startsWith('/api/v1/') && !path.startsWith('/montara/')) return null;
     const uploadPart = new RegExp("^/montara/uploads/([a-f0-9]{32})(/finish)?$").exec(path);
+    const sessionPart = /^\/montara\/session\/([a-f0-9]{12})(?:\/(.*))?$/.exec(path);
     const shotPreview = /^\/api\/v1\/wizard\/review\/preview\/([0-9]{1,5})$/.exec(path);
     const shotThumbnail = /^\/api\/v1\/wizard\/review\/thumbnail\/(assets-v2|[a-f0-9]{16,128})\/([A-Za-z0-9_.-]{1,180})$/.exec(path);
     const operation = routes[path] ||
       (uploadPart ? 'uploads/' + uploadPart[1] + (uploadPart[2] || '') :
+      sessionPart ? 'session/' + sessionPart[1] +
+        (sessionPart[2] ? '/' + sessionPart[2] : '') :
       shotPreview ? 'wizard/review/preview/' + shotPreview[1] :
       shotThumbnail ? 'wizard/review/thumbnail/' + shotThumbnail[1] + '/' + shotThumbnail[2] : null);
     const isStatusPoll = operation === 'wizard/status' &&
@@ -167,18 +172,34 @@
       parsed.searchParams.size === 3 &&
       ['index','choice','revision'].every(k =>
         /^[0-9]{1,9}$/.test(parsed.searchParams.get(k) || ''));
+    const sessionQuery = sessionPart && (
+      ((sessionPart[2] === 'listen') &&
+        parsed.searchParams.size===2 &&
+        ['start','end'].every(k=>/^[0-9]{1,9}(?:\\.[0-9]{1,6})?$/.test(parsed.searchParams.get(k)||''))) ||
+      (['originals','local-plan'].includes(sessionPart[2]) &&
+        parsed.searchParams.has('song') &&
+        parsed.searchParams.size<=4 &&
+        [...parsed.searchParams.keys()].every(k=>
+          ['song','start','end','name'].includes(k))) ||
+      (/^result\/[0-9]{1,6}$/.test(sessionPart[2]||'') &&
+        parsed.searchParams.size===1 &&
+        ((parsed.searchParams.get('download')==='1') ||
+         /^[0-9]{1,9}$/.test(parsed.searchParams.get('v')||'')))
+    );
     const videoVersion = Boolean(shotPreview) &&
       parsed.searchParams.size === 1 && /^[A-Za-z0-9_.-]{0,80}$/.test(parsed.searchParams.get('v') || '');
     if (!operation || parsed.hash ||
         (parsed.search && !isStatusPoll && !reviewQuery && !recipeQuery &&
-         !timelineQuery && !shotQuery && !frameQuery && !masterQuery && !videoVersion)) {
+         !timelineQuery && !shotQuery && !frameQuery && !masterQuery && !videoVersion &&
+         !sessionQuery)) {
       return { blocked: true };
     }
     return { path: base + operation +
       (isStatusPoll || recipeQuery ? '?project_id=owner-worker' :
        masterQuery ? '?project_id=owner-worker&revision=' + encodeURIComponent(parsed.searchParams.get('revision')) :
        reviewQuery || timelineQuery || shotQuery || frameQuery || videoVersion ?
-       parsed.search : ''), operation };
+       reviewQuery || timelineQuery || shotQuery || frameQuery || videoVersion ||
+       sessionQuery ? parsed.search : ''), operation };
   };
 
   const csrf = async () => {
@@ -277,7 +298,8 @@
   };
   const uploadOperation = (operation, method) =>
     method === 'POST' &&
-    (operation === 'wizard/upload' || operation === 'uploads');
+    (operation === 'wizard/upload' || operation === 'uploads' ||
+     operation === 'session');
   const mediaTransfer = (operation, method) =>
     operation === 'uploads' && method === 'POST' ||
     /^uploads\/[a-f0-9]{32}$/.test(operation) && method === 'PUT' ||
