@@ -88,6 +88,22 @@ class OwnerNavigationConsistencyTests(unittest.TestCase):
         self.assertIn(b"engineIssue.hidden=false",script)
         self.assertNotIn(b"accountDialog.showModal();\n      }finally",script)
 
+    def test_native_chema_errors_remain_visible_in_owner_pilot(self):
+        path=f"/urano/v1/editor/projects/{self.project.id}/montara.js"
+        result=self.get(path)
+        self.assertEqual(result.status_code,200)
+        self.assertIn(b'f.kind === "error" ? escapeHtml(f.error || "Transfer failed")',
+                      result.data)
+        self.assertNotIn(
+            b'f.small ? "Ready \xc2\xb7 lossless" : f.kind === "error"',
+            result.data)
+        original=(self.web/"montara.js").read_bytes()
+        self.assertIn(
+            b'f.small ? "Ready \xc2\xb7 lossless" : f.kind === "error"',
+            original)
+        css=self.get("/urano/v1/entry/picker.css").data
+        self.assertNotIn(b'content:"Transfer failed"',css)
+
     def test_engine_indicator_is_private_owner_only(self):
         picker = self.get("/urano/v1/entry/picker.js")
         self.assertEqual(picker.status_code, 200)
