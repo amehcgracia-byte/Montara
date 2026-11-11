@@ -184,6 +184,21 @@ class JMRealHTTPRPCContracts(unittest.TestCase):
             data=data,headers=headers or self.headers,
             content_type=content_type,base_url=ORIGIN)
 
+    def test_mp3_first_upload_and_readable_error_for_native_chema_xhr(self):
+        # No private media or live user project; one synthetic MP3 wire request.
+        audio=b"fake-mp3-test-bytes"*9000
+        header={**self.headers,"X-Zucker-Filename":"4._Minor_7th.mp3"}
+        uploaded=self.post("wizard/upload",audio,header,"application/octet-stream")
+        self.assertEqual(uploaded.status_code,200,uploaded.get_data(as_text=True))
+        self.assertEqual(uploaded.json["size"],len(audio))
+        self.assertEqual(self.ensured,[("ensure_owner",self.a.id)])
+        bad=self.post("wizard/upload",b"invalid",{
+            **self.headers,"X-Zucker-Filename":"bad.exe"
+        },"application/octet-stream")
+        self.assertEqual(bad.status_code,400)
+        self.assertIsInstance(bad.json["error"],dict)
+        self.assertIn("message",bad.json["error"])
+
     def test_real_proxy_bytes_and_original_jm_followup(self):
         video=b"proxy-video-bytes"*7000
         headers=dict(self.headers,**{"X-Zucker-Filename":"camera.small.mp4"})
