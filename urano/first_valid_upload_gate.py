@@ -26,54 +26,69 @@ _SUPPORTED = frozenset({".mp4", ".mov", ".m4v", ".mts", ".m2ts",
                         ".m4a", ".ogg"})
 
 
-def valid_first_upload(environ, *, max_proxy_bytes: int = 256 * 1024**2) -> bool:
-    """Only recognized new-upload calls, never dragenter, listing or polling."""
+def valid_first_upload(environ, *, max_proxy_bytes: int = 256 * 1024**2,
+                       rejection_codes: list[str] | None = None) -> bool:
+    """Validate media metadata only; never interpret untrusted names as paths.
+
+    Optional rejection codes distinguish unsupported format, size or metadata
+    to the authenticated Owner. No filename, fingerprint or original path is
+    included in the diagnostic.
+    """
+    def reject(code: str) -> bool:
+        if rejection_codes is not None:
+            rejection_codes.append(code)
+        return False
+
     path = environ.get("PATH_INFO")
     method = environ.get("REQUEST_METHOD")
     try:
         length = int(environ.get("CONTENT_LENGTH", "-1"))
     except (ValueError, TypeError):
-        return False
+        return reject("invalid_content_length")
     if method == "POST" and path == "/api/v1/wizard/upload":
         if not 0 < length <= 256_000_000:
-            return False
+            return reject("invalid_or_oversize_direct_media")
         if environ.get("CONTENT_TYPE", "").split(";")[0].strip() != "application/octet-stream":
-            return False
+            return reject("invalid_direct_content_type")
         name = unquote(environ.get("HTTP_X_ZUCKER_FILENAME", ""))
-        return bool(_FILE_NAME.fullmatch(name)
-                    and Path(name).suffix.lower() in _SUPPORTED)
+        if not _FILE_NAME.fullmatch(name):
+            return reject("invalid_media_name")
+        if Path(name).suffix.lower() not in _SUPPORTED:
+            return reject("unsupported_media_extension")
+        return True
     if method == "POST" and path == "/montara/uploads":
-        # Parse only bounded metadata, NEVER media bytes. Replace the WSGI
-        # stream so Chema's original resumable handler still receives the
-        # exact same JSON even when admission fails.
-        if (not 0 < length <= 8192
-                or environ.get("CONTENT_TYPE", "").split(";")[0].strip()
-                     != "application/json"):
-            return False
+        if not 0 < length <= 8192:
+            return reject("invalid_resumable_metadata_length")
+        if environ.get("CONTENT_TYPE", "").split(";")[0].strip() != "application/json":
+            return reject("invalid_resumable_content_type")
         raw = environ["wsgi.input"].read(length)
         environ["wsgi.input"] = io.BytesIO(raw)
         if len(raw) != length:
-            return False
+            return reject("incomplete_resumable_metadata")
         try:
             record = json.loads(raw)
         except (ValueError, UnicodeError):
-            return False
+            return reject("invalid_resumable_json")
         if not isinstance(record, dict):
-            return False
+            return reject("invalid_resumable_fields")
         name = record.get("name")
         size = record.get("size")
         fingerprint = record.get("fingerprint")
-        return bool(
-            isinstance(name, str) and _FILE_NAME.fullmatch(name)
-            and Path(name).suffix.lower() in _SUPPORTED
-            and type(size) is int and 0 < size <= (
-                max_proxy_bytes if record.get("video_preview") is True
-                or name.lower().endswith((".wav.opus", ".aif.opus", ".aiff.opus"))
-                else 256 * 1024**2)
-            and isinstance(fingerprint, str) and
-            _DIGEST.fullmatch(fingerprint)
-        )
-    return False
+        if not isinstance(name, str) or not _FILE_NAME.fullmatch(name):
+            return reject("invalid_media_name")
+        if Path(name).suffix.lower() not in _SUPPORTED:
+            return reject("unsupported_media_extension")
+        if type(size) is not int or size <= 0:
+            return reject("invalid_media_size")
+        allowed_size = (max_proxy_bytes if record.get("video_preview") is True
+                        or name.lower().endswith((".wav.opus",".aif.opus",".aiff.opus"))
+                        else 256 * 1024**2)
+        if size > allowed_size:
+            return reject("media_exceeds_private_transfer_limit")
+        if not isinstance(fingerprint,str) or not _DIGEST.fullmatch(fingerprint):
+            return reject("invalid_media_fingerprint")
+        return True
+    return reject("invalid_upload_operation")
 
 
 class FirstValidUploadEngineGate:
