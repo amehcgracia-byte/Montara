@@ -77,6 +77,8 @@ class PrivateEngineRouteContractTests(unittest.TestCase):
         self.denied(binding=replace(self.binding, mode="push"))
         self.denied(binding=replace(self.binding, mode="music"))
         self.denied(binding=replace(self.binding, mode=""))
+        self.denied(binding=replace(self.binding, mode=["stage"]))
+        self.denied(binding=replace(self.binding, mode={"stage": True}))
 
     def test_malformed_project_and_invalid_generation_fail_closed(self):
         for bad in ("../../x", PROJECT.upper(), "", None, OTHER_PROJECT):
