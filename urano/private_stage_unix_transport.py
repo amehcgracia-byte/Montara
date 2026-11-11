@@ -52,6 +52,7 @@ def serve_stage_socket(
     directory: Path, *, project_id: str, generation: int,
     read_snapshot: Callable[[], dict], trusted_broker_uid: int = 0,
     max_requests: int | None = None,
+    on_listening: Callable[[], None] | None = None,
 ) -> None:
     """Worker-side blocking loop, run only after isolated Engine project opens.
 
@@ -70,6 +71,10 @@ def serve_stage_socket(
         server.bind(str(path))
         os.chmod(path, 0o600)
         server.listen(4)
+        # A ready marker may only be emitted after the IPC listener exists.
+        # This eliminates a race between broker admission and worker startup.
+        if on_listening is not None:
+            on_listening()
         completed = 0
         try:
             while max_requests is None or completed < max_requests:
