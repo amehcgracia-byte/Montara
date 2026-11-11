@@ -1,0 +1,27 @@
+name: FER I40 private original JM Unix WSGI transport
+on:
+  pull_request:
+    paths:
+      - 'urano/private_jm_wsgi_socket.py'
+      - 'tests/test_urano_private_jm_wsgi_socket.py'
+      - '.github/workflows/fer-i40-original-jm-wsgi.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  unix-private-jm-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install WSGI contract dependencies
+        run: python -m pip install 'Flask>=3,<4'
+      - name: Verify real Unix WSGI socket and exact UI asset admission
+        run: |
+          python -m unittest discover -s tests -p test_urano_private_jm_wsgi_socket.py -v
+          python -m py_compile urano/private_jm_wsgi_socket.py
