@@ -69,6 +69,22 @@ class JMFirstValidUploadGateTests(unittest.TestCase):
                                  headers=headers)
         self.assertEqual(self.calls, [])
 
+    def test_invalid_resumable_metadata_never_starts_or_forwards_upload(self):
+        for body in (
+            {"name": "../../private/camera.mp4", "size": 120,
+             "fingerprint": "f" * 64},
+            {"name": "camera.exe", "size": 120,
+             "fingerprint": "f" * 64},
+            {"name": "cam.small.mp4", "size": True,
+             "fingerprint": "f" * 64},
+            {"name": "cam.small.mp4", "size": 120,
+             "fingerprint": "wrong"},
+        ):
+            with self.subTest(body=body):
+                reply = self.client.post("/montara/uploads", json=body)
+                self.assertEqual(reply.status_code, 400)
+        self.assertEqual(self.calls, [])
+
     def test_no_upload_forwarded_when_private_engine_cannot_be_attested(self):
         self.ready = False
         response = self.client.post(
