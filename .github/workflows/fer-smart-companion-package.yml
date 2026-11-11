@@ -1,0 +1,45 @@
+name: SMART Windows Companion beta ZIP
+on:
+  push:
+    branches:
+      - fernando/integracion
+    paths:
+      - 'companion/build_smart_beta.py'
+      - 'companion/smart_beta_launcher.py'
+      - 'companion/windows_video_jobs_compat.py'
+      - '.github/workflows/fer-smart-companion-package.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package-windows-companion:
+    runs-on: windows-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Retrieve exact reviewed Chema original source
+        shell: pwsh
+        run: |
+          git fetch --no-tags --depth=1 origin 14cce126137a0ef30a987351ff35b750f54473bd
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned Chema revision missing' }
+      - name: Create minimal isolated Companion beta ZIP
+        shell: pwsh
+        run: |
+          python companion/build_smart_beta.py --repo . --out dist/Montara-SMART-Beta-Windows.zip
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m zipfile -t dist/Montara-SMART-Beta-Windows.zip
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Publish installation ZIP for Fernando
+        uses: actions/upload-artifact@v4
+        with:
+          name: Montara-SMART-Beta-Windows
+          path: dist/Montara-SMART-Beta-Windows.zip
+          retention-days: 7
+          if-no-files-found: error
