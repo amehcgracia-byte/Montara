@@ -12,16 +12,7 @@ from flask import Blueprint, jsonify, request
 from urano.project_catalog import ProjectCatalog, ProjectNotFound
 from urano.session_auth import SESSION_COOKIE, SessionStore
 
-MODES = frozenset({"stage", "push", "show"})
-
-
-def project_mode(project) -> str | None:
-    """Existing I28 recipe mode; legacy/unclassified projects remain untouched."""
-    workspace = project.recipe.get("montara_beta_workspace")
-    if not isinstance(workspace, dict):
-        return None
-    mode = workspace.get("mode")
-    return mode if isinstance(mode, str) and mode in MODES else None
+from urano.editor_mode import MODES, project_mode
 
 
 def editor_project_bridge_blueprint(
