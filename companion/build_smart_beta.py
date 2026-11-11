@@ -1,15 +1,17 @@
-"""Reproducible, minimal Windows SMART Beta package from Chema's pinned source.
+"""Reproducible pinned Windows Companion + native Stage renderer ZIP.
 
-No source tree rewrite; only the reviewed Windows video_jobs compatibility
-patch is applied inside the distribution ZIP. Never package secrets, user
-state, source media, binaries from /opt, or an Engine mismatch.
+Bundled sources are pinned Chema 14cce126 and Engine b867b3c; Python
+dependencies are installed separately and only on the Windows test PC.
+Original Windows installations, personal projects and secrets stay outside.
 """
 from __future__ import annotations
+
 import argparse
 import hashlib
 import io
 import json
 import subprocess
+import tarfile
 import zipfile
 from pathlib import Path
 
@@ -18,7 +20,7 @@ from windows_video_jobs_compat import patched_windows_video_jobs
 EDITOR_SHA = "14cce126137a0ef30a987351ff35b750f54473bd"
 ENGINE_SHA = "b867b3c72af8fe4685b487bcf1e09ffcc2a7c82b"
 MIXER_SHA = "f15ff91c1b80fc5f157099dcd9451d958d553ae6"
-FILES = (
+SOURCE_FILES = (
     "companion/companion.py",
     "companion/video_jobs.py",
     "companion/video_recipe.py",
@@ -27,128 +29,174 @@ FILES = (
     "companion/windows_support.py",
     "companion/spherical_proxy.py",
 )
-START = r"""@echo off
-setlocal
-cd /d "%~dp0"
-echo Montara SMART Beta - Companion privado Windows
-echo Los Companion anteriores no se modificaran.
-echo.
-where python >nul 2>&1
-if errorlevel 1 (
-  echo No se encuentra Python. Comprueba su instalacion.
-  pause
-  exit /b 2
+SMART_FILES = (
+    "smart_beta_launcher.py",
+    "windows_tray_smart.ps1",
+    "INSTALAR-RENDER-SMART.ps1",
 )
-python smart_beta_launcher.py
+START = """@echo off
+cd /d "%~dp0"
+echo Montara SMART Beta - icono en la bandeja de Windows
+powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -WindowStyle Hidden -File "%~dp0windows_tray_smart.ps1"
+"""
+INSTALL = """@echo off
+cd /d "%~dp0"
+echo Montara SMART Beta - Preparar motor local de video
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0INSTALAR-RENDER-SMART.ps1"
+if errorlevel 1 (
+    echo No se ha terminado la instalacion. Revisar error anterior.
+    pause
+    exit /b 1
+)
 echo.
-echo Montara SMART Beta se ha detenido. No se ha actualizado ninguna instalacion previa.
 pause
 """
-README = """MONTARA SMART BETA · Companion Windows
-=======================================
+README = """MONTARA SMART BETA · Windows / Stage local
+============================================
+Este paquete utiliza el Companion de Chema (0.6.10) y el Engine b867b3c.
 
-Edicion aislada de validacion privada (no sustituye el Companion de Chema).
+No modifica:
+  C:\\Users\\lakme\\AppData\\Local\\Montara-Companion
+  C:\\Users\\lakme\\AppData\\Local\\Montara-Companion-Lab
+  C:\\Users\\lakme\\AppData\\Local\\Montara-W3L-Build
 
-1. Extrae este ZIP a una carpeta normal, por ejemplo tu Escritorio.
-2. No extraigas dentro de un Companion anterior.
-3. Haz doble clic en INICIAR-SMART-BETA.cmd.
-4. Debes tener Python (3.11 o posterior) y ffmpeg/ffprobe en PATH.
-5. Manten la ventana abierta mientras usas Montara. Ctrl+C la detiene.
-6. Comprueba http://127.0.0.1:47820/health y el acceso desde nuestra beta.
+Datos exclusivos de esta beta:
+  %LOCALAPPDATA%\\MontaraSMARTBeta
+El directorio del proyecto y los originales se eligen en Montara.
 
-Esta primera distribucion es de CONEXION/PROXIES, NO es todavia el instalador
-del motor de render de originales. El exportador local requiere una instalacion
-aparte del Engine b867b3c72af8fe4685b487bcf1e09ffcc2a7c82b y dependencias.
-NO declares que el MP4 final esta listo si /health no anuncia local_video.engine
-con ese mismo hash. Prepararemos ese paso antes del ensayo integrado.
+ANTES DE EMPEZAR:
+  - Cierra Companion antiguo y deja finalizar renders, si los hubiera.
+  - Python 3.11 instalado y reconocido por 'py -3.11'.
+  - FFmpeg y ffprobe en PATH.
+  - Acceso a Internet para instalar dependencias Python.
 
-Los originales de video permanecen en tu equipo. El Companion escucha
-exclusivamente en 127.0.0.1:47820 y solo acepta el origen HTTPS privado de
-Montara. Los datos del piloto se guardan aparte en
-%LOCALAPPDATA%\\MontaraSMARTBeta, nunca en ~/.montara-companion.
-No usar mientras otro Companion ocupe el puerto 47820.
+PASOS:
+  1. Extrae todo el ZIP en una carpeta nueva; NO mezcles con instalaciones antiguas.
+  2. Ejecuta una vez INSTALAR-RENDER-SMART.cmd.
+     Instala las librerias Python y verifica el Engine completo.
+  3. Ejecuta INICIAR-SMART-BETA.cmd.
+     Debe aparecer el icono en la bandeja de Windows; no hace falta consola.
+  4. Abre el menu del icono y pulsa Abrir Montara SMART Beta.
+     Comprueba los proyectos y el render local; originales sin subir.
 
-Editor: 14cce126137a0ef30a987351ff35b750f54473bd
-Engine: b867b3c72af8fe4685b487bcf1e09ffcc2a7c82b
-Mixer:  f15ff91c1b80fc5f157099dcd9451d958d553ae6
+Al salir, el icono bloquea el cierre si hay un trabajo activo.
+La preparacion del Engine se niega si hay un Companion abierto.
+No instala autoarranque, no toca registro, ni migra archivos antiguos.
+Se puede borrar la carpeta extraida cuando la beta no este en uso.
+
+Editor 14cce126137a0ef30a987351ff35b750f54473bd
+Engine b867b3c72af8fe4685b487bcf1e09ffcc2a7c82b
+Mixer  f15ff91c1b80fc5f157099dcd9451d958d553ae6
 """
-
-
-def git_bytes(repo: Path, ref: str, path: str) -> bytes:
-    proc = subprocess.run(
-        ["git", "-C", str(repo), "show", f"{ref}:{path}"],
-        capture_output=True, timeout=30
+def git_bytes(repo: Path, sha: str, path: str) -> bytes:
+    response = subprocess.run(
+        ["git","-C",str(repo),"show",f"{sha}:{path}"],
+        capture_output=True,timeout=30
     )
-    if proc.returncode:
-        raise RuntimeError(f"Missing pinned JM source: {path}")
-    return proc.stdout
+    if response.returncode:
+        raise RuntimeError(f"Missing pinned Chema source {path}")
+    return response.stdout
 
 
-def build(repo: Path, out: Path, source_sha: str) -> dict:
+def engine_files(engine_repo: Path) -> dict[str, bytes]:
+    revision = subprocess.check_output(
+        ["git","-C",str(engine_repo),"rev-parse","HEAD"],
+        timeout=15,text=True
+    ).strip()
+    if revision != ENGINE_SHA:
+        raise ValueError("Engine checkout does not match pinned Chema gitlink")
+    archived = subprocess.run(
+        ["git","-C",str(engine_repo),"archive",ENGINE_SHA,"core"],
+        capture_output=True,timeout=60,check=True
+    ).stdout
+    result={}
+    with tarfile.open(fileobj=io.BytesIO(archived)) as tar:
+        for member in tar.getmembers():
+            if not member.isfile():
+                continue
+            path=member.name
+            if (not path.startswith("core/") or "/../" in path
+                    or path.startswith("/") or "\\" in path
+                    or member.size>10_000_000):
+                raise ValueError("Unexpected Engine archive path")
+            content=tar.extractfile(member).read()
+            result["renderer/engine/"+path]=content
+    if "renderer/engine/core/stages/export.py" not in result:
+        raise ValueError("Pinned native export Stage is missing")
+    return result
+
+
+def build(repo: Path, engine_repo: Path, out: Path, source_sha: str) -> dict:
     if source_sha != EDITOR_SHA:
-        raise ValueError("Only the reviewed Chema editor revision is authorized")
-    # Fetch Chema's original files from the Git repository, but use the
-    # checked-out build script's own versioned SMART launcher.
-    launcher = Path(__file__).resolve().parent / "smart_beta_launcher.py"
-    if not launcher.is_file():
-        raise ValueError("SMART launcher missing beside build script")
-    output = {}
-    for path in FILES:
-        output[path.removeprefix("companion/")] = git_bytes(repo, source_sha, path)
-    output["video_jobs.py"] = patched_windows_video_jobs(
-        output["video_jobs.py"].decode("utf-8")
-    ).encode("utf-8")
-    output["smart_beta_launcher.py"] = (
-        launcher
-    ).read_bytes()
+        raise ValueError("Only the reviewed Chema editor commit is supported")
+    path_root=Path(__file__).resolve().parent
+    output={}
+    for path in SOURCE_FILES:
+        output[path.removeprefix("companion/")]=git_bytes(repo,source_sha,path)
+    original=output["video_jobs.py"].decode("utf-8")
+    output["video_jobs.py"]=patched_windows_video_jobs(original).encode("utf-8")
+    for path in SMART_FILES:
+        output[path]=(path_root/path).read_bytes()
 
-    # Only actual spatialmedia Python sources, not .git files, tests or data.
-    tree = subprocess.check_output(
-        ["git", "-C", str(repo), "ls-tree", "-r", "--name-only",
-         source_sha, "companion/spatialmedia"],
-        timeout=30, text=True
+    spatialmedia=subprocess.check_output(
+        ["git","-C",str(repo),"ls-tree","-r","--name-only",
+         source_sha,"companion/spatialmedia"],text=True,timeout=30
     ).splitlines()
-    for path in tree:
-        if not path.startswith("companion/spatialmedia/"):
-            raise ValueError("Unexpected original spatialmedia tree")
+    for path in spatialmedia:
         if path.endswith(".py"):
-            output[path.removeprefix("companion/")] = git_bytes(repo,source_sha,path)
+            output[path.removeprefix("companion/")]=git_bytes(repo,source_sha,path)
 
-    output["INICIAR-SMART-BETA.cmd"] = START.encode("utf-8")
-    output["LEEME-SMART-BETA.txt"] = README.encode("utf-8")
-    manifest = {
-        "schema": 1, "editor": EDITOR_SHA, "engine": ENGINE_SHA,
-        "mixer": MIXER_SHA, "render_engine_bundled": False,
-        "files": {
-            path: hashlib.sha256(data).hexdigest()
-            for path,data in sorted(output.items())
-        }
+    output["renderer/local_video.py"]=git_bytes(
+        repo,source_sha,"companion/local_video.py")
+    output["renderer/video_recipe.py"]=git_bytes(
+        repo,source_sha,"companion/video_recipe.py")
+    for name in ("montara-logo.png","montara-watermark.png"):
+        output["renderer/brand/"+name]=git_bytes(
+            repo,source_sha,"web/brand/"+name)
+    output["renderer/ENGINE_COMMIT"]=(ENGINE_SHA+"\n").encode("ascii")
+    output.update(engine_files(engine_repo))
+
+    output["INICIAR-SMART-BETA.cmd"]=START.encode("utf-8")
+    output["INSTALAR-RENDER-SMART.cmd"]=INSTALL.encode("utf-8")
+    output["LEEME-SMART-BETA.txt"]=README.encode("utf-8")
+    manifest={
+        "schema":2,"editor":EDITOR_SHA,"engine":ENGINE_SHA,
+        "mixer":MIXER_SHA,
+        "renderer_sources_bundled":True,
+        "dependencies_preinstalled":False,
+        "files":{name:hashlib.sha256(data).hexdigest()
+                 for name,data in sorted(output.items())},
     }
-    output["smart-beta-manifest.json"] = (
+    output["smart-beta-manifest.json"]=(
         json.dumps(manifest,sort_keys=True,indent=2)+"\n"
-    ).encode()
+    ).encode("utf-8")
     for path,data in output.items():
         if path.endswith(".py"):
             compile(data.decode("utf-8"),path,"exec")
     out.parent.mkdir(parents=True,exist_ok=True)
-    with zipfile.ZipFile(out,"w",compression=zipfile.ZIP_DEFLATED,
-                         compresslevel=9) as archive:
+    with zipfile.ZipFile(out,"w",zipfile.ZIP_DEFLATED,compresslevel=9) as z:
         for path,data in sorted(output.items()):
-            archive.writestr("Montara-SMART-Beta/"+path,data)
-    with zipfile.ZipFile(out) as archive:
-        if archive.testzip() is not None:
-            raise RuntimeError("Corrupt Beta package")
-    return {"path":str(out),"files":len(output),"bytes":out.stat().st_size,
-            "source":EDITOR_SHA,"renderer_included":False}
+            z.writestr("Montara-SMART-Beta/"+path,data)
+    with zipfile.ZipFile(out) as z:
+        assert z.testzip() is None
+    return {
+        "path":str(out),"files":len(output),
+        "bytes":out.stat().st_size,
+        "sha256":hashlib.sha256(out.read_bytes()).hexdigest(),
+        "editor":EDITOR_SHA,"engine":ENGINE_SHA,
+        "renderer_sources_bundled":True,
+    }
 
 
-def main() -> None:
-    parser=argparse.ArgumentParser()
-    parser.add_argument("--repo",type=Path,default=Path.cwd())
-    parser.add_argument("--source-sha",default=EDITOR_SHA)
-    parser.add_argument("--out",type=Path,required=True)
-    args=parser.parse_args()
-    print(json.dumps(build(args.repo,args.out,args.source_sha),sort_keys=True))
+def main():
+    cli=argparse.ArgumentParser()
+    cli.add_argument("--repo",type=Path,default=Path.cwd())
+    cli.add_argument("--engine-repo",type=Path,required=True)
+    cli.add_argument("--source-sha",default=EDITOR_SHA)
+    cli.add_argument("--out",type=Path,required=True)
+    args=cli.parse_args()
+    print(json.dumps(build(args.repo,args.engine_repo,args.out,args.source_sha),
+                     sort_keys=True))
 
 
 if __name__=="__main__":
