@@ -71,6 +71,18 @@ def original_editor_assets_blueprint(
         # Keep Chema's native Home intro when the logo is clicked.
         # Suppress only the redundant first intro when Stage is launched
         # from the already-authenticated Home/Video chooser.
+        # The pinned Chema page still advertises the old proxy-only test
+        # export. Owner SMART has a native Companion handoff: original media
+        # stays local, the cloud editor works on lightweight proxy files.
+        old_note = ("Companion connected: your videos stay on your computer "
+                    "and only small versions are uploaded. In this test the "
+                    "final video is made from those small versions.")
+        new_note = ("Companion connected. Originals stay on your computer. "
+                    "Only lightweight proxies are sent for online editing. "
+                    "Final export uses local originals through Companion "
+                    "when native rendering is available.")
+        if original.count(old_note)==1:
+            original=original.replace(old_note,new_note,1)
         # Owner has its own catalog title; this field names the exported video.
         output_name = 'Project name <input id="videoName"'
         if original.count(output_name) == 1:
