@@ -55,9 +55,19 @@ def patched_original_resumable_upload(original: str) -> str:
                    'free_bytes=shutil.disk_usage(root).free)'),
         "size": """        # Large files are admitted only when they are Companion previews.
         # Manual original uploads keep the standard JM remote 256 MiB limit.
-        preview_file = body.get('video_preview') is True or (
-            isinstance(name, str) and name.lower().endswith(PREVIEW))
-        admitted_limit = proxy_limit if preview_file else limit
+        # A Companion lossless derivative keeps the source audio extension
+        # (e.g. song.mp3.flac / song.wav.wv). This is audio, not an
+        # original video; only the reviewed remote proxy ceiling increases.
+        # Do not trust an arbitrary video_preview=true on a raw video.
+        lossless_audio = bool(isinstance(name, str) and re.search(
+            r"\\.(?:wav|aif|aiff|mp3|m4a|flac|ogg|opus|wv)\\.(?:flac|wv)\\Z",
+            name, re.IGNORECASE))
+        video_proxy = bool(body.get('video_preview') is True
+            and isinstance(name, str) and name.lower().endswith('.small.mp4'))
+        audio_preview = bool(isinstance(name, str)
+            and name.lower().endswith(PREVIEW))
+        admitted_limit = proxy_limit if (video_proxy or
+            lossless_audio or audio_preview) else limit
         if isinstance(size, bool) or not isinstance(size, int) or not 0 < size <= admitted_limit:""",
         "error": "            return failure(f'This environment accepts files up to {admitted_limit / 1024**2:.0f} MiB.', 413)",
     }
