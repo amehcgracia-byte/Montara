@@ -41,6 +41,7 @@ _ALLOWED = {
     ("GET", "project"): "/api/v1/project",
     ("POST", "branding"): "/montara/branding",
     ("GET", "branding"): "/montara/branding",
+    ("GET", "version"): "/montara/version",
     ("GET", "wizard/review"): "/api/v1/wizard/review",
     ("POST", "wizard/review/replace"): "/api/v1/wizard/review/replace",
     ("POST", "wizard/review/render"): "/api/v1/wizard/review/render",
