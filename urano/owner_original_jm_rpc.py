@@ -125,6 +125,14 @@ def initial_stage_gateway_blueprint(
         if request.method in ("POST","PUT"):
             if type(content_length) is not int or content_length<=0:
                 return jsonify(error="Expected bounded request body"),400
+            # The Owner API caps ordinary identity/project requests at
+            # 300 KB. Only these authenticated, reviewed media routes can
+            # stream larger content. All other handlers retain that cap.
+            if (operation=="wizard/upload"
+                    or request.method=="PUT" and upload_part):
+                request.max_content_length = (
+                    _MAX_VIDEO if operation=="wizard/upload" else _MAX_CHUNK
+                )
             if operation in ("wizard/upload","uploads"):
                 # The resumable JSON validator restores wsgi.input after
                 # reading; keep that restored stream on Flask's ACTUAL
