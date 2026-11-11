@@ -32,6 +32,10 @@ _ALLOWED = {
     ("POST", "wizard/upload"): "/api/v1/wizard/upload",
     ("POST", "wizard/projects/new"): "/api/v1/wizard/projects/new",
     ("POST", "wizard/draft"): "/api/v1/wizard/draft",
+    ("POST", "wizard/prepare"): "/api/v1/wizard/prepare",
+    ("POST", "wizard/start"): "/api/v1/wizard/start",
+    ("POST", "settings/fillers"): "/api/v1/settings/fillers",
+    ("GET", "artifacts/sync"): "/api/v1/artifacts/sync",
     ("GET", "wizard/status"): "/api/v1/wizard/status",
     ("GET", "project"): "/api/v1/project",
     ("POST", "branding"): "/montara/branding",
@@ -70,8 +74,17 @@ def initial_stage_gateway_blueprint(
             if (not finishing and request.method in ("GET","PUT","DELETE")
                     or finishing and request.method=="POST"):
                 path="/montara/uploads/"+uid+("/finish" if finishing else "")
-        if path is None or request.query_string:
+        if path is None:
             return jsonify(error="Unsupported original editor operation"),404
+        if request.query_string:
+            # Chema appends the physical JM project path when polling.
+            # Never let a browser select a different worker-local project;
+            # this Owner+generation worker already has exactly one.
+            if (request.method!="GET" or operation!="wizard/status"
+                    or set(request.args)!={"project_id"}
+                    or len(request.args.getlist("project_id"))!=1
+                    or not request.args["project_id"]):
+                return jsonify(error="Unsupported private project query"),404
         if request.host_url.rstrip("/") != https_origin:
             return jsonify(error="Trusted HTTPS host required"),403
         supplied_origin=request.headers.get("Origin")
