@@ -46,3 +46,9 @@ La comunicación multimedia está diseñada sin pasar vídeos por el broker root
 - El broker root actual está marcado **LAB ONLY**; los cambios de esta rama no están instalados. No dar por hecha la funcionalidad de FD en el broker en producción.
 - No se debe exponer directamente el socket JM del worker ni conectar el JS original a un Engine compartido. No hacer proxy HTTP genérico desde el navegador con un socket elegido por él.
 - No duplicar ni modificar `web/montara.js`, `companion.js`, `engine/`, `mixer/` o `main` de Chema para cerrar artificialmente una etapa.
+
+## Adenda de endurecimiento: subida válida y arranque automático
+
+Se reforzó `urano/first_valid_upload_gate.py`: el POST inicial con bytes debe declarar un nombre de formato de medios reconocido y longitud positiva; el inicio de la carga reanudable debe aportar metadatos JSON pequeños válidos (nombre, tamaño acotado, huella SHA-256). **Una subida malformada devuelve HTTP 400 y no ejecuta ni deja pasar el arranque del Engine**. El JSON de metadatos se devuelve intacto al handler original mediante un stream repuesto; nunca se leen ni almacenan en el gate los bytes de vídeo. El callback de arranque no es el broker real en los ensayos de media de I45, pero el contrato `ensure_owner` y la autorización root por sesión/CSRF se han probado independientemente.
+
+La prueba unitaria `test_urano_first_valid_upload_gate.py` quedó en **6 PASS** tras añadir casos de rutas maliciosas/metadatos inconsistentes. Las suites anteriores de recurso, root broker, Owner y FD sumaban 55 PASS antes de esta adenda (56 casos acumulados al añadir el nuevo). **No se ha desplegado nada** en los servicios activos.
