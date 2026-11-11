@@ -96,8 +96,9 @@ def initial_stage_gateway_blueprint(
         # Preserve status, content type and all non-upload endpoints. Never
         # inspect successful (possibly streaming) media responses.
         operation=(request.view_args or {}).get("operation")
-        if (operation in ("wizard/upload", "uploads") and response.status_code >= 400
-                and response.is_json):
+        if ((operation in ("wizard/upload", "uploads")
+             or isinstance(operation,str) and operation.startswith("session"))
+             and response.status_code >= 400 and response.is_json):
             payload=response.get_json(silent=True)
             if isinstance(payload,dict) and isinstance(payload.get("error"),str):
                 payload["error"]={"message":payload["error"]}
