@@ -1,0 +1,35 @@
+name: SMART Companion Windows compatibility
+on:
+  push:
+    branches:
+      - fernando/integracion
+    paths:
+      - 'companion/windows_video_jobs_compat.py'
+      - 'tests/test_smart_companion_windows_video_jobs.py'
+      - '.github/workflows/fer-smart-companion-windows.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  companion-windows:
+    runs-on: windows-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Read original Chema video_jobs without rewriting main
+        shell: pwsh
+        run: |
+          git fetch --no-tags --depth=1 origin 14cce126137a0ef30a987351ff35b750f54473bd
+          if ($LASTEXITCODE -ne 0) { throw "Missing pinned JM source" }
+          git show FETCH_HEAD:companion/video_jobs.py | Out-File -FilePath "$env:RUNNER_TEMP\video_jobs-original.py" -Encoding utf8
+          if ($LASTEXITCODE -ne 0) { throw "Missing original Chema renderer" }
+          $env:MONTARA_CHEMA_VIDEO_JOBS_FILE = "$env:RUNNER_TEMP\video_jobs-original.py"
+          python -m unittest discover -s tests -p test_smart_companion_windows_video_jobs.py -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
