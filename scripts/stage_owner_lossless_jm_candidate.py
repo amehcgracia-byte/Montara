@@ -55,7 +55,11 @@ def stage_candidate(source: Path, destination: Path) -> dict:
         raise FileExistsError("Refuse to replace an existing staging directory")
     destination.parent.mkdir(parents=True, exist_ok=True)
     try:
-        shutil.copytree(source, pending, symlinks=True)
+        # Source submodule .git internals are root-owned and unnecessary for
+        # running a pinned JM worker. Copy application files, not Git object
+        # stores or cached bytecode; keep the checked-in mixer code itself.
+        shutil.copytree(source, pending, symlinks=True,
+                        ignore=shutil.ignore_patterns(".git", "__pycache__"))
         candidate_upload = pending / "resumable_upload.py"
         # This file must be a separate inode; never write through a link.
         if candidate_upload.is_symlink() or not candidate_upload.is_file():
