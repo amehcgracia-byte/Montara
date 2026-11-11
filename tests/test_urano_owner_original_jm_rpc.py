@@ -237,9 +237,16 @@ class JMRealHTTPRPCContracts(unittest.TestCase):
         self.assertEqual(listen.status_code,200)
         self.assertEqual(listen.data,b"webm-audio")
         self.assertEqual(listen.content_type,"audio/webm")
+        head_headers=dict(get_headers)
+        head_headers.pop("Origin",None)
         head=self.client.head(self.url("session/"+"c"*12+"/listen"),
-                              headers=get_headers,base_url=ORIGIN)
+                              headers=head_headers,base_url=ORIGIN)
         self.assertEqual(head.status_code,200)
+        wrong_referrer=self.client.head(
+            self.url("session/"+"c"*12+"/listen"),
+            headers={**head_headers,"Origin":"https://evil.invalid"},
+            base_url=ORIGIN)
+        self.assertEqual(wrong_referrer.status_code,403)
         cancel=self.post("session/"+"c"*12+"/cancel","{}",
                          get_headers)
         self.assertEqual(cancel.status_code,202)
