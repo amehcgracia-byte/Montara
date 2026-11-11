@@ -63,11 +63,11 @@ async function nativeFetch(url,opts={}){
   }
   if(address===BASE+'edit/native-recipe?project_id=owner-worker'){
     return new Response(JSON.stringify({
-      engine:'b'.repeat(40),revision:2,platform:'youtube',
+      engine:'b'.repeat(40),revision:'abcdef0123456789abcd',platform:'youtube',
       sources:[],segments:[],
     }),{headers:{'Content-Type':'application/json',...hdr}});
   }
-  if(address===BASE+'edit/native-master?project_id=owner-worker&revision=2'){
+  if(address===BASE+'edit/native-master?project_id=owner-worker&revision=abcdef0123456789abcd'){
     return new Response(new Blob(['wav-master'],{type:'application/octet-stream'}),{
       headers:{'Content-Type':'application/octet-stream',...hdr}});
   }
@@ -113,7 +113,7 @@ vm.runInNewContext(fs.readFileSync(
   const recipe=await window.fetch('/api/v1/edit/native-recipe?project_id=%2Ftmp%2Fprivate-worker');
   assert.equal(recipe.status,200);
   assert.equal((await recipe.json()).engine,'b'.repeat(40));
-  const master=await window.fetch('/api/v1/edit/native-master?revision=2&project_id=%2Ftmp%2Fprivate-worker');
+  const master=await window.fetch('/api/v1/edit/native-master?revision=abcdef0123456789abcd&project_id=%2Ftmp%2Fprivate-worker');
   assert.equal(master.status,200);
   assert.equal(await master.text(),'wav-master');
   await assert.rejects(window.fetch('/api/v1/edit/native-master?revision=../3&project_id=other'),
