@@ -8,6 +8,7 @@ from flask import Flask, jsonify
 
 from urano.private_jm_wsgi_socket import (
     SOCKET_FILE, VerifiedJMUnixConnection, create_private_jm_wsgi_server,
+    pinned_jm_static_assets,
 )
 
 
@@ -72,6 +73,30 @@ class OriginalJMUnixTransportTests(unittest.TestCase):
             ):
                 with self.subTest(path=path), self.assertRaises(PermissionError):
                     conn.get_safe_read(path)
+
+    def test_static_assets_only_if_from_trusted_manifest(self):
+        web = self.directory / "web"
+        web.mkdir()
+        (web / "montara.js").write_text("console.log('JM');")
+        (web / ".secret.js").write_text("not public")
+        (web / "private.txt").write_text("not public")
+        manifest = pinned_jm_static_assets(web)
+        self.assertIn("/montara.js", manifest)
+        self.assertNotIn("/.secret.js", manifest)
+        self.assertNotIn("/private.txt", manifest)
+        with self.connection() as client:
+            with self.assertRaises(PermissionError):
+                client.get_safe_read("/montara.js")
+        with VerifiedJMUnixConnection(
+            self.path, expected_pid=os.getpid(), expected_uid=os.getuid(),
+            approved_assets=manifest,
+        ) as client:
+            # The real test app has no static file, so a 404 means the
+            # transport admitted the exact reviewed route.
+            code, _, _ = client.get_safe_read("/montara.js")
+            self.assertEqual(code, 404)
+            with self.assertRaises(PermissionError):
+                client.get_safe_read("/.secret.js")
 
     def test_deny_wrong_socket_peer_and_path_symlink(self):
         with self.connection(pid=os.getpid() + 42) as conn:
