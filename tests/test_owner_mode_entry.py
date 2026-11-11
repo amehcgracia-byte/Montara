@@ -92,6 +92,10 @@ class OwnerModeEntryTest(unittest.TestCase):
         self.assertIn("api('editor/projects?mode=stage')", script)
         self.assertIn("openEditor(current.id, true)", script)
         self.assertIn("result.projects.find(p=>p.id===selected)", script)
+        self.assertIn("engine-state", script)
+        self.assertIn("current=active", script)
+        self.assertLess(script.index("current=active"),
+                        script.index("openEditor(current.id, true)"))
         self.assertIn("window.MontaraProjectPicker.open('stage')", script)
         self.assertLess(script.index("openEditor(current.id, true)"),
                         script.index("window.MontaraProjectPicker.open('stage')"))
