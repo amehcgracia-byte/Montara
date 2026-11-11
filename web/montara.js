@@ -638,7 +638,7 @@ async function uploadSmall(file, entry) {
   if (!entry.removed) {
     entry.phase = small ? (small.preview ? "Uploading preview" : montaraCompanion.isAudio(file) ? "Uploading lossless copy" : "Uploading small version") : montaraCompanion.info ? "Uploading the whole file" : "";
     entry.progress = 0;
-    if (small) { if (montaraCompanion.isVideo(file)) companionVideoFiles.add(small.file); entry.small = true; entry.preview = small.preview; entry.original = small.original; remember(entry); }
+    if (small) { entry.audioIdentityRevision = small.audioIdentityRevision; if (montaraCompanion.isVideo(file)) companionVideoFiles.add(small.file); entry.small = true; entry.preview = small.preview; entry.original = small.original; remember(entry); }
     try { await performUpload(small ? small.file : file, entry); }
     finally { state.uploads -= 1; renderFiles(); }
     return;
@@ -756,7 +756,7 @@ async function uploadInParts(file, entry) {
   entry.uploadController = controller;
   try {
     const extra = companionVideoFiles.has(file) && entry.original ? {video_preview:true,original:{name:entry.original.name,size:entry.original.size,fingerprint:entry.original.fingerprint}} : entry.manualOriginalUpload === file ? {original_video_consent:true} : /\.opus$/i.test(file.name) && entry.original ? {original: {name: entry.original.name, size: entry.original.size, fingerprint: entry.original.fingerprint}, compact_preview:state.platform==='youtube' && state.files.some(f=>f.kind==='video'||/\.(mp4|mov|mkv|mts|m2ts|webm|avi|m4v)$/i.test(f.name))} : {};
-    const data = await sendResumableUpload(file, (progress, phase) => { entry.progress = progress; if(phase)entry.phase=phase; renderFiles(); }, id => {entry.uploadId = id; if (!entry.removed) remember(entry);}, () => entry.removed, extra, controller.signal);
+    const data = await sendResumableUpload(file, (progress, phase) => { entry.progress = progress; if(phase)entry.phase=phase; renderFiles(); }, id => {entry.uploadId = id; if (!entry.removed) remember(entry);}, () => entry.removed, {...extra, audio_identity_revision: entry.audioIdentityRevision}, controller.signal);
     const found = ['videos', 'master', 'songs', 'ignored'].map(kind => [kind, (data[kind] || [])[0]]).find(([, item]) => item);
     if (!found) throw new Error('Not a usable media file');
     entry.kind = found[0] === 'videos' ? 'video' : found[0];
@@ -782,6 +782,8 @@ function fileLabel(f) {
   return KIND_LABEL[f.kind] || f.kind.toUpperCase();
 }
 // One bounded listening preview per uploaded audio track. Never changes the mix or classification.
+const auditionWindows = new WeakMap();
+const AUDITION_WINDOW_COUNT = 12;
 const trackAudition = { audio: null, id: null, window: 0, start: 0, token: 0 };
 function stopTrackAudition() {
   trackAudition.token++;
@@ -795,11 +797,12 @@ function stopTrackAudition() {
 async function playTrackAudition(file, next=false) {
   if(!file?.path && !file?.localFile)return;
   if(trackAudition.id===file.id && !next){stopTrackAudition();return;}
-  const windowIndex=trackAudition.id===file.id && next ? (trackAudition.window+1)%3 : 0;
+  const windowIndex=next ? ((auditionWindows.get(file) ?? -1)+1)%AUDITION_WINDOW_COUNT : (auditionWindows.get(file) ?? 0);
+  auditionWindows.set(file, windowIndex);
   stopTrackAudition();
   const token=trackAudition.token;
   const audio=new Audio();
-  Object.assign(trackAudition,{audio,id:file.id,window:windowIndex,start:0});
+  Object.assign(trackAudition,{audio,id:file.id,window:windowIndex,start:0,playing:false});
   audio.preload='metadata';audio.src=audioUrl(file);
   const button=[...document.querySelectorAll('[data-audition]')].find(b=>b.dataset.audition===file.id);
   if(button){button.textContent='Loading…';button.setAttribute('aria-pressed','true');}
@@ -819,11 +822,11 @@ async function playTrackAudition(file, next=false) {
     if(trackAudition.token!==token)return;
     const duration=Number.isFinite(audio.duration)?audio.duration:Number(file.duration)||0;
     const room=Math.max(0,duration-12);
-    const start=room ? Math.min(room,room*[.25,.5,.75][windowIndex]) : 0;
+    const start=room ? room * windowIndex / (AUDITION_WINDOW_COUNT - 1) : 0;
     trackAudition.start=start;
     if(start>0)audio.currentTime=start;
     await audio.play();
-    if(trackAudition.token===token && button)button.textContent='❚❚ Stop';
+    if(trackAudition.token===token) { trackAudition.playing=true; renderFiles(); }
   }catch(error){
     if(trackAudition.token===token){finish();toast('Cannot play this track. Try another audio format.',true);}
   }
@@ -848,7 +851,7 @@ function uploadEta(f) {
 }
 function fileRow(f, typed = false) {
   return `
-    <li>
+    <li data-footage-row="${f.id}">
       <span class="kind ${f.kind}">${fileLabel(f)}</span>
       <span class="name" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}</span>
       <span class="state">${f.kind === "uploading" ? f.phase === "Queued" ? "Queued · waiting for an audio slot" : (f.phase ? escapeHtml(f.phase) + " " : "") + Math.round(f.progress * 100) + "%" + uploadEta(f) : state.syncExcluded.has(f.path) ? "No sync" : f.usage === "asset" ? "Ready" : f.small && f.kind === "video" ? "Ready · small version" : f.preview ? "Ready · preview" : f.small ? "Ready · lossless" : f.kind === "error" ? escapeHtml(f.error) : f.kind === "ignored" ? escapeHtml(f.reason || "not used") : "Ready"}</span>
@@ -857,8 +860,8 @@ function fileRow(f, typed = false) {
       ${state.platform === 'youtube' && !state.audioTask && f.kind === 'uploading' && !isAudioEntry(f) ? `<label class="track-type">Camera type <select data-pending-camera="${f.id}" aria-label="Camera type for ${escapeHtml(f.name)}"><option value="">Automatic</option>${[['360','360'],['fixed','Fixed camera'],['moving','Moving camera']].map(([value,label])=>`<option value="${value}" ${f.cameraType===value?'selected':''}>${label}</option>`).join('')}</select></label>` : ''}
       ${state.platform === 'youtube' && f.kind === 'video' && !isSphere(f) ? `<label class="track-type">Use as <select data-video-usage="${f.id}" aria-label="Use for ${escapeHtml(f.name)}"><option value="camera" ${!['filler','asset'].includes(f.usage) ? 'selected' : ''}>Camera</option><option value="filler" ${f.usage === 'filler' ? 'selected' : ''}>Insert · optional, no sync</option><option value="asset" ${f.usage === 'asset' ? 'selected' : ''}>Asset / logo · keep out of montage</option></select></label>` : ''}
       ${state.syncExcluded.has(f.path) ? '<span class="source-note">Not used in this song: no reliable audio match. Kept in your library.</span>' : ''}
-      ${f.path && (f.kind === "master" || f.kind === "songs") && state.audioTask !== 'master' ? `<span class="track-audition"><button type="button" data-audition="${f.id}" aria-pressed="false" aria-label="Listen to ${escapeHtml(f.name)} for 12 seconds">▶ Listen 12 s</button><button type="button" data-audition-next="${f.id}" aria-label="Listen to another part of ${escapeHtml(f.name)}">Another part</button></span>` : ""}
-      ${typed && (f.kind === "master" || f.kind === "songs") ? TrackTypes.controls(f.name) : ""}
+      ${f.path && (f.kind === "master" || f.kind === "songs") && state.audioTask !== 'master' ? `<span class="track-audition"><button type="button" data-audition="${f.id}" aria-pressed="${trackAudition.id===f.id}" aria-label="Listen to ${escapeHtml(f.name)} for 12 seconds">${trackAudition.id===f.id ? (trackAudition.playing ? "❚❚ Stop" : "Loading…") : "▶ Listen 12 s"}</button><button type="button" data-audition-next="${f.id}" aria-label="Listen to another part of ${escapeHtml(f.name)}">Another part${auditionWindows.has(f) ? ` · ${auditionWindows.get(f)+1}/${AUDITION_WINDOW_COUNT}` : ""}</button></span>` : ""}
+      ${typed && TrackTypes.needsLabel(f.name) && (f.kind === "master" || f.kind === "songs") ? TrackTypes.controls(f.name) : ""}
       ${f.kind === "uploading" ? `<span class="bar"><i style="width:${Math.round(f.progress * 100)}%"></i></span>` : ""}
     </li>`;
 }
@@ -907,6 +910,26 @@ document.addEventListener('click', event => {
   if (!state.files.some(f => f.sample)) $('#sampleNote').hidden = true;
   renderFiles();
 });
+$("#resetAudioImport").addEventListener("click", async () => {
+  const selected = state.files.filter(isAudioEntry);
+  const names = new Set(selected.map(file => file.name));
+  const remembered = (await footageMemory.list(state.platform))
+    .filter(file => (file.task || "video") === (state.audioTask || "video") && names.has(file.name));
+  for (const file of selected) {
+    file.removed = true;
+    file.uploadController?.abort();
+    file.xhr?.abort();
+    if (file.objectUrl) URL.revokeObjectURL(file.objectUrl);
+  }
+  stopTrackAudition();
+  TrackTypes.forget([...selected, ...remembered].map(file => file.name));
+  state.files = state.files.filter(file => !selected.includes(file));
+  await Promise.all([...new Set([...selected, ...remembered].map(file => file.id))].map(id => footageMemory.forget(id)));
+  await offerRestore();
+  renderFiles();
+  toast("Audio import cleared. Add your tracks again.");
+});
+
 function footageIsPreparing() {
   return state.files.some(file => !file.removed && file.kind === "uploading");
 }
@@ -924,9 +947,20 @@ function renderFiles() {
   $('[data-drop="video"]').closest('.box').hidden = state.platform === 'youtube' && $('#stageAudioOnly').checked;
   // Several tracks of one recording: each one says what it is (pre-filled from its name).
   const typed = state.platform === "youtube" && audioTracks().length >= 2;
-  // Do not rebuild the list under an open track-type menu (other uploads keep reporting progress).
-  if (!document.activeElement?.closest?.("#audioFiles .track-type"))
-    $("#audioFiles").innerHTML = state.files.filter(isAudioEntry).map(f => fileRow(f, typed)).join("");
+  // Progress on one track must not replace another track's playback controls.
+  const audioList = $("#audioFiles");
+  $("#resetAudioImport").hidden = !state.files.some(isAudioEntry);
+  const audioRows = new Map([...audioList.children].map(row => [row.dataset.footageRow, row]));
+  for (const file of state.files.filter(isAudioEntry)) {
+    const markup = fileRow(file, typed);
+    const row = audioRows.get(file.id);
+    if (!row) audioList.insertAdjacentHTML("beforeend", markup);
+    else if (row.footageMarkup !== markup && !row.querySelector(".track-type")?.contains(document.activeElement)) row.outerHTML = markup;
+    const current = audioList.querySelector(`[data-footage-row="${CSS.escape(file.id)}"]`);
+    if (current !== row || !row?.querySelector(".track-type")?.contains(document.activeElement)) current.footageMarkup = markup;
+    audioRows.delete(file.id);
+  }
+  for (const row of audioRows.values()) row.remove();
   $("#audioFiles").classList.toggle("compact", state.files.filter(isAudioEntry).length > 4);
   const focusedCamera = document.activeElement?.closest?.('[data-pending-camera]');
   if (!state.files.some(f => f.id === focusedCamera?.dataset.pendingCamera && f.kind === 'uploading'))

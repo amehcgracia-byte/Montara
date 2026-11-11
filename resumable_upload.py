@@ -229,6 +229,8 @@ def register_resumable_upload(app, data_root, classify):
         if not isinstance(fingerprint, str) or not re.fullmatch('[a-f0-9]{64}', fingerprint):
             return failure('Invalid file fingerprint.')
         record = dict(name=name, size=size, fingerprint=fingerprint, complete=False)
+        if body.get('audio_identity_revision') == 2 and name.lower().endswith(PREVIEW + LOSSLESS):
+            record['audio_identity_revision'] = 2
         video_preview = body.get('video_preview', False)
         if not isinstance(video_preview, bool):
             return failure('Invalid video preview mode.')
@@ -260,6 +262,7 @@ def register_resumable_upload(app, data_root, classify):
                     continue  # An unfinished upload was cancelled during allocation.
                 if (item['name'] == name and item['size'] == size and item['fingerprint'] == fingerprint
                         and item.get('preview_of') == record.get('preview_of')
+                        and item.get('audio_identity_revision') == record.get('audio_identity_revision')
                         and item.get('video_preview', False) == record.get('video_preview', False)
                         and item.get('compact_preview', False) == record.get('compact_preview', False)):
                     return jsonify(public(path.parent, item))

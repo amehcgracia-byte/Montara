@@ -232,3 +232,21 @@ def test_cpu_first_trial_is_limited_to_long_flat_intel_h264(tmp_path, monkeypatc
     assert 'libx264' in cpu and 'h264_videotoolbox' in hardware
     for changes in ({'panorama': True}, {'source_fps': 60}, {'duration': 60}, {'size': [3840, 2160]}):
         assert 'h264_videotoolbox' in companion.proxy_commands(src, dst, {**plan, **changes})[0]
+
+
+def test_numbered_audio_with_silent_edges_keeps_its_own_source(search):
+    folder = search / 'session'
+    folder.mkdir()
+    first, second = folder / '01.wav', folder / '02.wav'
+    edges = bytes(65536)
+    first.write_bytes(edges + b'kick' + edges)
+    second.write_bytes(edges + b'bass' + edges)
+    def identity(path):
+        name, size, edge_hash = described(path)
+        return dict(name=name, size=size, fingerprint=edge_hash)
+    assert identity(first)['fingerprint'] == identity(second)['fingerprint']
+    assert companion.find_original(identity(first)) == first
+    assert companion.find_original(identity(second)) == second
+    audio = identity(second)
+    legacy = hashlib.sha256(f"{audio['name']}|{audio['size']}|{audio['fingerprint']}".encode()).hexdigest()[:24]
+    assert companion.original_id(audio['name'], audio['size'], audio['fingerprint']) != legacy

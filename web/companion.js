@@ -148,7 +148,7 @@ const montaraCompanion = (() => {
         const wavpack = blob.type === 'audio/x-wavpack';  // float originals: WavPack instead of FLAC
         const name = preview ? file.name + '.opus' : audio ? file.name + (wavpack ? '.wv' : '.flac') : file.name.replace(/\.[^.]+$/, '') + '.small.mp4';
         const type = preview ? 'audio/ogg' : audio ? blob.type || 'audio/flac' : 'video/mp4';
-        return {file: new File([blob], name, {type}), preview, original: {name: file.name, size: file.size, lastModified: file.lastModified, fingerprint: print, companion: id}};
+        return {file: new File([blob], name, {type}), preview, audioIdentityRevision: audio ? info?.audio_identity_revision : undefined, original: {name: file.name, size: file.size, lastModified: file.lastModified, fingerprint: print, companion: id}};
       } catch (error) {
         if (error.name === 'TimeoutError') return {downloadFailed: true};
         console.warn('Companion unavailable for this file', error);
