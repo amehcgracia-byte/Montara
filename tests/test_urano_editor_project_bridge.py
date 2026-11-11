@@ -76,6 +76,51 @@ class EditorProjectBridgeTests(unittest.TestCase):
         self.assertEqual([x["id"] for x in result.json["projects"]], [self.foreign.id])
         self.assertEqual(self.get("projects/" + self.stage.id + "?mode=stage").status_code, 404)
 
+    def test_create_from_mode_is_owner_scoped_and_atomic(self):
+        csrf = self.sessions.issue("alice")
+        self.login(csrf.token)
+        response = self.client.post(
+            "/urano/v1/editor/projects", base_url=self.ORIGIN,
+            headers={"Origin": self.ORIGIN, "X-Urano-CSRF": csrf.csrf},
+            json={"title": "Nueva sesión", "mode": "push"},
+        )
+        self.assertEqual(response.status_code, 201, response.get_data(as_text=True))
+        item = response.json["project"]
+        self.assertEqual(item["mode"], "push")
+        self.assertEqual(item["revision"], 0)
+        saved = self.catalog.get("alice", item["id"])
+        self.assertEqual(saved.recipe["montara_beta_workspace"]["mode"], "push")
+        self.assertEqual(saved.revision, 0)
+        self.assertEqual(self.catalog.list_for("bob"), [self.foreign])
+        self.assertIn(item["id"], [
+            p["id"] for p in self.get("projects?mode=push").json["projects"]
+        ])
+
+    def test_create_rejects_forged_owner_csrf_and_invalid_mode(self):
+        valid = self.sessions.issue("alice")
+        self.login(valid.token)
+        url = "/urano/v1/editor/projects"
+        initial = len(self.catalog.list_for("alice"))
+        cases = [
+            ({"Origin": self.ORIGIN}, {"title": "No CSRF", "mode": "stage"}),
+            ({"Origin": "https://evil.test", "X-Urano-CSRF": valid.csrf},
+             {"title": "Wrong origin", "mode": "stage"}),
+            ({"Origin": self.ORIGIN, "X-Urano-CSRF": valid.csrf},
+             {"title": "Wrong mode", "mode": "music"}),
+            ({"Origin": self.ORIGIN, "X-Urano-CSRF": valid.csrf},
+             {"title": "With owner", "mode": "stage", "owner_id": "bob"}),
+            ({"Origin": self.ORIGIN, "X-Urano-CSRF": valid.csrf},
+             {"title": "", "mode": "show"}),
+        ]
+        for headers, payload in cases:
+            with self.subTest(payload=payload):
+                self.assertIn(
+                    self.client.post(url, base_url=self.ORIGIN,
+                                     headers=headers, json=payload).status_code,
+                    (400, 403),
+                )
+        self.assertEqual(len(self.catalog.list_for("alice")), initial)
+
     def test_missing_session_wrong_origin_invalid_mode_and_mutation(self):
         self.assertEqual(self.get("projects?mode=music").status_code, 400)
         self.assertEqual(self.get("projects").status_code, 400)
