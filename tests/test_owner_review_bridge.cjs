@@ -53,6 +53,20 @@ async function nativeFetch(url,opts={}){
     return new Response(new Blob(['mp4'],{type:'video/mp4'}),{
       headers:{...hdr,'Content-Type':'video/mp4'}});
   }
+  if([
+    'settings/video-light',
+    'settings/camera-types',
+    'settings/camera-subjects',
+    'settings/camera-roles',
+    'settings/spherical-landmarks',
+    'settings/stage-performers',
+    'wizard/cancel',
+  ].some(route=>address===BASE+route)){
+    assert.equal(opts.method,'POST');
+    assert.equal(opts.headers.get('X-Urano-CSRF'),'a'.repeat(64));
+    return new Response(JSON.stringify({ok:true}),{
+      headers:{...hdr,'Content-Type':'application/json'}});
+  }
   if(address===BASE+'wizard/review/render'){
     return new Response(JSON.stringify({status:'running'}),{
       status:202,headers:{...hdr,'Content-Type':'application/json'}});
@@ -118,6 +132,15 @@ vm.runInNewContext(fs.readFileSync(
   assert.equal(await master.text(),'wav-master');
   await assert.rejects(window.fetch('/api/v1/edit/native-master?revision=../3&project_id=other'),
     /not yet enabled/);
+  for (const route of [
+    'settings/video-light','settings/camera-types','settings/camera-subjects',
+    'settings/camera-roles','settings/spherical-landmarks',
+    'settings/stage-performers','wizard/cancel',
+  ]) {
+    const response=await window.fetch('/api/v1/'+route,{
+      method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+    assert.equal(response.status,200,route);
+  }
   const render=await window.fetch('/api/v1/wizard/review/render',{
     method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
   assert.equal(render.status,202);
