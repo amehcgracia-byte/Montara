@@ -96,11 +96,14 @@ class OwnerFirstStageWizard:
             body = json.loads(raw)
             if not isinstance(body, dict):
                 raise ValueError("Invalid editor request")
-            if body.get("project_id") not in (None, "", str(self.folder)):
+            supplied_id = body.get("project_id")
+            if supplied_id not in (None, "", str(self.folder)):
                 raise ValueError("Foreign JM Engine project")
             if body.get("platform") != "youtube":
-                raise ValueError("Only Stage first draft supported here")
-            if not self._empty(project):
+                raise ValueError("Only Stage draft supported here")
+            # Initial browser draft supplies null. Once media has been saved,
+            # only an explicit resume of this same physical project is safe.
+            if supplied_id in (None, "") and not self._empty(project):
                 raise ValueError("Existing Owner project must be resumed, not overwritten")
         except (TypeError, ValueError, KeyError, UnicodeError):
             return _json_error(start_response, "Invalid private Stage draft", 400)(environ,start_response)
