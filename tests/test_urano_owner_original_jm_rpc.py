@@ -212,6 +212,50 @@ class JMRealHTTPRPCContracts(unittest.TestCase):
                     env, max_proxy_bytes=2048*1024**2,
                     rejection_codes=reasons),reasons)
 
+    def test_configured_large_lossless_proxy_ceiling_excludes_original_videos(self):
+        from urano.first_valid_upload_gate import valid_first_upload
+        from io import BytesIO
+
+        def validate(name, size, metadata, limit):
+            record={"name":name,"size":size,"fingerprint":"f"*64,**metadata}
+            raw=json.dumps(record).encode("utf-8")
+            env={"PATH_INFO":"/montara/uploads","REQUEST_METHOD":"POST",
+                 "CONTENT_LENGTH":str(len(raw)),"CONTENT_TYPE":"application/json",
+                 "wsgi.input":BytesIO(raw)}
+            reasons=[]
+            allowed=valid_first_upload(env,max_proxy_bytes=limit,
+                                       rejection_codes=reasons)
+            return allowed,reasons
+
+        big=300*1024**2
+        configured=2048*1024**2
+        for name in ("4._Minor_7th.mp3.flac","track.wav.flac",
+                     "track.wav.wv","track.m4a.flac"):
+            with self.subTest(lossless=name):
+                allowed,reasons=validate(name,big,{},configured)
+                self.assertTrue(allowed,reasons)
+
+        for name,metadata in (
+            ("camera.mov",{}),
+            ("camera.mp4",{}),
+            ("camera.small.mp4",{}),
+            ("camera.small.mp4",{"video_preview":True}),
+            ("camera.flac",{}),
+        ):
+            with self.subTest(not_proxy=name):
+                allowed,reasons=validate(name,big,metadata,configured)
+                self.assertFalse(allowed)
+                self.assertIn("media_exceeds_private_transfer_limit",reasons)
+
+        original={"name":"camera.mp4","size":2*1024**3,
+                  "fingerprint":"e"*64}
+        allowed,reasons=validate("camera.small.mp4",big,
+                {"video_preview":True,"original":original},configured)
+        self.assertTrue(allowed,reasons)
+        allowed,reasons=validate("track.wav.flac",configured+1,{},configured)
+        self.assertFalse(allowed)
+        self.assertIn("media_exceeds_private_transfer_limit",reasons)
+
     def test_oversize_companion_lossless_audio_reports_specific_limit(self):
         record={"name":"Slow_Playalong_in_A.mp3.flac",
                 "size":300*1024**2,"fingerprint":"f"*64}
