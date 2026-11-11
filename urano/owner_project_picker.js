@@ -200,10 +200,10 @@
     if(mode!=='stage') {message('This project type is not yet available in the Owner beta.');return;}
     if(!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(p.id))
       throw Error('Invalid project ID');
-    try {sessionStorage.setItem('montara-owner-selected-stage',p.id);}catch {}
     if(isEditor) {
       const current=location.pathname.match(/\/projects\/([0-9a-f-]{36})\//i)?.[1];
       if(current===p.id){
+        try {sessionStorage.setItem('montara-owner-selected-stage',p.id);}catch {}
         dialog.close();
         // Same Owner project, but the native Chema Home/Mode screen is
         // showing: re-enter Stage instead of silently doing nothing.
@@ -232,6 +232,9 @@
         return;
       }
     }
+    // Commit preferred project only after Owner admission succeeds.
+    // A rejected switch must never overwrite the last usable project.
+    try {sessionStorage.setItem('montara-owner-selected-stage',p.id);}catch {}
     location.assign('/urano/v1/editor/projects/'+encodeURIComponent(p.id)+'/'+
       (newProject?'?start=stage':'?resume=footage'));
   }
