@@ -318,6 +318,24 @@ def main():
                 or not (jm/"web/montara.js").is_file()
                 or not (jm/"web/companion.js").is_file()):
             raise ValueError("Private JM bundle must be root-owned and complete")
+        from urano.jm_bundle_manifest import (
+            verify_jm_bundle_files, verify_pinned_chema_manifest
+        )
+        manifest_file=jm/"montara-jm-bundle.json"
+        if (manifest_file.is_symlink() or not manifest_file.is_file()
+                or manifest_file.stat().st_size > 8192
+                or manifest_file.stat().st_uid != 0
+                or manifest_file.stat().st_mode & 0o022):
+            raise ValueError("Untrusted original JM release manifest")
+        try:
+            manifest=json.loads(manifest_file.read_text(encoding="utf-8"))
+        except (OSError, ValueError, UnicodeError) as exc:
+            raise ValueError("Corrupt original JM release manifest") from exc
+        verify_pinned_chema_manifest(
+            manifest,expected_editor_commit=jm.name[3:],
+            expected_engine_commit=bundle.name[7:],
+            expected_private_preview_limit_mib=args.private_proxy_limit_mib)
+        verify_jm_bundle_files(jm,manifest)
     resources=WorkerResourceProfile(args.worker_memory_mb,args.worker_cpu_percent,
                                     args.worker_tasks_max)
     broker=DemoBroker(args.bundle,jm_bundle=args.jm_bundle,resources=resources,
