@@ -126,7 +126,7 @@ class EditorProjectBridgeTests(unittest.TestCase):
         self.assertEqual(self.get("projects").status_code, 400)
         self.assertEqual(self.client.post(
             "/urano/v1/editor/projects?mode=stage",
-            base_url=self.ORIGIN, json={"title": "not allowed"}).status_code, 405)
+            base_url=self.ORIGIN, json={"title": "not allowed"}).status_code, 403)
         self.assertEqual(self.client.get(
             "/urano/v1/editor/projects?mode=stage",
             base_url="https://wrong.example.test").status_code, 403)
