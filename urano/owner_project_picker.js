@@ -36,8 +36,44 @@
   form.append(modeSelect,name,create);
   dialog.append(top,search,list,hint,form);
   document.body.append(dialog);
-  oldHeader.querySelector('#newVideo, #ownerLogout, #sharePreview')?.before(trigger);
-  if(!trigger.isConnected) oldHeader.append(trigger);
+  // One consistent layout: Montara + Projects left, editor steps centre, Account right.
+  const brand = oldHeader.querySelector('.brand');
+  if (brand) brand.after(trigger);
+  else oldHeader.prepend(trigger);
+  if (isEditor) {
+    const account = document.createElement('button');
+    account.type = 'button'; account.className = 'btn ghost small';
+    account.id = 'montaraOwnerAccount'; account.textContent = 'Account';
+    const accountDialog = document.createElement('dialog');
+    accountDialog.className = 'montara-owner-dialog montara-owner-account';
+    const accountTitle = document.createElement('h2'); accountTitle.textContent = 'Account';
+    const signOut = document.createElement('button');
+    signOut.type = 'button'; signOut.className = 'btn ghost small';
+    signOut.textContent = 'Sign out';
+    const cancel = document.createElement('button');
+    cancel.type = 'button'; cancel.className = 'btn ghost small';
+    cancel.textContent = 'Close';
+    const accountStatus = document.createElement('p');
+    accountStatus.setAttribute('role', 'alert');
+    const actions = document.createElement('div'); actions.className = 'actions';
+    actions.append(signOut, cancel);
+    accountDialog.append(accountTitle, actions, accountStatus);
+    document.body.append(accountDialog);
+    oldHeader.append(account);
+    account.addEventListener('click', () => accountDialog.showModal());
+    cancel.addEventListener('click', () => accountDialog.close());
+    signOut.addEventListener('click', async () => {
+      signOut.disabled = true;
+      try {
+        await api('logout', {method:'POST',
+          headers:{'X-Urano-CSRF':await csrf(),Origin:location.origin}});
+        location.replace('/urano/v1/google/start');
+      } catch (error) {
+        accountStatus.textContent = error.message;
+        signOut.disabled = false;
+      }
+    });
+  }
   function modeOf(p) {
     const value=p.mode || p.recipe?.montara_beta_workspace?.mode;
     return ['stage','push','show'].includes(value)?value:'legacy';
@@ -59,6 +95,33 @@
     if(state.open)render();
   }
   function message(value){hint.textContent=value||'';}
+  function syncEditorScope() {
+    if(!isEditor) return;
+    const byId = id => document.getElementById(id);
+    const home = byId('home');
+    const mode = byId('mode');
+    if (home && !home.hidden) {setScope('all');return;}
+    if (mode && !mode.hidden) {
+      setScope(byId('videoChoices') && !byId('videoChoices').hidden ? 'video' :
+               byId('musicChoices') && !byId('musicChoices').hidden ? 'music' : 'all');
+      return;
+    }
+    setScope('stage');
+  }
+  if(isEditor) {
+    const watched = ['home','mode','videoChoices','musicChoices','footage'];
+    const observer = new MutationObserver(syncEditorScope);
+    for(const id of watched){
+      const node = document.getElementById(id);
+      if(node) observer.observe(node,{attributes:true,attributeFilter:['hidden']});
+    }
+    window.addEventListener('popstate',syncEditorScope);
+    document.addEventListener('click',event=>{
+      if(event.target.closest('.brand, #modeQuestionBack, [data-intent]'))
+        queueMicrotask(syncEditorScope);
+    });
+    queueMicrotask(syncEditorScope);
+  }
   async function api(path,opts={}) {
     const res=await fetch('/urano/v1/'+path,{credentials:'same-origin',cache:'no-store',...opts});
     const body=await res.json().catch(()=>({}));
