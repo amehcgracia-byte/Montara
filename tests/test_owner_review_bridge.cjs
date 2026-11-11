@@ -61,6 +61,16 @@ async function nativeFetch(url,opts={}){
     return new Response(JSON.stringify({replaced:[0]}),{
       headers:{...hdr,'Content-Type':'application/json'}});
   }
+  if(address===BASE+'edit/native-recipe?project_id=owner-worker'){
+    return new Response(JSON.stringify({
+      engine:'b'.repeat(40),revision:2,platform:'youtube',
+      sources:[],segments:[],
+    }),{headers:{'Content-Type':'application/json',...hdr}});
+  }
+  if(address===BASE+'edit/native-master?project_id=owner-worker&revision=2'){
+    return new Response(new Blob(['wav-master'],{type:'application/octet-stream'}),{
+      headers:{'Content-Type':'application/octet-stream',...hdr}});
+  }
   if(address===BASE+'version'){
     return new Response(JSON.stringify({version:'beta'}),{
       headers:{'Content-Type':'application/json'}});
@@ -100,6 +110,14 @@ vm.runInNewContext(fs.readFileSync(
   const previewCall=calls.find(c=>c.url.includes('wizard/review/preview/0'));
   assert(previewCall);
   assert.equal(previewCall.opts.headers.get('X-Montara-Engine-Generation'),'7');
+  const recipe=await window.fetch('/api/v1/edit/native-recipe?project_id=%2Ftmp%2Fprivate-worker');
+  assert.equal(recipe.status,200);
+  assert.equal((await recipe.json()).engine,'b'.repeat(40));
+  const master=await window.fetch('/api/v1/edit/native-master?revision=2&project_id=%2Ftmp%2Fprivate-worker');
+  assert.equal(master.status,200);
+  assert.equal(await master.text(),'wav-master');
+  await assert.rejects(window.fetch('/api/v1/edit/native-master?revision=../3&project_id=other'),
+    /not yet enabled/);
   const render=await window.fetch('/api/v1/wizard/review/render',{
     method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
   assert.equal(render.status,202);
