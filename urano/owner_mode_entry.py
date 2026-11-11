@@ -15,6 +15,17 @@ from urano.session_auth import SESSION_COOKIE, SessionStore
 SCRIPT = r"""'use strict';
 const message = document.querySelector('#ownerMessage');
 const modeSection = document.querySelector('#mode');
+const homeSection = document.querySelector('#home');
+let homeTimer = null;
+function showHome() {
+  clearTimeout(homeTimer);
+  modeSection.hidden = true;
+  homeSection.hidden = false;
+  document.body.classList.add('is-intro');
+  window.MontaraProjectPicker?.setScope('all');
+  homeTimer = setTimeout(() => choices('root'),
+    matchMedia('(prefers-reduced-motion: reduce)').matches ? 650 : 2450);
+}
 const projectSection = document.querySelector('#ownerProjects');
 const projectList = document.querySelector('#ownerProjectList');
 const title = document.querySelector('#ownerProjectTitle');
@@ -35,6 +46,10 @@ function openEditor(id, newlyCreated=false) {
                   (newlyCreated ? '?start=stage' : '?resume=footage'));
 }
 function choices(kind) {
+  clearTimeout(homeTimer);
+  homeSection.hidden = true;
+  modeSection.hidden = false;
+  document.body.classList.remove('is-intro');
   window.MontaraProjectPicker?.setScope(kind === 'root' ? 'all' : kind);
   document.querySelector('#intentChoices').hidden = kind !== 'root';
   document.querySelector('#videoChoices').hidden = kind !== 'video';
@@ -67,8 +82,9 @@ document.querySelectorAll('[data-intent]').forEach(button => {
 });
 document.querySelector('#modeQuestionBack').addEventListener('click', ()=>choices('root'));
 document.querySelector('header.top .brand').addEventListener('click', event => {
-  event.preventDefault(); choices('root'); notice('');
+  event.preventDefault(); showHome(); notice('');
 });
+homeSection.addEventListener('click', () => choices('root'));
 document.querySelectorAll('[data-platform]').forEach(button => {
   button.addEventListener('click', () => {
     if (button.dataset.platform === 'youtube') stage();
@@ -100,7 +116,7 @@ document.querySelector('#ownerLogout').addEventListener('click', async () => {
     location.replace('/urano/v1/login');
   } catch (error) { notice(error.message); }
 });
-choices('root');
+showHome();
 """
 
 
@@ -110,12 +126,15 @@ def owner_mode_entry_blueprint(*, sessions: SessionStore, https_origin: str,
     original = (root / "index.html").read_text(encoding="utf-8")
     header_start = '<header class="top">'
     header_end = '</header>'
+    home_start = '<section class="screen" id="home">'
     mode_start = '<section class="screen" id="mode" hidden>'
     mode_end = '</section>'
-    if (original.count(header_start) != 1 or original.count(mode_start) != 1):
+    if (original.count(header_start) != 1 or original.count(mode_start) != 1
+            or original.count(home_start) != 1):
         raise ValueError("Pinned Chema mode/header anchors changed")
     header = original.split(header_start, 1)[1].split(header_end, 1)[0]
     mode = original.split(mode_start, 1)[1].split(mode_end, 1)[0]
+    home = original.split(home_start, 1)[1].split('</section>', 1)[0]
     expected_logo = 'src="mark.svg"'
     if header.count(expected_logo) != 1:
         raise ValueError("Pinned Chema logo changed")
@@ -135,7 +154,8 @@ def owner_mode_entry_blueprint(*, sessions: SessionStore, https_origin: str,
 <link rel="stylesheet" href="/urano/v1/entry/assets/push-pack.css">
 <link rel="stylesheet" href="/urano/v1/entry/picker.css">
 </head><body><header class="top">''' + header + '''</header>
-<main><section class="screen" id="mode">''' + mode + '''</section>
+<main><section class="screen" id="home">''' + home + '''</section>
+<section class="screen" id="mode" hidden>''' + mode + '''</section>
 <section class="screen" id="ownerProjects" hidden>
 <h2>Mis proyectos · Stage</h2>
 <p class="hint">Abre un proyecto existente o crea uno nuevo. El Engine se activa solo cuando haga falta.</p>
