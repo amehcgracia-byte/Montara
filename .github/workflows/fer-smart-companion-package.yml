@@ -1,12 +1,13 @@
-name: SMART Windows Companion beta ZIP
+name: SMART Windows Companion beta with native renderer
 on:
   push:
-    branches:
-      - fernando/integracion
+    branches: [fernando/integracion]
     paths:
       - 'companion/build_smart_beta.py'
       - 'companion/smart_beta_launcher.py'
       - 'companion/windows_video_jobs_compat.py'
+      - 'companion/windows_tray_smart.ps1'
+      - 'companion/INSTALAR-RENDER-SMART.ps1'
       - '.github/workflows/fer-smart-companion-package.yml'
   workflow_dispatch:
 
@@ -16,30 +17,75 @@ permissions:
 jobs:
   package-windows-companion:
     runs-on: windows-latest
-    timeout-minutes: 12
+    timeout-minutes: 18
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
+      - uses: actions/checkout@v4
+        with:
+          repository: amehcgracia-byte/zucker_videos
+          ref: b867b3c72af8fe4685b487bcf1e09ffcc2a7c82b
+          path: reviewed-engine
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Retrieve exact reviewed Chema original source
+      - name: Fetch pinned original Chema editor in root repository
         shell: pwsh
         run: |
           git fetch --no-tags --depth=1 origin 14cce126137a0ef30a987351ff35b750f54473bd
-          if ($LASTEXITCODE -ne 0) { throw 'Pinned Chema revision missing' }
-      - name: Create minimal isolated Companion beta ZIP
+          if ($LASTEXITCODE -ne 0) { throw "Could not fetch pinned editor SHA" }
+      - name: Build full self-contained-source Windows beta
         shell: pwsh
         run: |
-          python companion/build_smart_beta.py --repo . --out dist/Montara-SMART-Beta-Windows.zip
+          python companion/build_smart_beta.py --repo . --engine-repo reviewed-engine --out dist/Montara-SMART-Beta-Windows-COMPLETO.zip
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          python -m zipfile -t dist/Montara-SMART-Beta-Windows.zip
+          python -m zipfile -t dist/Montara-SMART-Beta-Windows-COMPLETO.zip
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Publish installation ZIP for Fernando
+      - name: Parse Windows tray and installer scripts
+        shell: pwsh
+        run: |
+          $parsed = @(
+            "companion/windows_tray_smart.ps1",
+            "companion/INSTALAR-RENDER-SMART.ps1"
+          )
+          foreach ($path in $parsed) {
+            $tokens = $null
+            $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $path).Path, [ref]$tokens, [ref]$errors
+            )
+            if ($errors.Count -ne 0) {
+              $errors | Format-Table -AutoSize
+              throw "Invalid PowerShell syntax in $path"
+            }
+          }
+      - name: Validate full package content and pinned engine
+        shell: pwsh
+        run: |
+          @'
+          import json,zipfile
+          p='dist/Montara-SMART-Beta-Windows-COMPLETO.zip'
+          with zipfile.ZipFile(p) as z:
+              root='Montara-SMART-Beta/'
+              manifest=json.loads(z.read(root+'smart-beta-manifest.json'))
+              assert manifest['renderer_sources_bundled'] is True
+              assert manifest['engine']=='b867b3c72af8fe4685b487bcf1e09ffcc2a7c82b'
+              for filename in (
+                  'renderer/ENGINE_COMMIT','renderer/engine/core/stages/export.py',
+                  'renderer/local_video.py','windows_tray_smart.ps1',
+                  'INSTALAR-RENDER-SMART.ps1','INICIAR-SMART-BETA.cmd',
+                  'companion.py','video_jobs.py',
+              ):
+                  assert root+filename in z.namelist(),filename
+          print('WINDOWS_FULL_COMPANION_BUNDLE_PASS')
+          '@ | python -
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Upload complete private beta ZIP
         uses: actions/upload-artifact@v4
         with:
-          name: Montara-SMART-Beta-Windows
-          path: dist/Montara-SMART-Beta-Windows.zip
-          retention-days: 7
+          name: Montara-SMART-Beta-Windows-COMPLETO
+          path: dist/Montara-SMART-Beta-Windows-COMPLETO.zip
+          retention-days: 14
           if-no-files-found: error
