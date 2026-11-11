@@ -25,6 +25,7 @@ def serve_original_jm_worker(
     *, engine_root: Path, jm_root: Path, data_root: Path,
     project_id: str, generation: int, on_ready,
     runtime_root: Path | None = None,
+    private_preview_limit_mib: int = 256,
 ):
     """Blocking private WSGI worker; invoked only after root-broker launch."""
     engine_root = Path(engine_root).resolve(strict=True)
@@ -46,6 +47,19 @@ def serve_original_jm_worker(
     # imported only from its reviewed immutable bundle, not from main/global.
     if str(jm_root) not in sys.path:
         sys.path.insert(0, str(jm_root))
+    from urano.jm_private_proxy_overlay import private_proxy_limit_mib
+    private_proxy_limit_mib(private_preview_limit_mib)
+    if private_preview_limit_mib > 256:
+        # Fail closed if the operator has not installed the reviewed JM
+        # source overlay into this immutable bundle. No unbounded fallback.
+        reviewed=(jm_root/"resumable_upload.py").read_text(encoding="utf-8")
+        if "max_original_file_bytes=limit" not in reviewed or (
+                "MONTARA_PRIVATE_PROXY_LIMIT_MIB" not in reviewed):
+            raise ValueError("Private JM proxy quota requires reviewed bundle overlay")
+        os.environ["MONTARA_PRIVATE_PROXY_LIMIT_MIB"]=str(private_preview_limit_mib)
+    else:
+        os.environ.pop("MONTARA_PRIVATE_PROXY_LIMIT_MIB",None)
+
     # Treat this cloud-managed private worker as a remote JM runtime,
     # not an unrestricted desktop installation. The ORIGINAL JM uploader
     # applies its 256 MiB remote file ceiling when this marker exists.
