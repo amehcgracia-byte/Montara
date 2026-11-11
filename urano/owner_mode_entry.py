@@ -36,6 +36,7 @@ function openEditor(id, newlyCreated=false) {
                   (newlyCreated ? '?start=stage' : '?resume=footage'));
 }
 function choices(kind) {
+  window.MontaraProjectPicker?.setScope(kind === 'root' ? 'all' : kind);
   document.querySelector('#intentChoices').hidden = kind !== 'root';
   document.querySelector('#videoChoices').hidden = kind !== 'video';
   document.querySelector('#musicChoices').hidden = kind !== 'music';
@@ -45,7 +46,20 @@ function choices(kind) {
     kind === 'music' ? 'What does your music need?' : 'What would you like to make?';
 }
 async function stage() {
-  window.MontaraProjectPicker.open('stage');
+  // Enter Stage directly when an existing private Stage is available.
+  // Do not create an unwanted empty project or switch a running Engine here.
+  notice('Opening Stage…');
+  try {
+    const result = await api('editor/projects?mode=stage');
+    if (result.projects?.length) {
+      openEditor(result.projects[0].id);
+      return;
+    }
+    notice('');
+    window.MontaraProjectPicker.open('stage');
+  } catch (error) {
+    notice(error.message || 'Stage is temporarily unavailable.');
+  }
 }
 document.querySelectorAll('[data-intent]').forEach(button => {
   button.addEventListener('click', () => choices(button.dataset.intent));
