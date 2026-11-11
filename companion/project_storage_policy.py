@@ -74,8 +74,10 @@ def project_folder(root: Path, project_name: str) -> Path:
     Future Companion should handle collisions/reconnecting by trusted local
     project IDs, not by blindly reusing a display name.
     """
-    if not isinstance(project_name, str):
-        raise InvalidProjectRoot("Project name must be text")
+    if (not isinstance(project_name, str)
+            or "/" in project_name or "\\" in project_name
+            or project_name.strip() in {".", ".."}):
+        raise InvalidProjectRoot("Project name cannot contain path components")
     import re
     safe = re.sub(r"[^\w .,()+-]", "-", project_name).strip(" .")[:80]
     if not safe or safe in (".", ".."):
