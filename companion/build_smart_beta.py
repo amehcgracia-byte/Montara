@@ -37,7 +37,7 @@ SMART_FILES = (
 START = """@echo off
 cd /d "%~dp0"
 echo Montara SMART Beta - icono en la bandeja de Windows
-powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -WindowStyle Hidden -File "%~dp0windows_tray_smart.ps1"
+start "" powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -WindowStyle Hidden -File "%~dp0windows_tray_smart.ps1"
 """
 INSTALL = """@echo off
 cd /d "%~dp0"
