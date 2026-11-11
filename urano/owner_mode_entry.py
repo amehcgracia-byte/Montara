@@ -48,11 +48,13 @@ function choices(kind) {
 async function stage() {
   // Enter Stage directly when an existing private Stage is available.
   // Do not create an unwanted empty project or switch a running Engine here.
-  notice('Opening Stage…');
+  notice('');
   try {
     const result = await api('editor/projects?mode=stage');
     if (result.projects?.length) {
-      openEditor(result.projects[0].id);
+      // Stage card starts the original Footage flow; selecting a saved edit
+      // explicitly from Projects remains the native recovery path.
+      openEditor(result.projects[0].id, true);
       return;
     }
     notice('');
