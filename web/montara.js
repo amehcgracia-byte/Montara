@@ -493,23 +493,25 @@ $("#rangeBar").addEventListener("click", (e) => {
 // ---------- companion: offer it on a Mac, notice when it starts ----------
 const isDesktopMac = /Macintosh|Mac OS X/.test(navigator.userAgent) && !/iPhone|iPad/.test(navigator.userAgent) && navigator.maxTouchPoints < 2;
 let companionWatch = null;
-let expectedCompanionEngine = null;
 let companionVersionRequest = null;
-// Proactive and read-only. The browser cannot execute an installer; the
-// downloadable .command is explicitly opened by the Mac owner in Terminal.
-async function checkCompanionUpdate({force=false}={}) {
+async function checkCompanionUpdate() {
   if (!isDesktopMac) return;
   const notice=$("#companionUpdateNotice");
+  if (companionVersionRequest) return companionVersionRequest;
+  companionVersionRequest = refreshCompanionUpdate(notice).finally(() => {
+    companionVersionRequest = null;
+  });
+  return companionVersionRequest;
+}
+async function refreshCompanionUpdate(notice) {
   try {
-    if (!expectedCompanionEngine || force) {
-      if (!companionVersionRequest || force) companionVersionRequest=fetch("/montara/companion/version",{cache:"no-store"}).then(async response=>{
-        if (!response.ok) throw new Error("Montara Companion version unavailable");
-        return response.json();
-      });
-      const expected=await companionVersionRequest;
-      expectedCompanionEngine=expected.engine;
-    }
-    const info=await montaraCompanion.detect();
+    const [response, info] = await Promise.all([
+      fetch("/montara/companion/version", {cache:"no-store"}),
+      montaraCompanion.detect(),
+    ]);
+    if (!response.ok) throw new Error("Montara Companion version unavailable");
+    const {engine: expectedCompanionEngine} = await response.json();
+    if (!/^[a-f0-9]{40}$/.test(expectedCompanionEngine)) throw new Error("Invalid engine version");
     const installed=info?.local_video?.engine;
     const needsUpdate=installed!==expectedCompanionEngine;
     notice.hidden=!needsUpdate;
@@ -520,7 +522,7 @@ async function checkCompanionUpdate({force=false}={}) {
         ? "Open Montara Companion on your Mac, or download it if it is not installed."
         : !installed
           ? "This Companion cannot render original-quality video yet. Install the video update."
-          : "The installed video renderer is older or incompatible with this Montara version. Update it before exporting.";
+          : 'This editor needs video engine ' + expectedCompanionEngine.slice(0,7) + ' (installed: ' + installed.slice(0,7) + '). Download the Companion installer from this page before exporting.';
     }
   }catch(error){
     // If the version endpoint temporarily fails, do not present an unverified
@@ -530,9 +532,9 @@ async function checkCompanionUpdate({force=false}={}) {
 }
 $("#companionUpdateRecheck").addEventListener("click",()=>{
   const b=$("#companionUpdateRecheck");b.disabled=true;
-  checkCompanionUpdate({force:true}).finally(()=>{b.disabled=false;});
+  checkCompanionUpdate().finally(()=>{b.disabled=false;});
 });
-window.addEventListener("focus",()=>{if(!$("#companionUpdateNotice").hidden)checkCompanionUpdate();});
+window.addEventListener("focus",()=>{void checkCompanionUpdate();});
 async function watchCompanion() {
   clearTimeout(companionWatch);
   const info = await montaraCompanion.detect();
@@ -1990,6 +1992,7 @@ function pollFrames() {
   },1500);
 }
 async function openFrames() {
+  void checkCompanionUpdate();
   const generation=work.generation;
   state.waitingFrames=true;
   state.framesPending=true;

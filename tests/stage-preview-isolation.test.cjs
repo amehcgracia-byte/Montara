@@ -34,3 +34,32 @@ test('Companion update reminder checks version on entry without launching native
  assert.match(app, /@app\.get\("\/montara\/companion\/version"\)/);
  assert.doesNotMatch(source.slice(source.indexOf('async function checkCompanionUpdate'),source.indexOf('async function watchCompanion')), /exec\(|Terminal\.app|osascript|new Function|eval\(/);
 });
+
+test('a failed version request recovers and a server rollback makes the notice visible', async () => {
+ const vm = require('node:vm');
+ const installed = 'a'.repeat(40);
+ let required = installed;
+ let fail = true;
+ const elements = new Map();
+ const context = vm.createContext({
+   isDesktopMac: true,
+   $: id => {
+     if (!elements.has(id)) elements.set(id, {hidden: true});
+     return elements.get(id);
+   },
+   fetch: async () => ({ok: !fail, json: async () => ({engine: required})}),
+   montaraCompanion: {detect: async () => ({local_video: {engine: installed}})},
+   console: {warn() {}},
+ });
+ vm.runInContext(source.slice(source.indexOf('let companionVersionRequest'), source.indexOf('$("#companionUpdateRecheck").addEventListener')), context);
+ const check = () => vm.runInContext('checkCompanionUpdate()', context);
+ await check();
+ fail = false;
+ required = 'b'.repeat(40);
+ await check();
+ assert.equal(elements.get('#companionUpdateNotice').hidden, false);
+ assert.match(elements.get('#companionUpdateMessage').textContent, /bbbbbbb.*aaaaaaa/);
+ required = installed;
+ await check();
+ assert.equal(elements.get('#companionUpdateNotice').hidden, true);
+});
