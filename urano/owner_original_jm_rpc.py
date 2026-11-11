@@ -33,6 +33,7 @@ _ALLOWED = {
     ("POST", "wizard/draft"): "/api/v1/wizard/draft",
     ("GET", "wizard/status"): "/api/v1/wizard/status",
     ("GET", "project"): "/api/v1/project",
+    ("POST", "branding"): "/montara/branding",
 }
 _GEN = re.compile(r"[1-9][0-9]{0,9}\Z")
 _FILE = re.compile(r"[^\\/\x00-\x1f]{1,200}\Z")
@@ -58,9 +59,13 @@ def initial_stage_gateway_blueprint(
             return jsonify(error="Unsupported original editor operation"),404
         if request.host_url.rstrip("/") != https_origin:
             return jsonify(error="Trusted HTTPS host required"),403
-        if request.headers.get("Origin") != https_origin:
-            # All calls including read-only API are authenticated and CSRF
-            # gated. Same-origin JS can reliably supply these headers.
+        supplied_origin=request.headers.get("Origin")
+        if ((request.method!="GET" and supplied_origin!=https_origin)
+                or (request.method=="GET" and supplied_origin not in
+                    (None,https_origin))):
+            # Browsers need not include Origin on same-origin GET; CSRF on
+            # every read blocks cross-origin JS, since the token is not in a
+            # readable cookie and custom headers trigger CORS preflight.
             return jsonify(error="Trusted HTTPS origin required"),403
         token=request.cookies.get(SESSION_COOKIE)
         owner=sessions.verify(token)
