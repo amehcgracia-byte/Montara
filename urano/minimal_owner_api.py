@@ -53,8 +53,10 @@ def create_owner_api(private_dir: Path, *, settings: OIDCSettings,
     url = urlsplit(settings.redirect_uri)
     allowed_origin = f"{url.scheme}://{url.netloc}"
     if enable_dashboard:
-        app.register_blueprint(owner_dashboard_blueprint(session_store, https_origin=allowed_origin,
-            enable_engine_preview=enable_engine_preview))
+        app.register_blueprint(owner_dashboard_blueprint(
+            session_store, https_origin=allowed_origin,
+            enable_engine_preview=enable_engine_preview,
+            original_jm_pilot=enable_original_jm_browser_pilot))
     if engine_gateway is not None:
         from urano.owner_engine_gateway import owner_engine_blueprint
         # Avoid wiring an Engine gate belonging to another SQLite catalog.
