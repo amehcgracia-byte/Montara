@@ -72,6 +72,13 @@ class OwnerJMEditorHandoffTests(unittest.TestCase):
         with self.assertRaises(ProjectNotFound):
             self.registry.resolve_internal("owner-b", self.project.id)
 
+    def test_same_owner_can_reopen_same_real_jm_project(self):
+        first = self.bind()
+        second = self.bind()
+        self.assertEqual(first, second)
+        self.assertEqual(self.registry.resolve_internal(
+            "owner-a", self.project.id), self.folder)
+
     def test_foreign_owner_wrong_mode_and_push_are_denied(self):
         for kwargs in (
             {"owner": "owner-b"},
