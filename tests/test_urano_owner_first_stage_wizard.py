@@ -53,6 +53,21 @@ class OwnerFirstWizardContracts(unittest.TestCase):
             self.current.data["inputs"]["videos"] = body["videos"]
             return jsonify(project_id=str(self.folder))
 
+        for operation in ("prepare", "start"):
+            def handler(op=operation):
+                body=request.get_json()
+                self.calls.append((op,body))
+                return jsonify(ok=True,project_id=body.get("project_id"))
+            app.add_url_rule("/api/v1/wizard/"+operation,
+                             endpoint="mock_"+operation,
+                             view_func=handler,methods=["POST"])
+
+        @app.post("/api/v1/settings/fillers")
+        def original_fillers():
+            body=request.get_json()
+            self.calls.append(("fillers",body))
+            return jsonify(ok=True)
+
         self.app = app
         self.client = Client(
             OwnerFirstStageWizard(app, owner_project_folder=self.folder),
@@ -130,6 +145,46 @@ class OwnerFirstWizardContracts(unittest.TestCase):
         self.assertEqual(self.calls,[])
         self.assertEqual(self.draft(master=str(self.proxy),
                                     audio_paths=[str(self.proxy)]).status_code,200)
+
+    def test_stage_continue_uses_only_registered_owner_inputs(self):
+        self.new()
+        self.assertEqual(self.draft().status_code,200)
+        self.current.data["inputs"]["videos"]=[{"path":str(self.proxy)}]
+        body={"platform":"youtube","project_id":str(self.folder),
+              "name":"Stage","videos":[str(self.proxy)],"master":""}
+        prepared=self.client.post("/api/v1/wizard/prepare",json=body)
+        self.assertEqual(prepared.status_code,200)
+        started=self.client.post("/api/v1/wizard/start",json=body)
+        self.assertEqual(started.status_code,200)
+        self.assertEqual(self.calls[-2][0],"prepare")
+        self.assertEqual(self.calls[-1][0],"start")
+        self.assertEqual(self.calls[-1][1]["project_id"],str(self.folder))
+
+    def test_stage_continue_and_filler_cannot_reopen_foreign_media(self):
+        self.new()
+        self.assertEqual(self.draft().status_code,200)
+        self.current.data["inputs"]["videos"]=[{"path":str(self.proxy)}]
+        foreign=self.folder.parent.parent.parent/"outside.mp4"
+        foreign.write_bytes(b"private-original")
+        valid={"platform":"youtube","project_id":str(self.folder),
+               "videos":[str(self.proxy)],"master":""}
+        before=len(self.calls)
+        for route,body in (
+            ("wizard/prepare",{**valid,"videos":[str(foreign)]}),
+            ("wizard/start",{**valid,"videos":[str(foreign)]}),
+            ("wizard/start",{**valid,"project_id":"/other/owner"}),
+            ("wizard/start",{**valid,"platform":"show"}),
+            ("wizard/prepare",{**valid,"spherical_source_path":str(foreign)}),
+            ("settings/fillers",{"fillers":[str(foreign)]}),
+            ("settings/fillers",{"cutaways":[str(foreign)]}),
+        ):
+            with self.subTest(route=route,body=body):
+                result=self.client.post("/api/v1/"+route,json=body)
+                self.assertEqual(result.status_code,400)
+        self.assertEqual(len(self.calls),before)
+        self.assertEqual(self.client.post("/api/v1/settings/fillers",
+                                         json={"fillers":[str(self.proxy)],
+                                               "cutaways":[]}).status_code,200)
 
     def test_no_private_data_leaked_on_error(self):
         self.current.data["inputs"]["videos"] = ["private-original.mp4"]
