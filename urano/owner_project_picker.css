@@ -1,5 +1,5 @@
 /* Minimal contextual project overlay; original Chema UI remains unchanged. */
-.montara-owner-dialog{width:min(560px,calc(100vw - 32px));max-height:80vh;overflow:auto;
+.montara-owner-dialog{position:fixed;inset:0;margin:auto;width:min(560px,calc(100vw - 32px));max-height:80vh;overflow:auto;
   background:#1e1e22;color:#f4f1ef;border:1px solid #666;border-radius:16px;
   padding:22px;box-shadow:0 18px 75px #0009}
 .montara-owner-dialog::backdrop{background:#0009}
