@@ -853,7 +853,12 @@ document.addEventListener('click', event => {
   if (!state.files.some(f => f.sample)) $('#sampleNote').hidden = true;
   renderFiles();
 });
+function footageIsPreparing() {
+  return state.files.some(file => !file.removed && file.kind === "uploading");
+}
+
 function renderFiles() {
+  const preparing = footageIsPreparing();
   $('#stageSessionOptions').hidden = state.platform !== 'youtube' || !!state.audioTask && state.audioTask!=='session';
   $('#stageAudioOptions').hidden=!!state.audioTask;
   $('#taskHelp').textContent=state.audioTask ? AUDIO_TASKS[state.audioTask][1] : state.platform==='youtube' ? 'Add the cameras and a finished mix of the same performance. A 360 video lets you turn the view inside the picture; use a stitched MP4.' : 'Choose your clips, then the part you want to turn into a reel.';
@@ -874,21 +879,21 @@ function renderFiles() {
     $("#videoFiles").innerHTML = state.files.filter((f) => !isAudioEntry(f)).map(fileRow).join("");
   const master = state.files.find((f) => f.kind === "master");
   let hint = "";
-  let ready = (videos().length > 0 || audioOnly()) && state.uploads === 0;
+  let ready = (videos().length > 0 || audioOnly()) && !preparing;
   if (mixerMode()) hint = `${audioTracks().length} separate tracks: Montara will mix them for you, then you can adjust every fader.`;
   else if (state.platform === "youtube" && !master) { hint = "Stage needs the master audio (one mixed track of the song) to sync every camera."; ready = false; }
   if (state.platform === "reel" && !master && videos().length > 1) hint = "Tip: add the song so the reel cuts on the music.";
   if (state.platform === "reel" && master) hint = "The reel uses your song master. Camera sound is muted.";
   if (state.platform === "reel" && state.files.some(f=>f.sample) && !master) { hint = "The example song master is missing. Reopen the example."; ready = false; }
-  if (state.uploads) hint = state.platform === "youtube" && !state.audioTask ? "Files are preparing in the background. You can name the project and choose camera types now." : "Uploading…";
-  if (state.platform === 'youtube' && $('#fullSessionOn').checked && !state.uploads && audioTracks().length) hint = 'Find and review the songs, then export their mixes. This session step exports audio.';
+  if (preparing) hint = state.platform === "youtube" && !state.audioTask ? "Files are preparing in the background. You can name the project and choose camera types now." : "Uploading…";
+  if (state.platform === 'youtube' && $('#fullSessionOn').checked && !preparing && audioTracks().length) hint = 'Find and review the songs, then export their mixes. This session step exports audio.';
   const longest = Math.max(0, ...state.files.filter(isAudioEntry).map(f => f.duration || 0));
-  if (state.platform === 'youtube' && !$('#fullSessionOn').checked && !state.uploads && longest > 20 * 60) hint = `Your audio is ${Math.round(longest / 60)} min long. If it is a whole session and you want one song, tick Full session to find the songs first, or trim the tracks to that song.`;
+  if (state.platform === 'youtube' && !$('#fullSessionOn').checked && !preparing && longest > 20 * 60) hint = `Your audio is ${Math.round(longest / 60)} min long. If it is a whole session and you want one song, tick Full session to find the songs first, or trim the tracks to that song.`;
   // Long sessions: everything scales with how much audio comes in.
   if (state.platform === 'youtube' && longest > 30 * 60) hint = `${hint ? hint + ' ' : ''}Tip: only send what you need. If you want a few songs from a ${Math.round(longest / 60)} min session, export just that part of the tracks: uploading, finding songs and mixing all take much less time.`;
-  if (state.platform === 'youtube' && videos().length && (audioTracks().length >= 2 || state.files.some(f=>f.preview)) && !state.uploads)
+  if (state.platform === 'youtube' && videos().length && (audioTracks().length >= 2 || state.files.some(f=>f.preview)) && !preparing)
     hint = 'Montara will find, mix and master the song in your videos.';
-  if(state.audioTask==='master'){hint=audioTracks().length>1?'Choose one finished mix for mastering.':'';ready=audioTracks().length===1 && state.uploads===0;}
+  if(state.audioTask==='master'){hint=audioTracks().length>1?'Choose one finished mix for mastering.':'';ready=audioTracks().length===1 && !preparing;}
   if (!audioOnly() && state.branding === "mine" && !state.hasLogo) { hint = "Choose your logo, or pick another option."; ready = false; }
   $("#footageHint").textContent = hint;
   $("#continueFootage").disabled = !ready;
@@ -963,7 +968,7 @@ function isWholeSession() {
 }
 
 async function registerProject({mixed = false} = {}) {
-  if (state.uploads) return toast('Wait for the files to finish preparing.');
+  if (footageIsPreparing()) return toast('Wait for the files to finish preparing.');
   if(state.audioTask==='master')return runMasterOnly().catch(fail);
   if(work.cancelling)return toast('Wait for cancellation to finish.');
   if(!mixed){state.mixMaster=null;state.mixDownload=null;state.syncExcluded.clear();}

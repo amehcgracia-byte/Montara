@@ -63,3 +63,16 @@ test('an unresponsive proxy body times out and retries the same cached file', as
   assert.equal(received.retries, 1);
   assert.equal(reads, 2);
 });
+
+test('removed uploads cannot keep Footage busy while retained uploads still block', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'web', 'montara.js'), 'utf8');
+  const state = {uploads: 2, files: [
+    {kind: 'video'}, {kind: 'master'}, {kind: 'uploading', removed: true},
+  ]};
+  const context = vm.createContext({state});
+  vm.runInContext(source.slice(source.indexOf('function footageIsPreparing()'), source.indexOf('function renderFiles()')), context);
+  const isPreparing = () => vm.runInContext('footageIsPreparing()', context);
+  assert.equal(isPreparing(), false);
+  state.files.push({kind: 'uploading'});
+  assert.equal(isPreparing(), true);
+});
