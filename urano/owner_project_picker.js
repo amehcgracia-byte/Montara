@@ -128,9 +128,23 @@
     if(!res.ok)throw Error(typeof body.error==='string'?body.error:body.error?.message||'Request failed ('+res.status+')');
     return body;
   }
-  async function csrf(){
-    return (await api('session/refresh',{method:'POST'})).csrf;
+  let localCsrfJob = null;
+  function getLocalCsrf() {
+    if(!localCsrfJob) {
+      localCsrfJob = api('session/refresh',{
+        method:'POST',headers:{Origin:location.origin}
+      }).then(body=>{
+        if(!/^[a-f0-9]{64}$/.test(body.csrf||''))throw Error('Private session unavailable');
+        return body.csrf;
+      }).catch(error=>{localCsrfJob=null;throw error});
+    }
+    return localCsrfJob;
   }
+  if(!window.MontaraOwnerCsrf) {
+    window.MontaraOwnerCsrf = Object.freeze({get:getLocalCsrf});
+  }
+  async function csrf(){return window.MontaraOwnerCsrf.get();}
+
   async function openProject(p,newProject=false){
     const mode=modeOf(p);
     if(mode!=='stage') {message('This project type is not yet available in the Owner beta.');return;}
