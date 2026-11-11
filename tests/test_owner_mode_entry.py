@@ -90,9 +90,10 @@ class OwnerModeEntryTest(unittest.TestCase):
         script = self.get("/urano/v1/entry.js").data.decode("utf-8")
         self.assertIn("setScope(kind === 'root' ? 'all' : kind)", script)
         self.assertIn("api('editor/projects?mode=stage')", script)
-        self.assertIn("openEditor(result.projects[0].id, true)", script)
+        self.assertIn("openEditor(current.id, true)", script)
+        self.assertIn("result.projects.find(p=>p.id===selected)", script)
         self.assertIn("window.MontaraProjectPicker.open('stage')", script)
-        self.assertLess(script.index("openEditor(result.projects[0].id, true)"),
+        self.assertLess(script.index("openEditor(current.id, true)"),
                         script.index("window.MontaraProjectPicker.open('stage')"))
 
     def test_picker_assets_reject_anonymous_session(self):
