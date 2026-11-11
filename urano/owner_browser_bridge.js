@@ -18,6 +18,7 @@
     '/api/v1/wizard/status': 'wizard/status',
     '/api/v1/project': 'project',
     '/montara/branding': 'branding',
+    '/montara/uploads': 'uploads',
   });
   const nativeFetch = window.fetch.bind(window);
   const base = '/urano/v1/media/' + project + '/';
@@ -33,7 +34,9 @@
     if (parsed.origin !== location.origin) return null;
     const path = parsed.pathname;
     if (!path.startsWith('/api/v1/') && !path.startsWith('/montara/')) return null;
-    const operation = routes[path];
+    const uploadPart = /^\\/montara\\/uploads\\/([a-f0-9]{32})(\\/finish)?$/.exec(path);
+    const operation = routes[path] || (uploadPart
+      ? 'uploads/' + uploadPart[1] + (uploadPart[2] || '') : null);
     if (!operation || parsed.search || parsed.hash) {
       return { blocked: true };
     }
@@ -88,7 +91,8 @@
     return headers;
   };
   const uploadOperation = (operation, method) =>
-    method === 'POST' && operation === 'wizard/upload';
+    method === 'POST' &&
+    (operation === 'wizard/upload' || operation === 'uploads');
 
   window.fetch = async function ownerScopedFetch(input, init = {}) {
     const target = resolve(input);
