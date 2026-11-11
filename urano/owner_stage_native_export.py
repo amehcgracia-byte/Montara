@@ -39,8 +39,11 @@ class OwnerStageNativeExport:
             "/api/v1/edit/native-recipe",
             "/api/v1/edit/native-master",
         ):
-            q=parse_qs(environ.get("QUERY_STRING",""),keep_blank_values=True,
-                       strict_parsing=True,max_num_fields=4)
+            try:
+                q=parse_qs(environ.get("QUERY_STRING",""),keep_blank_values=True,
+                           strict_parsing=True,max_num_fields=4)
+            except ValueError:
+                return _reject(environ,start_response)
             permitted={"project_id"} if path.endswith("native-recipe") else {
                 "project_id","revision"}
             if (set(q)!=permitted or any(len(values)!=1 for values in q.values())
