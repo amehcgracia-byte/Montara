@@ -93,7 +93,7 @@ class StageCompanionGateway(unittest.TestCase):
         master=self.client.get(
             self.url+"edit/native-master?revision=2&project_id=owner-worker",
             base_url=ORIGIN,headers=self.headers)
-        self.assertEqual(master.status_code,200,master.get_data(as_text=True)[:200])
+        self.assertEqual(master.status_code,200,master.status)
         self.assertEqual(master.data,self.raw)
         self.assertEqual(master.headers["Content-Length"],str(len(self.raw)))
         self.assertEqual(master.headers["X-Content-Type-Options"],"nosniff")
