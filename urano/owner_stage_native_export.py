@@ -51,8 +51,7 @@ class OwnerStageNativeExport:
                     ("owner-worker",str(self.folder))):
                 return _reject(environ,start_response)
             if "revision" in q and (not q["revision"][0].isascii()
-                 or not q["revision"][0].isdecimal()
-                 or len(q["revision"][0])>10):
+                 or not __import__("re").fullmatch(r"[a-f0-9]{20}",q["revision"][0])):
                 return _reject(environ,start_response)
             rewrite=dict((key,value[0]) for key,value in q.items())
             rewrite["project_id"]=str(self.folder)
