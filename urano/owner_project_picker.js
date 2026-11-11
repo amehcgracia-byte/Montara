@@ -106,7 +106,12 @@
                byId('musicChoices') && !byId('musicChoices').hidden ? 'music' : 'all');
       return;
     }
-    setScope('stage');
+    // The same Chema Footage screen is used by Stage and by all Music
+    // actions. URL alone must never label an audio task "Stage projects".
+    const label = byId('modeLabel')?.textContent?.trim().toLowerCase() || '';
+    const musicTask = ['mix a song','mix a full session','master a mix']
+      .some(value => label.includes(value));
+    setScope(musicTask ? 'music' : 'stage');
   }
   if(isEditor) {
     const watched = ['home','mode','videoChoices','musicChoices','footage'];
@@ -115,6 +120,12 @@
       const node = document.getElementById(id);
       if(node) observer.observe(node,{attributes:true,attributeFilter:['hidden']});
     }
+    // Mode label changes after selecting an audio task, often without
+    // leaving Footage; track those text updates as well as screen changes.
+    const taskLabel = document.getElementById('modeLabel');
+    if(taskLabel) observer.observe(taskLabel,{
+      childList:true,characterData:true,subtree:true
+    });
     window.addEventListener('popstate',syncEditorScope);
     document.addEventListener('click',event=>{
       if(event.target.closest('.brand, #modeQuestionBack, [data-intent]'))
