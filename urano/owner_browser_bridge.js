@@ -11,6 +11,23 @@
   if (!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(project)) {
     throw new Error('Invalid Montara Owner project');
   }
+  // Chema's local footage cache was keyed only by platform. In Owner each
+  // Google project must have a separate browser database. Old global records
+  // stay untouched and are not offered as unrelated cameras/files.
+  try {
+    if (typeof indexedDB !== 'undefined' && typeof indexedDB.open === 'function') {
+      const originalOpen = indexedDB.open.bind(indexedDB);
+      indexedDB.open = function(name, version) {
+        const scopedName = name === 'montara-footage'
+          ? 'montara-footage-owner-' + project : name;
+        return version === undefined
+          ? originalOpen(scopedName) : originalOpen(scopedName, version);
+      };
+    }
+  } catch {
+    // Browser without storage support: leave the original unchanged.
+  }
+
   // The original Chema editor stores one open edit per browser tab, not
   // per private Owner project. Prevent another Stage's remembered edit from
   // overriding an explicit Stage entry; preserve the snapshot per Owner UUID.
