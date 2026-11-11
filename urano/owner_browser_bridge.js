@@ -337,6 +337,22 @@
     return response;
   };
 
+  const showPrivateUploadIssue = (reason) => {
+    if(typeof document.getElementById !== 'function')return;
+    const target=document.querySelector?.('#footage');
+    if(!target)return;
+    let alert=document.getElementById('montaraOwnerUploadIssue');
+    if(!alert) {
+      alert=document.createElement('p');
+      alert.id='montaraOwnerUploadIssue';
+      alert.setAttribute('role','alert');
+      alert.className='montara-owner-upload-issue';
+      target.prepend(alert);
+    }
+    alert.textContent=String(reason||'Private upload unavailable.');
+    alert.hidden=false;
+  };
+
   if (typeof XMLHttpRequest !== 'undefined') {
     const oldOpen = XMLHttpRequest.prototype.open;
     const oldSend = XMLHttpRequest.prototype.send;
@@ -346,6 +362,19 @@
       const target = resolve(url);
       const action = String(method).toUpperCase();
       state.set(this, { target, method: action, cancelled: false });
+      if(target && !target.blocked && uploadOperation(target.operation,action)
+          && typeof this.addEventListener==='function') {
+        this.addEventListener('loadend',()=>{
+          if(this.status>=400) {
+            let reason='HTTP '+this.status;
+            try {
+              const payload=JSON.parse(this.responseText||'{}');
+              reason=payload.error?.message||payload.error||reason;
+            }catch{}
+            showPrivateUploadIssue('Private media upload rejected: '+reason);
+          }
+        },{once:true});
+      }
       return oldOpen.call(this, action,
         target && !target.blocked ? target.path : url, ...rest);
     };
@@ -364,7 +393,14 @@
           this.setRequestHeader('X-Montara-Engine-Generation', String(generation));
         }
         oldSend.call(this, body);
-      }).catch(() => { if (!entry.cancelled) oldAbort.call(this); });
+      }).catch(error => {
+        if(!entry.cancelled) {
+          showPrivateUploadIssue('Private upload could not start: '+
+            (error?.message||'Engine admission failed')+
+            '. Your original file remains on your computer.');
+          oldAbort.call(this);
+        }
+      });
     };
     XMLHttpRequest.prototype.abort = function() {
       const entry = state.get(this);
