@@ -37,7 +37,7 @@ async function csrf() {
   return window.MontaraOwnerCsrf.get();
 }
 function openEditor(id, newlyCreated=false) {
-  if (!/^[0-9a-f-]{36}$/i.test(id)) throw Error('Identificador de proyecto inválido');
+  if (!/^[0-9a-f-]{36}$/i.test(id)) throw Error('Invalid project ID');
   location.assign('/urano/v1/editor/projects/' + encodeURIComponent(id) + '/' +
                   (newlyCreated ? '?start=stage' : '?resume=footage'));
 }
@@ -84,11 +84,11 @@ homeSection.addEventListener('click', () => choices('root'));
 document.querySelectorAll('[data-platform]').forEach(button => {
   button.addEventListener('click', () => {
     if (button.dataset.platform === 'youtube') stage();
-    else notice('Push y Show se conectarán después de la validación integral de Stage.');
+    else notice('Push and Show are not connected to the private beta yet.');
   });
 });
 document.querySelectorAll('[data-audio-task]').forEach(button => {
-  button.addEventListener('click', () => notice('El itinerario de audio se integrará después de Stage.'));
+  button.addEventListener('click', () => notice('Music editing is not connected to the private beta yet.'));
 });
 document.querySelector('#ownerLogout').addEventListener('click', async () => {
   try {
@@ -126,7 +126,7 @@ def owner_mode_entry_blueprint(*, sessions: SessionStore, https_origin: str,
         '<button class="btn ghost small" id="ownerLogout" type="button">Sign out</button>')
     # Project button is inserted by the shared picker, not duplicated here.
 
-    page = ('''<!doctype html><html lang="es"><head><meta charset="utf-8">
+    page = ('''<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Montara · Stage, Push, Show</title>
 <link rel="icon" href="/urano/v1/entry/assets/mark.svg" type="image/svg+xml">
