@@ -27,8 +27,7 @@ async function api(path, options={}) {
   return body;
 }
 async function csrf() {
-  const result = await api('session/refresh', {method:'POST', headers:{Origin:location.origin}});
-  return result.csrf;
+  return window.MontaraOwnerCsrf.get();
 }
 function openEditor(id, newlyCreated=false) {
   if (!/^[0-9a-f-]{36}$/i.test(id)) throw Error('Identificador de proyecto inválido');
