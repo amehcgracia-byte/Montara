@@ -49,6 +49,8 @@ class OwnerNavigationConsistencyTests(unittest.TestCase):
         script = self.get("/urano/v1/entry.js").data
         self.assertIn(b'showHome()', script)
         self.assertIn(b'homeTimer', script)
+        self.assertIn(b'originalChemaHome', script)
+        self.assertIn(b'homeSection.innerHTML = originalChemaHome', script)
         self.assertIn(b'document.body.classList.add(\'is-intro\')', script)
 
     def test_stage_launch_hides_only_redundant_first_intro(self):
@@ -58,11 +60,23 @@ class OwnerNavigationConsistencyTests(unittest.TestCase):
         self.assertIn(b'montara-owner-stage-entry', stage.data)
         self.assertIn(b'data-go="home"', stage.data)
         self.assertIn(b'Output video name <input id="videoName"', stage.data)
+        self.assertIn(b'Only lightweight proxies are sent', stage.data)
+        self.assertNotIn(b'final video is made from those small versions', stage.data)
         recovery = self.get(path + "?resume=footage")
         self.assertEqual(recovery.status_code, 200)
         self.assertNotIn(b'class="montara-owner-stage-entry"', recovery.data)
         self.assertIn(b'data-go="home"', recovery.data)
         self.assertIn(b'/urano/v1/entry/picker.js', recovery.data)
+
+    def test_engine_indicator_is_private_owner_only(self):
+        picker = self.get("/urano/v1/entry/picker.js")
+        self.assertEqual(picker.status_code, 200)
+        js = picker.data
+        self.assertIn(b"montaraOwnerEngineSwitch", js)
+        self.assertIn(b"state.status!=='idle'", js)
+        self.assertIn(b"projects/'+encodeURIComponent(ownProject)+'/close", js)
+        css = self.get("/urano/v1/entry/picker.css")
+        self.assertIn(b"montara-owner-engine-led", css.data)
 
     def test_scripts_are_original_and_editable_by_chema(self):
         stage = self.get(f"/urano/v1/editor/projects/{self.project.id}/?start=stage")
