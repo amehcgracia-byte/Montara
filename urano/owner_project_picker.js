@@ -98,6 +98,8 @@
       if(!ownProject || engineSwitch.disabled)return;
       engineSwitch.disabled = true;
       const wasOn = engineControl.dataset.status==='on';
+      let verifiedRunning = false;
+      let closeAttempted = false;
       engineState('checking');
       accountStatus.textContent='';
       engineIssue.hidden = true;
@@ -109,6 +111,7 @@
         });
         if(admission.state!=='ready' || !Number.isSafeInteger(admission.generation))
           throw Error('Private Engine verification failed.');
+        verifiedRunning = true;
         if(!wasOn) {
           engineState('on');
           return;
@@ -122,11 +125,13 @@
         if(!current.ok)throw Error('Project status is not verified. Nothing was stopped.');
         const state=await current.json();
         if(state.status!=='idle')
-          throw Error('Engine is busy ('+String(state.status||'unknown')+'). Nothing was stopped.');
+          throw Error('Editor is in state '+String(state.status||'unknown')+
+            '. The Engine is running, but it cannot be safely stopped from here.');
         if(!window.confirm('Close this idle Engine? Saved project files will remain.')){
           engineState('on');
           return;
         }
+        closeAttempted = true;
         const result=await api('projects/'+encodeURIComponent(ownProject)+'/close',{
           method:'POST',headers:{'X-Urano-CSRF':token,Origin:location.origin}
         });
@@ -134,7 +139,9 @@
         engineState('off');
         accountStatus.textContent='Engine closed. Saved projects are preserved.';
       }catch(error){
-        engineState('unknown');
+        // A confirmed worker admission remains ON even if editing is busy;
+        // amber means an unknown worker state, not "busy".
+        engineState(verifiedRunning && !closeAttempted ? 'on' : 'unknown');
         const reason=error.message||'Engine state not verified.';
         // Engine state is not an account-settings error. Keep the user in
         // Stage and show a small diagnostic beside the switch instead of
