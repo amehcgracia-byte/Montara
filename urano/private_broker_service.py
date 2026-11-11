@@ -61,8 +61,9 @@ class SystemdDirect:
 
 
 class DemoBroker:
-    def __init__(self,bundle):
+    def __init__(self,bundle,*,jm_bundle=None):
         self.bundle=Path(bundle)
+        self.jm_bundle=Path(jm_bundle) if jm_bundle is not None else None
         self.ledger=JobRecoveryLedger(LEDGER)
         self.control=RestrictedTargetControl(self.ledger,SystemdDirect())
         # Recover ONLY exact I24 names recorded before a crash. No TTL.
@@ -80,7 +81,7 @@ class DemoBroker:
         lease=self.ledger.start_trusted(owner_id,project_id)
         unit=self.ledger.reserve_target_unit(lease)
         try:
-            props=fixed_launch_properties(unit,self.bundle)
+            props=fixed_launch_properties(unit,self.bundle,jm_bundle=self.jm_bundle)
             command=["/usr/bin/systemd-run","--system","--no-block","--collect",
                 "--quiet","--unit="+unit]
             for prop in props:
@@ -90,6 +91,7 @@ class DemoBroker:
                 "-u","/opt/montara/broker/private_broker_worker.py",
                 "/opt/montara-engine",unit,
                 *([project_id,str(lease.generation)] if project_id!=PROJECT else []),
+                *(["--jm-bundle","/opt/montara-jm"] if self.jm_bundle is not None else []),
             ])
             cmd(command,timeout=14)
             ready_path=Path("/run")/unit/READY_FILE
@@ -281,6 +283,7 @@ def main():
     parser.add_argument("--web-uid",required=True,type=int)
     parser.add_argument("--web-gid",type=int)
     parser.add_argument("--owner-db-root")
+    parser.add_argument("--jm-bundle")
     args=parser.parse_args()
     if os.geteuid()!=0:
         raise RuntimeError("Only root-owned service may manage the isolated systemd units")
@@ -293,7 +296,17 @@ def main():
         bundle.stat().st_mode & 0o022 or
         not (bundle / "engine" / "server" / "api.py").is_file()):
         raise ValueError("Engine bundle must be root-owned and immutable")
-    broker=DemoBroker(args.bundle)
+    if args.jm_bundle:
+        if not re.fullmatch(r"/opt/montara/bundles/jm-[0-9a-f]{40}",args.jm_bundle):
+            raise ValueError("Unpinned private JM editor bundle")
+        jm=Path(args.jm_bundle)
+        if (jm.is_symlink() or jm.stat().st_uid!=0 or jm.stat().st_mode & 0o022
+                or not (jm/"app.py").is_file()
+                or not (jm/"web/index.html").is_file()
+                or not (jm/"web/montara.js").is_file()
+                or not (jm/"web/companion.js").is_file()):
+            raise ValueError("Private JM bundle must be root-owned and complete")
+    broker=DemoBroker(args.bundle,jm_bundle=args.jm_bundle)
     if SOCKET.is_symlink():
         raise RuntimeError("Socket symlink forbidden")
     if SOCKET.exists():
