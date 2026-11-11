@@ -147,6 +147,7 @@
       csrfJob = (async () => {
         const response = await nativeFetch('/urano/v1/session/refresh', {
           method: 'POST', credentials: 'same-origin', cache: 'no-store',
+          headers: { Origin: location.origin },
         });
         if (!response.ok) throw new Error('Montara login expired');
         const body = await response.json();
@@ -158,6 +159,14 @@
     }
     return csrfJob;
   };
+
+  // Share the rotating owner CSRF with the contextual picker in this tab.
+  // Independent refresh calls would invalidate each other's token.
+  if (!window.MontaraOwnerCsrf) {
+    Object.defineProperty(window, 'MontaraOwnerCsrf', {
+      value: Object.freeze({get: csrf}), configurable: false
+    });
+  }
 
   const ensure = async () => {
     if (generation) return generation;
