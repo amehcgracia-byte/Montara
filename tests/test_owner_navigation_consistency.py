@@ -82,11 +82,14 @@ class OwnerNavigationConsistencyTests(unittest.TestCase):
             f"/urano/v1/editor/projects/{self.project.id}/plans.js")
         self.assertEqual(js.status_code,200)
 
-    def test_engine_off_error_does_not_open_account_dialog(self):
+    def test_engine_is_read_only_status_with_project_name_not_switch(self):
         script=self.get("/urano/v1/entry/picker.js").data
-        self.assertIn(b"montaraOwnerEngineIssue",script)
-        self.assertIn(b"engineIssue.hidden=false",script)
-        self.assertNotIn(b"accountDialog.showModal();\n      }finally",script)
+        self.assertIn(b"montaraOwnerEngineLabel",script)
+        self.assertIn(b"montaraOwnerOpenActive",script)
+        self.assertIn(b"engine-state",script)
+        self.assertIn(b"Engine \xc2\xb7 ",script)
+        self.assertNotIn(b"montaraOwnerEngineSwitch",script)
+        self.assertNotIn(b"projects/'+encodeURIComponent(ownProject)+'/close",script)
 
     def test_native_chema_errors_remain_visible_in_owner_pilot(self):
         path=f"/urano/v1/editor/projects/{self.project.id}/montara.js"
@@ -108,9 +111,10 @@ class OwnerNavigationConsistencyTests(unittest.TestCase):
         picker = self.get("/urano/v1/entry/picker.js")
         self.assertEqual(picker.status_code, 200)
         js = picker.data
-        self.assertIn(b"montaraOwnerEngineSwitch", js)
-        self.assertIn(b"state.status!=='idle'", js)
-        self.assertIn(b"projects/'+encodeURIComponent(ownProject)+'/close", js)
+        self.assertIn(b"montaraOwnerEngineControl", js)
+        self.assertIn(b"state==='on'", js)
+        self.assertIn(b"active_project", js)
+        self.assertNotIn(b"montaraOwnerEngineSwitch", js)
         css = self.get("/urano/v1/entry/picker.css")
         self.assertIn(b"montara-owner-engine-led", css.data)
 
