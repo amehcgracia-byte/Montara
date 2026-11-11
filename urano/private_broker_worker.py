@@ -33,7 +33,13 @@ def main():
     unit = sys.argv[2]
     if not re.fullmatch(r"montara-i24-job-[0-9a-f]{32}",unit):
         raise SystemExit(3)
-    sys.path[:0] = [str(bundle/"site"), str(bundle/"app"), str(bundle/"engine")]
+    # The pinned Engine's older app/urano package must not shadow the
+    # reviewed, complete Owner worker's own urano modules.
+    # Library dependencies still resolve from the pinned bundle.
+    sys.path[:0] = [
+        str(Path(__file__).resolve().parent),
+        str(bundle/"site"), str(bundle/"app"), str(bundle/"engine")
+    ]
     from core.project import new_project_document
     data = Path("/run") / unit
     project_id = sys.argv[3] if len(sys.argv)>=4 else "I26-Synthetic"
