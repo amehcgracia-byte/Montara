@@ -327,12 +327,12 @@ select{height:38px;padding:0 12px;border-radius:10px;border:1px solid var(--line
 
 /* One wordmark: the symbol is the initial M. Progress surrounds that same mark. */
 .brand{gap:2px}.brand img{width:30px;height:28px}.brand span{letter-spacing:-.8px}
-.ring .ring-brand{position:absolute;inset:25px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;animation:brandbreathe 2.2s ease-in-out infinite}
-.ring .loading-mark{width:62px;height:52px;transform:none;overflow:visible;margin:0}
+.ring .ring-brand{position:absolute;inset:25px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px}
+.ring .loading-mark{width:62px;height:52px;transform:none;overflow:visible;margin:0;animation:brandbreathe 2.2s ease-in-out infinite}
 .ring .ring-brand b{position:static;font-size:25px;inset:auto}
 @keyframes brandbreathe{0%,100%{transform:scale(.94)}50%{transform:scale(1.09)}}
 .mixstatus .loading-mark{animation:brandbreathe 2.2s ease-in-out infinite}
-@media(prefers-reduced-motion:reduce){.ring .ring-brand,.mixstatus .loading-mark{animation:none}}
+@media(prefers-reduced-motion:reduce){.ring .loading-mark,.mixstatus .loading-mark{animation:none}}
 
 
 /* Show shares Montara's short flow, not the desktop editing workspace. */

@@ -1,0 +1,23 @@
+name: Native render progress checks
+on:
+  push:
+    branches:
+      - fix/native-render-phase-status-20261109
+  pull_request:
+    paths:
+      - web/montara.js
+      - web/montara.css
+      - companion/video_jobs.py
+      - companion/local_video.py
+      - tests/native-render-progress.test.cjs
+      - .github/workflows/native-render-progress.yml
+jobs:
+  native-progress:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test tests/native-render-progress.test.cjs
+      - run: python -m py_compile companion/video_jobs.py companion/local_video.py
