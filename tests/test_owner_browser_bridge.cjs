@@ -99,7 +99,32 @@ const assertNoGlobal=(url)=>
   assert(operations.some(x=>x.url==='/urano/v1/media/'+PROJECT+'/uploads/'+uploadId));
   assert(operations.some(x=>x.url==='/urano/v1/media/'+PROJECT+'/uploads/'+uploadId+'/finish'));
   assert.equal(operations.filter(x=>String(x.url).endsWith('/ensure')).length,1);
-  await assert.rejects(window.fetch('/montara/uploads/not-a-valid-id'),/not yet enabled/);
+  const sessionId='c'.repeat(12);
+  await window.fetch('/montara/session', {method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({tracks:['/isolated/audio.flac'],for_video:true})});
+  assert.equal(operations.at(-1).url,
+    '/urano/v1/media/'+PROJECT+'/session');
+  await window.fetch('/montara/session/'+sessionId);
+  assert.equal(operations.at(-1).url,
+    '/urano/v1/media/'+PROJECT+'/session/'+sessionId);
+  await window.fetch('/montara/session/'+sessionId+'/video-source');
+  assert.equal(operations.at(-1).url,
+    '/urano/v1/media/'+PROJECT+'/session/'+sessionId+'/video-source');
+  await window.fetch('/montara/session/'+sessionId+'/listen',{method:'HEAD'});
+  assert.equal(operations.at(-1).url,
+    '/urano/v1/media/'+PROJECT+'/session/'+sessionId+'/listen');
+  await window.fetch('/montara/session/'+sessionId+'/local-plan?song=1&start=2&end=4');
+  assert.equal(operations.at(-1).url,
+    '/urano/v1/media/'+PROJECT+'/session/'+sessionId+
+      '/local-plan?song=1&start=2&end=4');
+  await assert.rejects(window.fetch('/montara/session/'+sessionId+
+    '/originals?song=1&path=/etc/passwd'),/not yet enabled/);
+  await assert.rejects(window.fetch('/montara/session/'+sessionId+
+    '/result/1?download=../../something'),/not yet enabled/);
+  assertNoGlobal('/montara/session');
+  assertNoGlobal('/montara/session/'+sessionId);
+    await assert.rejects(window.fetch('/montara/uploads/not-a-valid-id'),/not yet enabled/);
   assertNoGlobal('/api/v1/wizard/upload');
   assertNoGlobal('/montara/uploads');
   console.log(JSON.stringify({
