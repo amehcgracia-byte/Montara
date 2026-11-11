@@ -139,6 +139,37 @@ class JMRealHTTPRPCContracts(unittest.TestCase):
         self.assertEqual(self.ensured,[])
         self.assertEqual(self.connected,[])
 
+    def test_resumable_limits_do_not_start_engine_and_bad_metadata_denied(self):
+        limits=self.client.get(self.url("uploads"),
+            base_url=ORIGIN,headers=self.headers)
+        self.assertEqual(limits.status_code,200)
+        self.assertEqual(limits.json["max_file_bytes"],256*1024**2)
+        self.assertEqual(self.ensured,[])
+        for body in (
+            {"name":"../../other-owner.mp4","size":30,
+             "fingerprint":"f"*64},
+            {"name":"cam.small.mp4","size":False,
+             "fingerprint":"f"*64},
+            {"name":"cam.small.mp4","size":600*1024**2,
+             "fingerprint":"f"*64},
+            {"name":"cam.small.mp4","size":30,
+             "fingerprint":"not-a-hash"},
+        ):
+            with self.subTest(body=body):
+                reply=self.client.post(self.url("uploads"),
+                    base_url=ORIGIN,headers=self.headers,json=body)
+                self.assertEqual(reply.status_code,400)
+        self.assertEqual(self.ensured,[])
+        self.assertEqual(self.connected,[])
+        invalid_chunk=dict(self.headers,**{
+            "X-Montara-Engine-Generation":"9","Upload-Offset":"-1"})
+        reply=self.client.put(
+            self.url("uploads/"+"a"*32),
+            base_url=ORIGIN,headers=invalid_chunk,
+            data=b"chunk",content_type="application/octet-stream")
+        self.assertEqual(reply.status_code,400)
+        self.assertEqual(self.connected,[])
+
     def test_missing_stale_generation_and_unreviewed_path_denied(self):
         no_gen=self.post("wizard/draft","{}")
         self.assertEqual(no_gen.status_code,409)
