@@ -26,7 +26,7 @@ const mockFetch=async (url,opts={})=>{
   if(String(url).startsWith('/urano/v1/media/')){
     headers.set('X-Montara-Engine-Generation','4');
   }
-  const json=()=>{
+  const json=()=>
     url==='/urano/v1/session/refresh'
       ? Promise.resolve({csrf:'a'.repeat(64)})
       : String(url).endsWith('/ensure')
