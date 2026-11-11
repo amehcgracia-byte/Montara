@@ -29,7 +29,8 @@ def create_owner_api(private_dir: Path, *, settings: OIDCSettings,
                      provider: GoogleProvider | None = None,
                      enable_dashboard: bool = False,
                      engine_gateway: OwnerEngineGateway | None = None,
-                     enable_engine_preview: bool = False) -> Flask:
+                     enable_engine_preview: bool = False,
+                     original_jm_web_root: Path | None = None) -> Flask:
     root = Path(private_dir).resolve()
     if not root.is_dir() or root.is_symlink():
         raise ValueError("Existing private database directory required")
@@ -59,6 +60,14 @@ def create_owner_api(private_dir: Path, *, settings: OIDCSettings,
         # Explicit injection only. The public C8 app does not pass a gateway.
         app.register_blueprint(owner_engine_blueprint(
             engine_gateway, session_store, https_origin=allowed_origin))
+
+    if original_jm_web_root is not None:
+        if not enable_engine_preview:
+            raise ValueError("Original JM editor requires private Owner beta")
+        from urano.original_jm_owner_assets import original_editor_assets_blueprint
+        app.register_blueprint(original_editor_assets_blueprint(
+            catalog, session_store, https_origin=allowed_origin,
+            web_root=original_jm_web_root))
 
     if enable_engine_preview:
         if not enable_dashboard or engine_gateway is not None:
