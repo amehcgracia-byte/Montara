@@ -25,6 +25,10 @@ from urano.private_stage_owner_admission import verify_stage_owner_request,ReadO
 from urano.private_stage_snapshot_bridge import trusted_stage_snapshot
 from urano.private_stage_unix_transport import SystemdUnixStageTransport
 from urano.private_engine_route_contract import PrivateEngineRouteDenied
+from urano.private_editor_connect_admission import verify_editor_connect_request
+from urano.private_editor_fd_handoff import (
+    EditorFdLease, open_verified_editor_socket, send_editor_fd
+)
 from urano.job_recovery_ledger import JobRecoveryLedger,BusyOwner,StaleJob
 from urano.restricted_broker_ipc import authenticate_peer,parse_stop
 from urano.restricted_systemd_broker import (
@@ -123,6 +127,13 @@ class DemoBroker:
             except Exception:
                 pass
             raise
+
+    def editor_connect_owner(self, owner_id, project_id, generation):
+        """Grant one pinned JM HTTP connection, never proxy media via root."""
+        return open_verified_editor_socket(
+            self.ledger, self.control.systemd.show,
+            owner_id=owner_id, project_id=project_id, generation=generation,
+        )
 
     def ensure_owner(self, owner_id, project_id):
         """Idempotent admission for first valid proxy upload and later edits.
@@ -241,6 +252,10 @@ def dispatch_owner(conn, web_uid:int, owner_db_root:Path, broker:DemoBroker):
         raise ValueError("Invalid private owner frame") from exc
     if not isinstance(envelope,dict):
         raise ValueError("Invalid private owner frame")
+    if envelope.get("op")=="connect_editor":
+        owner_id,project_id,generation=verify_editor_connect_request(
+            data,owner_db_root=owner_db_root)
+        return broker.editor_connect_owner(owner_id,project_id,generation)
     if envelope.get("op")=="stage_snapshot_owner":
         owner_id,project_id,generation=verify_stage_owner_request(
             data,owner_db_root=owner_db_root)
@@ -323,8 +338,15 @@ def main():
                             UnverifiedTarget,RuntimeError,subprocess.SubprocessError,
                             TimeoutError,KeyError,sqlite3.Error,PrivateEngineRouteDenied) as exc:
                         reply={"ok":False,"error":type(exc).__name__}
-                    try:conn.sendall(json.dumps(reply,separators=(",",":")).encode()+b"\n")
-                    except (BrokenPipeError,ConnectionResetError):pass
+                    try:
+                        if isinstance(reply, EditorFdLease):
+                            # Root passes only a connected kernel descriptor;
+                            # the web process handles the media stream itself.
+                            send_editor_fd(conn, reply)
+                        else:
+                            conn.sendall(json.dumps(reply,separators=(",",":")).encode()+b"\n")
+                    except (BrokenPipeError,ConnectionResetError,OSError):
+                        pass
     finally:
         srv.close()
         if owner_srv is not None:
