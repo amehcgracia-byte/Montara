@@ -22,6 +22,11 @@
     '/api/v1/wizard/status': 'wizard/status',
     '/api/v1/project': 'project',
     '/montara/branding': 'branding',
+    '/montara/version': 'version',
+    '/api/v1/wizard/review': 'wizard/review',
+    '/api/v1/wizard/review/replace': 'wizard/review/replace',
+    '/api/v1/wizard/review/render': 'wizard/review/render',
+    '/api/v1/edit/native-recipe': 'edit/native-recipe',
     '/montara/uploads': 'uploads',
   });
   const nativeFetch = window.fetch.bind(window);
@@ -39,20 +44,34 @@
     const path = parsed.pathname;
     if (!path.startsWith('/api/v1/') && !path.startsWith('/montara/')) return null;
     const uploadPart = new RegExp("^/montara/uploads/([a-f0-9]{32})(/finish)?$").exec(path);
-    const operation = routes[path] || (uploadPart
-      ? 'uploads/' + uploadPart[1] + (uploadPart[2] || '') : null);
+    const shotPreview = /^\/api\/v1\/wizard\/review\/preview\/([0-9]{1,5})$/.exec(path);
+    const shotThumbnail = /^\/api\/v1\/wizard\/review\/thumbnail\/(assets-v2|[a-f0-9]{16,128})\/([A-Za-z0-9_.-]{1,180})$/.exec(path);
+    const operation = routes[path] ||
+      (uploadPart ? 'uploads/' + uploadPart[1] + (uploadPart[2] || '') :
+      shotPreview ? 'wizard/review/preview/' + shotPreview[1] :
+      shotThumbnail ? 'wizard/review/thumbnail/' + shotThumbnail[1] + '/' + shotThumbnail[2] : null);
     const isStatusPoll = operation === 'wizard/status' &&
       parsed.searchParams.size === 1 &&
       parsed.searchParams.has('project_id') &&
       parsed.searchParams.get('project_id').length > 0;
     // Status is intentionally bound to this worker; discard the browser's
     // physical path query rather than forwarding it to a global JM catalog.
+    const reviewQuery = operation === 'wizard/review' &&
+      [...parsed.searchParams.keys()].every(k => k === 'render' || k === 'shot') &&
+      (!parsed.searchParams.has('render') || ['0','1'].includes(parsed.searchParams.get('render'))) &&
+      (!parsed.searchParams.has('shot') || /^[0-9]{1,5}$/.test(parsed.searchParams.get('shot'))) &&
+      [...parsed.searchParams.keys()].length <= 2;
+    const recipeQuery = operation === 'edit/native-recipe' &&
+      parsed.searchParams.size === 1 && parsed.searchParams.has('project_id');
+    const videoVersion = Boolean(shotPreview) &&
+      parsed.searchParams.size === 1 && /^[A-Za-z0-9_.-]{0,80}$/.test(parsed.searchParams.get('v') || '');
     if (!operation || parsed.hash ||
-        (parsed.search && !isStatusPoll)) {
+        (parsed.search && !isStatusPoll && !reviewQuery && !recipeQuery && !videoVersion)) {
       return { blocked: true };
     }
     return { path: base + operation +
-      (isStatusPoll ? '?project_id=owner-worker' : ''), operation };
+      (isStatusPoll || recipeQuery ? '?project_id=owner-worker' :
+       reviewQuery ? parsed.search : videoVersion ? parsed.search : ''), operation };
   };
 
   const csrf = async () => {
@@ -106,6 +125,41 @@
     method === 'POST' &&
     (operation === 'wizard/upload' || operation === 'uploads');
 
+  // Chema renders shot thumbnails through <img>, which cannot carry the
+  // Owner CSRF header. Resolve reviewed, owner-scoped media using fetch and
+  // display a browser-local blob URL; never expose an unauthenticated media
+  // endpoint. Keep a tiny cache across review polling iterations.
+  const reviewBlobs = new Map();
+  const getReviewBlob = async (url) => {
+    if (!reviewBlobs.has(url)) {
+      const job = (async () => {
+        const response = await window.fetch(url);
+        if (!response.ok) throw new Error('Private Stage preview unavailable');
+        const blob = await response.blob();
+        return URL.createObjectURL(blob);
+      })();
+      reviewBlobs.set(url, job);
+      job.catch(() => { if (reviewBlobs.get(url) === job) reviewBlobs.delete(url); });
+    }
+    return reviewBlobs.get(url);
+  };
+
+  const decorateReview = async (response) => {
+    if (!response.ok) return response;
+    const body = await response.clone().json();
+    if (!Array.isArray(body.items) || body.items.length > 200) return response;
+    await Promise.all(body.items.map(async (item) => {
+      if (typeof item.thumbnail === 'string' &&
+          /^\/api\/v1\/wizard\/review\/thumbnail\//.test(item.thumbnail)) {
+        try { item.thumbnail = await getReviewBlob(item.thumbnail); }
+        catch { item.thumbnail = null; }
+      }
+    }));
+    return new Response(JSON.stringify(body), {
+      status: response.status, headers: response.headers,
+    });
+  };
+
   window.fetch = async function ownerScopedFetch(input, init = {}) {
     const target = resolve(input);
     if (!target) return nativeFetch(input, init);
@@ -121,6 +175,9 @@
     const response = await nativeFetch(target.path, options);
     const next = Number(response.headers.get('X-Montara-Engine-Generation'));
     if (Number.isSafeInteger(next) && next > 0) generation = next;
+    if (target.operation === 'wizard/review' && method === 'GET') {
+      return decorateReview(response);
+    }
     return response;
   };
 
@@ -158,6 +215,38 @@
       if (entry) entry.cancelled = true;
       return oldAbort.call(this);
     };
+  }
+
+  // Hover previews are inserted directly as <video src=...> by JM.
+  // Convert the URL on demand using the same Owner+CSRF fetch contract,
+  // never a shared Engine media endpoint.
+  if (typeof HTMLVideoElement !== 'undefined' && typeof HTMLMediaElement !== 'undefined') {
+    const descriptor = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype,'src');
+    if (descriptor && descriptor.get && descriptor.set) {
+      const latest = new WeakMap();
+      Object.defineProperty(HTMLVideoElement.prototype,'src', {
+        configurable: true, enumerable: descriptor.enumerable,
+        get() { return latest.get(this)?.original || descriptor.get.call(this); },
+        set(value) {
+          const original = String(value);
+          const target = resolve(original);
+          if (!target || target.blocked || !target.operation.startsWith('wizard/review/preview/')) {
+            latest.delete(this);
+            return descriptor.set.call(this,value);
+          }
+          const job = { original };
+          latest.set(this,job);
+          descriptor.set.call(this,'');
+          getReviewBlob(original).then((url) => {
+            if (latest.get(this) !== job) return;
+            descriptor.set.call(this,url);
+            this.load();
+          }).catch(() => {
+            if (latest.get(this) === job) this.dispatchEvent(new Event('error'));
+          });
+        },
+      });
+    }
   }
 
   // Stable exposed inspection data (not an authentication credential).
