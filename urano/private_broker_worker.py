@@ -38,7 +38,20 @@ def main():
     if (project_id != "I26-Synthetic" and
         not re.fullmatch(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",project_id)):
         raise SystemExit(4)
-    folder = data / "Projects" / project_id
+    # systemd StateDirectory is persistent across worker generations;
+    # RuntimeDirectory remains strictly ephemeral for sockets/ready marker.
+    # Never permit a browser-supplied location or reuse the runtime root for
+    # durable original JM state.
+    state_root = data
+    if jm is not None:
+        value=os.environ.get("STATE_DIRECTORY", "")
+        if not value or ":" in value:
+            raise RuntimeError("Owner persistent StateDirectory required")
+        state_root=Path(value).resolve(strict=True)
+        if (not re.fullmatch(r"montara-owner-[0-9a-f]{40}",state_root.name)
+                or state_root.stat().st_mode & 0o077):
+            raise RuntimeError("Owner persistent storage not verified")
+    folder = state_root / "Projects" / project_id
     if folder.is_symlink():
         raise ValueError("Linked project folder denied")
     folder.mkdir(parents=True,exist_ok=True)
@@ -59,8 +72,8 @@ def main():
             raise ValueError("Full JM worker needs durable generation")
         from urano.full_jm_worker import serve_original_jm_worker
         serve_original_jm_worker(
-            engine_root=bundle, jm_root=jm, data_root=data,
-            project_id=project_id, generation=generation,
+            engine_root=bundle, jm_root=jm, data_root=state_root,
+            runtime_root=data, project_id=project_id, generation=generation,
             on_ready=announce_ready,
         )
         return
