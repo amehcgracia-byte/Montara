@@ -30,9 +30,10 @@ async function csrf() {
   const result = await api('session/refresh', {method:'POST', headers:{Origin:location.origin}});
   return result.csrf;
 }
-function openEditor(id) {
+function openEditor(id, newlyCreated=false) {
   if (!/^[0-9a-f-]{36}$/i.test(id)) throw Error('Identificador de proyecto inválido');
-  location.assign('/urano/v1/editor/projects/' + encodeURIComponent(id) + '/');
+  location.assign('/urano/v1/editor/projects/' + encodeURIComponent(id) + '/' +
+                  (newlyCreated ? '?start=stage' : ''));
 }
 function choices(kind) {
   document.querySelector('#intentChoices').hidden = kind !== 'root';
@@ -89,7 +90,7 @@ document.querySelector('#ownerCreateForm').addEventListener('submit', async even
       headers:{'Content-Type':'application/json','X-Urano-CSRF':await csrf(),Origin:location.origin},
       body:JSON.stringify({title:title.value,mode:'stage'})
     });
-    openEditor(result.project.id);
+    openEditor(result.project.id, true);
   } catch (error) { notice(error.message); createButton.disabled=false; }
 });
 document.querySelector('#ownerLogout').addEventListener('click', async () => {
