@@ -536,6 +536,94 @@
     }
   }
 
+  // Chema uses native HTML <audio> and <a download> for complete sessions.
+  // Neither element can send the Owner CSRF header. Resolve these special
+  // media requests through the already-fenced fetch bridge, then hand the
+  // browser a LOCAL object URL. No unauthenticated /montara/session route.
+  const sessionMediaBlobCache = new Map();
+  const sessionMediaBlob = async (original) => {
+    const target=resolve(original);
+    if (!target || target.blocked || !/^session\/[a-f0-9]{12}\/listen$/.test(
+        target.operation)) {
+      throw new Error('Unsupported private listening media');
+    }
+    if (!sessionMediaBlobCache.has(original)) {
+      const task=(async()=>{
+        const response=await window.fetch(original,{cache:'no-store'});
+        if(!response.ok)throw new Error('Private session audio unavailable');
+        const limit=128*1024*1024; // bounded browser memory for beta player
+        const length=Number(response.headers.get('Content-Length')||0);
+        if(length>limit)throw new Error('Session audio exceeds browser preview limit');
+        if(!response.body?.getReader) {
+          const blob=await response.blob();
+          if(blob.size>limit)throw new Error('Session audio exceeds preview limit');
+          return URL.createObjectURL(blob);
+        }
+        const chunks=[];let size=0;
+        const reader=response.body.getReader();
+        for (;;) {
+          const {done,value}=await reader.read();
+          if(done)break;
+          size+=value.byteLength;
+          if(size>limit){await reader.cancel();throw new Error('Session preview too large');}
+          chunks.push(value);
+        }
+        return URL.createObjectURL(new Blob(chunks,{
+          type:response.headers.get('Content-Type')||'audio/webm'}));
+      })();
+      sessionMediaBlobCache.set(original,task);
+      task.catch(()=>{if(sessionMediaBlobCache.get(original)===task)
+        sessionMediaBlobCache.delete(original)});
+    }
+    return sessionMediaBlobCache.get(original);
+  };
+  if (typeof window.Audio==='function') {
+    const NativeAudio=window.Audio;
+    function OwnerAudio(source) {
+      const value=typeof source==='string'?source:'';
+      const target=value?resolve(value):null;
+      if (!target || target.blocked ||
+          !/^session\/[a-f0-9]{12}\/listen$/.test(target.operation)) {
+        return new NativeAudio(source);
+      }
+      const audio=new NativeAudio();
+      sessionMediaBlob(value).then(url=>{
+        audio.src=url;audio.load();
+      }).catch(()=>audio.dispatchEvent(new Event('error')));
+      return audio;
+    }
+    OwnerAudio.prototype=NativeAudio.prototype;
+    window.Audio=OwnerAudio;
+  }
+  if (typeof document!=='undefined' &&
+      typeof document.addEventListener==='function') {
+    document.addEventListener('click',async event=>{
+      const link=event.target?.closest?.('a[href]');
+      if(!link)return;
+      const original=link.getAttribute('href')||'';
+      const target=resolve(original);
+      if(!target || target.blocked || !/^session\/[a-f0-9]{12}\/(?:results\\.zip|result\/[0-9]{1,6})$/.test(target.operation))return;
+      event.preventDefault();
+      try {
+        const response=await window.fetch(original,{cache:'no-store'});
+        if(!response.ok)throw new Error('Private download unavailable');
+        const blob=await response.blob();
+        if(blob.size>2*1024**3)throw new Error('Private download over limit');
+        const local=URL.createObjectURL(blob);
+        const save=document.createElement('a');
+        save.href=local;
+        save.download=target.operation.endsWith('.zip')
+          ?'Montara session.zip':'Montara song.mp3';
+        document.body.append(save);
+        save.click();save.remove();
+        setTimeout(()=>URL.revokeObjectURL(local),60000);
+      }catch(error){
+        if(typeof window.alert==='function')
+          window.alert('Could not download this private session: '+error.message);
+      }
+    },true);
+  }
+
   // A newly created Stage opens on Footage without asking the same mode twice.
   // Existing projects never receive this hint: preserve Chema recovery/edits.
   if (typeof window !== 'undefined' && typeof window.addEventListener === 'function'
