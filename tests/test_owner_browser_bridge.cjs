@@ -83,7 +83,23 @@ const assertNoGlobal=(url)=>
   assert.equal(operations.at(-1).headers['X-Montara-Engine-Generation'],'4');
 
   await assert.rejects(window.fetch('/api/v1/edit/native-source/foreign'),/not yet enabled/);
-  await assert.rejects(window.fetch('/montara/uploads'),/not yet enabled/);
+  await window.fetch('/montara/uploads');
+  const uploadId='b'.repeat(32);
+  await window.fetch('/montara/uploads',{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({name:'cam.small.mp4',size:100,fingerprint:'f'.repeat(64)}),
+  });
+  await window.fetch('/montara/uploads/'+uploadId,{
+    method:'PUT',headers:{'Upload-Offset':'0','Content-Type':'application/octet-stream'},
+    body:'chunk',
+  });
+  await window.fetch('/montara/uploads/'+uploadId+'/finish',{
+    method:'POST',headers:{'Content-Type':'application/json'},body:'{}',
+  });
+  assert(operations.some(x=>x.url==='/urano/v1/media/'+PROJECT+'/uploads/'+uploadId));
+  assert(operations.some(x=>x.url==='/urano/v1/media/'+PROJECT+'/uploads/'+uploadId+'/finish'));
+  assert.equal(operations.filter(x=>String(x.url).endsWith('/ensure')).length,1);
+  await assert.rejects(window.fetch('/montara/uploads/not-a-valid-id'),/not yet enabled/);
   assertNoGlobal('/api/v1/wizard/upload');
   assertNoGlobal('/montara/uploads');
   console.log(JSON.stringify({
@@ -92,6 +108,6 @@ const assertNoGlobal=(url)=>
     original_chema_fetch_and_xhr_rewritten:true,
     stale_shared_engine_fallback_blocked:true,
     original_chema_source_modified:false,
-    unfinished_resumable_uploads_not_claimed_supported:true,
+    resumable_upload_paths_owner_scoped:true,
   }));
 })().catch(e=>{console.error(e);process.exitCode=1});
