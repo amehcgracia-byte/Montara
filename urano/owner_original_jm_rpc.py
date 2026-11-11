@@ -152,7 +152,7 @@ def initial_stage_gateway_blueprint(
             return jsonify(version="Montara SMART Beta")
         if operation=="branding" and request.method=="GET" and not request.headers.get("X-Montara-Engine-Generation"):
             # Before the first upload the private Engine is intentionally off.
-            return jsonify(mode="none")
+            return jsonify(mode="montara",has_logo=False)
         if operation=="uploads" and request.method=="GET":
             # Original JM upload limits normally need a running worker.
             # This read-only preflight intentionally doesn't activate Engine.
