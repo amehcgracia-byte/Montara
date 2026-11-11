@@ -435,7 +435,10 @@
       && new URL(location.href).searchParams.get('start') === 'stage') {
     window.addEventListener('load', () => {
       const home = document.querySelector('#home');
-      if (!home || home.hidden) return;  // Original JM already restored a step.
+      if (!home || home.hidden) {
+        document.documentElement.classList.remove('montara-owner-stage-entry');
+        return;
+      }
       const newProject = document.querySelector('#newVideo');
       const video = document.querySelector('[data-intent="video"]');
       const stage = document.querySelector('.mode[data-platform="youtube"]');
@@ -444,6 +447,9 @@
         video.click();
         stage.click();
       }
+      // No intro animation on this transition; the real Chema intro runs
+      // on Home visits only. Preserve the user's ability to use the logo.
+      document.documentElement.classList.remove('montara-owner-stage-entry');
     }, { once: true });
   }
 
