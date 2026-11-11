@@ -29,6 +29,30 @@ SYSTEMD_PROPS = (
 CGROUP_ROOT = Path("/sys/fs/cgroup")
 
 
+@dataclass(frozen=True)
+class WorkerResourceProfile:
+    """Operator-configurable Linux worker limits; not hardcoded cloud sizing."""
+
+    memory_mb: int = 768
+    cpu_percent: int = 100
+    tasks_max: int = 64
+
+    def __post_init__(self):
+        if (type(self.memory_mb) is not int or not 512 <= self.memory_mb <= 65536
+                or type(self.cpu_percent) is not int
+                or not 25 <= self.cpu_percent <= 3200
+                or type(self.tasks_max) is not int
+                or not 16 <= self.tasks_max <= 2048):
+            raise ValueError("Invalid owner Engine worker resource profile")
+
+    def properties(self):
+        return (
+            "MemoryMax="+str(self.memory_mb)+"M",
+            "CPUQuota="+str(self.cpu_percent)+"%",
+            "TasksMax="+str(self.tasks_max),
+        )
+
+
 class UnverifiedTarget(RuntimeError):
     """Never release a reserved job without exact unit/cgroup proof."""
 
@@ -118,7 +142,8 @@ class RestrictedTargetControl:
 
 
 def fixed_launch_properties(unit: str, bundle_path: Path,
-                            *, jm_bundle: Path | None = None) -> tuple[str, ...]:
+                            *, jm_bundle: Path | None = None,
+                            resources: WorkerResourceProfile | None = None) -> tuple[str, ...]:
     """Build safe properties only from trusted operator bundle config."""
     expected_cgroup(unit)
     path = Path(bundle_path)
@@ -135,5 +160,10 @@ def fixed_launch_properties(unit: str, bundle_path: Path,
                 or not re.fullmatch(r"jm-[0-9a-f]{40}", jm.name)):
             raise ValueError("JM bundle must be version-pinned")
         binds.append("BindReadOnlyPaths="+str(jm)+":/opt/montara-jm")
-    return (*SYSTEMD_PROPS, "RuntimeDirectory="+unit, *binds)
+    profile = resources if resources is not None else WorkerResourceProfile()
+    if not isinstance(profile, WorkerResourceProfile):
+        raise ValueError("Invalid trusted worker resource policy")
+    base_props = tuple(prop for prop in SYSTEMD_PROPS
+                       if not prop.startswith(("MemoryMax=", "TasksMax=", "CPUQuota=")))
+    return (*base_props, *profile.properties(), "RuntimeDirectory="+unit, *binds)
 
