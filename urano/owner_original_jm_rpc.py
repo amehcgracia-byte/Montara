@@ -42,7 +42,7 @@ _FILE = re.compile(r"[^\\/\x00-\x1f]{1,200}\Z")
 _MAX_JSON = 256_000
 _MAX_VIDEO = 256 * 1024 * 1024
 _MAX_RESULT = 1_000_000
-_UPLOAD_PART = re.compile(r"uploads/([a-f0-9]{32})(/finish)?\\Z")
+_UPLOAD_PART = re.compile(r"uploads/([a-f0-9]{32})(/finish)?\Z")
 _MAX_CHUNK = 16 * 1024 * 1024
 
 
