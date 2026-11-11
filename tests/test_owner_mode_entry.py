@@ -71,6 +71,21 @@ class OwnerModeEntryTest(unittest.TestCase):
             self.assertEqual(self.get("/urano/v1/entry/assets/" + name).status_code, 200)
         self.assertEqual(self.get("/urano/v1/entry/assets/other.env").status_code, 404)
 
+    def test_contextual_picker_is_authenticated_and_no_extra_screen_navigation(self):
+        self.login()
+        html = self.get("/urano/v1/entry").data
+        self.assertIn(b"/urano/v1/entry/picker.js", html)
+        self.assertIn(b"/urano/v1/entry/picker.css", html)
+        script = self.get("/urano/v1/entry.js")
+        self.assertEqual(script.status_code, 200)
+        self.assertIn(b"MontaraProjectPicker.open('stage')", script.data)
+        for asset in ("picker.js", "picker.css"):
+            self.assertEqual(self.get("/urano/v1/entry/" + asset).status_code, 200)
+
+    def test_picker_assets_reject_anonymous_session(self):
+        self.assertEqual(self.get("/urano/v1/entry/picker.js").status_code, 401)
+        self.assertEqual(self.get("/urano/v1/entry/picker.css").status_code, 401)
+
     def test_fail_closed_if_chema_changes(self):
         web = self.root / "web"
         (web / "index.html").write_text("<div>Unreviewed editor</div>", encoding="utf-8")
