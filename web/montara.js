@@ -610,13 +610,20 @@ async function uploadSmall(file, entry) {
     const preview = !['master','song'].includes(state.audioTask) && state.platform === 'youtube' && ($('#fullSessionOn').checked || (montaraCompanion.isAudio(file) && file.size > LONG_AUDIO_BYTES));
     small = await montaraCompanion.smallVersion(file, (phase, progress) => { entry.phase = phase; entry.progress = progress; renderFiles(); }, () => entry.removed, {preview});
   } catch (error) { console.warn(error); }
+  if (small?.downloadFailed && !entry.removed) {
+    entry.kind = "error";
+    entry.error = "Could not read the prepared file from Companion. Add the same file again to retry.";
+    state.uploads -= 1;
+    renderFiles();
+    return;
+  }
   // Companion problems never trigger an automatic video-original upload.
   // An explicit confirmation retains this as an experimental escape hatch.
   if (!entry.removed && montaraCompanion.isVideo(file) && !small?.file) {
-    const message = small?.downloadFailed ? "Could not read the prepared proxy from Companion. Add the same file again to retry the proxy." : small?.missing
+    const message = small?.missing
       ? "Video not found on this computer. Check the file and retry with Companion."
       : "Companion could not prepare this video. Check Companion and retry.";
-    if (small?.downloadFailed || !confirmOriginalVideoUpload(file, entry, message)) {
+    if (!confirmOriginalVideoUpload(file, entry, message)) {
       entry.kind = "error";
       entry.error = message;
       entry.wholeFile = file;

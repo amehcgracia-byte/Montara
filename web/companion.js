@@ -24,8 +24,10 @@ const montaraCompanion = (() => {
   }
   async function readProxy(id, cancelled) {
     for (let attempt = 0; attempt < 3 && !cancelled(); attempt++) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 120000);
       try {
-        const response = await call(`/proxies/${id}/file`, {cache: 'no-store'});
+        const response = await call(`/proxies/${id}/file`, {cache: 'no-store', signal: controller.signal});
         if (response.ok) {
           const blob = await response.blob();
           if (cancelled()) return null;
@@ -35,7 +37,9 @@ const montaraCompanion = (() => {
           return null;
         }
       } catch (error) {
-        if (!(error instanceof TypeError) && error.name !== 'TypeError') throw error;
+        if (!controller.signal.aborted && !(error instanceof TypeError) && error.name !== 'TypeError') throw error;
+      } finally {
+        clearTimeout(timeout);
       }
       if (attempt < 2 && !cancelled()) await new Promise(resolve => setTimeout(resolve, 250 * (attempt + 1)));
     }
