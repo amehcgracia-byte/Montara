@@ -60,3 +60,9 @@ header.top .montara-owner-engine-switch:disabled{opacity:.55;cursor:wait}
 header.top #montaraOwnerAccount{margin-left:0}
 header.top .montara-owner-engine{margin-left:auto}
 @media(max-width:650px){header.top .montara-owner-engine{font-size:0;gap:4px}}
+
+/* Do not swallow an XHR failure: keep the verified transport reason visible. */
+.montara-owner-upload-issue{padding:11px 14px;border:1px solid #d95b47;
+  border-radius:10px;background:#2b1c1a;color:#f3d2cb;
+  margin:0 0 14px;font-size:13px;line-height:1.5}
+.montara-owner-upload-issue[hidden]{display:none!important}
