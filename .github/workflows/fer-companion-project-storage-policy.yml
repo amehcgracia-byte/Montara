@@ -1,0 +1,25 @@
+name: FER Companion configurable project-root policy
+on:
+  pull_request:
+    paths:
+      - 'companion/project_storage_policy.py'
+      - 'tests/test_companion_project_storage_policy.py'
+      - '.github/workflows/fer-companion-project-storage-policy.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  pure-storage-policy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Check configurable destination and preservation of legacy mappings
+        run: |
+          python -m unittest discover -s tests -p test_companion_project_storage_policy.py -v
+          python -m py_compile companion/project_storage_policy.py
