@@ -9,6 +9,7 @@ from unittest.mock import patch
 from urano.jm_private_proxy_overlay import (
     DEFAULT_PRIVATE_PROXY_MIB, _MARKERS, patched_original_resumable_upload,
     private_proxy_limit_mib, stage_private_jm_resumable,
+    patched_reviewed_private_audio_overlay, stage_reviewed_private_audio_overlay,
 )
 
 def verified_jm_upload_fixture() -> str:
@@ -66,6 +67,29 @@ class ChemaProxyOverlayTests(unittest.TestCase):
                 stage_private_jm_resumable(source,target)
             with self.assertRaises(ValueError):
                 stage_private_jm_resumable(source,source)
+
+    def test_private_audio_candidate_is_separate_and_fails_closed(self):
+        first=patched_original_resumable_upload(verified_jm_upload_fixture())
+        upgraded=patched_reviewed_private_audio_overlay(first)
+        self.assertNotEqual(first,upgraded)
+        self.assertIn("lossless_audio = bool",upgraded)
+        self.assertIn("video_proxy = bool",upgraded)
+        self.assertIn("max_original_file_bytes=limit",upgraded)
+        compile(upgraded,"reviewed-candidate.py","exec")
+        with self.assertRaises(ValueError):
+            patched_reviewed_private_audio_overlay(upgraded)
+        with self.assertRaises(ValueError):
+            patched_reviewed_private_audio_overlay(
+                verified_jm_upload_fixture())
+        with tempfile.TemporaryDirectory() as temp:
+            first_path=Path(temp)/"reviewed-immutable.py"
+            target=Path(temp)/"new-jm-bundle"/"resumable_upload.py"
+            first_path.write_text(first)
+            stage_reviewed_private_audio_overlay(first_path,target)
+            self.assertEqual(target.read_text(),upgraded)
+            self.assertEqual(first_path.read_text(),first)
+            with self.assertRaises(ValueError):
+                stage_reviewed_private_audio_overlay(first_path,target)
 
     def test_private_quota_bounds(self):
         for bad in (0,255,4097,"2048",True,None):
