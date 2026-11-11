@@ -21,6 +21,10 @@ import time
 from pathlib import Path
 
 from urano.private_owner_admission import verify_owner_and_project,OwnerAdmissionDenied
+from urano.private_stage_owner_admission import verify_stage_owner_request,ReadOnlyOwnerCatalog
+from urano.private_stage_snapshot_bridge import trusted_stage_snapshot
+from urano.private_stage_unix_transport import SystemdUnixStageTransport
+from urano.private_engine_route_contract import PrivateEngineRouteDenied
 from urano.job_recovery_ledger import JobRecoveryLedger,BusyOwner,StaleJob
 from urano.restricted_broker_ipc import authenticate_peer,parse_stop
 from urano.restricted_systemd_broker import (
@@ -120,6 +124,17 @@ class DemoBroker:
                 pass
             raise
 
+    def stage_snapshot_owner(self, owner_id, project_id, generation, owner_db_root):
+        """Broker-owned trusted read: no browser-supplied worker endpoint."""
+        snapshot = trusted_stage_snapshot(
+            owner_id, project_id, generation=generation,
+            catalog=ReadOnlyOwnerCatalog(owner_db_root),
+            ledger=self.ledger,
+            engine_sha=self.bundle.name.removeprefix("engine-"),
+            transport=SystemdUnixStageTransport(self.control.systemd.show),
+        )
+        return {"ok": True, **snapshot}
+
     def stop_owner(self, owner_id, project_id):
         jobs=self.ledger.unverified_for_owner(owner_id)
         if len(jobs)!=1 or jobs[0].project_id!=project_id:
@@ -179,6 +194,13 @@ def dispatch_owner(conn, web_uid:int, owner_db_root:Path, broker:DemoBroker):
     data=conn.recv(513)
     if not data or len(data)>384:
         raise ValueError("Owner frame denied")
+    # The read path has a separate strict schema including the worker
+    # generation. It rechecks the existing broker-side Google session+CSRF.
+    if b'"stage_snapshot_owner"' in data:
+        owner_id,project_id,generation=verify_stage_owner_request(
+            data,owner_db_root=owner_db_root)
+        return broker.stage_snapshot_owner(
+            owner_id,project_id,generation,owner_db_root)
     op,owner_id,project_id=verify_owner_and_project(data,owner_db_root=owner_db_root)
     if op=="open_owner":
         result=broker.demo_start(owner_id,project_id)
@@ -252,7 +274,7 @@ def main():
                                 Path(args.owner_db_root),broker)
                     except (ValueError,TypeError,PermissionError,BusyOwner,StaleJob,
                             UnverifiedTarget,RuntimeError,subprocess.SubprocessError,
-                            TimeoutError,KeyError,sqlite3.Error) as exc:
+                            TimeoutError,KeyError,sqlite3.Error,PrivateEngineRouteDenied) as exc:
                         reply={"ok":False,"error":type(exc).__name__}
                     try:conn.sendall(json.dumps(reply,separators=(",",":")).encode()+b"\n")
                     except (BrokenPipeError,ConnectionResetError):pass
