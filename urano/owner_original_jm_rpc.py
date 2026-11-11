@@ -84,7 +84,12 @@ def initial_stage_gateway_blueprint(
             if type(content_length) is not int or content_length<=0:
                 return jsonify(error="Expected bounded request body"),400
             if operation=="wizard/upload":
-                if (not valid_first_upload(request.environ)
+                # Validate as the ORIGINAL JM path, not the Owner URL
+                # prefix. Copy metadata only; never mutate the Flask request
+                # or consume the streamed media here.
+                upload_environ=dict(request.environ)
+                upload_environ["PATH_INFO"]=path
+                if (not valid_first_upload(upload_environ)
                         or content_length>_MAX_VIDEO):
                     return jsonify(error="Invalid private video upload"),400
             elif (content_length>_MAX_JSON
