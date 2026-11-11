@@ -27,6 +27,7 @@
     '/api/v1/wizard/review/replace': 'wizard/review/replace',
     '/api/v1/wizard/review/render': 'wizard/review/render',
     '/api/v1/edit/native-recipe': 'edit/native-recipe',
+    '/api/v1/edit/native-master': 'edit/native-master',
     '/api/v1/edit/timeline': 'edit/timeline',
     '/api/v1/edit/shot': 'edit/shot',
     '/api/v1/edit/shot/frame': 'edit/shot/frame',
@@ -65,7 +66,13 @@
       (!parsed.searchParams.has('shot') || /^[0-9]{1,5}$/.test(parsed.searchParams.get('shot'))) &&
       [...parsed.searchParams.keys()].length <= 2;
     const recipeQuery = operation === 'edit/native-recipe' &&
-      parsed.searchParams.size === 1 && parsed.searchParams.has('project_id');
+      parsed.searchParams.size === 1 && parsed.searchParams.has('project_id') &&
+      parsed.searchParams.get('project_id').length > 0;
+    const masterQuery = operation === 'edit/native-master' &&
+      parsed.searchParams.size === 2 &&
+      parsed.searchParams.has('project_id') &&
+      parsed.searchParams.get('project_id').length > 0 &&
+      /^[0-9]{1,10}$/.test(parsed.searchParams.get('revision') || '');
     const timelineQuery = operation === 'edit/timeline' &&
       parsed.searchParams.size === 1 && parsed.searchParams.get('kind') === 'music';
     const shotQuery = operation === 'edit/shot' &&
@@ -78,11 +85,12 @@
       parsed.searchParams.size === 1 && /^[A-Za-z0-9_.-]{0,80}$/.test(parsed.searchParams.get('v') || '');
     if (!operation || parsed.hash ||
         (parsed.search && !isStatusPoll && !reviewQuery && !recipeQuery &&
-         !timelineQuery && !shotQuery && !frameQuery && !videoVersion)) {
+         !timelineQuery && !shotQuery && !frameQuery && !masterQuery && !videoVersion)) {
       return { blocked: true };
     }
     return { path: base + operation +
       (isStatusPoll || recipeQuery ? '?project_id=owner-worker' :
+       masterQuery ? '?project_id=owner-worker&revision=' + encodeURIComponent(parsed.searchParams.get('revision')) :
        reviewQuery || timelineQuery || shotQuery || frameQuery || videoVersion ?
        parsed.search : ''), operation };
   };
