@@ -69,8 +69,16 @@
       try {
         // The Owner-bound bridge retrieves only this project's state.
         // Refuse to stop on any unavailable or uncertain status.
-        const current = await fetch('/api/v1/wizard/status', {
-          credentials: 'same-origin', cache: 'no-store'
+        const token = await csrf();
+        const admission = await api('projects/'+encodeURIComponent(ownProject)+'/ensure',{
+          method:'POST',headers:{'X-Urano-CSRF':token,Origin:location.origin}
+        });
+        if(admission.state!=='ready' || !Number.isSafeInteger(admission.generation))
+          throw Error('Private Engine verification failed. Nothing was stopped.');
+        const current = await fetch('/urano/v1/media/'+encodeURIComponent(ownProject)+'/wizard/status', {
+          credentials:'same-origin',cache:'no-store',
+          headers:{'X-Urano-CSRF':token,
+                   'X-Montara-Engine-Generation':String(admission.generation)}
         });
         if(!current.ok) throw Error('Project status is not verified. Nothing has been stopped.');
         const state = await current.json();
@@ -81,10 +89,11 @@
           return;
         }
         const result=await api('projects/'+encodeURIComponent(ownProject)+'/close',{
-          method:'POST',headers:{'X-Urano-CSRF':await csrf(),Origin:location.origin}
+          method:'POST',headers:{'X-Urano-CSRF':token,Origin:location.origin}
         });
         if(result.state!=='stopped')throw Error('Engine closure was not confirmed.');
-        accountStatus.textContent='Engine closed. Project files remain saved. You may open another project.';
+        accountStatus.textContent='Engine closed. Project files remain saved. Returning to projects…';
+        location.replace('/urano/v1/entry');
       }catch(error){accountStatus.textContent=error.message}
       finally{closeEngine.disabled=false}
     });
