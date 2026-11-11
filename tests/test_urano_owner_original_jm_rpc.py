@@ -184,6 +184,44 @@ class JMRealHTTPRPCContracts(unittest.TestCase):
             data=data,headers=headers or self.headers,
             content_type=content_type,base_url=ORIGIN)
 
+    def test_actual_companion_proxy_metadata_without_media_files(self):
+        # Mirror the two file names and byte schemas used by Chema's
+        # sendResumableUpload: MP3 lossless audio and .small.mp4 video.
+        # Only metadata is supplied; no user videos or audio are accessed.
+        from urano.first_valid_upload_gate import valid_first_upload
+        from io import BytesIO
+        for name, extra in (
+            ("Slow_Playalong_in_A.mp3.flac", {}),
+            ("Bebop_LICK_tutorial.small.mp4", {
+                "video_preview": True,
+                "original": {"name":"Bebop_LICK_tutorial.mp4",
+                             "size":1024*1024*1024,
+                             "fingerprint":"e"*64}
+            }),
+        ):
+            with self.subTest(proxy_name=name):
+                record={"name":name,"size":3*1024*1024,
+                        "fingerprint":"f"*64,**extra}
+                raw=json.dumps(record).encode("utf-8")
+                env={"PATH_INFO":"/montara/uploads","REQUEST_METHOD":"POST",
+                     "CONTENT_LENGTH":str(len(raw)),
+                     "CONTENT_TYPE":"application/json",
+                     "wsgi.input":BytesIO(raw)}
+                reasons=[]
+                self.assertTrue(valid_first_upload(
+                    env, max_proxy_bytes=2048*1024**2,
+                    rejection_codes=reasons),reasons)
+
+    def test_oversize_companion_lossless_audio_reports_specific_limit(self):
+        record={"name":"Slow_Playalong_in_A.mp3.flac",
+                "size":300*1024**2,"fingerprint":"f"*64}
+        response=self.client.post(self.url("uploads"),base_url=ORIGIN,
+                                  headers=self.headers,json=record)
+        self.assertEqual(response.status_code,400)
+        self.assertEqual(response.json["error"]["code"],
+                         "media_exceeds_private_transfer_limit")
+        self.assertEqual(self.ensured,[])
+
     def test_mp3_first_upload_and_readable_error_for_native_chema_xhr(self):
         # No private media or live user project; one synthetic MP3 wire request.
         audio=b"fake-mp3-test-bytes"*9000
