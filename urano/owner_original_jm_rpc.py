@@ -120,8 +120,9 @@ def initial_stage_gateway_blueprint(
                   and set(request.args)=={"project_id"}
                   and len(request.args.getlist("project_id"))==1
                   and request.args["project_id"]):
-                # Do not expose actual worker filesystem paths.
-                pass
+                # Fixed alias; only the isolated worker resolves its
+                # private physical project. Never echo a browser path.
+                path+="?project_id=owner-worker"
             elif (request.method=="GET" and operation=="edit/native-master"
                   and set(request.args)=={"project_id","revision"}
                   and all(len(request.args.getlist(k))==1 for k in request.args)
