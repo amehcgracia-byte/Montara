@@ -35,9 +35,6 @@ def main():
         raise SystemExit(3)
     sys.path[:0] = [str(bundle/"site"), str(bundle/"app"), str(bundle/"engine")]
     from core.project import new_project_document
-    from urano.engine_worker_process import make_engine_client
-    from urano.private_stage_payload import private_stage_snapshot
-    from urano.private_stage_unix_transport import serve_stage_socket
     data = Path("/run") / unit
     project_id = sys.argv[3] if len(sys.argv)>=4 else "I26-Synthetic"
     generation = int(sys.argv[4]) if len(sys.argv)>=5 else None
@@ -87,7 +84,11 @@ def main():
         )
         return
 
-    # Original I26 Engine-only laboratory remains a separate unchanged mode.
+    # Legacy I26-only imports are NOT dependencies of the full Chema
+    # editor. Keep them away from real Owner workers.
+    from urano.engine_worker_process import make_engine_client
+    from urano.private_stage_payload import private_stage_snapshot
+    from urano.private_stage_unix_transport import serve_stage_socket
     client = make_engine_client(bundle/"engine", data)
     opened = client.post("/api/v1/wizard/projects/open", json={"path": str(folder)})
     state = client.application.config.get("ZUCKER_STATE")
