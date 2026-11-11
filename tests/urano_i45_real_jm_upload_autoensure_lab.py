@@ -51,7 +51,7 @@ def main():
         video = root / "synthetic-source.mp4"
         subprocess.run([
             "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
-            "-f", "lavfi", "-i", "testsrc2=size=320x180:rate=12:duration=2",
+            "-f", "lavfi", "-i", "testsrc2=size=640x360:rate=12:duration=3",
             "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
             str(video),
         ], check=True, stderr=subprocess.PIPE, timeout=45)
