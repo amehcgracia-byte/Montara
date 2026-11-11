@@ -107,20 +107,23 @@ const montaraCompanion = (() => {
       const nowMs = () => typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now();
       const timings = {started: nowMs(), located: null, proxyReady: null, downloaded: null};
       let cacheHit = null;
+      const proxyRequest = (path, options = {}) => call(path, {...options, signal: AbortSignal.timeout(30000)});
       try {
         onProgress('Finding it on your computer', 0);
         const print = await fingerprint(file);
-        const located = await call('/locate', json({name: file.name, size: file.size, fingerprint: print}));
+        const located = await proxyRequest('/locate', json({name: file.name, size: file.size, fingerprint: print}));
         if (!located.ok) return located.status === 404 ? {missing: true} : null;
         const located_ = await located.json();
         timings.located = nowMs();
-        const queued = await call('/proxies', json({id: located_.id, preview}));
+        const queued = await proxyRequest('/proxies', json({id: located_.id, preview}));
         if (!queued.ok) return null;
         const {id, reused} = await queued.json();
         if (!id) return null;
         for (;;) {
           if (cancelled()) return null;
-          const state = await (await call(`/proxies/${id}`)).json();
+          const response = await proxyRequest(`/proxies/${id}`);
+          if (!response.ok) return {downloadFailed: true};
+          const state = await response.json();
           if (state.status === 'ready') { cacheHit = reused === true || state.cache_hit === true ? true : state.cache_hit ?? null; timings.proxyReady = nowMs(); break; }
           if (state.status === 'skipped' || state.status === 'failed') { console.info('Companion:', state.reason || state.error); return null; }
           onProgress(preview ? 'Light preview' : audio ? 'Lossless copy' : 'Small version', state.progress || 0);
@@ -147,6 +150,7 @@ const montaraCompanion = (() => {
         const type = preview ? 'audio/ogg' : audio ? blob.type || 'audio/flac' : 'video/mp4';
         return {file: new File([blob], name, {type}), preview, original: {name: file.name, size: file.size, lastModified: file.lastModified, fingerprint: print, companion: id}};
       } catch (error) {
+        if (error.name === 'TimeoutError') return {downloadFailed: true};
         console.warn('Companion unavailable for this file', error);
         return null;
       }

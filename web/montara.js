@@ -68,15 +68,17 @@ const state = {
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => [...document.querySelectorAll(sel)];
 
-async function api(path, body) {
+async function api(path, body, signal) {
   const options = body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
+  if (signal) options.signal = signal;
   const url = path.startsWith("/montara") ? path : `/api/v1${path}`;
   let response;
   for (let attempt = 0; ; attempt++) {
     try { response = await fetch(url, options); break; }
     catch (error) {
       // A dropped connection (tunnel, Wi-Fi) is retried for reads; never resend a POST blindly.
-      if (body === undefined && attempt < 2) { await new Promise((resolve) => setTimeout(resolve, 1500 * (attempt + 1))); continue; }
+      if (!signal?.aborted && body === undefined && attempt < 2) { await new Promise((resolve) => setTimeout(resolve, 1500 * (attempt + 1))); continue; }
+      if (signal?.reason?.name === "TimeoutError") throw new Error("Montara stopped responding. Add this file again to resume.");
       console.warn('Montara request failed', url, error);
       throw new Error(`Lost the connection to Montara (${url.split('?')[0]}). Check that the server window is still open, then retry.`);
     }
@@ -612,7 +614,7 @@ async function uploadSmall(file, entry) {
   } catch (error) { console.warn(error); }
   if (small?.downloadFailed && !entry.removed) {
     entry.kind = "error";
-    entry.error = "Could not read the prepared file from Companion. Add the same file again to retry.";
+    entry.error = "Companion stopped responding or the prepared file could not be read. Add the same file again to retry.";
     state.uploads -= 1;
     renderFiles();
     return;
@@ -637,13 +639,56 @@ async function uploadSmall(file, entry) {
     entry.phase = small ? (small.preview ? "Uploading preview" : montaraCompanion.isAudio(file) ? "Uploading lossless copy" : "Uploading small version") : montaraCompanion.info ? "Uploading the whole file" : "";
     entry.progress = 0;
     if (small) { if (montaraCompanion.isVideo(file)) companionVideoFiles.add(small.file); entry.small = true; entry.preview = small.preview; entry.original = small.original; remember(entry); }
-    upload(small ? small.file : file, entry);
+    try { await performUpload(small ? small.file : file, entry); }
+    finally { state.uploads -= 1; renderFiles(); }
+    return;
   }
   state.uploads -= 1;
   renderFiles();
 }
 
+const audioUploadQueue = [];
+let activeAudioUploads = 0;
+
+function startQueuedAudioUploads() {
+  while (activeAudioUploads < 3 && audioUploadQueue.length) {
+    const {file, entry} = audioUploadQueue.shift();
+    if (entry.removed) continue;
+    activeAudioUploads++;
+    entry.phase = "Preparing audio";
+    renderFiles();
+    void runFootageUpload(file, entry).finally(() => {
+      activeAudioUploads--;
+      startQueuedAudioUploads();
+    });
+  }
+}
+
 function upload(file, entry) {
+  if (AUDIO_NAME.test(file.name)) {
+    entry.phase = "Queued";
+    audioUploadQueue.push({file, entry});
+    startQueuedAudioUploads();
+    renderFiles();
+    return;
+  }
+  return runFootageUpload(file, entry);
+}
+
+async function runFootageUpload(file, entry) {
+  try {
+    await performUpload(file, entry);
+  } catch (error) {
+    if (!entry.removed) {
+      entry.kind = "error";
+      entry.error = error.message || "Could not prepare this file. Add it again to retry.";
+    }
+  } finally {
+    renderFiles();
+  }
+}
+
+async function performUpload(file, entry) {
   // A local video normally uses Companion; importing its full original is
   // allowed only after per-file consent. Neither a filename nor restored
   // metadata proves that these particular bytes came from Companion.
@@ -661,7 +706,6 @@ function upload(file, entry) {
   if (montaraCompanion.info && !entry.viaCompanion && montaraCompanion.helps(file)) return uploadSmall(file, entry);
   // A lossless copy must reach the server through the resumable path, which restores the WAV.
   if (isCompanionProxy || file.size > 8 * 1024 * 1024 || /\.(wav|aiff?)\.(flac|opus|wv)$/i.test(file.name)) return uploadInParts(file, entry);
-  state.uploads += 1;
   const xhr = new XMLHttpRequest();
   entry.xhr = xhr;
   xhr.open("POST", "/api/v1/wizard/upload");
@@ -669,7 +713,6 @@ function upload(file, entry) {
   xhr.setRequestHeader("X-Zucker-Filename", encodeURIComponent(file.name));
   xhr.upload.onprogress = (e) => { if (e.lengthComputable) { entry.progress = e.loaded / e.total; renderFiles(); } };
   xhr.onload = () => {
-    state.uploads -= 1;
     let data = {};
     try { data = JSON.parse(xhr.responseText); } catch { /* handled below */ }
     if (xhr.status >= 400) {
@@ -691,9 +734,20 @@ function upload(file, entry) {
     }
     renderFiles();
   };
-  xhr.onerror = () => { state.uploads -= 1; entry.kind = "error"; entry.error = "Connection interrupted"; renderFiles(); };
-  xhr.onabort = () => { state.uploads -= 1; renderFiles(); };
-  xhr.send(file);
+  xhr.onerror = () => { entry.kind = "error"; entry.error = "Connection interrupted"; renderFiles(); };
+  xhr.ontimeout = () => { entry.kind = "error"; entry.error = "Upload timed out. Add this file again to retry."; };
+  xhr.timeout = 120000;
+  state.uploads += 1;
+  try {
+    await new Promise((resolve, reject) => {
+      xhr.onloadend = resolve;
+      try { xhr.send(file); } catch (error) { reject(error); }
+    });
+  } finally {
+    state.uploads -= 1;
+    delete entry.xhr;
+    renderFiles();
+  }
 }
 
 async function uploadInParts(file, entry) {
@@ -797,7 +851,7 @@ function fileRow(f, typed = false) {
     <li>
       <span class="kind ${f.kind}">${fileLabel(f)}</span>
       <span class="name" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}</span>
-      <span class="state">${f.kind === "uploading" ? (f.phase ? escapeHtml(f.phase) + " " : "") + Math.round(f.progress * 100) + "%" + uploadEta(f) : state.syncExcluded.has(f.path) ? "No sync" : f.usage === "asset" ? "Ready" : f.small && f.kind === "video" ? "Ready · small version" : f.preview ? "Ready · preview" : f.small ? "Ready · lossless" : f.kind === "error" ? escapeHtml(f.error) : f.kind === "ignored" ? escapeHtml(f.reason || "not used") : "Ready"}</span>
+      <span class="state">${f.kind === "uploading" ? f.phase === "Queued" ? "Queued · waiting for an audio slot" : (f.phase ? escapeHtml(f.phase) + " " : "") + Math.round(f.progress * 100) + "%" + uploadEta(f) : state.syncExcluded.has(f.path) ? "No sync" : f.usage === "asset" ? "Ready" : f.small && f.kind === "video" ? "Ready · small version" : f.preview ? "Ready · preview" : f.small ? "Ready · lossless" : f.kind === "error" ? escapeHtml(f.error) : f.kind === "ignored" ? escapeHtml(f.reason || "not used") : "Ready"}</span>
       <button class="remove" data-remove-file="${f.id}" type="button" aria-label="Remove ${escapeHtml(f.name)}" title="Remove">×</button>
       ${f.wholeFile && f.kind === "error" ? `<button class="link whole" data-upload-whole="${f.id}" type="button">Upload the whole file (${(f.wholeFile.size / 1e9).toFixed(1)} GB)</button>` : ""}
       ${state.platform === 'youtube' && !state.audioTask && f.kind === 'uploading' && !isAudioEntry(f) ? `<label class="track-type">Camera type <select data-pending-camera="${f.id}" aria-label="Camera type for ${escapeHtml(f.name)}"><option value="">Automatic</option>${[['360','360'],['fixed','Fixed camera'],['moving','Moving camera']].map(([value,label])=>`<option value="${value}" ${f.cameraType===value?'selected':''}>${label}</option>`).join('')}</select></label>` : ''}
