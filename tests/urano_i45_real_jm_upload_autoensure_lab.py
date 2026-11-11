@@ -85,7 +85,7 @@ def main():
                                     uploaded.get_data(as_text=True)[:150]]))
         found = (uploaded.get_json().get("videos") or [])
         if len(found) != 1 or not found[0].get("path"):
-            raise RuntimeError("Original JM uploader did not classify proxy")
+            raise RuntimeError("Original JM uploader did not classify proxy: "+str(uploaded.get_json())[:750])
         private_path = found[0]["path"]
         if not Path(private_path).is_relative_to(data_root / "WizardUploads"):
             raise RuntimeError("Video bytes escaped private worker Inbox")
