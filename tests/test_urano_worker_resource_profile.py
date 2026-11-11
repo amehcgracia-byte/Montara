@@ -27,7 +27,8 @@ class FlexibleWorkerResourceTests(unittest.TestCase):
         profile = WorkerResourceProfile(
             memory_mb=4096, cpu_percent=400, tasks_max=256)
         props = fixed_launch_properties(
-            UNIT, ENGINE, jm_bundle=JM, resources=profile)
+            UNIT, ENGINE, jm_bundle=JM, resources=profile,
+            owner_id="google-owner-a")
         self.assertIn("MemoryMax=4096M", props)
         self.assertIn("CPUQuota=400%", props)
         self.assertIn("TasksMax=256", props)
@@ -35,8 +36,26 @@ class FlexibleWorkerResourceTests(unittest.TestCase):
             "BindReadOnlyPaths="+str(ENGINE)+":/opt/montara-engine", props)
         self.assertIn(
             "BindReadOnlyPaths="+str(JM)+":/opt/montara-jm", props)
+        self.assertIn("StateDirectoryMode=0700", props)
+        self.assertEqual(
+            len([x for x in props if x.startswith("StateDirectory=")]), 1)
+        self.assertTrue(
+            next(x for x in props if x.startswith("StateDirectory="))
+            .startswith("StateDirectory=montara-owner-"))
         self.assertIn("PrivateNetwork=yes", props)
         self.assertIn("RuntimeDirectoryMode=0700", props)
+
+    def test_persistent_namespace_stable_across_worker_generations(self):
+        from urano.worker_state_policy import owner_state_directory
+        a=owner_state_directory("google-owner-a")
+        b=owner_state_directory("google-owner-b")
+        self.assertNotEqual(a,b)
+        self.assertEqual(a,owner_state_directory("google-owner-a"))
+        self.assertNotIn("google-owner-a",a)
+        with self.assertRaises(ValueError):
+            fixed_launch_properties(UNIT,ENGINE,jm_bundle=JM)
+        with self.assertRaises(ValueError):
+            fixed_launch_properties(UNIT,ENGINE,owner_id="owner-a")
 
     def test_invalid_or_user_named_runtime_bundles_rejected(self):
         for path in (
@@ -45,7 +64,8 @@ class FlexibleWorkerResourceTests(unittest.TestCase):
             Path("/opt/montara/bundles/../jm-"+"f"*40),
         ):
             with self.subTest(path=path), self.assertRaises(ValueError):
-                fixed_launch_properties(UNIT, ENGINE, jm_bundle=path)
+                fixed_launch_properties(UNIT, ENGINE, jm_bundle=path,
+                                        owner_id="owner-a")
         for args in (
             {"memory_mb": 256}, {"cpu_percent": 0},
             {"cpu_percent": 10000}, {"tasks_max": 2},
