@@ -168,6 +168,43 @@ def run(stdin, stdout, *, engine_dir: Path, data_root: Path, make_client=make_en
                                    "normalized_sha256": sha256_file(normalized)})
                 emit({"ok": True, "type": "ingest_proof", "sources": proofs})
                 continue
+            if packet.get("op") == "stage_snapshot":
+                # Read-only, bounded status for a private Stage editor. Never
+                # serialize the full project: it contains private local paths.
+                if set(packet) != {"op"} or active_folder is None:
+                    raise ValueError("An opened private Stage project is required")
+                state = client.application.config.get("ZUCKER_STATE")
+                loaded = getattr(getattr(state, "project", None), "folder", None)
+                if (not isinstance(loaded, (str, Path))
+                        or Path(loaded).resolve() != active_folder):
+                    raise ValueError("Active Engine project changed")
+                inspected = client.get("/api/v1/project")
+                if inspected.status_code != 200:
+                    emit({"ok": False, "type": "stage_snapshot_unavailable"})
+                    continue
+                project = inspected.get_json()
+                if not isinstance(project, dict):
+                    raise ValueError("Invalid Engine project snapshot")
+                stages = project.get("stages", {})
+                inputs = project.get("inputs", {})
+                if not isinstance(stages, dict) or not isinstance(inputs, dict):
+                    raise ValueError("Invalid Engine project structure")
+                status = {}
+                for stage in ("ingest", "sync", "cut", "edit", "export"):
+                    item = stages.get(stage, {})
+                    if not isinstance(item, dict):
+                        raise ValueError("Invalid Engine stage")
+                    value = item.get("status", "not_started")
+                    if not isinstance(value, str) or value not in allowed_stage_statuses:
+                        raise ValueError("Unrecognized Engine stage status")
+                    status[stage] = value
+                videos = inputs.get("videos", [])
+                if not isinstance(videos, list) or len(videos) > 200:
+                    raise ValueError("Invalid private camera list")
+                emit({"ok": True, "type": "stage_snapshot",
+                      "project": active_folder.name, "stages": status,
+                      "camera_count": len(videos)})
+                continue
             if packet.get("op") in ("ingest_start", "ingest_status"):
                 # Strict fixed operations. No user-supplied paths, media IDs,
                 # filenames, URLs or request bodies; Engine uses inputs that
