@@ -66,3 +66,18 @@ header.top .montara-owner-engine{margin-left:auto}
   border-radius:10px;background:#2b1c1a;color:#f3d2cb;
   margin:0 0 14px;font-size:13px;line-height:1.5}
 .montara-owner-upload-issue[hidden]{display:none!important}
+
+/* Errors in the Engine switch should never open Account by surprise. */
+header.top .montara-owner-engine{position:relative}
+header.top .montara-owner-engine-issue{position:absolute;right:0;top:100%;
+  z-index:75;width:min(340px,72vw);padding:9px 12px;margin-top:8px;
+  border:1px solid #d95b47;border-radius:9px;background:#211b1b;
+  color:#f4d3ca;white-space:normal;font-size:12px;
+  letter-spacing:0;line-height:1.4;box-shadow:0 8px 22px #0007}
+header.top .montara-owner-engine-issue[hidden]{display:none!important}
+/* Chema marks a failed Companion proxy as ERROR but its original state
+   label can still say Ready · lossless. Override that misleading text only
+   for errored rows; preserve preparation status on successful files. */
+#footage li:has(.kind.error) .state{visibility:hidden;position:relative}
+#footage li:has(.kind.error) .state::after{content:"Transfer failed";
+  position:absolute;visibility:visible;left:0;top:0;color:#ea8576}
