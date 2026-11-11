@@ -11,6 +11,40 @@
   if (!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(project)) {
     throw new Error('Invalid Montara Owner project');
   }
+  // Native Chema recovery briefly renders the technical "Opening your edit"
+  // screen. For Owner, keep the existing Montara logo visible while the real
+  // restore proceeds. Never replace or fake the response from Chema.
+  if (new URL(location.href).searchParams.get('resume') === 'footage') {
+    const splash = document.createElement('div');
+    splash.id = 'montaraOwnerResumeSplash';
+    splash.setAttribute('aria-label', 'Opening Montara');
+    const originalLogo = document.querySelector('#home .intro-name');
+    if (originalLogo) splash.append(originalLogo.cloneNode(true));
+    else splash.textContent = 'Montara';
+    document.body.append(splash);
+    const visible = id => {
+      const element = document.getElementById(id);
+      return element && !element.hidden;
+    };
+    const toast = document.getElementById('toast');
+    let observer;
+    const clear = () => {observer?.disconnect();splash.remove();};
+    const inspect = () => {
+      if (['footage','mode','frames','failed','result'].some(visible) ||
+          (toast && !toast.hidden && toast.classList.contains('err')))
+        clear();
+    };
+    observer = new MutationObserver(inspect);
+    for (const id of ['footage','mode','frames','failed','result','toast']) {
+      const element = document.getElementById(id);
+      if (element) observer.observe(element,{
+        attributes:true,attributeFilter:['hidden','class']
+      });
+    }
+    // A failed recovery must never leave an indefinite covering layer.
+    setTimeout(clear, 14000);
+  }
+
   // Chema's local footage cache was keyed only by platform. In Owner each
   // Google project must have a separate browser database. Old global records
   // stay untouched and are not offered as unrelated cameras/files.
