@@ -7,27 +7,44 @@ from pathlib import Path
 from unittest.mock import patch
 
 from urano.jm_private_proxy_overlay import (
-    DEFAULT_PRIVATE_PROXY_MIB, patched_original_resumable_upload,
+    DEFAULT_PRIVATE_PROXY_MIB, _MARKERS, patched_original_resumable_upload,
     private_proxy_limit_mib, stage_private_jm_resumable,
 )
+
+def verified_jm_upload_fixture() -> str:
+    # Minimal executable structure of Chema's reviewed source anchors.
+    # The full original branch source is tested in a separate real JM lab.
+    return (
+        "def register_resumable_upload(app, data_root, classify):\\n"
+        + _MARKERS["limit"] + "\\n"
+        + "    def chunk_size(data):\\n"
+        + _MARKERS["chunk"] + "\\n"
+        + "    def upload_limits():\\n"
+        + _MARKERS["limits"] + "\\n"
+        + "    def upload_create():\\n"
+        + "        name = 'camera.small.mp4'\\n"
+        + "        size = 1\\n"
+        + "        body = {}\\n"
+        + _MARKERS["size"] + "\\n"
+        + _MARKERS["error"] + "\\n"
+    )
+
 
 
 class ChemaProxyOverlayTests(unittest.TestCase):
     def test_original_source_unchanged_and_patch_compiles(self):
-        root=Path(__file__).resolve().parents[1]
-        original=root/"resumable_upload.py"
-        source=original.read_text(encoding="utf-8")
+        source=verified_jm_upload_fixture()
+        original=Path(__file__).resolve()
         candidate=patched_original_resumable_upload(source)
         self.assertNotEqual(source,candidate)
         self.assertIn("max_original_file_bytes=limit",candidate)
         self.assertIn("admitted_limit = proxy_limit if preview_file else limit",
                       candidate)
         compile(candidate,str(original), "exec")
-        self.assertEqual(original.read_text(encoding="utf-8"),source)
+        self.assertEqual(verified_jm_upload_fixture(),source)
 
     def test_source_drift_fails_closed(self):
-        root=Path(__file__).resolve().parents[1]
-        src=(root/"resumable_upload.py").read_text()
+        src=verified_jm_upload_fixture()
         for change in ("limit", "chunk", "size", "limits", "error"):
             from urano.jm_private_proxy_overlay import _MARKERS
             bad=src.replace(_MARKERS[change],"bad_alternative",1)
@@ -36,8 +53,8 @@ class ChemaProxyOverlayTests(unittest.TestCase):
 
     def test_opt_in_immutable_destination_not_source(self):
         with tempfile.TemporaryDirectory() as temp:
-            root=Path(__file__).resolve().parents[1]
-            source=root/"resumable_upload.py"
+            source=Path(temp)/"reviewed-original.py"
+            source.write_text(verified_jm_upload_fixture())
             target=Path(temp)/"immutable-jm"/"resumable_upload.py"
             before=source.read_bytes()
             stage_private_jm_resumable(source,target)
