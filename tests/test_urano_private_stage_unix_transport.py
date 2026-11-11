@@ -128,7 +128,9 @@ class LocalUnixStageIPC(unittest.TestCase):
         self.finish()
 
     def test_systemd_identity_mismatch_fails_before_connect(self):
-        self.start_server()
+        # A refused socket peer still consumes one accept; the next valid
+        # request must use the second bounded worker slot.
+        self.start_server(max_requests=2)
         broker = self.broker()
         self.inspection["ControlGroup"] = "/system.slice/other.service"
         with self.assertRaises(PrivateEngineRouteDenied):
