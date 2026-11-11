@@ -51,6 +51,56 @@ def owner_engine_preview_blueprint(catalog:ProjectCatalog,sessions:SessionStore,
                                    *,https_origin:str)->Blueprint:
     bp=Blueprint("urano_i27_owner_engine_preview",__name__,url_prefix="/urano/v1")
 
+    @bp.get("/projects/<project_id>/engine-state")
+    def engine_state(project_id: str):
+        """No Engine admission or shutdown: reveal the owner's active Stage.
+
+        This endpoint never starts a worker and never exposes systemd details.
+        The root broker independently verifies session, CSRF and Owner.
+        """
+        if request.host_url.rstrip("/") != https_origin:
+            return jsonify(error="Trusted HTTPS origin required"),403
+        if request.content_length not in (None,0):
+            return jsonify(error="Body unsupported"),400
+        token=request.cookies.get(SESSION_COOKIE)
+        user=sessions.verify(token)
+        if user is None:
+            return jsonify(error="Authentication required"),401
+        csrf=request.headers.get("X-Urano-CSRF")
+        if not user.matches_csrf(csrf):
+            return jsonify(error="Invalid CSRF token"),403
+        from urano.editor_project_bridge import project_mode
+        try:
+            selected=catalog.get(user.owner_id,project_id)
+        except (ProjectNotFound,ValueError):
+            return jsonify(error="Project not found"),404
+        if project_mode(selected)!="stage":
+            return jsonify(error="Project not found"),404
+        try:
+            outcome=broker_request("status_owner",token,csrf,project_id)
+        except (ValueError,OSError,RuntimeError,TimeoutError,json.JSONDecodeError):
+            return jsonify(error="Private Engine unavailable"),503
+        if outcome.get("ok") is not True or outcome.get("state") not in (
+                "on","off","unknown"):
+            return jsonify(error="Private Engine state unavailable"),503
+        state=outcome["state"]
+        active_id=outcome.get("active_project_id")
+        active=None
+        if active_id is not None:
+            try:
+                project=catalog.get(user.owner_id,active_id)
+            except (ProjectNotFound,ValueError):
+                return jsonify(error="Invalid private Engine owner"),503
+            if project_mode(project)!="stage":
+                return jsonify(error="Invalid private Engine project"),503
+            active={"id":project.id,"title":project.title}
+        if ((state=="on" and active is None)
+                or (state=="off" and active is not None)):
+            return jsonify(error="Invalid private Engine state"),503
+        response=jsonify(state=state,active_project=active)
+        response.headers["Cache-Control"]="private, no-store"
+        return response
+
     @bp.get("/projects/<project_id>/stage-status")
     def stage_status(project_id: str):
         # No Engine unit, worker address, backend URL or filesystem path from
