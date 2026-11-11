@@ -38,8 +38,10 @@ class ChemaProxyOverlayTests(unittest.TestCase):
         candidate=patched_original_resumable_upload(source)
         self.assertNotEqual(source,candidate)
         self.assertIn("max_original_file_bytes=limit",candidate)
-        self.assertIn("admitted_limit = proxy_limit if preview_file else limit",
+        self.assertIn("admitted_limit = proxy_limit if (video_proxy or",
                       candidate)
+        self.assertIn("lossless_audio = bool",candidate)
+        self.assertIn("audio_preview = bool",candidate)
         compile(candidate,str(original), "exec")
         self.assertEqual(verified_jm_upload_fixture(),source)
 
