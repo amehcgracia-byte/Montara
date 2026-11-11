@@ -85,7 +85,10 @@ def serve_original_jm_worker(
 
     # All original UI/Engine routes stay inside this process. The broker hands
     # the authorized gateway one connected descriptor per request.
-    app_wsgi = OwnerFirstStageWizard(app, owner_project_folder=folder)
+    from urano.owner_stage_native_export import OwnerStageNativeExport
+    app_wsgi = OwnerStageNativeExport(
+        OwnerFirstStageWizard(app, owner_project_folder=folder),
+        folder=folder)
     server, sock_path = create_private_jm_wsgi_server(app_wsgi, runtime_root)
     status_ready = threading.Event()
     status_errors = []
