@@ -81,19 +81,15 @@ def main():
             owner_db=root/"owner"
             owner_db.mkdir()
             catalog=ProjectCatalog(owner_db/"projects.sqlite3")
-            with catalog._connect() as ignored:
-                pass
-            # The Owner catalog UUID is normally minted independently. For
-            # this lab use the created catalog's actual UUID and mirror it in
-            # worker project folder only when it is the same literal project.
+            # Lab-only fixed UUID; production uses catalog.create() before
+            # starting its corresponding private worker, never raw SQL.
             import sqlite3
             with sqlite3.connect(catalog.db_path) as connection:
                 connection.execute(
-                    "INSERT INTO urano_projects (project_id,owner_id,title,recipe,created_at,updated_at) "
-                    "VALUES (?,?,?,?,?,?)",
+                    "INSERT INTO urano_projects "
+                    "(project_id,owner_id,title,recipe_json) VALUES (?,?,?,?)",
                     (PROJECT,"owner-a","Stage A",
-                     '{"montara_beta_workspace":{"mode":"stage","version":1}}',
-                     1,1))
+                     '{"montara_beta_workspace":{"mode":"stage","version":1}}'))
             sessions=SessionStore(owner_db/"sessions.sqlite3")
             auth=sessions.issue("owner-a")
             checks=[]
