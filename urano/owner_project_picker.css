@@ -75,9 +75,6 @@ header.top .montara-owner-engine-issue{position:absolute;right:0;top:100%;
   color:#f4d3ca;white-space:normal;font-size:12px;
   letter-spacing:0;line-height:1.4;box-shadow:0 8px 22px #0007}
 header.top .montara-owner-engine-issue[hidden]{display:none!important}
-/* Chema marks a failed Companion proxy as ERROR but its original state
-   label can still say Ready · lossless. Override that misleading text only
-   for errored rows; preserve preparation status on successful files. */
-#footage li:has(.kind.error) .state{visibility:hidden;position:relative}
-#footage li:has(.kind.error) .state::after{content:"Transfer failed";
-  position:absolute;visibility:visible;left:0;top:0;color:#ea8576}
+/* The Owner-scoped Chema JS now shows the native f.error for every
+   ERROR row. Never mask its diagnostic with a generic CSS pseudo-label. */
+#footage li:has(.kind.error) .state{color:#ea8576}
