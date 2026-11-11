@@ -148,6 +148,19 @@ class JMRealHTTPRPCContracts(unittest.TestCase):
         self.assertEqual(self.events[2][0],"draft")
         self.assertEqual(self.ensured,[("ensure_owner",self.a.id)])
 
+    def test_real_megabyte_proxy_crosses_owner_300kb_control_plane_cap(self):
+        # Mirror the actual beta Flask MAX_CONTENT_LENGTH. A valid media
+        # request can stream, but all normal Owner routes retain 300 KB.
+        self.client.application.config["MAX_CONTENT_LENGTH"]=300_000
+        payload=b"synthetic-proxy"*100_000
+        headers={**self.headers,"X-Zucker-Filename":"camera.small.mp4"}
+        response=self.post("wizard/upload",payload,headers,
+                           "application/octet-stream")
+        self.assertEqual(response.status_code,200,response.get_data(as_text=True))
+        self.assertEqual(response.json["size"],len(payload))
+        self.assertEqual(self.ensured,[("ensure_owner",self.a.id)])
+        self.assertIn(("upload",len(payload)),self.events)
+
     def test_project_and_csrf_rejected_before_any_worker(self):
         cases=[
             (self.b.id,self.headers,404),
