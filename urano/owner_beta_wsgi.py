@@ -107,8 +107,8 @@ def create_private_owner_beta(
     def owner_home():
         session = SessionStore(root / "sessions.sqlite3").verify(
             request.cookies.get(SESSION_COOKIE))
-        return redirect("/urano/v1/dashboard" if session else
-                        "/urano/v1/google/start", code=303)
+        return redirect(("/urano/v1/entry" if editor_pilot else "/urano/v1/dashboard")
+                        if session else "/urano/v1/google/start", code=303)
 
     @app.get("/urano/v1/login")
     @app.get("/urano/v1/register")
@@ -117,7 +117,8 @@ def create_private_owner_beta(
         session = SessionStore(root / "sessions.sqlite3").verify(
             request.cookies.get(SESSION_COOKIE))
         if session:
-            return redirect("/urano/v1/dashboard", code=303)
+            return redirect("/urano/v1/entry" if editor_pilot else
+                            "/urano/v1/dashboard", code=303)
         registering = request.path == "/urano/v1/register"
         heading = "Crear cuenta" if registering else "Iniciar sesión"
         alternate = ('<p>¿Ya tienes cuenta? <a href="/urano/v1/login">Inicia sesión</a></p>'
