@@ -21,6 +21,23 @@ from urano.private_stage_payload import private_stage_snapshot
 from urano.private_stage_unix_transport import serve_stage_socket
 
 
+def pinned_native_session_site(engine_root: Path) -> str:
+    """The exact root-pinned Engine wheel site for Chema's child processes.
+
+    The broker runs the original JM parent with package paths prepended to
+    sys.path in memory. Child jobs use sys.executable -m and start with a new
+    sys.path, so they do not inherit that Python-only modification.
+    Export only the already-reviewed, immutable, vendor-bundled site. No
+    pip install, untrusted PYTHONPATH entry, user-home venv or global site.
+    """
+    site = (Path(engine_root) / "site").resolve(strict=True)
+    if not site.is_dir() or not all((site / module).is_dir() for module in
+            ("numpy", "scipy", "numba", "librosa", "soundfile",
+             "pyloudnorm", "matchering")):
+        raise RuntimeError("Pinned JM mixer libraries unavailable")
+    return str(site)
+
+
 def serve_original_jm_worker(
     *, engine_root: Path, jm_root: Path, data_root: Path,
     project_id: str, generation: int, on_ready,
@@ -47,6 +64,10 @@ def serve_original_jm_worker(
     # imported only from its reviewed immutable bundle, not from main/global.
     if str(jm_root) not in sys.path:
         sys.path.insert(0, str(jm_root))
+    # subprocess.Popen([sys.executable, '-m', 'mixer_adapter.session', ...])
+    # inherits os.environ, not the parent's sys.path. Without this, the
+    # analysis child reports 'No module named numpy' despite vendored deps.
+    os.environ["PYTHONPATH"] = pinned_native_session_site(engine_root)
     from urano.jm_private_proxy_overlay import private_proxy_limit_mib
     private_proxy_limit_mib(private_preview_limit_mib)
     if private_preview_limit_mib > 256:
