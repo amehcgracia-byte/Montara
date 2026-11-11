@@ -47,12 +47,12 @@ class StageCompanionGateway(unittest.TestCase):
         @app.get("/api/v1/edit/native-recipe")
         def recipe():
             assert request.args.get("project_id")==str(folder)
-            return jsonify(engine="a"*40,revision="+REVISION+",platform="youtube",
+            return jsonify(engine="a"*40,revision=REVISION,platform="youtube",
                 sources=[],segments=[])
         @app.get("/api/v1/edit/native-master")
         def audio():
             assert request.args.get("project_id")==str(folder)
-            assert request.args.get("revision")=="2"
+            assert request.args.get("revision")==REVISION
             return Response(self.raw,mimetype="audio/wav")
         @app.get("/api/v1/edit/native-source/0")
         def original():
