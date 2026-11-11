@@ -5,7 +5,7 @@
    a lossless FLAC (name.wav.flac); the server restores the identical WAV. For a full session
    it becomes a light Opus preview (name.wav.opus); at export only the song ranges of the
    originals are sent, lossless (segment). Without the
-   companion, or if it cannot help with a file, Montara uploads the original as before. */
+   companion, the video original requires explicit user consent. */
 const montaraCompanion = (() => {
   const BASE = 'http://127.0.0.1:47820';
   const EDGE = 65536;
@@ -22,6 +22,25 @@ const montaraCompanion = (() => {
     try { return await fetch(BASE + path, {...options, signal: controller.signal}); }
     finally { if (timer) clearTimeout(timer);options.signal?.removeEventListener('abort',abort); }
   }
+  async function readProxy(id, cancelled) {
+    for (let attempt = 0; attempt < 3 && !cancelled(); attempt++) {
+      try {
+        const response = await call(`/proxies/${id}/file`, {cache: 'no-store'});
+        if (response.ok) {
+          const blob = await response.blob();
+          if (cancelled()) return null;
+          if (blob.size && (!response.headers?.get('Content-Length') || blob.size === Number(response.headers.get('Content-Length'))))
+            return {blob, retries: attempt};
+        } else if (![408, 429, 502, 503, 504].includes(response.status)) {
+          return null;
+        }
+      } catch (error) {
+        if (!(error instanceof TypeError) && error.name !== 'TypeError') throw error;
+      }
+      if (attempt < 2 && !cancelled()) await new Promise(resolve => setTimeout(resolve, 250 * (attempt + 1)));
+    }
+    return null;
+  }
   async function fingerprint(file) {
     const edges = await new Blob([file.slice(0, EDGE), file.slice(Math.max(0, file.size - EDGE))]).arrayBuffer();
     return [...new Uint8Array(await crypto.subtle.digest('SHA-256', edges))].map(n => n.toString(16).padStart(2, '0')).join('');
@@ -31,7 +50,7 @@ const montaraCompanion = (() => {
     get info() { return info; },
     async detect() {
       try {
-        const response = await call('/health', {}, 1200);
+        const response = await call('/health', {cache: 'no-store'}, 2500);
         const data = await response.json();
         info = response.ok && data.app === 'montara-companion' && data.ffmpeg ? data : null;
       } catch { info = null; }
@@ -50,7 +69,14 @@ const montaraCompanion = (() => {
     },
     async saveInProject(projectId, name, blob) {
       const response = await call(`/projects/${projectId}/save?name=${encodeURIComponent(name)}`, {method: 'POST', headers: {'Content-Type': 'application/octet-stream'}, body: blob});
-      if (!response.ok) throw new Error('The companion could not save the video.');
+      if (!response.ok) {
+        const detail = await response.json().catch(() => ({}));
+        const message = typeof detail.error === 'string' ? detail.error : 'Could not save the video';
+        const error = new Error('Companion could not save the video (' + response.status + '): ' + message);
+        error.status = response.status;
+        error.companionError = message;
+        throw error;
+      }
       return (await response.json()).saved;
     },
     async locateOriginal(original) {
@@ -74,24 +100,44 @@ const montaraCompanion = (() => {
       if (!info || !this.helps(file)) return null;
       const audio = this.isAudio(file);
       preview = preview && audio && !!info.audio_preview;
+      const nowMs = () => typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now();
+      const timings = {started: nowMs(), located: null, proxyReady: null, downloaded: null};
+      let cacheHit = null;
       try {
         onProgress('Finding it on your computer', 0);
         const print = await fingerprint(file);
         const located = await call('/locate', json({name: file.name, size: file.size, fingerprint: print}));
         if (!located.ok) return located.status === 404 ? {missing: true} : null;
         const located_ = await located.json();
-        const {id} = await (await call('/proxies', json({id: located_.id, preview}))).json();
+        timings.located = nowMs();
+        const queued = await call('/proxies', json({id: located_.id, preview}));
+        if (!queued.ok) return null;
+        const {id, reused} = await queued.json();
+        if (!id) return null;
         for (;;) {
           if (cancelled()) return null;
           const state = await (await call(`/proxies/${id}`)).json();
-          if (state.status === 'ready') break;
+          if (state.status === 'ready') { cacheHit = reused === true || state.cache_hit === true ? true : state.cache_hit ?? null; timings.proxyReady = nowMs(); break; }
           if (state.status === 'skipped' || state.status === 'failed') { console.info('Companion:', state.reason || state.error); return null; }
           onProgress(preview ? 'Light preview' : audio ? 'Lossless copy' : 'Small version', state.progress || 0);
           await new Promise(resolve => setTimeout(resolve, 800));
         }
-        const download = await call(`/proxies/${id}/file`);
-        if (!download.ok) return null;
-        const blob = await download.blob();
+        const download = await readProxy(id, cancelled);
+        if (!download) return cancelled() ? null : {downloadFailed: true};
+        const {blob, retries} = download;
+        timings.downloaded = nowMs();
+        // Stage performance diagnostics: durations only; no filenames or local paths.
+        console.info('[Montara upload timing]', {
+          step: 'local proxy',
+          cache_hit: cacheHit,
+          local_read_retries: retries,
+          original_mib: +(file.size / 1048576).toFixed(1),
+          locate_sec: +((timings.located - timings.started) / 1000).toFixed(2),
+          convert_sec: +((timings.proxyReady - timings.located) / 1000).toFixed(2),
+          local_read_sec: +((timings.downloaded - timings.proxyReady) / 1000).toFixed(2),
+          total_sec: +((timings.downloaded - timings.started) / 1000).toFixed(2),
+          proxy_mib: +(blob.size / 1048576).toFixed(1)
+        });
         const wavpack = blob.type === 'audio/x-wavpack';  // float originals: WavPack instead of FLAC
         const name = preview ? file.name + '.opus' : audio ? file.name + (wavpack ? '.wv' : '.flac') : file.name.replace(/\.[^.]+$/, '') + '.small.mp4';
         const type = preview ? 'audio/ogg' : audio ? blob.type || 'audio/flac' : 'video/mp4';

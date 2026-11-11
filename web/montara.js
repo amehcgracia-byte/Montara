@@ -139,6 +139,7 @@ function rememberOpenEdit(id){
   }));} catch {}
 }
 function show(id) {
+  if (id !== "making" && !$("#making").hidden) $("#rangeAudio").pause();
   if (id !== 'footage' && trackAudition.audio) stopTrackAudition();
   rememberOpenEdit(id);
   clearTimeout(introTimer);
@@ -173,6 +174,7 @@ function show(id) {
     span.classList.toggle("done", position < current);
   });
   if(['showSetup','showStyle'].includes(id)&&typeof renderShowModeInputs==='function'){const anchor=$('#'+(id==='showSetup'?'showSetupInputs':'showStyleInputs'));anchor.append($('#showModeInputs'));renderShowModeInputs();}
+  if (id === "making") prepareMakingPlayback();
   window.scrollTo({ top: 0 });
 }
 $("#home").addEventListener("click", finishIntro);
@@ -391,6 +393,39 @@ setInterval(()=>{
 const range = { start: 0, end: null, duration: 0 };
 let rangeSourcesList = [];
 const clock = (t) => { t = Math.max(0, Math.floor(t || 0)); const h = Math.floor(t / 3600), m = Math.floor(t / 60) % 60, s = String(t % 60).padStart(2, "0"); return h ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`; };
+// The song-range player remains alive under the progress screen. Its music
+// can continue from the user's previous Play action; the render never depends
+// on or controls this playback.
+function prepareMakingPlayback() {
+  const audio = $("#rangeAudio"), button = $("#makingAudioToggle");
+  if (!audio.getAttribute("src")) {
+    const track = state.mixMaster ? {path:state.mixMaster} :
+      audioTracks().length === 1 ? audioTracks()[0] : null;
+    if (track) audio.src = audioUrl(track);
+  }
+  button.hidden = !audio.getAttribute("src");
+  updateMakingPlayback();
+}
+function updateMakingPlayback() {
+  const audio = $("#rangeAudio"), button = $("#makingAudioToggle");
+  const playing = !audio.paused && !audio.ended;
+  // The visual control is an icon; keep accessible text for screen readers.
+  button.setAttribute("aria-pressed", String(playing));
+  button.setAttribute("aria-label", playing ? "Pause music while Montara works" : "Play music while Montara works");
+  button.title = playing ? "Pause music" : "Play music";
+}
+$("#makingAudioToggle").addEventListener("click", async () => {
+  const audio = $("#rangeAudio");
+  if (audio.paused || audio.ended) {
+    try { await audio.play(); }
+    catch { toast("Could not play the music. Check the audio source.", true); }
+  } else audio.pause();
+  updateMakingPlayback();
+});
+for (const event of ["play","pause","ended","error"]) {
+  $("#rangeAudio").addEventListener(event, updateMakingPlayback);
+}
+
 function audioUrl(f) {
   if (f.localFile) return (f.objectUrl ||= URL.createObjectURL(f.localFile));
   return f.path ? `/montara/audio?path=${encodeURIComponent(f.path)}` : "";
@@ -458,6 +493,46 @@ $("#rangeBar").addEventListener("click", (e) => {
 // ---------- companion: offer it on a Mac, notice when it starts ----------
 const isDesktopMac = /Macintosh|Mac OS X/.test(navigator.userAgent) && !/iPhone|iPad/.test(navigator.userAgent) && navigator.maxTouchPoints < 2;
 let companionWatch = null;
+let expectedCompanionEngine = null;
+let companionVersionRequest = null;
+// Proactive and read-only. The browser cannot execute an installer; the
+// downloadable .command is explicitly opened by the Mac owner in Terminal.
+async function checkCompanionUpdate({force=false}={}) {
+  if (!isDesktopMac) return;
+  const notice=$("#companionUpdateNotice");
+  try {
+    if (!expectedCompanionEngine || force) {
+      if (!companionVersionRequest || force) companionVersionRequest=fetch("/montara/companion/version",{cache:"no-store"}).then(async response=>{
+        if (!response.ok) throw new Error("Montara Companion version unavailable");
+        return response.json();
+      });
+      const expected=await companionVersionRequest;
+      expectedCompanionEngine=expected.engine;
+    }
+    const info=await montaraCompanion.detect();
+    const installed=info?.local_video?.engine;
+    const needsUpdate=installed!==expectedCompanionEngine;
+    notice.hidden=!needsUpdate;
+    if(needsUpdate){
+      const title=$("#companionUpdateTitle"),message=$("#companionUpdateMessage");
+      title.textContent=!info?"Companion is not running":!installed?"Companion needs the video renderer":"Companion update available";
+      message.textContent=!info
+        ? "Open Montara Companion on your Mac, or download it if it is not installed."
+        : !installed
+          ? "This Companion cannot render original-quality video yet. Install the video update."
+          : "The installed video renderer is older or incompatible with this Montara version. Update it before exporting.";
+    }
+  }catch(error){
+    // If the version endpoint temporarily fails, do not present an unverified
+    // update or disturb editing. Export still checks its recipe version.
+    console.warn("Companion version check failed:",error);
+  }
+}
+$("#companionUpdateRecheck").addEventListener("click",()=>{
+  const b=$("#companionUpdateRecheck");b.disabled=true;
+  checkCompanionUpdate({force:true}).finally(()=>{b.disabled=false;});
+});
+window.addEventListener("focus",()=>{if(!$("#companionUpdateNotice").hidden)checkCompanionUpdate();});
 async function watchCompanion() {
   clearTimeout(companionWatch);
   const info = await montaraCompanion.detect();
@@ -466,13 +541,14 @@ async function watchCompanion() {
   if (!info && !$("#footage").hidden) companionWatch = setTimeout(watchCompanion, 4000);  // starts while the person installs it
   else if (info && renderFiles.companionSeen === false) toast("Companion connected: videos stay on your computer.");
   renderFiles.companionSeen = Boolean(info);
+  void checkCompanionUpdate();
 }
 
 // ---------- footage memory: survive a reload ----------
 function remember(entry) {
   if (!entry.memory) return;
-  const { id, name, kind, path, reason, projection, duration, uploadId, small, preview, original, usage } = entry;
-  footageMemory.save({ id, name, kind: kind === "error" ? "uploading" : kind, path, reason, projection, duration, uploadId, small, preview, original, usage, ...entry.memory });
+  const { id, name, kind, path, reason, projection, duration, uploadId, small, preview, original, usage, cameraType } = entry;
+  footageMemory.save({ id, name, kind: kind === "error" ? "uploading" : kind, path, reason, projection, duration, uploadId, small, preview, original, usage, cameraType, ...entry.memory });
 }
 async function offerRestore() {
   const records = (await footageMemory.list(state.platform)).filter(r=>(r.task || 'video')===(state.audioTask || 'video')).filter((r) => !state.files.some((f) => f.id === r.id));
@@ -503,16 +579,22 @@ $("#restoreFiles").addEventListener("click", async () => {
 
 // URANO U3C: local original upload is retained for explicit manual tests.
 // Never silently fall back to an original when Companion is unavailable.
+const companionVideoFiles = new WeakSet();
 function confirmOriginalVideoUpload(file, entry, reason) {
   if (entry.removed) return false;
-  if (entry.manualOriginalUpload) return true;
+  if (entry.manualOriginalUpload === file) return true;
   const size = (file.size / (1024 * 1024)).toFixed(1);
   const approved = window.confirm(
     `${reason}\n\nFor testing only: upload the ORIGINAL video (${size} MiB) to the server?\n` +
     "This may consume considerable bandwidth and server storage.\n\n" +
     "Cancel = do not upload. OK = upload original for this attempt."
   );
-  if (approved) entry.manualOriginalUpload = true;
+  if (approved) {
+    entry.manualOriginalUpload = file;
+    entry.small = false;
+    entry.preview = false;
+    entry.original = null;
+  }
   return approved;
 }
 
@@ -531,10 +613,10 @@ async function uploadSmall(file, entry) {
   // Companion problems never trigger an automatic video-original upload.
   // An explicit confirmation retains this as an experimental escape hatch.
   if (!entry.removed && montaraCompanion.isVideo(file) && !small?.file) {
-    const message = small?.missing
+    const message = small?.downloadFailed ? "Could not read the prepared proxy from Companion. Add the same file again to retry the proxy." : small?.missing
       ? "Video not found on this computer. Check the file and retry with Companion."
       : "Companion could not prepare this video. Check Companion and retry.";
-    if (!confirmOriginalVideoUpload(file, entry, message)) {
+    if (small?.downloadFailed || !confirmOriginalVideoUpload(file, entry, message)) {
       entry.kind = "error";
       entry.error = message;
       entry.wholeFile = file;
@@ -547,7 +629,7 @@ async function uploadSmall(file, entry) {
   if (!entry.removed) {
     entry.phase = small ? (small.preview ? "Uploading preview" : montaraCompanion.isAudio(file) ? "Uploading lossless copy" : "Uploading small version") : montaraCompanion.info ? "Uploading the whole file" : "";
     entry.progress = 0;
-    if (small) { entry.small = true; entry.preview = small.preview; entry.original = small.original; remember(entry); }
+    if (small) { if (montaraCompanion.isVideo(file)) companionVideoFiles.add(small.file); entry.small = true; entry.preview = small.preview; entry.original = small.original; remember(entry); }
     upload(small ? small.file : file, entry);
   }
   state.uploads -= 1;
@@ -556,13 +638,10 @@ async function uploadSmall(file, entry) {
 
 function upload(file, entry) {
   // A local video normally uses Companion; importing its full original is
-  // allowed only after a per-attempt explicit test-only confirmation.
-  // A restored browser handle reopens the ORIGINAL, even if its persisted
-  // entry.small flag was set during an interrupted proxy upload. Only the
-  // derived .small.mp4 file itself is exempt from original-upload consent.
-  const proxyName = entry.original?.name?.replace(/\.[^.]+$/, '') + '.small.mp4';
-  const isCompanionProxy = entry.small && entry.original?.name && file.name === proxyName;
-  if (montaraCompanion.isVideo(file) && !isCompanionProxy && !entry.manualOriginalUpload) {
+  // allowed only after per-file consent. Neither a filename nor restored
+  // metadata proves that these particular bytes came from Companion.
+  const isCompanionProxy = companionVideoFiles.has(file);
+  if (montaraCompanion.isVideo(file) && !isCompanionProxy && entry.manualOriginalUpload !== file) {
     if (montaraCompanion.info) return uploadSmall(file, entry);
     const message = "Open Montara Companion to import a video from your computer.";
     if (!confirmOriginalVideoUpload(file, entry, message)) {
@@ -612,9 +691,11 @@ function upload(file, entry) {
 
 async function uploadInParts(file, entry) {
   state.uploads += 1;
+  const controller = new AbortController();
+  entry.uploadController = controller;
   try {
-    const extra = entry.small && entry.original && montaraCompanion.isVideo(file) ? {video_preview:true,original:{name:entry.original.name,size:entry.original.size,fingerprint:entry.original.fingerprint}} : /\.opus$/i.test(file.name) && entry.original ? {original: {name: entry.original.name, size: entry.original.size, fingerprint: entry.original.fingerprint}, compact_preview:state.platform==='youtube' && state.files.some(f=>f.kind==='video'||/\.(mp4|mov|mkv|mts|m2ts|webm|avi|m4v)$/i.test(f.name))} : {};
-    const data = await sendResumableUpload(file, (progress, phase) => { entry.progress = progress; if(phase)entry.phase=phase; renderFiles(); }, id => {entry.uploadId = id; remember(entry);}, () => entry.removed, extra);
+    const extra = companionVideoFiles.has(file) && entry.original ? {video_preview:true,original:{name:entry.original.name,size:entry.original.size,fingerprint:entry.original.fingerprint}} : entry.manualOriginalUpload === file ? {original_video_consent:true} : /\.opus$/i.test(file.name) && entry.original ? {original: {name: entry.original.name, size: entry.original.size, fingerprint: entry.original.fingerprint}, compact_preview:state.platform==='youtube' && state.files.some(f=>f.kind==='video'||/\.(mp4|mov|mkv|mts|m2ts|webm|avi|m4v)$/i.test(f.name))} : {};
+    const data = await sendResumableUpload(file, (progress, phase) => { entry.progress = progress; if(phase)entry.phase=phase; renderFiles(); }, id => {entry.uploadId = id; if (!entry.removed) remember(entry);}, () => entry.removed, extra, controller.signal);
     const found = ['videos', 'master', 'songs', 'ignored'].map(kind => [kind, (data[kind] || [])[0]]).find(([, item]) => item);
     if (!found) throw new Error('Not a usable media file');
     entry.kind = found[0] === 'videos' ? 'video' : found[0];
@@ -627,7 +708,7 @@ async function uploadInParts(file, entry) {
       return;
     }
     entry.kind = 'error'; entry.error = error.message;
-  } finally { state.uploads -= 1; renderFiles(); }
+  } finally { delete entry.uploadController; state.uploads -= 1; renderFiles(); }
 }
 
 const KIND_LABEL = { video: "VIDEO", master: "AUDIO", songs: "SONGS", ignored: "SKIPPED", uploading: "UPLOAD", error: "ERROR" };
@@ -712,6 +793,7 @@ function fileRow(f, typed = false) {
       <span class="state">${f.kind === "uploading" ? (f.phase ? escapeHtml(f.phase) + " " : "") + Math.round(f.progress * 100) + "%" + uploadEta(f) : state.syncExcluded.has(f.path) ? "No sync" : f.usage === "asset" ? "Ready" : f.small && f.kind === "video" ? "Ready · small version" : f.preview ? "Ready · preview" : f.small ? "Ready · lossless" : f.kind === "error" ? escapeHtml(f.error) : f.kind === "ignored" ? escapeHtml(f.reason || "not used") : "Ready"}</span>
       <button class="remove" data-remove-file="${f.id}" type="button" aria-label="Remove ${escapeHtml(f.name)}" title="Remove">×</button>
       ${f.wholeFile && f.kind === "error" ? `<button class="link whole" data-upload-whole="${f.id}" type="button">Upload the whole file (${(f.wholeFile.size / 1e9).toFixed(1)} GB)</button>` : ""}
+      ${state.platform === 'youtube' && !state.audioTask && f.kind === 'uploading' && !isAudioEntry(f) ? `<label class="track-type">Camera type <select data-pending-camera="${f.id}" aria-label="Camera type for ${escapeHtml(f.name)}"><option value="">Automatic</option>${[['360','360'],['fixed','Fixed camera'],['moving','Moving camera']].map(([value,label])=>`<option value="${value}" ${f.cameraType===value?'selected':''}>${label}</option>`).join('')}</select></label>` : ''}
       ${state.platform === 'youtube' && f.kind === 'video' && !isSphere(f) ? `<label class="track-type">Use as <select data-video-usage="${f.id}" aria-label="Use for ${escapeHtml(f.name)}"><option value="camera" ${!['filler','asset'].includes(f.usage) ? 'selected' : ''}>Camera</option><option value="filler" ${f.usage === 'filler' ? 'selected' : ''}>Insert · optional, no sync</option><option value="asset" ${f.usage === 'asset' ? 'selected' : ''}>Asset / logo · keep out of montage</option></select></label>` : ''}
       ${state.syncExcluded.has(f.path) ? '<span class="source-note">Not used in this song: no reliable audio match. Kept in your library.</span>' : ''}
       ${f.path && (f.kind === "master" || f.kind === "songs") && state.audioTask !== 'master' ? `<span class="track-audition"><button type="button" data-audition="${f.id}" aria-pressed="false" aria-label="Listen to ${escapeHtml(f.name)} for 12 seconds">▶ Listen 12 s</button><button type="button" data-audition-next="${f.id}" aria-label="Listen to another part of ${escapeHtml(f.name)}">Another part</button></span>` : ""}
@@ -730,6 +812,12 @@ document.addEventListener('click', event => {
 });
 
 document.addEventListener('change', event => {
+  const pending = event.target.closest('[data-pending-camera]');
+  if (pending) {
+    const file = state.files.find(f => f.id === pending.dataset.pendingCamera);
+    if (file) { file.cameraType = pending.value || undefined; remember(file); }
+    return;
+  }
   const select = event.target.closest('[data-video-usage]');
   const file = select && state.files.find(f => f.id === select.dataset.videoUsage);
   if (!file) return;
@@ -748,9 +836,10 @@ document.addEventListener('click', event => {
   if (!entry) return;
   if(trackAudition.id===entry.id)stopTrackAudition();
   entry.removed = true;
+  entry.uploadController?.abort();
   footageMemory.forget(entry.id);
   if (entry.xhr && entry.kind === 'uploading') entry.xhr.abort();
-  if (entry.uploadId && entry.kind !== 'video' && entry.kind !== 'master' && entry.kind !== 'songs') {
+  if (!entry.uploadController && entry.uploadId && entry.kind !== 'video' && entry.kind !== 'master' && entry.kind !== 'songs') {
     fetch(`/montara/uploads/${entry.uploadId}`, {method: 'DELETE'}).catch(() => {});
   }
   state.files = state.files.filter(f => f !== entry);
@@ -773,7 +862,9 @@ function renderFiles() {
   if (!document.activeElement?.closest?.("#audioFiles .track-type"))
     $("#audioFiles").innerHTML = state.files.filter(isAudioEntry).map(f => fileRow(f, typed)).join("");
   $("#audioFiles").classList.toggle("compact", state.files.filter(isAudioEntry).length > 4);
-  $("#videoFiles").innerHTML = state.files.filter((f) => !isAudioEntry(f)).map(fileRow).join("");
+  const focusedCamera = document.activeElement?.closest?.('[data-pending-camera]');
+  if (!state.files.some(f => f.id === focusedCamera?.dataset.pendingCamera && f.kind === 'uploading'))
+    $("#videoFiles").innerHTML = state.files.filter((f) => !isAudioEntry(f)).map(fileRow).join("");
   const master = state.files.find((f) => f.kind === "master");
   let hint = "";
   let ready = (videos().length > 0 || audioOnly()) && state.uploads === 0;
@@ -782,7 +873,7 @@ function renderFiles() {
   if (state.platform === "reel" && !master && videos().length > 1) hint = "Tip: add the song so the reel cuts on the music.";
   if (state.platform === "reel" && master) hint = "The reel uses your song master. Camera sound is muted.";
   if (state.platform === "reel" && state.files.some(f=>f.sample) && !master) { hint = "The example song master is missing. Reopen the example."; ready = false; }
-  if (state.uploads) hint = "Uploading…";
+  if (state.uploads) hint = state.platform === "youtube" && !state.audioTask ? "Files are preparing in the background. You can name the project and choose camera types now." : "Uploading…";
   if (state.platform === 'youtube' && $('#fullSessionOn').checked && !state.uploads && audioTracks().length) hint = 'Find and review the songs, then export their mixes. This session step exports audio.';
   const longest = Math.max(0, ...state.files.filter(isAudioEntry).map(f => f.duration || 0));
   if (state.platform === 'youtube' && !$('#fullSessionOn').checked && !state.uploads && longest > 20 * 60) hint = `Your audio is ${Math.round(longest / 60)} min long. If it is a whole session and you want one song, tick Full session to find the songs first, or trim the tracks to that song.`;
@@ -865,6 +956,7 @@ function isWholeSession() {
 }
 
 async function registerProject({mixed = false} = {}) {
+  if (state.uploads) return toast('Wait for the files to finish preparing.');
   if(state.audioTask==='master')return runMasterOnly().catch(fail);
   if(work.cancelling)return toast('Wait for cancellation to finish.');
   if(!mixed){state.mixMaster=null;state.mixDownload=null;state.syncExcluded.clear();}
@@ -1561,7 +1653,7 @@ async function saveCameras() {
   const flat = cameras.filter((f) => !isSphere(f) && f.usage !== "filler");
   const subjects = Object.fromEntries(flat.map((f) => [f.path, state.subjects[f.path] || "general"]));
   if (flat.length) await api("/settings/camera-subjects", { camera_subjects: subjects });
-  const roles = Object.fromEntries(flat.map((f) => [f.path, state.roles[f.path] || guessRole(f)]));
+  const roles = Object.fromEntries(flat.map((f) => [f.path, state.roles[f.path] || (f.cameraType==='fixed' ? 'fixed_rear' : f.cameraType==='moving' ? 'handheld' : guessRole(f))]));
   if (flat.length) await api("/settings/camera-roles", { camera_roles: roles });
   for (const file of cameras.filter(isSphere)) {
     const views = state.viewpoints[file.path] || {};
@@ -1745,7 +1837,10 @@ function renderShotBars(s) {
   const box = $("#renderBars");
   const shots = (s.tasks || []).filter((t) => /^segment-\d+$/.test(t.id || ""));
   const total = Math.max(0, ...shots.map((t) => Number((/\/(\d+)/.exec(t.label || "") || [])[1] || 0)));
-  if (!total || s.status === "done") { box.hidden = true; box.innerHTML = ""; return; }
+  // Companion seeds every segment at 0% before export starts. Do not show
+  // empty shot bars during original inspection, transcoding or preparation.
+  const started = shots.some(t => Number(t.percent || 0) > 0);
+  if (!total || !started || s.status === "done" || s.status === "ready") { box.hidden = true; box.innerHTML = ""; return; }
   if (box.children.length !== total) box.innerHTML = Array.from({ length: total }, () => "<i></i>").join("");
   box.classList.toggle("many", total > 60);
   for (const t of shots) {
@@ -1908,32 +2003,41 @@ async function openFrames() {
   if(state.framesPending)pollFrames();
 }
 let framesRequest=null;
-async function refreshFrames(first) {
+async function refreshFrames(first, index) {
   // One request in flight. An interval must not fill all server threads.
-  if(framesRequest){await framesRequest;if(first)return refreshFrames(true);return;}
-  framesRequest=updateFrames(first);
+  if(framesRequest){await framesRequest;if(first)return refreshFrames(true,index);return;}
+  framesRequest=updateFrames(first,index);
   try { return await framesRequest; } finally { framesRequest=null; }
 }
-async function updateFrames(first) {
+async function updateFrames(first,index) {
   const generation=work.generation;
-  const data = await api(`/wizard/review?render=${first ? 1 : 0}`);
+  const data = await api(`/wizard/review?render=${first ? 1 : 0}${Number.isInteger(index) ? "&shot="+index : ""}`);
   if(generation!==work.generation)return;
   const all = data.items || [];
-  if(all.slice(0,3).some(item=>item.thumbnail_status==='failed'))throw new Error('Could not prepare a camera frame. Your project is saved; retry or choose another camera.');
-  let ready=0;
-  for(let first=0;first<all.length;first+=3){
-    const batch=all.slice(first,first+3);
-    if(!batch.every(item=>item.thumbnail && (item.preview_ready || item.preview_error)))break;
-    ready+=batch.length;
+  const stage = (data.platform || state.platform) === 'youtube';
+  if (!stage && all.slice(0,3).some(item=>item.thumbnail_status==='failed'))throw new Error('Could not prepare a camera frame. Your project is saved; retry or choose another camera.');
+  let items = all;
+  const settled = item => item.thumbnail_status === 'failed' ||
+    Boolean(item.thumbnail && (item.preview_ready || item.preview_error));
+  let pending = all.filter(item => !settled(item)).length;
+  if (!stage) {
+    let ready = 0;
+    for (let start=0;start<all.length;start+=3) {
+      const batch = all.slice(start,start+3);
+      if (!batch.every(item => item.thumbnail && (item.preview_ready || item.preview_error))) break;
+      ready += batch.length;
+    }
+    items = all.slice(0,ready);
+    pending = all.length-ready;
   }
-  const items=all.slice(0,ready);
-  const pending=all.length-ready;
+  const ready = all.length-pending;
+  const waitingPhotos = all.filter(item => !item.thumbnail && item.thumbnail_status !== "failed").length;
   state.framesPending=Boolean(pending);
-  if(state.waitingFrames && (ready || !all.length)){
+  if(state.waitingFrames && (stage || ready || !all.length)){
     state.waitingFrames=false;
     show('frames');
   }
-  $("#framesHint").textContent = pending ? `Preparing shots… ${ready} of ${all.length}` : `${items.length} shots`;
+  $("#framesHint").textContent = waitingPhotos ? `Preparing pictures… ${all.length-waitingPhotos} of ${all.length}` : `${items.length} shots`;
   const grid = $("#frameGrid");
   for(const figure of grid.children)if(Number(figure.dataset.index)>=all.length)figure.remove();
   if (grid.children.length !== items.length) {
@@ -1963,11 +2067,18 @@ async function updateFrames(first) {
     const img = fig.querySelector("img");
     const thumb = fig.querySelector(".thumb");
     fig.classList.toggle("reel-frame",state.platform==='reel');
-    if(item.preview_error){const label=thumb.querySelector(".hover-status");label.textContent="Preview unavailable · Edit to change camera";label.hidden=false;}
     // The thumbnail changes when a shot is swapped: use it to version the preview URL.
     const preview = item.preview || `/api/v1/wizard/review/preview/${item.index}?v=${encodeURIComponent(item.thumbnail || "")}`;
     if (thumb.dataset.preview && thumb.dataset.preview !== preview) { if (frameHover?.thumb === thumb) stopFrameHover(); resetFrameVideo(thumb); }
     thumb.dataset.preview = preview;
+    const unavailable = item.thumbnail_status === 'failed' || item.preview_error;
+    const status = thumb.querySelector(".hover-status");
+    if (unavailable) {
+      status.textContent = "Preview unavailable · Edit to change camera";
+      status.hidden = false;
+    } else if (status.textContent.startsWith("Preview unavailable ·")) {
+      status.hidden = true;
+    }
     const landmark = viewpointName(item);
     const type=item.camera_type || (item.pose && Object.keys(item.pose).length?"360":"moving");
     const label = `${{fixed:"Fixed",moving:"Moving","360":"360"}[type]}${type==="360" && landmark?" · "+landmark:""}`;
@@ -1981,7 +2092,10 @@ async function updateFrames(first) {
     }
     fig.querySelector(".src").textContent=label;
     if(!item.thumbnail)img.hidden=true;
-    fig.classList.toggle("busy", !item.thumbnail || (!item.preview_ready && !item.preview_error) || swapping.has(item.index));
+    if (unavailable) swapping.delete(item.index);
+    // A pending hover video is NOT an unloaded shot. Keep all ready pictures
+    // visible while Companion/FFmpeg prepares only the changed video preview.
+    fig.classList.toggle("busy", !unavailable && (!item.thumbnail || swapping.has(item.index)));
     fig.querySelector(".dur").textContent = `${Number(item.duration_sec).toFixed(1)} s`;
     fig.querySelector(".swap").disabled = item.candidate_count !== undefined && item.candidate_count < 2;
   }
@@ -2625,38 +2739,86 @@ async function finishOriginalVideo(s) {
       await workRequest(generation,'/wizard/review/render',{});
       startPolling();return;
     }
-    await montaraCompanion.detect();
+    const companion = await montaraCompanion.detect();
     if(job.cancelled)return;
-    if(!montaraCompanion.info?.local_video)throw new Error('Update the Montara companion with the video renderer to export from your originals.');
+    if (!companion || companion.local_video?.engine !== recipe.engine) {
+      const error = new Error(!companion
+        ? 'Montara could not reach Companion. Open it and allow local network access if your browser asks.'
+        : !companion.local_video
+          ? 'Companion is running, but its original-quality video renderer is unavailable.'
+          : 'This edit requires a different version of the Companion video renderer.');
+      error.companion = {needsUpdate: Boolean(companion), retry: () => finishOriginalVideo(s)};
+      throw error;
+    }
     renderShotBars({tasks:recipe.segments.map((_,i)=>({id:`segment-${i+1}`,label:`Shot ${i+1}/${recipe.segments.length}`,percent:0}))});
-    if(recipe.engine!==montaraCompanion.info.local_video.engine)throw new Error('The companion needs the same editor version as this page. Update it before exporting.');
     if(!state.localProject)state.localProject=await montaraCompanion.projectFolder($('#videoName').value.trim()||todayName(),state.files.filter(f=>f.original).map(f=>f.original));
     if(job.cancelled)return;
     if(!state.localProject)throw new Error('Choose a project folder to save the original-quality video.');
+    // The browser may have remembered a Companion project ID from a process
+    // that was replaced during an update. Never discard the saved edit:
+    // reselect its local destination only when Companion confirms that ID
+    // is unknown, then retry the one failed asset exactly once.
+    const saveNativeAsset = async (name, blob) => {
+      if (!blob?.size) throw new Error('The video asset "' + name + '" is empty. Check the master and retry.');
+      try {
+        return await montaraCompanion.saveInProject(state.localProject.id, name, blob);
+      } catch (error) {
+        if (error.status !== 404 || error.companionError !== 'unknown project' || job.cancelled) throw error;
+        setProgress(0,'Reconnect local project…','Companion was restarted and lost the saved project folder. Choose where to save your video.');
+        const selected = await montaraCompanion.projectFolder(
+          $('#videoName').value.trim() || todayName(), state.files.filter(f => f.original).map(f => f.original));
+        if (!selected) throw new Error('Companion lost the saved project folder. Choose a local folder to continue without losing your edits.');
+        state.localProject = selected;
+        rememberOpenEdit('making');
+        if (job.cancelled) return;
+        return montaraCompanion.saveInProject(selected.id, name, blob);
+      }
+    };
     const savedOriginals = await footageMemory.list(state.platform).catch(()=>[]);
     const candidates = [...state.files, ...savedOriginals];
     const identities = new Map();
     const unavailable = [];
-    for (const source of recipe.sources) {
+    // Verify up to two independent camera originals concurrently. This only
+    // runs identity/HEAD checks: never fetch full source bodies in parallel.
+    const checksStarted = performance.now();
+    const lookupByIdentity = new Map();
+    let checkedSources = 0;
+    const verifySources = async (source) => {
+      if (job.cancelled) return;
       const original = NativeExport.originalFor(source, candidates);
       identities.set(source.key, original);
+      let missing = false;
       if (original) {
-        if (!await montaraCompanion.locateOriginal(original)) unavailable.push(source.key);
-      } else if (source.preview || /\.small\.mp4$/i.test(source.path) || state.files.some(f=>f.path===source.path && f.small)) unavailable.push(source.key);
-      else {
+        const identity = JSON.stringify([original.name, original.size, original.fingerprint]);
+        if (!lookupByIdentity.has(identity)) lookupByIdentity.set(identity, montaraCompanion.locateOriginal(original));
+        missing = !(await lookupByIdentity.get(identity));
+      } else if (source.preview || /\.small\.mp4$/i.test(source.path) || state.files.some(f=>f.path===source.path && f.small)) {
+        missing = true;
+      } else {
         const checked = await fetch('/api/v1/edit/native-source/'+source.key+'?'+new URLSearchParams({revision:recipe.revision,project_id:state.projectId}), {method:'HEAD'});
-        if ([400,404,410].includes(checked.status)) unavailable.push(source.key);
-        else if (!checked.ok) throw new Error('Could not check this edit’s originals. Reopen the edit and retry.');
+        missing = [400,404,410].includes(checked.status);
+        if (!missing && !checked.ok) throw new Error('Could not check this edit’s originals. Reopen the edit and retry.');
       }
+      if (missing) unavailable.push(source.key);
+      checkedSources += 1;
+      if (!job.cancelled) setProgress(0,'Finding original camera files…',`Checked ${checkedSources} of ${recipe.sources.length} sources`);
+    };
+    for (let index=0;index<recipe.sources.length;index+=2) {
+      await Promise.all(recipe.sources.slice(index,index+2).map(verifySources));
       if (job.cancelled) return;
     }
+    console.info('[Montara native timing]', {phase:'check originals', seconds:(performance.now()-checksStarted)/1000, sources:checkedSources, local_checks:lookupByIdentity.size, unavailable:unavailable.length});
     const planned = NativeExport.plan(recipe, unavailable);
     if (planned.blocked) throw new Error(NativeExport.warnings(planned.diagnostics.filter(d=>d.status==='required')).join('\n'));
     recipe = planned.recipe;
     job.diagnostics = planned.diagnostics;
     if (planned.diagnostics.length) toast(NativeExport.warnings(planned.diagnostics).join(' '), true);
     const sources=[];
+    let connectedSources=0, transferredBytes=0, fallbackSources=0;
+    const transferStarted=performance.now();
     for(const source of recipe.sources){
+      if(job.cancelled)return;
+      setProgress(0,'Connecting original camera files…',`Source ${connectedSources+1} of ${recipe.sources.length} · ${identities.get(source.key)?'Checking local original':'Preparing server fallback'}`);
       const original = identities.get(source.key);
       const file=state.files.find(f=>f.path===source.path);
       if(original)sources.push({source:source.key,original});
@@ -2668,21 +2830,28 @@ async function finishOriginalVideo(s) {
         const response=await fetch('/api/v1/edit/native-source/'+source.key+'?'+new URLSearchParams({revision:recipe.revision,project_id:state.projectId}));
         if(!response.ok)throw new Error('The original camera video is unavailable.');
         const name='montara-render-source-'+crypto.randomUUID().replaceAll('-','')+'.mp4';
-        await montaraCompanion.saveInProject(state.localProject.id,name,await response.blob());sources.push({source:source.key,asset:name});
+        const blob=await response.blob();
+        if(job.cancelled)return;
+        await saveNativeAsset(name,blob);sources.push({source:source.key,asset:name});
+        transferredBytes+=blob.size;fallbackSources++;
       }
+      connectedSources++;
       if(job.cancelled)return;
     }
-    setProgress(1,'Preparing your master…','');
+    setProgress(1,'Preparing your master…','Copying the audio master to Companion');
     const response=await fetch('/api/v1/edit/native-master?'+new URLSearchParams({revision:recipe.revision,project_id:state.projectId}));
     if(!response.ok)throw new Error('The master is not available for this edit.');
     const master='montara-render-audio-'+crypto.randomUUID().replaceAll('-','')+'.audio';
-    await montaraCompanion.saveInProject(state.localProject.id,master,await response.blob());
+    const masterBlob=await response.blob();
+    if(job.cancelled)return;
+    await saveNativeAsset(master,masterBlob);
+    console.info('[Montara native timing]', {phase:'connect export assets', seconds:(performance.now()-transferStarted)/1000, fallback_sources:fallbackSources, fallback_bytes:transferredBytes, master_bytes:masterBlob.size});
     if(job.cancelled)return;
     let logo=null;
     if(state.branding==='mine'){
       const image=await fetch('/montara/logo');if(!image.ok)throw new Error('Your logo is unavailable. Choose it again.');
       logo='montara-render-logo-'+crypto.randomUUID().replaceAll('-','')+'.png';
-      await montaraCompanion.saveInProject(state.localProject.id,logo,await image.blob());
+      await saveNativeAsset(logo,await image.blob());
       if(job.cancelled)return;
     }
     job.startRequest=montaraCompanion.startVideo({project:state.localProject.id,recipe,master,originals:sources,logo,branding:state.branding||'none',name:projectDownloadName().slice(0,-4)});
@@ -2700,7 +2869,11 @@ async function watchNativeVideo(job,s={}) {
       if(status.status==='failed')throw new Error(status.error || 'The original-quality export failed.');
       if(status.status==='cancelled')return;
       renderShotBars(status);
-      setProgress(Math.min(99,Math.round((status.progress||0)*100)),'Rendering original-quality video…','');
+      const phase = status.message?.trim() || (status.status === 'queued' ? 'Waiting to start the local render…' : 'Preparing original-quality video…');
+      const elapsed = Number.isFinite(status.elapsed_sec) ? `Elapsed ${Math.floor(status.elapsed_sec / 60)}m ${Math.floor(status.elapsed_sec % 60)}s` : '';
+      const activeShots = (status.tasks || []).filter(task => /^segment-/.test(task.id || '') && Number(task.percent || 0) > 0);
+      const shotDetail = activeShots.length ? `${activeShots.filter(task => Number(task.percent || 0) >= 100).length} of ${activeShots.length} started shots finished` : 'Shot rendering has not started yet';
+      setProgress(Math.min(99,Math.round((status.progress||0)*100)),phase,[elapsed,shotDetail].filter(Boolean).join(' · '));
       if(status.status==='ready')break;
       await new Promise(resolve=>setTimeout(resolve,700));
     }
@@ -2756,11 +2929,23 @@ function fail(error) {
   if(error instanceof WorkCancelled)return;
   stopPolling();
   $("#errorText").textContent = error.message;
+  const recovery = $("#companionRecovery");
+  recovery.hidden = !error.companion;
+  if (error.companion) {
+    const download = $("#companionRecoveryDownload");
+    download.hidden = !isDesktopMac;
+    download.textContent = error.companion.needsUpdate ? "Update Companion (.pkg)" : "Install Companion (.pkg)";
+    $("#companionRecoveryHelp").textContent = isDesktopMac
+      ? "Open the downloaded .pkg using macOS Installer. Do not interrupt active local renders. This testing installer is not yet Apple-notarized."
+      : "Ask your Montara administrator for the matching video renderer for this computer.";
+    $("#companionRecoveryRetry").onclick = error.companion.retry;
+  }
   show("failed");
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
 loadBranding();
+void checkCompanionUpdate();
 api("/montara/version").then((v) => { $("#version").textContent = `Montara ${v.version}`; }).catch(() => {});
 let savedEdit=null;
 try {savedEdit=JSON.parse(sessionStorage.getItem('montara-open-edit'));} catch {}

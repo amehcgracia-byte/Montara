@@ -1,0 +1,21 @@
+name: Upload timing diagnostics
+on:
+  pull_request:
+    paths:
+      - 'web/companion.js'
+      - 'web/resumable-upload.js'
+      - 'tests/upload-performance.test.cjs'
+      - '.github/workflows/upload-timings.yml'
+  push:
+    branches: [perf/stage-upload-phase-timings-20261109]
+jobs:
+  scripts:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test tests/upload-performance.test.cjs

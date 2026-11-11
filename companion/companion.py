@@ -28,7 +28,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 VERSION = "0.6.10"
-VIDEO_PROXY_RECIPE = 2
+VIDEO_PROXY_RECIPE = 3
 PORT = int(os.environ.get("MONTARA_COMPANION_PORT", "47820"))
 HOME = Path(os.environ.get("MONTARA_COMPANION_HOME", Path.home() / ".montara-companion"))
 CACHE = HOME / "proxies"
@@ -348,7 +348,7 @@ def plan(info: dict) -> dict:
     turned = next((d["rotation"] for d in video.get("side_data_list", []) if "rotation" in d), 0)
     if panorama and int(float(turned)) % 360:
         return {"skip": "Rotated 360 layout: export a stitched upright 2:1 panorama first"}
-    return {"fps": fps, "hdr": hdr, "duration": duration, "codec": video.get("codec_name"), "size": [width, height],
+    return {"fps": fps, "source_fps": source_fps, "hdr": hdr, "duration": duration, "codec": video.get("codec_name"), "size": [width, height],
             "pix_fmt": video.get("pix_fmt"), "rotation": int(float(turned)) % 360, "panorama": panorama}
 
 
@@ -370,12 +370,26 @@ def proxy_command(source: Path, target: Path, p: dict, hardware: bool = False) -
             chain += ["zscale=t=linear:npl=100", "format=gbrpf32le", "zscale=p=bt709",
                       "tonemap=tonemap=hable:desat=0", "zscale=t=bt709:m=bt709:r=tv"]
         chain.append("format=yuv420p")
+    # Rotation, scaling and tonemapping are per-frame operations. If the
+    # proxy drops many frames, select the same output timestamps before doing
+    # that work. Keep the normal 24/25/30 fps path exactly as before.
+    if p.get("source_fps", p["fps"]) >= 1.5 * p["fps"]:
+        fps_filter = f"fps={p['fps']}"
+        chain.remove(fps_filter)
+        chain.insert(0, fps_filter)
     if hardware and HW_H264:
         video = ["-c:v", "h264_videotoolbox", "-b:v", "2500k", "-maxrate", "4M", "-bufsize", "8M"]
     else:
         video = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "24"]
     if p.get("panorama") and hardware and HW_H264:
         video = ["-c:v", "h264_videotoolbox", "-b:v", "4M", "-maxrate", "6M", "-bufsize", "12M"]
+    # Long flat clips dominate WAN transfer. Keep resolution, frame rate and
+    # audio unchanged, and leave the higher-detail 360 profile alone.
+    if p.get("duration", 0) >= 600 and not p.get("panorama"):
+        if hardware and HW_H264:
+            video = ["-c:v", "h264_videotoolbox", "-b:v", "1250k", "-maxrate", "1800k", "-bufsize", "3600k"]
+        else:
+            video += ["-maxrate", "1250k", "-bufsize", "2500k"]
     return head + ["-i", str(source), "-map", "0:v:0", "-map", "0:a:0?", "-vf", ",".join(chain),
                    "-fps_mode", "cfr", "-r", str(p["fps"]), "-g", str(p["fps"]), *video,
                    # -colorspace cannot convert frames on the chip: scale_vt has already tagged them.
@@ -384,11 +398,23 @@ def proxy_command(source: Path, target: Path, p: dict, hardware: bool = False) -
                    "-movflags", "+faststart", "-progress", "pipe:1", "-nostats", str(target)]
 
 
+def prefer_cpu_proxy(p: dict) -> bool:
+    """Trial route for the measured Intel Mac workload; leave other inputs alone."""
+    return (os.environ.get("MONTARA_PROXY_INTEL_CPU_FIRST") == "1"
+            and sys.platform == "darwin" and os.uname().machine == "x86_64"
+            and SOFT_H264 and not p.get("panorama") and not p.get("hdr")
+            and p.get("rotation") == 0 and p.get("size") == [1920, 1080]
+            and p.get("codec") == "h264" and p.get("pix_fmt") == "yuv420p"
+            and 24 <= p.get("source_fps", 0) <= 30.01
+            and p.get("duration", 0) >= 600)
+
+
 def proxy_commands(source: Path, target: Path, p: dict) -> list[list[str]]:
-    """The fastest way first, the software way as a safety net (4K on an Intel MacBook: 5x less CPU, up to twice as fast)."""
+    """Choose the preferred route first and keep the other route as fallback."""
     plain = proxy_command(source, target, p)
     if HW_SCALE and not p["hdr"] and p["codec"] in {"h264", "hevc"} and p["pix_fmt"] in {"yuv420p", "yuvj420p", "nv12"}:
-        return [proxy_command(source, target, p, hardware=True), plain]
+        hardware = proxy_command(source, target, p, hardware=True)
+        return [plain, hardware] if prefer_cpu_proxy(p) else [hardware, plain]
     return [plain]
 
 
@@ -425,7 +451,7 @@ def make_proxy(key: str) -> None:
     source = sources[key[:24]]
     target = output_path(key)
     if proxy_cache_valid(key, target):
-        job.update(status="ready", progress=1.0, bytes=target.stat().st_size)
+        job.update(status="ready", progress=1.0, bytes=target.stat().st_size, cache_hit=True)
         return
     try:
         p = audio_plan(probe(source)) if is_audio(source) else plan(probe(source))
@@ -439,9 +465,9 @@ def make_proxy(key: str) -> None:
                 cached_picture_failed = proxy_picture_error(source, target, p) > .16
             except (OSError, ValueError, subprocess.SubprocessError):
                 cached_picture_failed = True
-            if not cached_picture_failed:
+            if not cached_picture_failed and (p.get('panorama') or p.get('duration', 0) < 600):
                 target.with_suffix('.quality.json').write_text(json.dumps({'recipe':VIDEO_PROXY_RECIPE}))
-                job.update(status='ready', progress=1.0, bytes=target.stat().st_size)
+                job.update(status='ready', progress=1.0, bytes=target.stat().st_size, cache_hit=True)
                 return
             log(f'{source.name}: cached picture differs from original; rebuilding with CPU')
         pending = output_path(key, pending=True)
@@ -457,7 +483,7 @@ def make_proxy(key: str) -> None:
             job.update(info={k: p[k] for k in ("fps", "hdr", "codec", "size")})
             commands = [proxy_command(source, pending, p)] if cached_picture_failed else proxy_commands(source, pending, p)
             log(f"small version of {source.name} ({p['codec']} {p['size'][0]}x{p['size'][1]}{' HDR' if p['hdr'] else ''}, "
-                f"{'hardware' if HW_H264 else 'software'} encoder)")
+                f"{'VideoToolbox' if 'h264_videotoolbox' in commands[0] else 'software'} encoder)")
         started = time.monotonic()
         for attempt, command in enumerate(commands, 1):
             # Merge FFmpeg progress and diagnostics to avoid a blocked stderr
@@ -478,7 +504,7 @@ def make_proxy(key: str) -> None:
                         diagnostic_tail.pop(0)
             process.stdout.close()
             succeeded = process.wait() == 0
-            if succeeded and not p.get('audio') and 'h264_videotoolbox' in command:
+            if succeeded and not p.get('audio') and ('h264_videotoolbox' in command or prefer_cpu_proxy(p)):
                 try:
                     error = proxy_picture_error(source, pending, p)
                     succeeded = error <= .16
@@ -491,7 +517,8 @@ def make_proxy(key: str) -> None:
             reason = next((line for line in reversed(diagnostic_tail) if line), "FFmpeg failed")
             if attempt == len(commands):
                 raise RuntimeError(reason)
-            log(f"{source.name}: the fast way failed ({reason}); trying the software way")
+            next_encoder = "VideoToolbox" if "h264_videotoolbox" in commands[attempt] else "software"
+            log(f"{source.name}: proxy attempt failed ({reason}); trying {next_encoder}")
             job["progress"] = 0.0
         if p.get("panorama"):
             from spherical_proxy import preserve_panorama
@@ -500,11 +527,11 @@ def make_proxy(key: str) -> None:
         if not p.get('audio'):
             target.with_suffix('.quality.json').write_text(json.dumps({'recipe':VIDEO_PROXY_RECIPE}))
         elapsed = time.monotonic() - started
-        job.update(status="ready", progress=1.0, bytes=target.stat().st_size, seconds=round(elapsed, 1))
+        job.update(status="ready", progress=1.0, bytes=target.stat().st_size, cache_hit=False, seconds=round(elapsed, 1))
         log(f"ready {source.name}: {target.stat().st_size / 1e6:.0f} MB "
             f"({100 * target.stat().st_size / max(1, source.stat().st_size):.0f}% of the original) in {elapsed:.0f} s "
             f"({p['duration'] / max(elapsed, 0.1):.1f}x real time)")
-    except Exception as error:  # reported to the page, which then uploads the original
+    except Exception as error:  # the browser requires consent before sending an original
         job.update(status="failed", error=str(error)[:300])
         log(f"failed {source.name}: {error}")
     finally:
@@ -593,7 +620,12 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply(200, {"app": "montara-companion", "version": VERSION, "ffmpeg": bool(FFMPEG and FFPROBE),
                                     "hardware_encoder": HW_H264, "tonemap": TONEMAP, "lossless_audio": True,
                                     "audio_preview": OPUS, "segment_formats": ["lossless"] + (["opus"] if OPUS else []),
-                                    "local_mix": local_mixer(), "mix_progress": True, "local_video": video_jobs.runtime()})
+                                    "local_mix": local_mixer(), "mix_progress": True, "local_video": video_jobs.runtime(),
+                                    "busy": any(
+                                        row.get("status") not in {"ready", "done", "failed", "cancelled", "skipped"}
+                                        for row in list(video_jobs.jobs.values()) + list(jobs.values()) + list(mix_jobs.values())
+                                        if isinstance(row, dict)
+                                    )})
         native = re.fullmatch(r'/video-renders/([a-f0-9]{32})(/file)?(?:\?download=1)?',self.path)
         if native:
             token=native.group(1)
@@ -626,13 +658,20 @@ class Handler(BaseHTTPRequestHandler):
         target = output_path(match.group(1))
         if job.get("status") != "ready" or not target.is_file():
             return self.reply(409, {"error": "not ready"})
-        self.send_response(200)
-        self.cors(self.origin_ok())
-        self.send_header("Content-Type", {".flac": "audio/flac", ".wv": "audio/x-wavpack", ".opus": "audio/ogg"}.get(target.suffix, "video/mp4"))
-        self.send_header("Content-Length", str(target.stat().st_size))
-        self.end_headers()
-        with target.open("rb") as handle:
-            shutil.copyfileobj(handle, self.wfile, 1024 * 1024)
+        try:
+            handle = target.open("rb")
+        except FileNotFoundError:
+            return self.reply(409, {"error": "not ready"})
+        with handle:
+            try:
+                self.send_response(200)
+                self.cors(self.origin_ok())
+                self.send_header("Content-Type", {".flac": "audio/flac", ".wv": "audio/x-wavpack", ".opus": "audio/ogg"}.get(target.suffix, "video/mp4"))
+                self.send_header("Content-Length", str(os.fstat(handle.fileno()).st_size))
+                self.end_headers()
+                shutil.copyfileobj(handle, self.wfile, 1024 * 1024)
+            except (BrokenPipeError, ConnectionResetError):
+                log("Proxy read disconnected; cached file retained")
 
     def do_POST(self):
         if not self.origin_ok():
@@ -685,11 +724,12 @@ class Handler(BaseHTTPRequestHandler):
             preview = body.get("preview") is True and is_audio(sources[source_id]) and OPUS
             key = source_id + ("p" if preview else "")
             with lock:
-                stale = jobs.get(key, {}).get("status") == "ready" and not output_path(key).is_file()
+                reused = jobs.get(key, {}).get("status") == "ready" and proxy_cache_valid(key, output_path(key))
+                stale = jobs.get(key, {}).get("status") == "ready" and not reused
                 if key not in jobs or stale or jobs[key].get("status") == "failed":
                     jobs[key] = {"status": "working", "progress": 0.0}
                     threading.Thread(target=make_proxy, args=(key,), daemon=True).start()
-            return self.reply(202, {"id": key, "preview": bool(preview)})
+            return self.reply(202, {"id": key, "preview": bool(preview), "reused": reused})
         if self.path == "/segment":
             return self.send_segment(body)
         if self.path == "/projects":

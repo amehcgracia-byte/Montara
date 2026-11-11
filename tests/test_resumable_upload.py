@@ -236,3 +236,42 @@ def test_legacy_proxy_reconnect_uses_complete_bytes_and_refuses_ambiguity(tmp_pa
     legacy.write_bytes(payload)
     upload({**body,'original':{**original,'fingerprint':'b'*64}})
     assert reconnect_preview_original(legacy,root) is None
+
+
+def test_private_video_proxy_large_chunks_resume_and_reuse(tmp_path):
+    c = make_client(tmp_path)
+    payload = b'a' * (17 * 1024**2)
+    body = dict(name='camera.small.mp4', size=len(payload), fingerprint=fingerprint(payload),
+                video_preview=True, original=dict(name='camera.mp4', size=len(payload)*4, fingerprint='a'*64))
+    job = c.post('/montara/uploads', json=body).json
+    assert job['chunk_size'] == 16 * 1024**2
+    url = '/montara/uploads/' + job['id']
+    first = payload[:job['chunk_size']]
+    for _ in range(2):  # Lost response: retransmitting the same chunk is harmless.
+        assert c.put(url, data=first, headers={'Upload-Offset': '0'}).json['received'] == len(first)
+    c = make_client(tmp_path)
+    assert c.post('/montara/uploads', json=body).json['received'] == len(first)
+    assert c.put(url, data=payload[len(first):], headers={'Upload-Offset': str(len(first))}).status_code == 200
+    assert c.post(url + '/finish', json={}).status_code == 200
+    assert c.post('/montara/uploads', json=body).json['complete']
+
+
+def test_concurrent_delete_is_idempotent_after_the_lock_is_acquired(tmp_path, monkeypatch):
+    import fcntl
+    import shutil
+    c = make_client(tmp_path)
+    job = create(c, b'pending').json
+    path = tmp_path / 'Uploads' / job['id']
+    url = '/montara/uploads/' + job['id']
+    lock = fcntl.flock
+
+    def after_other_delete(fd, mode):
+        lock(fd, mode)
+        shutil.rmtree(path)
+
+    with monkeypatch.context() as patch:
+        patch.setattr('resumable_upload.fcntl.flock', after_other_delete)
+        response = c.delete(url)
+    assert response.status_code == 200 and response.json['deleted']
+    assert c.delete(url).json['deleted']
+    assert c.get(url).status_code == 404

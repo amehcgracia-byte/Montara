@@ -242,24 +242,50 @@ def create_montara_app(data_root: Path = DEFAULT_DATA, samples: bool = True):
             abort(404)
         return send_file(path, conditional=True)
 
+    @app.get("/montara/companion/version")
+    def montara_companion_version():
+        """Expected local video-engine commit; never report secrets or paths."""
+        import re
+        try:
+            # The running checkout is authoritative when Git is available:
+            # service environment variables can contain a pre-update SHA.
+            try:
+                sha = subprocess.check_output(
+                    ["git", "-C", str(ENGINE), "rev-parse", "HEAD"],
+                    text=True, stderr=subprocess.DEVNULL, timeout=5).strip()
+            except (OSError, subprocess.SubprocessError):
+                sha = os.environ.get("MONTARA_ENGINE_SHA", "")
+            if not re.fullmatch(r"[a-f0-9]{40}", sha):
+                raise ValueError("Unversioned engine")
+        except (OSError, subprocess.SubprocessError, ValueError):
+            return jsonify(error="Companion version unavailable"), 503
+        return jsonify(engine=sha, download="/montara/companion/download")
+
     @app.get("/montara/companion/download")
     def montara_companion_download():
-        """Zip for macOS: double-click 'Install Montara Companion.command' (executable bit kept)."""
-        import io
-        import zipfile
+        """Download a single native macOS .pkg, not a ZIP or shell script.
+
+        Only serve a package pinned to the engine currently used by JM.
+        A notarized package may replace the beta package at this path later;
+        installation always requires the Mac owner's explicit OS consent.
+        """
+        import re
         from flask import send_file
-        folder = ROOT / "companion"
-        buffer = io.BytesIO()
-        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
-            for name, mode in (("Install Montara Companion.command", 0o755), ("companion.py", 0o644), ("video_jobs.py", 0o644), ("video_recipe.py", 0o644), ("README.md", 0o644)):
-                info = zipfile.ZipInfo(f"Montara Companion/{name}")
-                info.external_attr = (0o100000 | mode) << 16
-                info.compress_type = zipfile.ZIP_DEFLATED
-                archive.writestr(info, (folder / name).read_bytes())
-            engine_sha = subprocess.check_output(['git','-C',str(ENGINE),'rev-parse','HEAD'],text=True).strip()
-            archive.writestr('Montara Companion/EDITOR_COMMIT', engine_sha+'\n')
-        buffer.seek(0)
-        return send_file(buffer, mimetype="application/zip", as_attachment=True, download_name="Montara Companion.zip")
+        try:
+            engine = subprocess.check_output(
+                ["git", "-C", str(ENGINE), "rev-parse", "HEAD"],
+                text=True, stderr=subprocess.DEVNULL, timeout=5,
+            ).strip()
+            if not re.fullmatch(r"[a-f0-9]{40}", engine):
+                raise ValueError("No versioned video engine")
+        except (OSError, subprocess.SubprocessError, ValueError):
+            return jsonify(error="Companion engine version is unavailable."), 503
+        package = data_root / "Installers" / f"Montara-Companion-{engine[:8]}.pkg"
+        if not package.is_file() or package.stat().st_size < 1024:
+            return jsonify(error="The matching Mac installer has not been published yet."), 503
+        return send_file(package, mimetype="application/octet-stream", as_attachment=True,
+                         download_name=f"Montara-Companion-{engine[:8]}.pkg", max_age=0)
+
     _apply_branding(str(load_global_config().get("montara_branding_mode") or "montara"), data_root)
 
     @app.get("/montara/samples")

@@ -12,14 +12,40 @@ say() { printf '  %s\n' "$*"; }
 echo "Montara companion"
 
 PY=""
-for c in python3 /opt/homebrew/bin/python3 /usr/local/bin/python3 /usr/bin/python3; do
-  if command -v "$c" >/dev/null 2>&1 && "$c" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)' 2>/dev/null; then
-    PY="$(command -v "$c")"; break
+if [ "$(uname -s)" = Darwin ]; then
+  arch="$(uname -m)"
+  python311_ok() {
+    "$1" - "$arch" <<'PYTHON'
+import email.utils, platform, sys, threading
+if sys.version_info[:2] != (3, 11) or platform.machine() != sys.argv[1]:
+    sys.exit(1)
+result = []
+def probe():
+    for _ in range(100):
+        email.utils.formatdate(usegmt=True)
+    result.append(True)
+thread = threading.Thread(target=probe)
+thread.start()
+thread.join()
+sys.exit(0 if result else 1)
+PYTHON
+  }
+  for candidate in /opt/homebrew/opt/python@3.11/bin/python3.11 /usr/local/opt/python@3.11/bin/python3.11 /Library/Frameworks/Python.framework/Versions/3.11/bin/python3.11 "$(command -v python3.11 || true)"; do
+    if [ -x "$candidate" ] && python311_ok "$candidate"; then PY="$candidate"; break; fi
+  done
+  if [ -z "$PY" ] && command -v brew >/dev/null 2>&1; then
+    brew install python@3.11
+    candidate="$(brew --prefix python@3.11)/bin/python3.11"
+    if python311_ok "$candidate"; then PY="$candidate"; fi
   fi
-done
-if [ -z "$PY" ]; then
-  say "Python 3.9 or newer is needed. On a Mac run:  xcode-select --install   then run this command again."
-  exit 1
+  [ -n "$PY" ] || { say "A native Python 3.11 is required for Companion on macOS."; exit 1; }
+else
+  for c in python3 /usr/bin/python3; do
+    if command -v "$c" >/dev/null 2>&1 && "$c" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)' 2>/dev/null; then
+      PY="$(command -v "$c")"; break
+    fi
+  done
+  [ -n "$PY" ] || { say "Python 3.9 or newer is required."; exit 1; }
 fi
 say "python: $PY"
 
@@ -35,8 +61,33 @@ if ! command -v ffmpeg >/dev/null 2>&1 && [ ! -x /opt/homebrew/bin/ffmpeg ] && [
 fi
 say "ffmpeg: ok"
 
+if [ "${MONTARA_REQUIRE_CLOSED:-0}" = 1 ]; then
+  if ! command -v lsof >/dev/null 2>&1; then
+    say "Could not check whether Companion is running."; exit 1
+  fi
+  if lsof -t -iTCP:47820 -sTCP:LISTEN >/dev/null 2>&1; then
+    say "Wait for Montara work to finish, quit Companion, then reopen this installer."
+    exit 1
+  fi
+fi
+if [ -n "${MONTARA_EXPECTED_ENGINE:-}" ]; then
+  expected="$(curl -fsSL "https://api.github.com/repos/amehcgracia-byte/Montara/contents/engine?ref=$REF" | "$PY" -c 'import json,sys; print(json.load(sys.stdin)["sha"])')"
+  if [ "$expected" != "$MONTARA_EXPECTED_ENGINE" ]; then
+    say "The installer does not match the Editor version on this page."; exit 1
+  fi
+fi
+
 # Do not replace code underneath a local mix, proxy or video render.
 if command -v lsof >/dev/null 2>&1; then
+  # The newer Companion reports in-flight jobs even between FFmpeg processes.
+  # Never kill an active render, proxy conversion or local mix during updates.
+  health="$(curl -fsS --max-time 3 http://127.0.0.1:47820/health 2>/dev/null || true)"
+  if lsof -t -iTCP:47820 -sTCP:LISTEN >/dev/null 2>&1 && [ -z "$health" ]; then
+    say "Companion did not respond to the safety check; update cancelled.";exit 1
+  fi
+  if [ -n "$health" ] && printf '%s' "$health" | "$PY" -c 'import json,sys;sys.exit(0 if json.load(sys.stdin).get("busy") else 1)' 2>/dev/null; then
+    say "A Companion job is active. Finish it before updating.";exit 1
+  fi
   for listener in $(lsof -t -iTCP:47820 -sTCP:LISTEN 2>/dev/null || true); do
     if pgrep -P "$listener" >/dev/null 2>&1; then say "Wait for the current Montara work to finish, then run this installer again.";exit 1;fi
   done
@@ -46,6 +97,9 @@ if command -v lsof >/dev/null 2>&1; then
       *"$DIR/companion.py"*) ;;
       *) say "Port 47820 belongs to another application; nothing was replaced."; exit 1 ;;
     esac
+    if [ "${MONTARA_REQUIRE_CLOSED:-0}" = 1 ]; then
+      say "Companion started during setup. Wait for work to finish and quit it first."; exit 1
+    fi
     say "Stopping the idle Companion before updating…"
     kill -TERM "$listener"
     for attempt in $(seq 50); do
@@ -111,6 +165,7 @@ fi
 if [ "${1:-}" = "--video" ] || [ "${MONTARA_VIDEO:-}" = "1" ]; then
   VIDEO="$DIR/video"; ROOT_RAW="https://raw.githubusercontent.com/amehcgracia-byte/Montara/$REF"
   VPY=""
+  if [ "$(uname -s)" = Darwin ]; then VPY="$PY"; else
   for candidate in python3.11 python3.12 python3.10 "$DIR/mixer/venv/bin/python" "$PY"; do
     if command -v "$candidate" >/dev/null 2>&1 && "$candidate" -c 'import sys;sys.exit(0 if (3,10)<=sys.version_info[:2]<=(3,12) else 1)' 2>/dev/null; then VPY="$(command -v "$candidate")";break;fi
   done
@@ -118,25 +173,59 @@ if [ "${1:-}" = "--video" ] || [ "${MONTARA_VIDEO:-}" = "1" ]; then
     brew install python@3.11
     VPY="$(brew --prefix python@3.11)/bin/python3.11"
   fi
+  fi
   [ -n "$VPY" ] || { say "The video renderer needs Python 3.10–3.12. Install Python 3.11, then run this installer with --video."; exit 1; }
-  SHA="$(curl -fsSL "https://api.github.com/repos/amehcgracia-byte/Montara/contents/engine?ref=$REF" | "$VPY" -c 'import json,sys; print(json.load(sys.stdin)["sha"])')"
-  mkdir -p "$VIDEO/brand"
+  SHA="${expected:-$(curl -fsSL "https://api.github.com/repos/amehcgracia-byte/Montara/contents/engine?ref=$REF" | "$VPY" -c 'import json,sys; print(json.load(sys.stdin)["sha"])')}"
+  [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || { say "Invalid Editor version."; exit 1; }
+  mkdir -p "$VIDEO"
+  stage=$(mktemp -d "$VIDEO/.update.XXXXXXXX")
+  trap 'rm -rf "$stage"' EXIT
+  mkdir -p "$stage/engine" "$stage/brand"
+  curl -fsSL "https://codeload.github.com/amehcgracia-byte/zucker_videos/tar.gz/$SHA" | tar -xz -C "$stage/engine" --strip-components=1
+  for f in local_video.py video_recipe.py; do curl -fsSL "$RAW/$f" -o "$stage/$f"; done
+  for f in montara-logo.png montara-watermark.png; do curl -fsSL "$ROOT_RAW/web/brand/$f" -o "$stage/brand/$f"; done
+  # Stage a fresh environment; a failed dependency install leaves the old one intact.
+  "$VPY" -m venv "$stage/venv"
+  "$stage/venv/bin/python" -m pip install -q 'numpy>=1.26,<2' 'scipy>=1.11,<1.15' 'opencv-python-headless>=4.9,<4.12' 'pillow>=10' 'flask>=3'
+  (cd "$stage/engine" && ZUCKER_DATA_ROOT="$stage/smoke" "$stage/venv/bin/python" -c 'import cv2, numpy, scipy; from core.stages.export import ExportStage')
+  printf '%s\n' "$SHA" > "$stage/ENGINE_COMMIT"
+  if [ "${MONTARA_REQUIRE_CLOSED:-0}" = 1 ] && lsof -t -iTCP:47820 -sTCP:LISTEN >/dev/null 2>&1; then
+    say "Companion started during setup. Wait for work to finish and quit it first."; exit 1
+  fi
   touch "$VIDEO/INSTALLING"
-  rm -rf "$VIDEO/engine.new" && mkdir -p "$VIDEO/engine.new"
-  curl -fsSL "https://codeload.github.com/amehcgracia-byte/zucker_videos/tar.gz/$SHA" | tar -xz -C "$VIDEO/engine.new" --strip-components=1
-  rm -rf "$VIDEO/engine" && mv "$VIDEO/engine.new" "$VIDEO/engine"
-  for f in local_video.py video_recipe.py; do curl -fsSL "$RAW/$f" -o "$VIDEO/$f"; done
-  for f in montara-logo.png montara-watermark.png; do curl -fsSL "$ROOT_RAW/web/brand/$f" -o "$VIDEO/brand/$f"; done
-  [ -x "$VIDEO/venv/bin/python" ] || "$VPY" -m venv "$VIDEO/venv"
-  "$VIDEO/venv/bin/python" -m pip install -q 'numpy>=1.26,<2' 'scipy>=1.11,<1.15' 'opencv-python-headless>=4.9,<4.12' 'pillow>=10' 'flask>=3'
-  (cd "$VIDEO/engine" && ZUCKER_DATA_ROOT="$VIDEO/state" "$VIDEO/venv/bin/python" -c 'from core.stages.export import ExportStage')
-  echo "$SHA" > "$VIDEO/ENGINE_COMMIT"
+  if [ -d "$VIDEO/engine" ] || [ -d "$VIDEO/brand" ]; then
+    previous=$(mktemp -d "$VIDEO/.previous.XXXXXXXX")
+    for f in engine ENGINE_COMMIT local_video.py video_recipe.py brand venv; do
+      [ ! -e "$VIDEO/$f" ] || mv "$VIDEO/$f" "$previous/$f"
+    done
+  fi
+  for f in engine local_video.py video_recipe.py brand venv ENGINE_COMMIT; do mv "$stage/$f" "$VIDEO/$f"; done
   rm -f "$VIDEO/INSTALLING"
+  rm -rf "$stage"
+  trap - EXIT
   say "Original-quality video renderer ready (editor ${SHA:0:7})"
 fi
 
-say "installed in $DIR · next time just type:  montara-companion"
+if [ "${MONTARA_REQUIRE_CLOSED:-0}" = 1 ]; then
+  mkdir -p "$HOME/Applications"
+  cat > "$HOME/Applications/Montara Companion.command" <<'EOF'
+#!/bin/bash
+export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+exec "$HOME/.montara-companion/bin/montara-companion"
+EOF
+  chmod +x "$HOME/Applications/Montara Companion.command"
+  say "Installed. Next time, open Montara Companion from Spotlight."
+else
+  say "installed in $DIR · next time just type:  montara-companion"
+fi
 echo
+# The native macOS .pkg registers a LaunchAgent after this script returns.
+# Never leave a background process attached to Installer's own lifecycle.
+if [ "${MONTARA_INSTALL_ONLY:-0}" = 1 ]; then
+  say "Installed files. macOS Installer will register and verify Companion."
+  exit 0
+fi
+
 if [ "${MONTARA_BACKGROUND:-0}" = 1 ]; then
   nohup "$PY" "$DIR/companion.py" > "$DIR/companion.log" 2>&1 < /dev/null &
   for attempt in $(seq 30); do

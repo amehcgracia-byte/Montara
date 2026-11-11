@@ -54,11 +54,14 @@ class VideoJobs:
     def runtime(self):
         python=self.home/'venv/bin/python';marker=self.home/'ENGINE_COMMIT'
         if (self.home/'INSTALLING').exists():return None
-        if not python.is_file() or not marker.is_file() or not (self.home/'local_video.py').is_file():return None
-        sha=marker.read_text().strip()
+        if not os.access(python, os.X_OK) or not (self.home/'local_video.py').is_file():return None
+        if not (self.home/'engine/core/stages/export.py').is_file():return None
+        try:sha=marker.read_text().strip()
+        except (OSError, UnicodeError):return None
         return {'engine':sha} if re.fullmatch('[a-f0-9]{40}',sha) else None
 
     def start(self,body,projects,find_original):
+        locate_started=time.monotonic()
         runtime=self.runtime()
         if not runtime:raise ValueError('Install the companion video renderer before exporting originals')
         recipe=validate(body.get('recipe'))
@@ -116,7 +119,8 @@ class VideoJobs:
             while output.exists() or output in reserved:
                 output=folder/(name+f' ({suffix}).mp4');suffix+=1
             progress=work/'progress.json'
-            manifest={'verified_originals':verified,'personal_logo':personal_logo,'recipe':recipe,'source_files':source_files,'master':str(master),'branding':branding,'work':str(work),'output':str(output),'progress':str(progress)}
+            manifest={'verified_originals':verified,'personal_logo':personal_logo,'recipe':recipe,'source_files':source_files,'master':str(master),'branding':branding,'work':str(work),'output':str(output),'progress':str(progress),'source_lookup_sec':round(time.monotonic()-locate_started,3),
+                      'spherical_cache':str(self.home/'spherical-cache'/runtime['engine'])}
             (work/'render.json').write_text(json.dumps(manifest))
             for key in [k for k,j in self.jobs.items() if j['status'] in ('ready','failed','cancelled')][:-30]:self.jobs.pop(key)
             self.jobs[token]={'diagnostics':recipe.get('diagnostics',[]),'status':'queued','progress':0,'path':output,'work':work,'snapshot':progress,'download_name':name+'.mp4',
@@ -130,6 +134,7 @@ class VideoJobs:
             with self.lock:
                 if job['status']=='cancelled':return
                 job['status']='rendering'
+                job['started_monotonic']=time.monotonic()
             try:
                 with (job['work']/'render.log').open('wb') as log:
                     with self.lock:
@@ -164,6 +169,8 @@ class VideoJobs:
         job=self.jobs.get(token)
         if not job:return None
         result={k:job[k] for k in ('status','progress','error','tasks','diagnostics') if k in job}
+        if job['status']=='rendering' and 'started_monotonic' in job:
+            result['elapsed_sec']=round(max(0.,time.monotonic()-job['started_monotonic']),1)
         if job['status']=='rendering':
             try:
                 snap=json.loads(job['snapshot'].read_text())

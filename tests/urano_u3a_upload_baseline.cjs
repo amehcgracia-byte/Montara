@@ -34,6 +34,7 @@ async function scenario(name, config) {
     isAudio: () => false,
     smallVersion: async () => {
       if (config.result === "throw") throw new Error("simulated FFmpeg error");
+      if (config.result === "download-failed") return {downloadFailed:true};
       if (config.result === "missing") return {missing:true};
       if (config.result === "proxy") return {
         file:{name:"original.small.mp4",size:2*1024*1024,type:"video/mp4"},
@@ -49,7 +50,7 @@ async function scenario(name, config) {
     send(payload) {recorded.push({route:this.url,name:payload.name,size:payload.size});}
   }
   const ctx = vm.createContext({
-    state, montaraCompanion:companion, XMLHttpRequest:FakeXHR,
+    AbortController, state, montaraCompanion:companion, XMLHttpRequest:FakeXHR,
     window:{confirm:message=>{prompts.push(message);return Boolean(config.approveOriginal);}},
     sendResumableUpload:async (payload,progress,registered,cancelled,extra)=>{
       recorded.push({route:"/montara/uploads",name:payload.name,size:payload.size,extra});
@@ -90,6 +91,7 @@ async function scenario(name, config) {
   await scenario("no_companion_300MiB",{companion:false,mb:300,expected:"none"});
   await scenario("companion_missing_10MiB",{companion:true,mb:10,result:"missing",expected:"none"});
   await scenario("companion_missing_300MiB",{companion:true,mb:300,result:"missing",expected:"none"});
+  await scenario("proxy_read_failed_no_original_prompt",{companion:true,mb:300,result:"download-failed",approveOriginal:true,expected:"none",expectedPrompt:0});
   await scenario("companion_failed_300MiB",{companion:true,mb:300,result:"null",expected:"none"});
   await scenario("companion_ffmpeg_throws_300MiB",{companion:true,mb:300,result:"throw",expected:"none"});
   await scenario("companion_success_300MiB",{companion:true,mb:300,result:"proxy",expected:"proxy",route:"/montara/uploads"});
@@ -99,11 +101,13 @@ async function scenario(name, config) {
   await scenario("restored_small_missing_original_300MiB",{companion:true,restoredSmall:true,mb:300,result:"missing",expectedPrompt:1,expected:"none"});
   await scenario("restored_small_no_companion_explicit_test_10MiB",{companion:false,restoredSmall:true,mb:10,approveOriginal:true,expectedPrompt:1,expected:"original",route:"/montara/uploads"});
 
+  await scenario("renamed_proxy_lookalike",{companion:false,name:"camera.small.mp4",mb:1100,restoredSmall:true,expectedPrompt:1,expected:"none"});
+
   // Manual consent must retain the old upload capability, without silent fallback.
   await scenario("manual_no_companion_2MiB",{companion:false,mb:2,approveOriginal:true,expectedPrompt:1,expected:"original",route:"/api/v1/wizard/upload"});
   await scenario("manual_no_companion_300MiB",{companion:false,mb:300,approveOriginal:true,expectedPrompt:1,expected:"original",route:"/montara/uploads"});
   await scenario("manual_failed_proxy_300MiB",{companion:true,mb:300,result:"throw",approveOriginal:true,expectedPrompt:1,expected:"original",route:"/montara/uploads"});
   // Stage audio routing remains unchanged; removing that path needs its own review.
   await scenario("legacy_stage_audio_10MiB",{companion:false,name:"session.wav",mb:10,expected:"original",route:"/montara/uploads"});
-  console.log("URANO_U3C_MANUAL_FALLBACK_PASS: 15 mocked cases; silent original uploads blocked, explicit test consent retains upload.");
+  console.log("URANO_U3C_MANUAL_FALLBACK_PASS: 17 mocked cases; silent original uploads blocked, explicit test consent retains upload.");
 })().catch(error=>{console.error(error);process.exitCode=1;});
