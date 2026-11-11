@@ -87,6 +87,22 @@ def initial_stage_gateway_blueprint(
     bp=Blueprint("urano_i51_original_jm_rpc", __name__,
                  url_prefix="/urano/v1/media")
 
+    @bp.after_request
+    def owner_upload_error_shape(response):
+        # Chema's native XHR expects error.message, not a bare string.
+        # Preserve status, content type and all non-upload endpoints. Never
+        # inspect successful (possibly streaming) media responses.
+        operation=(request.view_args or {}).get("operation")
+        if (operation in ("wizard/upload", "uploads") and response.status_code >= 400
+                and response.is_json):
+            payload=response.get_json(silent=True)
+            if isinstance(payload,dict) and isinstance(payload.get("error"),str):
+                payload["error"]={"message":payload["error"]}
+                response.set_data(json.dumps(payload,separators=(",",":")))
+                response.headers["Content-Type"]="application/json"
+                response.headers["Content-Length"]=str(len(response.get_data()))
+        return response
+
     @bp.route("/<project_id>/<path:operation>",
               methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
     def relay(project_id: str, operation: str):
