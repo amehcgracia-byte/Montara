@@ -56,8 +56,8 @@ _MAX_VIDEO = 256 * 1024 * 1024
 _MAX_RESULT = 1_000_000
 _UPLOAD_PART = re.compile(r"uploads/([a-f0-9]{32})(/finish)?\Z")
 _MAX_CHUNK = 16 * 1024 * 1024
-_PREVIEW = re.compile(r"wizard/review/preview/([0-9]{1,5})\\Z")
-_THUMB = re.compile(r"wizard/review/thumbnail/(assets-v2|[0-9a-f]{16,128})/([A-Za-z0-9_.-]{1,180})\\Z")
+_PREVIEW = re.compile(r"wizard/review/preview/([0-9]{1,5})\Z")
+_THUMB = re.compile(r"wizard/review/thumbnail/(assets-v2|[0-9a-f]{16,128})/([A-Za-z0-9_.-]{1,180})\Z")
 _MAX_PREVIEW = 128 * 1024 * 1024
 
 
