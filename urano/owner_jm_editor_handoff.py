@@ -54,4 +54,25 @@ def bind_open_jm_editor_project(
     except (OSError, KeyError, TypeError, AttributeError) as exc:
         raise EditorHandoffDenied("JM Engine state unavailable") from exc
     # Existing U13A registry uniquely binds folder to one Owner UUID.
-    return registry.bind_trusted(owner_id, project_id, project_id)
+    # A valid reopening must be idempotent; do not fail merely because a
+    # previous authenticated editing session already registered this folder.
+    try:
+        already = registry.resolve_internal(owner_id, project_id)
+    except ProjectNotFound:
+        already = None
+    if already is not None:
+        if already.resolve() != folder.resolve():
+            raise EditorHandoffDenied("JM project binding changed")
+        return EngineBinding(project_id, project_id)
+    try:
+        return registry.bind_trusted(owner_id, project_id, project_id)
+    except ValueError as exc:
+        # A second trusted transaction may have bound the same project in the
+        # meantime. Accept only the identical, physically checked mapping.
+        try:
+            already = registry.resolve_internal(owner_id, project_id)
+        except (ValueError, ProjectNotFound):
+            raise EditorHandoffDenied("JM project binding unavailable") from exc
+        if already.resolve() != folder.resolve():
+            raise EditorHandoffDenied("JM project binding changed") from exc
+        return EngineBinding(project_id, project_id)
