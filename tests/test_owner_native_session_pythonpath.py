@@ -19,7 +19,10 @@ class NativeMixerPythonPathTests(unittest.TestCase):
             site.mkdir(parents=True)
             for module in ("numpy","scipy","numba","librosa","soundfile",
                            "pyloudnorm","matchering"):
-                (site/module).mkdir()
+                if module=="soundfile":
+                    (site/"soundfile.py").write_text("version='pinned'\n")
+                else:
+                    (site/module).mkdir()
             (site/"montara_vendor_path_marker.py").write_text(
                 "value='only-the-bundled-packages'\n",encoding="utf-8")
             expected=str(site.resolve())
