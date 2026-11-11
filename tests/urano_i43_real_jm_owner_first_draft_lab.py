@@ -43,7 +43,8 @@ def main():
         folder.mkdir(parents=True)
         (folder/"project.json").write_text(
             json.dumps(new_project_document(folder.name)),encoding="utf-8")
-        proxy=temp/"synthetic-proxy.mp4"
+        (private/"WizardUploads").mkdir(exist_ok=True)
+        proxy=private/"WizardUploads"/"synthetic-proxy.mp4"
         subprocess.run([
             "ffmpeg","-hide_banner","-loglevel","error","-y",
             "-f","lavfi","-i","testsrc2=size=320x180:rate=12:duration=2",
