@@ -37,3 +37,26 @@ body #newVideo{display:none!important}
 /* The first Home animation belongs to the authenticated entry. Do not show
    half of the native Home animation during an explicit Stage launch. */
 html.montara-owner-stage-entry #home{visibility:hidden!important;animation:none!important}
+
+/* Compact vintage control: verified states only. An unchecked worker is amber,
+   never falsely shown as stopped; this is a beta diagnostic switch. */
+header.top .montara-owner-engine{display:flex;align-items:center;gap:7px;
+  flex-shrink:0;font-size:11px;letter-spacing:.04em;color:#bbb6b1}
+header.top .montara-owner-engine-led{width:8px;height:8px;border-radius:50%;
+  background:#d5a346;box-shadow:0 0 6px #d5a3467a}
+header.top .montara-owner-engine[data-status=on] .montara-owner-engine-led{
+  background:#52cc79;box-shadow:0 0 8px #52cc7988}
+header.top .montara-owner-engine[data-status=off] .montara-owner-engine-led{
+  background:#e86d62;box-shadow:0 0 7px #e86d6288}
+header.top .montara-owner-engine-switch{position:relative;display:block;width:36px;height:19px;
+  border:1px solid #686764;border-radius:11px;background:#252527;padding:0;
+  box-shadow:inset 0 1px 3px #000b;cursor:pointer}
+header.top .montara-owner-engine-switch .montara-owner-engine-knob{
+  position:absolute;top:2px;left:2px;width:13px;height:13px;border-radius:50%;
+  background:linear-gradient(#ede7de,#bbb4a9);box-shadow:0 1px 3px #0008;
+  transition:left .14s ease}
+header.top .montara-owner-engine[data-status=on] .montara-owner-engine-knob{left:18px}
+header.top .montara-owner-engine-switch:disabled{opacity:.55;cursor:wait}
+header.top #montaraOwnerAccount{margin-left:0}
+header.top .montara-owner-engine{margin-left:auto}
+@media(max-width:650px){header.top .montara-owner-engine{font-size:0;gap:4px}}
