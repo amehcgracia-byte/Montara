@@ -21,6 +21,7 @@ from urano.project_catalog import ProjectCatalog
 from urano.session_auth import SessionStore, SESSION_COOKIE
 
 ORIGIN="https://montara.test"
+REVISION="abcdef0123456789abcd"
 
 
 class StageCompanionGateway(unittest.TestCase):
@@ -46,7 +47,7 @@ class StageCompanionGateway(unittest.TestCase):
         @app.get("/api/v1/edit/native-recipe")
         def recipe():
             assert request.args.get("project_id")==str(folder)
-            return jsonify(engine="a"*40,revision=2,platform="youtube",
+            return jsonify(engine="a"*40,revision="+REVISION+",platform="youtube",
                 sources=[],segments=[])
         @app.get("/api/v1/edit/native-master")
         def audio():
@@ -91,7 +92,7 @@ class StageCompanionGateway(unittest.TestCase):
         self.assertEqual(r.status_code,200,r.get_data(as_text=True)[:170])
         self.assertEqual(r.json["engine"],"a"*40)
         master=self.client.get(
-            self.url+"edit/native-master?revision=2&project_id=owner-worker",
+            self.url+"edit/native-master?revision="+REVISION+"&project_id=owner-worker",
             base_url=ORIGIN,headers=self.headers)
         self.assertEqual(master.status_code,200,master.status)
         self.assertEqual(master.data,self.raw)
@@ -102,15 +103,15 @@ class StageCompanionGateway(unittest.TestCase):
     def test_foreign_project_and_unapproved_paths_denied(self):
         result=self.client.get(
             "/urano/v1/media/"+self.foreign.id+
-            "/edit/native-master?project_id=owner-worker&revision=2",
+            "/edit/native-master?project_id=owner-worker&revision="+REVISION+"",
             base_url=ORIGIN,headers=self.headers)
         self.assertEqual(result.status_code,404)
         for suffix in (
-            "edit/native-master?project_id=/tmp/other&revision=2",
+            "edit/native-master?project_id=/tmp/other&revision="+REVISION+"",
             "edit/native-master?project_id=owner-worker&revision=../../",
-            "edit/native-master?revision=2&project_id=owner-worker&path=/etc/passwd",
+            "edit/native-master?revision="+REVISION+"&project_id=owner-worker&path=/etc/passwd",
             "edit/native-recipe?project_id=owner-worker&path=/secret",
-            "edit/native-source/0?revision=2&project_id=owner-worker",
+            "edit/native-source/0?revision="+REVISION+"&project_id=owner-worker",
         ):
             with self.subTest(suffix=suffix):
                 result=self.client.get(self.url+suffix,base_url=ORIGIN,
@@ -119,7 +120,7 @@ class StageCompanionGateway(unittest.TestCase):
 
     def test_no_untrusted_master_without_csrf(self):
         response=self.client.get(
-            self.url+"edit/native-master?project_id=owner-worker&revision=2",
+            self.url+"edit/native-master?project_id=owner-worker&revision="+REVISION+"",
             base_url=ORIGIN,headers={"Origin":ORIGIN})
         self.assertEqual(response.status_code,403)
 
