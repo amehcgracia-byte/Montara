@@ -55,50 +55,84 @@
     cancel.textContent = 'Close';
     const accountStatus = document.createElement('p');
     accountStatus.setAttribute('role', 'alert');
-    const closeEngine = document.createElement('button');
-    closeEngine.type = 'button'; closeEngine.className = 'btn ghost small';
-    closeEngine.textContent = 'Close idle Engine';
+    const engineControl = document.createElement('div');
+    engineControl.id = 'montaraOwnerEngineControl';
+    engineControl.className = 'montara-owner-engine';
+    const engineLed = document.createElement('span');
+    engineLed.className = 'montara-owner-engine-led';
+    engineLed.setAttribute('aria-hidden','true');
+    const engineLabel = document.createElement('span');
+    engineLabel.textContent = 'Engine';
+    const engineSwitch = document.createElement('button');
+    engineSwitch.type = 'button';
+    engineSwitch.className = 'montara-owner-engine-switch';
+    engineSwitch.id = 'montaraOwnerEngineSwitch';
+    engineSwitch.setAttribute('aria-label','Verify or start private Engine');
+    engineSwitch.setAttribute('aria-pressed','false');
+    const switchKnob = document.createElement('span');
+    switchKnob.className = 'montara-owner-engine-knob';
+    engineSwitch.append(switchKnob);
+    engineControl.append(engineLed, engineLabel, engineSwitch);
+    engineControl.dataset.status = 'unknown'; // A running worker MUST NOT be shown as off without verification.
+    const ownProject = location.pathname.match(/\/projects\/([0-9a-f-]{36})\//i)?.[1];
+    function engineState(status) {
+      engineControl.dataset.status = status;
+      engineSwitch.setAttribute('aria-pressed',String(status==='on'));
+      engineSwitch.setAttribute('aria-label',status==='on'
+        ? 'Close verified idle Engine' : 'Verify or start private Engine');
+      engineControl.title = status==='unknown' ? 'Engine status not checked' :
+        status==='on' ? 'Private Engine verified running' :
+        status==='off' ? 'Private Engine confirmed stopped' : 'Checking Engine';
+    }
+    window.addEventListener('montara-owner-engine-ready',()=>engineState('on'));
     const actions = document.createElement('div'); actions.className = 'actions';
-    actions.append(closeEngine, signOut, cancel);
+    actions.append(signOut, cancel);
     accountDialog.append(accountTitle, actions, accountStatus);
-    closeEngine.addEventListener('click', async () => {
-      const ownProject = location.pathname.match(/\/projects\/([0-9a-f-]{36})\//i)?.[1];
-      if(!ownProject) return;
-      closeEngine.disabled = true;
-      accountStatus.textContent = 'Checking current project activity…';
+    engineSwitch.addEventListener('click', async () => {
+      if(!ownProject || engineSwitch.disabled)return;
+      engineSwitch.disabled = true;
+      const wasOn = engineControl.dataset.status==='on';
+      engineState('checking');
+      accountStatus.textContent='';
       try {
-        // The Owner-bound bridge retrieves only this project's state.
-        // Refuse to stop on any unavailable or uncertain status.
         const token = await csrf();
-        const admission = await api('projects/'+encodeURIComponent(ownProject)+'/ensure',{
+        const admission=await api('projects/'+encodeURIComponent(ownProject)+'/ensure',{
           method:'POST',headers:{'X-Urano-CSRF':token,Origin:location.origin}
         });
         if(admission.state!=='ready' || !Number.isSafeInteger(admission.generation))
-          throw Error('Private Engine verification failed. Nothing was stopped.');
-        const current = await fetch('/urano/v1/media/'+encodeURIComponent(ownProject)+'/wizard/status', {
+          throw Error('Private Engine verification failed.');
+        if(!wasOn) {
+          engineState('on');
+          return;
+        }
+        // No switch-off unless the exact, authenticated worker reports idle.
+        const current=await fetch('/urano/v1/media/'+encodeURIComponent(ownProject)+'/wizard/status',{
           credentials:'same-origin',cache:'no-store',
           headers:{'X-Urano-CSRF':token,
                    'X-Montara-Engine-Generation':String(admission.generation)}
         });
-        if(!current.ok) throw Error('Project status is not verified. Nothing has been stopped.');
-        const state = await current.json();
-        if(state.status !== 'idle')
-          throw Error('Project is not idle ('+String(state.status||'unknown')+'). Finish or cancel its work first.');
-        if(!window.confirm('Close the idle Engine for this project? Project files will remain saved.')) {
-          accountStatus.textContent = 'Engine was not closed.';
+        if(!current.ok)throw Error('Project status is not verified. Nothing was stopped.');
+        const state=await current.json();
+        if(state.status!=='idle')
+          throw Error('Engine is busy ('+String(state.status||'unknown')+'). Nothing was stopped.');
+        if(!window.confirm('Close this idle Engine? Saved project files will remain.')){
+          engineState('on');
           return;
         }
         const result=await api('projects/'+encodeURIComponent(ownProject)+'/close',{
           method:'POST',headers:{'X-Urano-CSRF':token,Origin:location.origin}
         });
-        if(result.state!=='stopped')throw Error('Engine closure was not confirmed.');
-        accountStatus.textContent='Engine closed. Project files remain saved. Returning to projects…';
-        location.replace('/urano/v1/entry');
-      }catch(error){accountStatus.textContent=error.message}
-      finally{closeEngine.disabled=false}
+        if(result.state!=='stopped')throw Error('Engine shutdown was not confirmed.');
+        engineState('off');
+        accountStatus.textContent='Engine closed. Saved projects are preserved.';
+      }catch(error){
+        engineState('unknown');
+        accountStatus.textContent=error.message||'Engine state not verified.';
+        accountDialog.showModal();
+      }finally{engineSwitch.disabled=false}
     });
     document.body.append(accountDialog);
-    oldHeader.append(account);
+    oldHeader.append(engineControl,account);
     account.addEventListener('click', () => accountDialog.showModal());
     cancel.addEventListener('click', () => accountDialog.close());
     signOut.addEventListener('click', async () => {
