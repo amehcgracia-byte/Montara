@@ -62,9 +62,11 @@ class SystemdDirect:
 
 
 class DemoBroker:
-    def __init__(self,bundle,*,jm_bundle=None,resources=None):
+    def __init__(self,bundle,*,jm_bundle=None,resources=None,private_preview_limit_mib=256):
         self.bundle=Path(bundle)
         self.jm_bundle=Path(jm_bundle) if jm_bundle is not None else None
+        from urano.jm_private_proxy_overlay import private_proxy_limit_mib
+        self.private_preview_limit_mib=private_proxy_limit_mib(private_preview_limit_mib)
         self.resources=resources if resources is not None else WorkerResourceProfile()
         self.ledger=JobRecoveryLedger(LEDGER)
         self.control=RestrictedTargetControl(self.ledger,SystemdDirect())
@@ -95,7 +97,9 @@ class DemoBroker:
                 "-u","/opt/montara/broker/private_broker_worker.py",
                 "/opt/montara-engine",unit,
                 *([project_id,str(lease.generation)] if project_id!=PROJECT else []),
-                *(["--jm-bundle","/opt/montara-jm"] if self.jm_bundle is not None else []),
+                *(["--jm-bundle","/opt/montara-jm",
+                    "--private-proxy-limit-mib",str(self.private_preview_limit_mib)]
+                  if self.jm_bundle is not None else []),
             ])
             cmd(command,timeout=14)
             ready_path=Path("/run")/unit/READY_FILE
@@ -291,6 +295,7 @@ def main():
     parser.add_argument("--worker-memory-mb",type=int,default=768)
     parser.add_argument("--worker-cpu-percent",type=int,default=100)
     parser.add_argument("--worker-tasks-max",type=int,default=64)
+    parser.add_argument("--private-proxy-limit-mib",type=int,default=256)
     args=parser.parse_args()
     if os.geteuid()!=0:
         raise RuntimeError("Only root-owned service may manage the isolated systemd units")
@@ -315,7 +320,8 @@ def main():
             raise ValueError("Private JM bundle must be root-owned and complete")
     resources=WorkerResourceProfile(args.worker_memory_mb,args.worker_cpu_percent,
                                     args.worker_tasks_max)
-    broker=DemoBroker(args.bundle,jm_bundle=args.jm_bundle,resources=resources)
+    broker=DemoBroker(args.bundle,jm_bundle=args.jm_bundle,resources=resources,
+                      private_preview_limit_mib=args.private_proxy_limit_mib)
     if SOCKET.is_symlink():
         raise RuntimeError("Socket symlink forbidden")
     if SOCKET.exists():
