@@ -33,7 +33,9 @@ class OwnerModeEntryTest(unittest.TestCase):
         self.root = Path(self.temp.name)
         web = self.root / "web"
         web.mkdir()
-        (web / "index.html").write_text(HEADER + MODE, encoding="utf-8")
+        (web / "index.html").write_text(
+            HEADER + '<section class="screen" id="home"><h1 class="intro-name">Montara</h1></section>' + MODE,
+            encoding="utf-8")
         for asset in ("montara.css", "push-pack.css", "mark.svg"):
             (web / asset).write_text("/* pinned JM test asset */", encoding="utf-8")
         self.sessions = SessionStore(self.root / "sessions.sqlite3")
