@@ -32,6 +32,15 @@ class OriginalJMUnixTransportTests(unittest.TestCase):
         def write():
             raise AssertionError("Lab client must never send edits")
 
+        @app.post("/api/v1/wizard/projects/new")
+        def original_new():
+            return jsonify(ok=True)
+
+        @app.post("/api/v1/wizard/draft")
+        def original_draft():
+            from flask import request
+            return jsonify(project_id=request.get_json().get("project_id"))
+
         self.server, self.path = create_private_jm_wsgi_server(
             app, self.directory)
         self.thread = threading.Thread(
@@ -73,6 +82,27 @@ class OriginalJMUnixTransportTests(unittest.TestCase):
             ):
                 with self.subTest(path=path), self.assertRaises(PermissionError):
                     conn.get_safe_read(path)
+
+    def test_only_original_first_stage_writes_cross_unix_socket(self):
+        with self.connection() as conn:
+            status, kind, body = conn.post_first_stage_json(
+                "/api/v1/wizard/projects/new", {})
+            self.assertEqual(status, 200)
+            self.assertIn(b"true", body)
+            status, kind, body = conn.post_first_stage_json(
+                "/api/v1/wizard/draft", {
+                    "name": "Owner", "platform": "youtube",
+                    "project_id": "owner-canonical-uuid",
+                })
+            self.assertEqual(status, 200)
+            self.assertIn(b"owner-canonical-uuid", body)
+            for path in ("/api/v1/wizard/start",
+                         "/montara/uploads", "/api/v1/wizard/review/render"):
+                with self.subTest(path=path), self.assertRaises(PermissionError):
+                    conn.post_first_stage_json(path, {})
+            with self.assertRaises(ValueError):
+                conn.post_first_stage_json("/api/v1/wizard/draft",
+                    {"too_large": "A" * 256_001})
 
     def test_static_assets_only_if_from_trusted_manifest(self):
         web = self.directory / "web"
