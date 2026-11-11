@@ -107,7 +107,7 @@ def owner_mode_entry_blueprint(*, sessions: SessionStore, https_origin: str,
         raise ValueError("Pinned Chema header action changed")
     header = header.replace(new_project,
         '<button class="btn ghost small" id="ownerLogout" type="button">Salir</button>')
-    // Project button is inserted by the shared picker, not duplicated here.
+    # Project button is inserted by the shared picker, not duplicated here.
 
     page = ('''<!doctype html><html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
