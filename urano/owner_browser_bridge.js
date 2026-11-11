@@ -34,7 +34,7 @@
     if (parsed.origin !== location.origin) return null;
     const path = parsed.pathname;
     if (!path.startsWith('/api/v1/') && !path.startsWith('/montara/')) return null;
-    const uploadPart = /^\\/montara\\/uploads\\/([a-f0-9]{32})(\\/finish)?$/.exec(path);
+    const uploadPart = new RegExp("^/montara/uploads/([a-f0-9]{32})(/finish)?$").exec(path);
     const operation = routes[path] || (uploadPart
       ? 'uploads/' + uploadPart[1] + (uploadPart[2] || '') : null);
     if (!operation || parsed.search || parsed.hash) {
