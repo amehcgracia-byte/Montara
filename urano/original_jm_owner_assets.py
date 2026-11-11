@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from flask import Blueprint, abort, make_response, request, send_from_directory
+from flask import Blueprint, Response, abort, make_response, request, send_from_directory
 
 from urano.project_catalog import ProjectCatalog, ProjectNotFound
 from urano.session_auth import SESSION_COOKIE, SessionStore
@@ -20,6 +20,7 @@ from urano.private_jm_wsgi_socket import pinned_jm_static_assets
 def original_editor_assets_blueprint(
     catalog: ProjectCatalog, sessions: SessionStore, *,
     https_origin: str, web_root: Path,
+    enable_browser_pilot: bool = False,
 ) -> Blueprint:
     root = Path(web_root).resolve(strict=True)
     if not root.is_dir() or not (root / "index.html").is_file():
@@ -51,7 +52,35 @@ def original_editor_assets_blueprint(
     @bp.get("/<project_id>/")
     def index(project_id: str):
         authorize(project_id)
-        return deliver("index.html")
+        if not enable_browser_pilot:
+            return deliver("index.html")
+        # Never edit Chema's original source or insert a new editor. Inject a
+        # separately removable, reviewed URL adapter BEFORE its existing JS.
+        original=(root / "index.html").read_text(encoding="utf-8")
+        first_script='<script src="mix-levels.js"></script>'
+        if original.count(first_script)!=1:
+            abort(503)
+        bootstrap=(
+            '<script src="owner-bridge.js" data-owner-project="'
+            +project_id+'"></script>'
+        )
+        response=make_response(original.replace(
+            first_script, bootstrap+"\\n"+first_script, 1))
+        response.headers["Content-Type"]="text/html; charset=utf-8"
+        response.headers["Cache-Control"]="private, no-store"
+        response.headers["X-Content-Type-Options"]="nosniff"
+        response.headers["X-Frame-Options"]="DENY"
+        return response
+
+    @bp.get("/<project_id>/owner-bridge.js")
+    def bridge(project_id: str):
+        authorize(project_id)
+        if not enable_browser_pilot:
+            abort(404)
+        source=Path(__file__).with_name("owner_browser_bridge.js")
+        return Response(source.read_bytes(),mimetype="application/javascript",
+                        headers={"Cache-Control":"private, no-store",
+                                 "X-Content-Type-Options":"nosniff"})
 
     @bp.get("/<project_id>/<path:filename>")
     def static(project_id: str, filename: str):
