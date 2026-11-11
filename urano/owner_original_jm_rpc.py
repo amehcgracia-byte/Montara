@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import re
+from contextlib import closing
 from http.client import HTTPException
 
 from flask import Blueprint, Response, jsonify, request
@@ -107,7 +108,7 @@ def initial_stage_gateway_blueprint(
                 return jsonify(error="Engine generation required"),409
             generation=int(raw_generation)
         try:
-            with connect_worker(token,csrf,project_id,generation) as conn:
+            with closing(connect_worker(token,csrf,project_id,generation)) as conn:
                 headers={"Cache-Control":"no-store"}
                 if request.method=="POST":
                     headers["Content-Type"]=request.content_type
