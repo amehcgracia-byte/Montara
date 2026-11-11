@@ -27,6 +27,9 @@
     '/api/v1/wizard/review/replace': 'wizard/review/replace',
     '/api/v1/wizard/review/render': 'wizard/review/render',
     '/api/v1/edit/native-recipe': 'edit/native-recipe',
+    '/api/v1/edit/timeline': 'edit/timeline',
+    '/api/v1/edit/shot': 'edit/shot',
+    '/api/v1/edit/shot/frame': 'edit/shot/frame',
     '/montara/uploads': 'uploads',
   });
   const nativeFetch = window.fetch.bind(window);
@@ -63,15 +66,25 @@
       [...parsed.searchParams.keys()].length <= 2;
     const recipeQuery = operation === 'edit/native-recipe' &&
       parsed.searchParams.size === 1 && parsed.searchParams.has('project_id');
+    const timelineQuery = operation === 'edit/timeline' &&
+      parsed.searchParams.size === 1 && parsed.searchParams.get('kind') === 'music';
+    const shotQuery = operation === 'edit/shot' &&
+      parsed.searchParams.size === 1 && /^[0-9]{1,5}$/.test(parsed.searchParams.get('index') || '');
+    const frameQuery = operation === 'edit/shot/frame' &&
+      parsed.searchParams.size === 3 &&
+      ['index','choice','revision'].every(k =>
+        /^[0-9]{1,9}$/.test(parsed.searchParams.get(k) || ''));
     const videoVersion = Boolean(shotPreview) &&
       parsed.searchParams.size === 1 && /^[A-Za-z0-9_.-]{0,80}$/.test(parsed.searchParams.get('v') || '');
     if (!operation || parsed.hash ||
-        (parsed.search && !isStatusPoll && !reviewQuery && !recipeQuery && !videoVersion)) {
+        (parsed.search && !isStatusPoll && !reviewQuery && !recipeQuery &&
+         !timelineQuery && !shotQuery && !frameQuery && !videoVersion)) {
       return { blocked: true };
     }
     return { path: base + operation +
       (isStatusPoll || recipeQuery ? '?project_id=owner-worker' :
-       reviewQuery ? parsed.search : videoVersion ? parsed.search : ''), operation };
+       reviewQuery || timelineQuery || shotQuery || frameQuery || videoVersion ?
+       parsed.search : ''), operation };
   };
 
   const csrf = async () => {
@@ -243,6 +256,35 @@
             this.load();
           }).catch(() => {
             if (latest.get(this) === job) this.dispatchEvent(new Event('error'));
+          });
+        },
+      });
+    }
+  }
+
+  // Stage 360 shot editor loads a frame directly in <img>; use the
+  // same scoped, CSRF-protected blob conversion as for review thumbnails.
+  if (typeof HTMLImageElement !== 'undefined') {
+    const descriptor = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype,'src');
+    if (descriptor && descriptor.get && descriptor.set) {
+      const latest = new WeakMap();
+      Object.defineProperty(HTMLImageElement.prototype,'src',{
+        configurable:true,enumerable:descriptor.enumerable,
+        get(){return latest.get(this)?.original || descriptor.get.call(this);},
+        set(value){
+          const original=String(value);
+          const target=resolve(original);
+          if (!target || target.blocked || target.operation!=='edit/shot/frame') {
+            latest.delete(this);
+            return descriptor.set.call(this,value);
+          }
+          const job={original};
+          latest.set(this,job);
+          descriptor.set.call(this,'');
+          getReviewBlob(original).then(url=>{
+            if(latest.get(this)===job)descriptor.set.call(this,url);
+          }).catch(()=>{
+            if(latest.get(this)===job)this.dispatchEvent(new Event('error'));
           });
         },
       });
