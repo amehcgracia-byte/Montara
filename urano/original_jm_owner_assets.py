@@ -65,17 +65,15 @@ def original_editor_assets_blueprint(
             +project_id+'"></script>'
             '<script src="/urano/v1/entry/picker.js"></script>'
         )
-        if original.count("</head>") != 1:
-            abort(503)
-        original = original.replace("</head>",
-            '<link rel="stylesheet" href="/urano/v1/entry/picker.css"></head>', 1)
-        # In Owner, the logo returns to the mode chooser. Never restart a
-        # second intro after an already-authenticated project was opened.
+        if "</head>" in original:
+            original = original.replace("</head>",
+                '<link rel="stylesheet" href="/urano/v1/entry/picker.css"></head>', 1)
+        # In Owner the brand returns to the chooser, without replaying Home.
+        # Only the expected exact brand anchor is adapted, never other buttons.
         logo_nav = 'class="brand" href="#" data-go="home"'
-        if original.count(logo_nav) != 1:
-            abort(503)
-        original = original.replace(logo_nav,
-            'class="brand" href="#" data-go="mode"', 1)
+        if original.count(logo_nav) == 1:
+            original = original.replace(logo_nav,
+                'class="brand" href="#" data-go="mode"', 1)
         response=make_response(original.replace(
             first_script, bootstrap+"\\n"+first_script, 1))
         response.headers["Content-Type"]="text/html; charset=utf-8"
