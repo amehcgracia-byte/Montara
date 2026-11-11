@@ -60,7 +60,7 @@ def patched_original_resumable_upload(original: str) -> str:
         # original video; only the reviewed remote proxy ceiling increases.
         # Do not trust an arbitrary video_preview=true on a raw video.
         lossless_audio = bool(isinstance(name, str) and re.search(
-            r"\\.(?:wav|aif|aiff|mp3|m4a|flac|ogg|opus|wv)\\.(?:flac|wv)\\Z",
+            r"\.(?:wav|aif|aiff|mp3|m4a|flac|ogg|opus|wv)\.(?:flac|wv)\Z",
             name, re.IGNORECASE))
         video_proxy = bool(body.get('video_preview') is True
             and isinstance(name, str) and name.lower().endswith('.small.mp4'))
