@@ -16,10 +16,16 @@ SCRIPT = r"""'use strict';
 const message = document.querySelector('#ownerMessage');
 const modeSection = document.querySelector('#mode');
 const homeSection = document.querySelector('#home');
+const originalChemaHome = homeSection.innerHTML;
 let homeTimer = null;
 function showHome() {
   clearTimeout(homeTimer);
   modeSection.hidden = true;
+  // Chema's CSS intro is attached to the SVG/letter elements. Recreate
+  // those SAME original elements to restart its exact animation every time,
+  // instead of resuming their already-finished timeline.
+  homeSection.hidden = true;
+  homeSection.innerHTML = originalChemaHome;
   homeSection.hidden = false;
   document.body.classList.add('is-intro');
   window.MontaraProjectPicker?.setScope('all');
