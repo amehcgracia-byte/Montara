@@ -20,7 +20,7 @@ from contextlib import closing
 from urllib.parse import urlencode
 from http.client import HTTPException
 
-from flask import Blueprint, Response, jsonify, request
+from flask import Blueprint, Response, jsonify, request, stream_with_context
 
 from urano.first_valid_upload_gate import valid_first_upload
 from urano.jm_private_proxy_overlay import private_proxy_limit_mib
@@ -46,6 +46,7 @@ _ALLOWED = {
     ("POST", "wizard/review/replace"): "/api/v1/wizard/review/replace",
     ("POST", "wizard/review/render"): "/api/v1/wizard/review/render",
     ("GET", "edit/native-recipe"): "/api/v1/edit/native-recipe",
+    ("GET", "edit/native-master"): "/api/v1/edit/native-master",
     ("GET", "edit/timeline"): "/api/v1/edit/timeline",
     ("PATCH", "edit/timeline"): "/api/v1/edit/timeline",
     ("GET", "edit/shot"): "/api/v1/edit/shot",
@@ -121,6 +122,16 @@ def initial_stage_gateway_blueprint(
                   and request.args["project_id"]):
                 # Do not expose actual worker filesystem paths.
                 pass
+            elif (request.method=="GET" and operation=="edit/native-master"
+                  and set(request.args)=={"project_id","revision"}
+                  and all(len(request.args.getlist(k))==1 for k in request.args)
+                  and request.args["project_id"]
+                  and re.fullmatch(r"[0-9]{1,10}",request.args["revision"])):
+                # The local isolated worker alone resolves owner-worker into
+                # its trusted physical project directory.
+                path+="?"+urlencode({
+                    "project_id":"owner-worker",
+                    "revision":request.args["revision"]})
             elif (request.method=="GET" and operation=="edit/timeline"
                   and set(request.args)=={"kind"}
                   and request.args.get("kind")=="music"
@@ -250,6 +261,51 @@ def initial_stage_gateway_blueprint(
                 return jsonify(error="Invalid preview byte range"),416
         else:
             range_header=None
+        if request.method=="GET" and operation=="edit/native-master":
+            # Master audio must be copied to the user's LOCAL Companion;
+            # lossless media is often much larger than JSON. Keep a bounded
+            # iterator over one broker-authorized worker FD, never buffer
+            # the whole file in the portal, and close on disconnect.
+            try:
+                conn=connect_worker(token,csrf,project_id,generation)
+                conn.request("GET",path,headers={"Cache-Control":"no-store"})
+                upstream=conn.getresponse()
+                length=upstream.getheader("Content-Length","")
+                if (not length.isascii() or not length.isdecimal()
+                        or int(length)>2*1024**3):
+                    conn.close()
+                    return jsonify(error="Invalid private audio length"),503
+                if upstream.status!=200:
+                    # Return structured JSON error, not a binary attachment.
+                    data=upstream.read(_MAX_RESULT+1)
+                    code=upstream.status
+                    conn.close()
+                    if len(data)>_MAX_RESULT:
+                        return jsonify(error="Invalid Stage master"),503
+                    return Response(data,status=code,
+                                    mimetype="application/json")
+                def chunks():
+                    read_total=0
+                    try:
+                        while True:
+                            chunk=upstream.read(128*1024)
+                            if not chunk:break
+                            read_total+=len(chunk)
+                            if read_total>2*1024**3:
+                                raise IOError("Private audio cap exceeded")
+                            yield chunk
+                    finally:
+                        conn.close()
+                result=Response(stream_with_context(chunks()),
+                                status=200,mimetype="application/octet-stream",
+                                direct_passthrough=True)
+                result.headers["Content-Length"]=length
+                result.headers["Cache-Control"]="no-store"
+                result.headers["X-Content-Type-Options"]="nosniff"
+                result.headers["X-Montara-Engine-Generation"]=str(generation)
+                return result
+            except (OSError,ValueError,TimeoutError,HTTPException,RuntimeError):
+                return jsonify(error="Private Stage master unavailable"),503
         try:
             with closing(connect_worker(token,csrf,project_id,generation)) as conn:
                 headers={"Cache-Control":"no-store"}
