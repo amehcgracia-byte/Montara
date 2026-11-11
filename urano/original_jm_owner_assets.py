@@ -159,6 +159,25 @@ def original_editor_assets_blueprint(
                 or any(part.is_symlink() for part in selected.parents if part == root
                        or root in part.parents)):
             abort(404)
+        if enable_browser_pilot and filename == "montara.js":
+            # The pinned JM editor renders "Ready · lossless" before checking
+            # error for Companion artifacts. Adapt only the served Owner copy:
+            # show its real f.error, rather than replacing it with a CSS
+            # "Transfer failed" placeholder. Original file is immutable.
+            source = selected.read_text(encoding="utf-8")
+            original_state = ('f.small ? "Ready · lossless" : '
+                              'f.kind === "error" ? escapeHtml(f.error)')
+            corrected_state = ('f.kind === "error" ? '
+                               'escapeHtml(f.error || "Transfer failed") : '
+                               'f.small ? "Ready · lossless"')
+            if original_state in source:
+                if source.count(original_state) != 1:
+                    abort(503)
+                source = source.replace(original_state, corrected_state, 1)
+            return Response(source, mimetype="application/javascript",
+                            headers={"Cache-Control":"private, no-store",
+                                     "X-Content-Type-Options":"nosniff",
+                                     "X-Frame-Options":"DENY"})
         return deliver(filename)
 
     return bp
