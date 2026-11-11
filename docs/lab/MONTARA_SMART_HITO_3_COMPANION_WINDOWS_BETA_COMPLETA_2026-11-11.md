@@ -1,3 +1,20 @@
+## CIERRE FUNCIONAL: MP4 nativo real en Windows — PASS
+
+**Prueba de aceptación del hito 3 completada:** GitHub Actions Windows runner, workflow `fer-smart-companion-package.yml`, [run #43038849790](https://github.com/amehcgracia-byte/Montara/actions/runs/43038849790), step **Render an actual 1080p MP4 on Windows from local originals — SUCCESS**.
+
+Se instaló el ZIP final desde una carpeta temporal, se crearon clips sintéticos con FFmpeg y se llamó al **`VideoJobs` ORIGINAL de Chema** con la adaptación Windows y el Engine `b867b3c`. Resultado concreto del log:
+
+```json
+{"SMART_WINDOWS_NATIVE_REAL_MP4_PASS":true,"engine":"b867b3c72af8fe4685b487bcf1e09ffcc2a7c82b","mp4_bytes":4218608,"originals_uploaded":false,"rendered_resolution":"1920x1080","saved_inside_selected_project":true,"source_untouched":true}
+```
+
+También PASS en el mismo Windows runner: instalación del Engine Python 3.11, import de `ExportStage`, Companion local en puerto 47820, estado `/health` con `local_video.engine` exacto, FFmpeg presente, origen Cloudflare autorizado y origen externo rechazado. Comprobación de PowerShell AST para instalador y bandeja.
+
+**Distribución final verificable:** `Montara-SMART-Beta-Windows-COMPLETO.zip`, 160 archivos; SHA256 del ZIP interior descargado del run **`384db08a6dc36cb54ea5069103dd771e5c6351a9772e5b2ba18c5d7d29af6c18`**. Manifiesto SHA-256 de 159 archivos verificado, sin credenciales.
+
+Esto permite declarar **HITO 3/5 COMPLETADO TÉCNICAMENTE**. No confundir con haber instalado aún el paquete en el equipo personal de Fernando ni con haber realizado el E2E Google → Owner → Companion → MP4: eso corresponde a los hitos 4 y 5.
+
+---
 # MONTARA SMART — Hito 3/5: Companion Windows beta y renderizador local
 
 Fecha: 11 de noviembre de 2026. Rama: `fernando/integracion`. **No fusionar a `main` antes de la validación humana de Fernando.**
