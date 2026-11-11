@@ -15,7 +15,7 @@ import uuid
 from pathlib import Path
 
 _TOKEN = re.compile(r"[a-f0-9]{64}\Z")
-_OWNEROPS = frozenset({"open_owner", "close_owner"})
+_OWNEROPS = frozenset({"open_owner", "close_owner", "ensure_owner"})
 
 
 class OwnerAdmissionDenied(PermissionError):
