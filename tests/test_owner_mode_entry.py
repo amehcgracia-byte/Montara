@@ -82,6 +82,16 @@ class OwnerModeEntryTest(unittest.TestCase):
         for asset in ("picker.js", "picker.css"):
             self.assertEqual(self.get("/urano/v1/entry/" + asset).status_code, 200)
 
+    def test_back_restores_all_projects_and_stage_skips_forced_popup(self):
+        self.login()
+        script = self.get("/urano/v1/entry.js").data.decode("utf-8")
+        self.assertIn("setScope(kind === 'root' ? 'all' : kind)", script)
+        self.assertIn("api('editor/projects?mode=stage')", script)
+        self.assertIn("openEditor(result.projects[0].id)", script)
+        self.assertIn("window.MontaraProjectPicker.open('stage')", script)
+        self.assertLess(script.index("openEditor(result.projects[0].id)"),
+                        script.index("window.MontaraProjectPicker.open('stage')"))
+
     def test_picker_assets_reject_anonymous_session(self):
         self.assertEqual(self.get("/urano/v1/entry/picker.js").status_code, 401)
         self.assertEqual(self.get("/urano/v1/entry/picker.css").status_code, 401)
