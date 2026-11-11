@@ -87,8 +87,11 @@ def git_bytes(repo: Path, ref: str, path: str) -> bytes:
 def build(repo: Path, out: Path, source_sha: str) -> dict:
     if source_sha != EDITOR_SHA:
         raise ValueError("Only the reviewed Chema editor revision is authorized")
-    if not (repo / "companion" / "smart_beta_launcher.py").is_file():
-        raise ValueError("SMART launcher missing from development branch")
+    # Fetch Chema's original files from the Git repository, but use the
+    # checked-out build script's own versioned SMART launcher.
+    launcher = Path(__file__).resolve().parent / "smart_beta_launcher.py"
+    if not launcher.is_file():
+        raise ValueError("SMART launcher missing beside build script")
     output = {}
     for path in FILES:
         output[path.removeprefix("companion/")] = git_bytes(repo, source_sha, path)
@@ -96,7 +99,7 @@ def build(repo: Path, out: Path, source_sha: str) -> dict:
         output["video_jobs.py"].decode("utf-8")
     ).encode("utf-8")
     output["smart_beta_launcher.py"] = (
-        repo / "companion" / "smart_beta_launcher.py"
+        launcher
     ).read_bytes()
 
     # Only actual spatialmedia Python sources, not .git files, tests or data.
