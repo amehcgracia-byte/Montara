@@ -127,7 +127,7 @@ def initial_stage_gateway_blueprint(
                   and set(request.args)=={"project_id","revision"}
                   and all(len(request.args.getlist(k))==1 for k in request.args)
                   and request.args["project_id"]=="owner-worker"
-                  and re.fullmatch(r"[0-9]{1,10}",request.args["revision"])):
+                  and re.fullmatch(r"[a-f0-9]{20}",request.args["revision"])):
                 # The local isolated worker alone resolves owner-worker into
                 # its trusted physical project directory.
                 path+="?"+urlencode({
