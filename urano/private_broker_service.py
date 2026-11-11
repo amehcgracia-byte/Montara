@@ -206,6 +206,40 @@ class DemoBroker:
         )
         return {"ok": True, **snapshot}
 
+    def owner_engine_status(self, owner_id):
+        """Read-only, broker-authoritative owner slot; never starts or stops.
+
+        Only expose the Owner project's UUID, never internal unit/PID/job ID.
+        A running ledger row is NOT enough to claim that the worker is online.
+        """
+        jobs = self.ledger.unverified_for_owner(owner_id)
+        if not jobs:
+            return {"ok":True,"state":"off","active_project_id":None}
+        if len(jobs) != 1:
+            return {"ok":True,"state":"unknown","active_project_id":None}
+        lease = jobs[0]
+        if lease.state != "running":
+            return {"ok":True,"state":"unknown",
+                    "active_project_id":lease.project_id}
+        try:
+            unit = self.ledger.target_for_trusted(lease)
+            if unit is None:
+                raise UnverifiedTarget("Target unit not registered")
+            info = self.control.systemd.show(unit)
+            pid = int(info.get("MainPID","0"))
+            if (info.get("ActiveState")!="active" or
+                    info.get("ControlGroup")!=expected_cgroup(unit) or pid<=1):
+                raise UnverifiedTarget("Worker not independently active")
+            marker=json.loads((Path("/run")/unit/READY_FILE).read_text())
+            if (marker.get("ready") is not True or
+                    marker.get("folder")!=lease.project_id or
+                    type(marker.get("uid")) is not int or marker["uid"]<=0):
+                raise UnverifiedTarget("Worker identity not verified")
+        except (ValueError,TypeError,OSError,UnverifiedTarget):
+            return {"ok":True,"state":"unknown",
+                    "active_project_id":lease.project_id}
+        return {"ok":True,"state":"on","active_project_id":lease.project_id}
+
     def stop_owner(self, owner_id, project_id):
         jobs=self.ledger.unverified_for_owner(owner_id)
         if len(jobs)!=1 or jobs[0].project_id!=project_id:
@@ -285,6 +319,8 @@ def dispatch_owner(conn, web_uid:int, owner_db_root:Path, broker:DemoBroker):
         return broker.stage_snapshot_owner(
             owner_id,project_id,generation,owner_db_root)
     op,owner_id,project_id=verify_owner_and_project(data,owner_db_root=owner_db_root)
+    if op=="status_owner":
+        return broker.owner_engine_status(owner_id)
     if op=="ensure_owner":
         return broker.ensure_owner(owner_id,project_id)
     if op=="open_owner":
