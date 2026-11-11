@@ -14,13 +14,21 @@ from pathlib import Path
 
 
 def main():
-    if len(sys.argv) not in (3,4,5,7):
+    if len(sys.argv) not in (3,4,5,7,9):
         raise SystemExit(2)
     jm = None
-    if len(sys.argv) == 7:
-        if sys.argv[5:] != ["--jm-bundle", "/opt/montara-jm"]:
+    proxy_limit_mib = 256
+    if len(sys.argv) >= 7:
+        if sys.argv[5:7] != ["--jm-bundle", "/opt/montara-jm"]:
             raise SystemExit(6)
         jm = Path("/opt/montara-jm")
+        if len(sys.argv) == 9:
+            if (sys.argv[7] != "--private-proxy-limit-mib"
+                    or not re.fullmatch(r"[0-9]{3,4}",sys.argv[8])):
+                raise SystemExit(6)
+            proxy_limit_mib=int(sys.argv[8])
+            if not 256 <= proxy_limit_mib <= 4096:
+                raise SystemExit(6)
     bundle = Path(sys.argv[1])
     unit = sys.argv[2]
     if not re.fullmatch(r"montara-i24-job-[0-9a-f]{32}",unit):
@@ -75,6 +83,7 @@ def main():
             engine_root=bundle, jm_root=jm, data_root=state_root,
             runtime_root=data, project_id=project_id, generation=generation,
             on_ready=announce_ready,
+            private_preview_limit_mib=proxy_limit_mib,
         )
         return
 
