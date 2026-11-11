@@ -258,6 +258,10 @@
   const uploadOperation = (operation, method) =>
     method === 'POST' &&
     (operation === 'wizard/upload' || operation === 'uploads');
+  const mediaTransfer = (operation, method) =>
+    operation === 'uploads' && method === 'POST' ||
+    /^uploads\/[a-f0-9]{32}$/.test(operation) && method === 'PUT' ||
+    /^uploads\/[a-f0-9]{32}\/finish$/.test(operation) && method === 'POST';
 
   // Chema renders shot thumbnails through <img>, which cannot carry the
   // Owner CSRF header. Resolve reviewed, owner-scoped media using fetch and
@@ -328,7 +332,28 @@
     const headers = new Headers(init.headers || input?.headers || {});
     metadata(headers, token);
     const options = { ...init, method, headers, credentials: 'same-origin' };
-    const response = await nativeFetch(target.path, options);
+    let response;
+    try {
+      response = await nativeFetch(target.path, options);
+    } catch (error) {
+      if (mediaTransfer(target.operation,method)) {
+        showPrivateUploadIssue('Private proxy transfer interrupted: '+
+          (error?.message||'Network unavailable')+
+          '. Your original remains on your computer.');
+      }
+      throw error;
+    }
+    if(mediaTransfer(target.operation,method) && !response.ok) {
+      // Native Chema uses fetch for fragmented Companion media, not XHR.
+      // Surface its original, owner-scoped failure without consuming the
+      // response body Chema still needs for resumable retries.
+      let reason='HTTP '+response.status;
+      try {
+        const payload=await response.clone().json();
+        reason=payload?.error?.message||payload?.error||reason;
+      } catch {}
+      showPrivateUploadIssue('Private proxy transfer rejected: '+reason);
+    }
     const next = Number(response.headers.get('X-Montara-Engine-Generation'));
     if (Number.isSafeInteger(next) && next > 0) generation = next;
     if (target.operation === 'wizard/review' && method === 'GET') {
