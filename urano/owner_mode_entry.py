@@ -26,10 +26,6 @@ function showHome() {
   homeTimer = setTimeout(() => choices('root'),
     matchMedia('(prefers-reduced-motion: reduce)').matches ? 650 : 2450);
 }
-const projectSection = document.querySelector('#ownerProjects');
-const projectList = document.querySelector('#ownerProjectList');
-const title = document.querySelector('#ownerProjectTitle');
-const createButton = document.querySelector('#ownerCreate');
 function notice(value) { message.textContent = value || ''; }
 async function api(path, options={}) {
   const res = await fetch('/urano/v1/' + path, {credentials:'same-origin', cache:'no-store', ...options});
@@ -94,22 +90,6 @@ document.querySelectorAll('[data-platform]').forEach(button => {
 document.querySelectorAll('[data-audio-task]').forEach(button => {
   button.addEventListener('click', () => notice('El itinerario de audio se integrará después de Stage.'));
 });
-document.querySelector('#ownerBack').addEventListener('click', () => {
-  projectSection.hidden=true; modeSection.hidden=false; choices('video'); notice('');
-});
-// Shared picker owns the header button and all contextual project lists.
-document.querySelector('#ownerCreateForm').addEventListener('submit', async event => {
-  event.preventDefault();
-  createButton.disabled=true; notice('Creando proyecto privado…');
-  try {
-    const result = await api('editor/projects', {
-      method:'POST',
-      headers:{'Content-Type':'application/json','X-Urano-CSRF':await csrf(),Origin:location.origin},
-      body:JSON.stringify({title:title.value,mode:'stage'})
-    });
-    openEditor(result.project.id, true);
-  } catch (error) { notice(error.message); createButton.disabled=false; }
-});
 document.querySelector('#ownerLogout').addEventListener('click', async () => {
   try {
     await api('logout', {method:'POST', headers:{'X-Urano-CSRF':await csrf(), Origin:location.origin}});
@@ -156,16 +136,7 @@ def owner_mode_entry_blueprint(*, sessions: SessionStore, https_origin: str,
 </head><body><header class="top">''' + header + '''</header>
 <main><section class="screen" id="home">''' + home + '''</section>
 <section class="screen" id="mode" hidden>''' + mode + '''</section>
-<section class="screen" id="ownerProjects" hidden>
-<h2>Mis proyectos · Stage</h2>
-<p class="hint">Abre un proyecto existente o crea uno nuevo. El Engine se activa solo cuando haga falta.</p>
-<ul id="ownerProjectList"></ul>
-<form id="ownerCreateForm" class="actions">
-<label>Nombre del proyecto <input id="ownerProjectTitle" maxlength="120" required placeholder="Nuevo proyecto Stage"></label>
-<button class="btn primary" id="ownerCreate" type="submit">Crear Stage</button>
-</form>
-<button class="btn ghost" id="ownerBack" type="button">Volver a modalidades</button>
-</section><p class="hint" role="status" id="ownerMessage" aria-live="polite"></p></main>
+<p class="hint" role="status" id="ownerMessage" aria-live="polite"></p></main>
 <script src="/urano/v1/entry/picker.js"></script>
 <script src="/urano/v1/entry.js"></script></body></html>''')
 
