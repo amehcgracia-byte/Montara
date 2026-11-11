@@ -4,6 +4,17 @@ const vm=require('node:vm');
 const assert=require('node:assert/strict');
 const path=require('node:path');
 const src=fs.readFileSync(path.resolve(__dirname,'../infra/cloudflare/montara-owner-worker.mjs'),'utf8');
+const chema=fs.readFileSync(path.resolve(__dirname,'../web/montara.js'),'utf8');
+const uploader=fs.readFileSync(path.resolve(__dirname,'../web/resumable-upload.js'),'utf8');
+const ownerBridge=fs.readFileSync(path.resolve(__dirname,'../urano/owner_browser_bridge.js'),'utf8');
+// Prevent future Git merges from silently removing any Chema/Owner header.
+assert.ok(chema.includes('X-Zucker-Filename'));
+assert.ok(uploader.includes('Upload-Offset'));
+assert.ok(ownerBridge.includes('X-Montara-Engine-Generation'));
+for(const required of ['"x-zucker-filename"','"upload-offset"','"x-montara-engine-generation"','"x-urano-csrf"']){
+  assert.ok(src.includes(required),'Missing edge-to-GCP header '+required);
+}
+
 const js=src.replace('export const OWNER_HOST','const OWNER_HOST').replace('export default {','const __worker = {')+'\n;globalThis.workerToTest=__worker;';
 const ctx={Request,Response,Headers,URL,console};
 vm.runInNewContext(js,ctx,{filename:'montara-owner-worker.mjs'});
