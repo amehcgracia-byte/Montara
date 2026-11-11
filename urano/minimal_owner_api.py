@@ -30,7 +30,8 @@ def create_owner_api(private_dir: Path, *, settings: OIDCSettings,
                      enable_dashboard: bool = False,
                      engine_gateway: OwnerEngineGateway | None = None,
                      enable_engine_preview: bool = False,
-                     original_jm_web_root: Path | None = None) -> Flask:
+                     original_jm_web_root: Path | None = None,
+                     enable_original_jm_rpc: bool = False) -> Flask:
     root = Path(private_dir).resolve()
     if not root.is_dir() or root.is_symlink():
         raise ValueError("Existing private database directory required")
@@ -68,6 +69,15 @@ def create_owner_api(private_dir: Path, *, settings: OIDCSettings,
         app.register_blueprint(original_editor_assets_blueprint(
             catalog, session_store, https_origin=allowed_origin,
             web_root=original_jm_web_root))
+
+    if enable_original_jm_rpc:
+        # Explicit operator-only opt-in: the read-only editor HTML is not
+        # enough to expose media RPCs, and the public C8 app stays unchanged.
+        if original_jm_web_root is None or not enable_engine_preview:
+            raise ValueError("Private JM RPC requires original editor Owner beta")
+        from urano.owner_original_jm_rpc import initial_stage_gateway_blueprint
+        app.register_blueprint(initial_stage_gateway_blueprint(
+            catalog, session_store, https_origin=allowed_origin))
 
     if enable_engine_preview:
         if not enable_dashboard or engine_gateway is not None:
