@@ -107,7 +107,7 @@ class JMRealHTTPRPCContracts(unittest.TestCase):
         headers=dict(self.headers,**{"X-Zucker-Filename":"camera.small.mp4"})
         upload=self.post("wizard/upload",video,headers,
                          "application/octet-stream")
-        self.assertEqual(upload.status_code,200)
+        self.assertEqual(upload.status_code,200,upload.get_data(as_text=True))
         self.assertEqual(upload.json["size"],len(video))
         self.assertEqual(upload.headers["X-Montara-Engine-Generation"],"9")
         self.assertEqual(self.ensured,[("ensure_owner",self.a.id)])
