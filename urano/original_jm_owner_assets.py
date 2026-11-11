@@ -83,6 +83,13 @@ def original_editor_assets_blueprint(
                     "when native rendering is available.")
         if original.count(old_note)==1:
             original=original.replace(old_note,new_note,1)
+        # Chema's Plans preview is bundled with the original editor. In
+        # Owner it must remain inside this authenticated project's static
+        # asset scope; the global /montara/plans endpoint is intentionally
+        # NOT exposed to anonymous users.
+        plans_link = 'href="/montara/plans"'
+        if original.count(plans_link) == 1 and "/plans.html" in manifest:
+            original = original.replace(plans_link, 'href="plans.html"', 1)
         # Owner has its own catalog title; this field names the exported video.
         output_name = 'Project name <input id="videoName"'
         if original.count(output_name) == 1:
