@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import re
 from contextlib import closing
+from urllib.parse import urlencode
 from http.client import HTTPException
 
 from flask import Blueprint, Response, jsonify, request
@@ -39,6 +40,11 @@ _ALLOWED = {
     ("GET", "wizard/status"): "/api/v1/wizard/status",
     ("GET", "project"): "/api/v1/project",
     ("POST", "branding"): "/montara/branding",
+    ("GET", "branding"): "/montara/branding",
+    ("GET", "wizard/review"): "/api/v1/wizard/review",
+    ("POST", "wizard/review/replace"): "/api/v1/wizard/review/replace",
+    ("POST", "wizard/review/render"): "/api/v1/wizard/review/render",
+    ("GET", "edit/native-recipe"): "/api/v1/edit/native-recipe",
     ("GET", "uploads"): "/montara/uploads",
     ("POST", "uploads"): "/montara/uploads",
 }
@@ -49,6 +55,9 @@ _MAX_VIDEO = 256 * 1024 * 1024
 _MAX_RESULT = 1_000_000
 _UPLOAD_PART = re.compile(r"uploads/([a-f0-9]{32})(/finish)?\Z")
 _MAX_CHUNK = 16 * 1024 * 1024
+_PREVIEW = re.compile(r"wizard/review/preview/([0-9]{1,5})\\Z")
+_THUMB = re.compile(r"wizard/review/thumbnail/([0-9a-f]{16,128})/([A-Za-z0-9_.-]{1,180})\\Z")
+_MAX_PREVIEW = 128 * 1024 * 1024
 
 
 
@@ -69,6 +78,13 @@ def initial_stage_gateway_blueprint(
     def relay(project_id: str, operation: str):
         path=_ALLOWED.get((request.method,operation))
         upload_part=_UPLOAD_PART.fullmatch(operation)
+        preview_part=_PREVIEW.fullmatch(operation)
+        thumb_part=_THUMB.fullmatch(operation)
+        if path is None and request.method=="GET":
+            if preview_part:
+                path="/api/v1/wizard/review/preview/"+preview_part.group(1)
+            elif thumb_part:
+                path="/api/v1/wizard/review/thumbnail/"+"/".join(thumb_part.groups())
         if path is None and upload_part:
             uid, finishing=upload_part.groups()
             if (not finishing and request.method in ("GET","PUT","DELETE")
@@ -77,13 +93,29 @@ def initial_stage_gateway_blueprint(
         if path is None:
             return jsonify(error="Unsupported original editor operation"),404
         if request.query_string:
-            # Chema appends the physical JM project path when polling.
-            # Never let a browser select a different worker-local project;
-            # this Owner+generation worker already has exactly one.
-            if (request.method!="GET" or operation!="wizard/status"
-                    or set(request.args)!={"project_id"}
-                    or len(request.args.getlist("project_id"))!=1
-                    or not request.args["project_id"]):
+            # The worker is already bound to exactly one authenticated
+            # project. Strip browser-supplied local filesystem paths.
+            if (request.method=="GET" and operation=="wizard/status"
+                    and set(request.args)=={"project_id"}
+                    and len(request.args.getlist("project_id"))==1
+                    and request.args["project_id"]):
+                pass
+            elif (request.method=="GET" and operation=="wizard/review"
+                  and set(request.args) <= {"render","shot"}
+                  and request.args.get("render","0") in ("0","1")
+                  and all(len(request.args.getlist(k))==1 for k in request.args)
+                  and (not request.args.get("shot")
+                       or (request.args["shot"].isascii()
+                           and request.args["shot"].isdecimal()
+                           and len(request.args["shot"])<=5))):
+                path += "?"+urlencode(dict(request.args))
+            elif (request.method=="GET" and operation=="edit/native-recipe"
+                  and set(request.args)=={"project_id"}
+                  and len(request.args.getlist("project_id"))==1
+                  and request.args["project_id"]):
+                # Do not expose actual worker filesystem paths.
+                pass
+            else:
                 return jsonify(error="Unsupported private project query"),404
         if request.host_url.rstrip("/") != https_origin:
             return jsonify(error="Trusted HTTPS host required"),403
@@ -109,6 +141,11 @@ def initial_stage_gateway_blueprint(
                 raise ProjectNotFound("Not a Stage project")
         except (ProjectNotFound, ValueError):
             return jsonify(error="Private Stage project unavailable"),404
+        if operation=="version" and request.method=="GET":
+            return jsonify(version="Montara SMART Beta")
+        if operation=="branding" and request.method=="GET" and not request.headers.get("X-Montara-Engine-Generation"):
+            # Before the first upload the private Engine is intentionally off.
+            return jsonify(mode="none")
         if operation=="uploads" and request.method=="GET":
             # Original JM upload limits normally need a running worker.
             # This read-only preflight intentionally doesn't activate Engine.
@@ -176,6 +213,14 @@ def initial_stage_gateway_blueprint(
             if not _GEN.fullmatch(raw_generation):
                 return jsonify(error="Engine generation required"),409
             generation=int(raw_generation)
+        media_response=request.method=="GET" and bool(preview_part or thumb_part)
+        if media_response and request.headers.get("Range"):
+            range_header=request.headers["Range"]
+            if (len(range_header)>80
+                    or not re.fullmatch(r"bytes=[0-9]{1,12}-[0-9]{0,12}",range_header)):
+                return jsonify(error="Invalid preview byte range"),416
+        else:
+            range_header=None
         try:
             with closing(connect_worker(token,csrf,project_id,generation)) as conn:
                 headers={"Cache-Control":"no-store"}
@@ -193,13 +238,21 @@ def initial_stage_gateway_blueprint(
                     body=request.stream
                 else:
                     body=None
+                if range_header:
+                    headers["Range"]=range_header
                 conn.request(request.method,path,body=body,headers=headers)
                 reply=conn.getresponse()
-                data=reply.read(_MAX_RESULT+1)
-                if len(data)>_MAX_RESULT:
+                # Only explicitly reviewed preview endpoints may return
+                # larger binary bytes. Cap physical response size so a
+                # compromised worker cannot fill portal memory.
+                limit=_MAX_PREVIEW if media_response else _MAX_RESULT
+                data=reply.read(limit+1)
+                if len(data)>limit:
                     raise ValueError("Oversized private JM response")
                 status=reply.status
                 content_type=reply.getheader("Content-Type","application/json")
+                content_range=reply.getheader("Content-Range")
+                accept_ranges=reply.getheader("Accept-Ranges")
         except (OSError,ValueError,TimeoutError,HTTPException,RuntimeError):
             return jsonify(error="Private original editor unavailable"),503
         if not 100<=status<=599 or "\r" in content_type or "\n" in content_type:
@@ -209,6 +262,11 @@ def initial_stage_gateway_blueprint(
         result.headers["Cache-Control"]="no-store"
         result.headers["X-Content-Type-Options"]="nosniff"
         result.headers["X-Montara-Engine-Generation"]=str(generation)
+        if media_response:
+            if content_range and re.fullmatch(r"bytes [0-9]+-[0-9]+/[0-9]+",content_range):
+                result.headers["Content-Range"]=content_range
+            if accept_ranges=="bytes":
+                result.headers["Accept-Ranges"]="bytes"
         return result
 
     return bp
