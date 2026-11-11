@@ -69,7 +69,15 @@ class ChemaProxyOverlayTests(unittest.TestCase):
                 stage_private_jm_resumable(source,source)
 
     def test_private_audio_candidate_is_separate_and_fails_closed(self):
-        first=patched_original_resumable_upload(verified_jm_upload_fixture())
+        from urano.jm_private_proxy_overlay import _REVIEWED_AUDIO_SIZE_ANCHOR
+        current=patched_original_resumable_upload(verified_jm_upload_fixture())
+        # Emulate an existing frozen I56 bundle, which predates this upgrade;
+        # the newest build overlay already contains the updated policy.
+        begin=current.index("        # Large files are admitted")
+        end=current.index("        if isinstance(size, bool)",begin)
+        first=current[:begin]+_REVIEWED_AUDIO_SIZE_ANCHOR+"\\n"+current[end:]
+        with self.assertRaises(ValueError):
+            patched_reviewed_private_audio_overlay(current)
         upgraded=patched_reviewed_private_audio_overlay(first)
         self.assertNotEqual(first,upgraded)
         self.assertIn("lossless_audio = bool",upgraded)
