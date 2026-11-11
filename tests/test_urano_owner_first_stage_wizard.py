@@ -114,6 +114,23 @@ class OwnerFirstWizardContracts(unittest.TestCase):
             '{"name":"proxy.small.mp4","complete":true}')
         self.assertEqual(self.draft(videos=[str(media)]).status_code, 200)
 
+    def test_no_audio_field_can_escape_verified_owner_uploads(self):
+        self.new()
+        foreign=self.folder.parent.parent.parent/"foreign-master.wav"
+        foreign.write_bytes(b"private-audio")
+        for field in (
+            {"master":str(foreign)},
+            {"songs":str(foreign)},
+            {"audio_paths":[str(foreign)]},
+            {"audio_paths":str(self.proxy)},
+            {"audio_paths":[str(self.proxy),str(foreign)]},
+        ):
+            with self.subTest(field=field):
+                self.assertEqual(self.draft(**field).status_code,400)
+        self.assertEqual(self.calls,[])
+        self.assertEqual(self.draft(master=str(self.proxy),
+                                    audio_paths=[str(self.proxy)]).status_code,200)
+
     def test_no_private_data_leaked_on_error(self):
         self.current.data["inputs"]["videos"] = ["private-original.mp4"]
         reply = self.new()
