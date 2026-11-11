@@ -29,7 +29,7 @@ const a=run('?start=stage',past);
 assert.equal(a.has('montara-open-edit'),false);
 assert.equal(a.get('montara-owner-edit:'+other),past);
 const own=JSON.stringify({project:'/private/Projects/'+project,platform:'youtube',step:'footage'});
-const b=run('?resume=footage',past,{'montara-owner-edit:'+project:own});
+const b=run('?resume=footage',past,{['montara-owner-edit:'+project]:own});
 assert.equal(b.get('montara-open-edit'),own);
 assert.equal(b.get('montara-owner-edit:'+other),past);
 console.log('OWNER_TAB_PROJECT_ISOLATION_PASS preserved prior edit and no cross-project resume');
