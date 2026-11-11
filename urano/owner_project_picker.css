@@ -27,3 +27,9 @@ body #sessionResume{display:none!important}
 /* The original global Latest recovery bypasses Owner project authorization.
    Keep Chema's element and handlers intact but expose only Owner Projects. */
 body #newVideo{display:none!important}
+
+/* Recovery uses Chema's existing intro logo, not a second editing wizard. */
+#montaraOwnerResumeSplash{position:fixed;inset:0;z-index:999;
+  display:flex;align-items:center;justify-content:center;
+  background:#0c0c0f;color:#f5f3ef;pointer-events:auto}
+#montaraOwnerResumeSplash .intro-name{margin:0;transform:none}
