@@ -60,7 +60,8 @@ def editor_project_bridge_blueprint(
             return jsonify(error="Trusted editor session and CSRF required"), 403
         body = request.get_json(silent=True)
         if (not isinstance(body, dict) or set(body) != {"title", "mode"}
-                or body.get("mode") not in MODES):
+                or not isinstance(body.get("mode"), str)
+                or body["mode"] not in MODES):
             return jsonify(error="Choose a title and Stage, Push or Show"), 400
         try:
             project = catalog.create(owner(), body["title"], recipe={
