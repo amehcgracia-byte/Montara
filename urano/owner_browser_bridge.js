@@ -11,6 +11,29 @@
   if (!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(project)) {
     throw new Error('Invalid Montara Owner project');
   }
+  // The original Chema editor stores one open edit per browser tab, not
+  // per private Owner project. Prevent another Stage's remembered edit from
+  // overriding an explicit Stage entry; preserve the snapshot per Owner UUID.
+  try {
+    const params = new URL(location.href).searchParams;
+    const stored = sessionStorage.getItem('montara-open-edit');
+    if (stored) {
+      const remembered = JSON.parse(stored);
+      const projectPath = String(remembered?.project || '').replace(/\\/g, '/');
+      const found = /\/Projects\/([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})$/i.exec(projectPath);
+      if (found) sessionStorage.setItem('montara-owner-edit:' + found[1].toLowerCase(), stored);
+    }
+    if (params.get('start') === 'stage') {
+      sessionStorage.removeItem('montara-open-edit');
+    } else if (params.get('resume') === 'footage') {
+      const own = sessionStorage.getItem('montara-owner-edit:' + project);
+      if (own) sessionStorage.setItem('montara-open-edit', own);
+      else sessionStorage.removeItem('montara-open-edit');
+    }
+  } catch {
+    // Keep native storage untouched if browser storage is disabled.
+  }
+
   const routes = Object.freeze({
     '/api/v1/wizard/upload': 'wizard/upload',
     '/api/v1/wizard/projects/new': 'wizard/projects/new',
