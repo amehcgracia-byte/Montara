@@ -46,7 +46,9 @@ def create_owner_api(private_dir: Path, *, settings: OIDCSettings,
         owners=GoogleOwnerStore(root / "owners.sqlite3"),
         sessions=session_store,
         provider=provider,
-        success_path="/urano/v1/dashboard" if enable_dashboard else "/urano/v1/projects",
+        success_path=("/urano/v1/entry" if enable_original_jm_browser_pilot
+                      else "/urano/v1/dashboard" if enable_dashboard
+                      else "/urano/v1/projects"),
     ))
     catalog = ProjectCatalog(root / "projects.sqlite3")
     app.register_blueprint(project_blueprint(catalog, session_store))
@@ -68,6 +70,12 @@ def create_owner_api(private_dir: Path, *, settings: OIDCSettings,
 
     if enable_original_jm_browser_pilot and not enable_original_jm_rpc:
         raise ValueError("Original JM browser pilot requires private Stage RPC")
+    if original_jm_web_root is not None and enable_original_jm_browser_pilot:
+        from urano.owner_mode_entry import owner_mode_entry_blueprint
+        app.register_blueprint(owner_mode_entry_blueprint(
+            sessions=session_store, https_origin=allowed_origin,
+            web_root=original_jm_web_root))
+
     if original_jm_web_root is not None:
         if not enable_engine_preview:
             raise ValueError("Original JM editor requires private Owner beta")
