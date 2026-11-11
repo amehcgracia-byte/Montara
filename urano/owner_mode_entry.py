@@ -33,7 +33,7 @@ async function csrf() {
 function openEditor(id, newlyCreated=false) {
   if (!/^[0-9a-f-]{36}$/i.test(id)) throw Error('Identificador de proyecto inválido');
   location.assign('/urano/v1/editor/projects/' + encodeURIComponent(id) + '/' +
-                  (newlyCreated ? '?start=stage' : ''));
+                  (newlyCreated ? '?start=stage' : '?resume=footage'));
 }
 function choices(kind) {
   document.querySelector('#intentChoices').hidden = kind !== 'root';
