@@ -72,7 +72,7 @@
       parsed.searchParams.size === 2 &&
       parsed.searchParams.has('project_id') &&
       parsed.searchParams.get('project_id').length > 0 &&
-      /^[0-9]{1,10}$/.test(parsed.searchParams.get('revision') || '');
+      /^[a-f0-9]{20}$/.test(parsed.searchParams.get('revision') || '');
     const timelineQuery = operation === 'edit/timeline' &&
       parsed.searchParams.size === 1 && parsed.searchParams.get('kind') === 'music';
     const shotQuery = operation === 'edit/shot' &&
