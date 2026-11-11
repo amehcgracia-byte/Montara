@@ -22,6 +22,7 @@ from http.client import HTTPException
 from flask import Blueprint, Response, jsonify, request
 
 from urano.first_valid_upload_gate import valid_first_upload
+from urano.jm_private_proxy_overlay import private_proxy_limit_mib
 from urano.owner_broker_preview import broker_request
 from urano.owner_private_http_client import authenticated_private_jm_connection
 from urano.project_catalog import ProjectCatalog, ProjectNotFound
@@ -52,8 +53,10 @@ def initial_stage_gateway_blueprint(
     https_origin: str,
     ensure_worker=broker_request,
     connect_worker=authenticated_private_jm_connection,
+    private_preview_limit_mib: int = 256,
 ) -> Blueprint:
     """Only explicit provider-neutral control-plane callbacks are injected."""
+    preview_limit = private_proxy_limit_mib(private_preview_limit_mib) * 1024**2
     bp=Blueprint("urano_i51_original_jm_rpc", __name__,
                  url_prefix="/urano/v1/media")
 
@@ -97,7 +100,8 @@ def initial_stage_gateway_blueprint(
             # Original JM upload limits normally need a running worker.
             # This read-only preflight intentionally doesn't activate Engine.
             # Free space is not asserted: original JM checks it on POST.
-            reply=jsonify(max_file_bytes=_MAX_VIDEO,
+            reply=jsonify(max_file_bytes=preview_limit,
+                          max_original_file_bytes=_MAX_VIDEO,
                           chunk_bytes=4*1024*1024,free_bytes=None)
             reply.headers["Cache-Control"]="no-store"
             return reply
@@ -115,7 +119,8 @@ def initial_stage_gateway_blueprint(
                 original_path=request.environ["PATH_INFO"]
                 request.environ["PATH_INFO"]=path
                 try:
-                    valid=valid_first_upload(request.environ)
+                    valid=valid_first_upload(
+                        request.environ, max_proxy_bytes=preview_limit)
                 finally:
                     request.environ["PATH_INFO"]=original_path
                 if (not valid or content_length>_MAX_VIDEO):
