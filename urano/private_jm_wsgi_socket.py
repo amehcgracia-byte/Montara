@@ -21,6 +21,33 @@ _INITIAL_SAFE_GETS = frozenset({
     "/", "/montara/version", "/api/v1/wizard/status", "/api/v1/project",
 })
 
+_STATIC_EXTENSIONS = frozenset({".js", ".css", ".svg", ".png", ".webp",
+                                ".jpg", ".jpeg", ".ico", ".woff2"})
+
+
+def pinned_jm_static_assets(web_root: Path) -> frozenset[str]:
+    """Exact static routes from a reviewed and immutable JM web bundle.
+
+    Static manifest is constructed by trusted deployment code, NOT from a
+    browser parameter. Never accept hidden, linked or user-uploaded assets.
+    """
+    root = Path(web_root)
+    if root.is_symlink() or not root.is_dir():
+        raise ValueError("Reviewed JM web root unavailable")
+    allowed = set()
+    for candidate in root.rglob("*"):
+        if candidate.is_symlink():
+            raise ValueError("Linked JM UI asset forbidden")
+        if not candidate.is_file():
+            continue
+        relative = candidate.relative_to(root)
+        if (len(relative.parts) > 3
+                or any(part.startswith(".") for part in relative.parts)
+                or candidate.suffix.lower() not in _STATIC_EXTENSIONS):
+            continue
+        allowed.add("/" + relative.as_posix())
+    return frozenset(allowed)
+
 
 def create_private_jm_wsgi_server(app, directory: Path):
     """Prepare a local original JM WSGI server; no TCP or public listener."""
@@ -42,7 +69,8 @@ class VerifiedJMUnixConnection(HTTPConnection):
     """Test/transport-level PID+UID pinning. Broker authorizes owner separately."""
 
     def __init__(self, path: Path, *, expected_pid: int,
-                 expected_uid: int, timeout: float = 5.0):
+                 expected_uid: int, timeout: float = 5.0,
+                 approved_assets: frozenset[str] = frozenset()):
         if (type(expected_pid) is not int or expected_pid <= 1
                 or type(expected_uid) is not int or expected_uid < 0
                 or type(timeout) not in (int, float) or not 0 < timeout <= 10):
@@ -50,6 +78,11 @@ class VerifiedJMUnixConnection(HTTPConnection):
         self._socket_path = Path(path)
         self._expected_pid = expected_pid
         self._expected_uid = expected_uid
+        if (not isinstance(approved_assets, frozenset)
+                or any(not isinstance(a, str) or not a.startswith("/")
+                       for a in approved_assets)):
+            raise ValueError("Static routes must be trusted manifest")
+        self._approved_assets = approved_assets
         super().__init__("localhost", timeout=timeout)
 
     def __enter__(self):
@@ -83,7 +116,9 @@ class VerifiedJMUnixConnection(HTTPConnection):
         # This first bridge deliberately does not tunnel mutating JM requests,
         # media uploads, previews or arbitrary paths. Add reviewed policies
         # only behind the authorized root broker, never in the web app.
-        if type(path) is not str or path not in _INITIAL_SAFE_GETS:
+        if (type(path) is not str
+                or path not in _INITIAL_SAFE_GETS
+                   and path not in self._approved_assets):
             raise PermissionError("JM editor read not authorized")
         self.request("GET", path, headers={"Cache-Control": "no-store"})
         response = self.getresponse()
