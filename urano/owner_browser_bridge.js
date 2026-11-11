@@ -237,6 +237,12 @@
           throw new Error('Invalid private Engine generation');
         }
         generation = body.generation;
+        // Inform the Owner header only after the broker has verified this
+        // exact project's worker. Never infer ON from a successful page load.
+        if (typeof window.dispatchEvent === 'function' &&
+            typeof CustomEvent === 'function') {
+          window.dispatchEvent(new CustomEvent('montara-owner-engine-ready'));
+        }
         return generation;
       })();
       ensureJob.catch(() => { ensureJob = null; });
