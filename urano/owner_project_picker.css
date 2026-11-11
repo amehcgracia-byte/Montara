@@ -70,3 +70,8 @@ header.top #montaraOwnerAccount{margin-left:0;flex-shrink:0}
 /* The Owner-scoped Chema JS now shows the native f.error for every
    ERROR row. Never mask its diagnostic with a generic CSS pseudo-label. */
 #footage li:has(.kind.error) .state{color:#ea8576}
+
+/* Compatibility safety: if an older deployed picker still constructs the
+   Engine ON/OFF button, hide it. A cosmetic toggle cannot safely stop a
+   broker-owned worker. The read-only state indicator remains visible. */
+header.top .montara-owner-engine-switch{display:none!important}
