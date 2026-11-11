@@ -149,6 +149,17 @@ class OwnerFirstStageWizard:
                     or any(not _vetted_stage_video(path, self.folder.parent.parent)
                            for path in videos)):
                 raise ValueError("Stage sources must be verified worker uploads")
+            # Original JM also accepts master, songs and audio_paths.
+            # Never let a Stage draft smuggle an arbitrary host file through
+            # an audio field after video paths have been checked.
+            audio = body.get("audio_paths", [])
+            if not isinstance(audio, list) or len(audio) > 100:
+                raise ValueError("Invalid Stage audio paths")
+            for supplied in (body.get("master", ""), body.get("songs", ""), *audio):
+                if supplied in ("", None):
+                    continue
+                if not _vetted_stage_video(supplied, self.folder.parent.parent):
+                    raise ValueError("Stage audio must be verified worker uploads")
             # Initial browser draft supplies null. Once media has been saved,
             # only an explicit resume of this same physical project is safe.
             if supplied_id in (None, "") and not self._empty(project):
