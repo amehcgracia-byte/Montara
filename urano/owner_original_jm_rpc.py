@@ -46,6 +46,11 @@ _ALLOWED = {
     ("POST", "wizard/review/replace"): "/api/v1/wizard/review/replace",
     ("POST", "wizard/review/render"): "/api/v1/wizard/review/render",
     ("GET", "edit/native-recipe"): "/api/v1/edit/native-recipe",
+    ("GET", "edit/timeline"): "/api/v1/edit/timeline",
+    ("PATCH", "edit/timeline"): "/api/v1/edit/timeline",
+    ("GET", "edit/shot"): "/api/v1/edit/shot",
+    ("PATCH", "edit/shot"): "/api/v1/edit/shot",
+    ("GET", "edit/shot/frame"): "/api/v1/edit/shot/frame",
     ("GET", "uploads"): "/montara/uploads",
     ("POST", "uploads"): "/montara/uploads",
 }
@@ -75,7 +80,7 @@ def initial_stage_gateway_blueprint(
                  url_prefix="/urano/v1/media")
 
     @bp.route("/<project_id>/<path:operation>",
-              methods=["GET", "POST", "PUT", "DELETE"])
+              methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
     def relay(project_id: str, operation: str):
         path=_ALLOWED.get((request.method,operation))
         upload_part=_UPLOAD_PART.fullmatch(operation)
@@ -116,6 +121,22 @@ def initial_stage_gateway_blueprint(
                   and request.args["project_id"]):
                 # Do not expose actual worker filesystem paths.
                 pass
+            elif (request.method=="GET" and operation=="edit/timeline"
+                  and set(request.args)=={"kind"}
+                  and request.args.get("kind")=="music"
+                  and len(request.args.getlist("kind"))==1):
+                path+="?kind=music"
+            elif (request.method=="GET" and operation=="edit/shot"
+                  and set(request.args)=={"index"}
+                  and len(request.args.getlist("index"))==1
+                  and re.fullmatch(r"[0-9]{1,5}",request.args.get("index",""))):
+                path+="?index="+request.args["index"]
+            elif (request.method=="GET" and operation=="edit/shot/frame"
+                  and set(request.args)=={"index","choice","revision"}
+                  and all(len(request.args.getlist(k))==1 for k in request.args)
+                  and all(re.fullmatch(r"[0-9]{1,9}",request.args[k])
+                          for k in ("index","choice","revision"))):
+                path+="?"+urlencode(dict(request.args))
             elif (request.method=="GET" and bool(preview_part)
                   and set(request.args)=={"v"}
                   and len(request.args.getlist("v"))==1
@@ -166,7 +187,7 @@ def initial_stage_gateway_blueprint(
         if request.headers.get("Transfer-Encoding") or (
                 request.method=="GET" and content_length not in (None,0)):
             return jsonify(error="Unsupported request framing"),400
-        if request.method in ("POST","PUT"):
+        if request.method in ("POST","PUT","PATCH"):
             if type(content_length) is not int or content_length<=0:
                 return jsonify(error="Expected bounded request body"),400
             # The Owner API caps ordinary identity/project requests at
@@ -220,7 +241,8 @@ def initial_stage_gateway_blueprint(
             if not _GEN.fullmatch(raw_generation):
                 return jsonify(error="Engine generation required"),409
             generation=int(raw_generation)
-        media_response=request.method=="GET" and bool(preview_part or thumb_part)
+        media_response=request.method=="GET" and (
+            bool(preview_part or thumb_part) or operation=="edit/shot/frame")
         if media_response and request.headers.get("Range"):
             range_header=request.headers["Range"]
             if (len(range_header)>80
@@ -231,7 +253,7 @@ def initial_stage_gateway_blueprint(
         try:
             with closing(connect_worker(token,csrf,project_id,generation)) as conn:
                 headers={"Cache-Control":"no-store"}
-                if request.method in ("POST","PUT"):
+                if request.method in ("POST","PUT","PATCH"):
                     headers["Content-Type"]=request.content_type
                     headers["Content-Length"]=str(content_length)
                     if operation=="wizard/upload":
