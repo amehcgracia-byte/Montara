@@ -33,3 +33,7 @@ body #newVideo{display:none!important}
   display:flex;align-items:center;justify-content:center;
   background:#0c0c0f;color:#f5f3ef;pointer-events:auto}
 #montaraOwnerResumeSplash .intro-name{margin:0;transform:none}
+
+/* The first Home animation belongs to the authenticated entry. Do not show
+   half of the native Home animation during an explicit Stage launch. */
+html.montara-owner-stage-entry #home{visibility:hidden!important;animation:none!important}
