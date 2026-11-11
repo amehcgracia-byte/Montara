@@ -32,7 +32,8 @@ def create_owner_api(private_dir: Path, *, settings: OIDCSettings,
                      enable_engine_preview: bool = False,
                      original_jm_web_root: Path | None = None,
                      enable_original_jm_rpc: bool = False,
-                     enable_original_jm_browser_pilot: bool = False) -> Flask:
+                     enable_original_jm_browser_pilot: bool = False,
+                     private_preview_limit_mib: int = 256) -> Flask:
     root = Path(private_dir).resolve()
     if not root.is_dir() or root.is_symlink():
         raise ValueError("Existing private database directory required")
@@ -81,7 +82,8 @@ def create_owner_api(private_dir: Path, *, settings: OIDCSettings,
             raise ValueError("Private JM RPC requires original editor Owner beta")
         from urano.owner_original_jm_rpc import initial_stage_gateway_blueprint
         app.register_blueprint(initial_stage_gateway_blueprint(
-            catalog, session_store, https_origin=allowed_origin))
+            catalog, session_store, https_origin=allowed_origin,
+            private_preview_limit_mib=private_preview_limit_mib))
 
     if enable_engine_preview:
         if not enable_dashboard or engine_gateway is not None:
