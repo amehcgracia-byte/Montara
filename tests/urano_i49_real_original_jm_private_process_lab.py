@@ -20,10 +20,14 @@ PROJECT = "7b8f5fd6-02b4-4cd0-8d16-c2d6d606a505"
 def child_worker(bundle, checkout, data, queue):
     try:
         from urano.full_jm_worker import serve_original_jm_worker
+        def announce():
+            (Path(data) / "ready.json").write_text(json.dumps({
+                "ready": True, "uid": os.getuid(), "folder": PROJECT}))
+            queue.put({"ready": True, "pid": os.getpid()})
         serve_original_jm_worker(
             engine_root=Path(bundle), jm_root=Path(checkout),
             data_root=Path(data), project_id=PROJECT, generation=7,
-            on_ready=lambda: queue.put({"ready": True, "pid": os.getpid()}),
+            on_ready=announce,
         )
     except BaseException as exc:
         queue.put({"error": type(exc).__name__, "message": str(exc)[:250]})
