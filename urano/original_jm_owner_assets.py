@@ -63,7 +63,12 @@ def original_editor_assets_blueprint(
         bootstrap=(
             '<script src="owner-bridge.js" data-owner-project="'
             +project_id+'"></script>'
+            '<script src="/urano/v1/entry/picker.js"></script>'
         )
+        if original.count("</head>") != 1:
+            abort(503)
+        original = original.replace("</head>",
+            '<link rel="stylesheet" href="/urano/v1/entry/picker.css"></head>', 1)
         response=make_response(original.replace(
             first_script, bootstrap+"\\n"+first_script, 1))
         response.headers["Content-Type"]="text/html; charset=utf-8"
