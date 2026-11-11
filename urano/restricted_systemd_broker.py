@@ -143,7 +143,8 @@ class RestrictedTargetControl:
 
 def fixed_launch_properties(unit: str, bundle_path: Path,
                             *, jm_bundle: Path | None = None,
-                            resources: WorkerResourceProfile | None = None) -> tuple[str, ...]:
+                            resources: WorkerResourceProfile | None = None,
+                            owner_id: str | None = None) -> tuple[str, ...]:
     """Build safe properties only from trusted operator bundle config."""
     expected_cgroup(unit)
     path = Path(bundle_path)
@@ -160,10 +161,23 @@ def fixed_launch_properties(unit: str, bundle_path: Path,
                 or not re.fullmatch(r"jm-[0-9a-f]{40}", jm.name)):
             raise ValueError("JM bundle must be version-pinned")
         binds.append("BindReadOnlyPaths="+str(jm)+":/opt/montara-jm")
+    state_props=()
+    if jm_bundle is not None:
+        if owner_id is None:
+            raise ValueError("Persistent JM worker requires verified Owner identity")
+        from urano.worker_state_policy import owner_state_directory
+        state_props=(
+            "StateDirectory="+owner_state_directory(owner_id),
+            "StateDirectoryMode=0700",
+        )
+    elif owner_id is not None:
+        raise ValueError("No persistent Owner state in Engine-only lab")
+
     profile = resources if resources is not None else WorkerResourceProfile()
     if not isinstance(profile, WorkerResourceProfile):
         raise ValueError("Invalid trusted worker resource policy")
     base_props = tuple(prop for prop in SYSTEMD_PROPS
                        if not prop.startswith(("MemoryMax=", "TasksMax=", "CPUQuota=")))
-    return (*base_props, *profile.properties(), "RuntimeDirectory="+unit, *binds)
+    return (*base_props, *profile.properties(), "RuntimeDirectory="+unit,
+            *state_props, *binds)
 
