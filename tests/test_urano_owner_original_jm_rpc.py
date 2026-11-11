@@ -109,6 +109,31 @@ class JMRealHTTPRPCContracts(unittest.TestCase):
                     "Accept-Ranges":"bytes"}
             return b"mp4-preview",200,{"Content-Type":"video/mp4"}
 
+        @worker.get("/api/v1/edit/timeline")
+        def timeline():
+            self.events.append(("timeline",dict(request.args)))
+            return jsonify(kind="music",revision=1,boundaries=[])
+
+        @worker.patch("/api/v1/edit/timeline")
+        def timeline_patch():
+            self.events.append(("timeline_patch",request.get_json()))
+            return jsonify(kind="music",revision=2,boundaries=[])
+
+        @worker.get("/api/v1/edit/shot")
+        def shot():
+            self.events.append(("shot",dict(request.args)))
+            return jsonify(index=0,revision=1,cameras=[0])
+
+        @worker.patch("/api/v1/edit/shot")
+        def shot_patch():
+            self.events.append(("shot_patch",request.get_json()))
+            return jsonify(ok=True,revision=2)
+
+        @worker.get("/api/v1/edit/shot/frame")
+        def shot_frame():
+            self.events.append(("shot_frame",dict(request.args)))
+            return b"jpeg-stage-frame",200,{"Content-Type":"image/jpeg"}
+
         @worker.get("/api/v1/project")
         def status():
             self.events.append(("status",None))
@@ -307,6 +332,42 @@ class JMRealHTTPRPCContracts(unittest.TestCase):
             self.url("wizard/review/preview/0",self.b.id),
             base_url=ORIGIN,headers=headers)
         self.assertEqual(forbidden.status_code,404)
+        self.assertEqual(self.ensured,[])
+
+    def test_original_stage_manual_shot_and_music_cut_edit(self):
+        headers={**self.headers,"X-Montara-Engine-Generation":"9"}
+        timeline=self.client.get(
+            self.url("edit/timeline")+"?kind=music",
+            base_url=ORIGIN,headers=headers)
+        self.assertEqual(timeline.status_code,200)
+        self.assertEqual(self.events[-1],("timeline",{"kind":"music"}))
+        doc=self.client.get(self.url("edit/shot")+"?index=0",
+            base_url=ORIGIN,headers=headers)
+        self.assertEqual(doc.status_code,200)
+        shot=self.client.patch(self.url("edit/shot"),
+            base_url=ORIGIN,headers=headers,
+            json={"project_id":"/private/owner-folder","revision":1,
+                  "index":0,"choice":0,"movement":True})
+        self.assertEqual(shot.status_code,200)
+        self.assertEqual(self.events[-1][0],"shot_patch")
+        moved=self.client.patch(self.url("edit/timeline"),
+            base_url=ORIGIN,headers=headers,
+            json={"kind":"music","project_id":"/private/owner-folder",
+                  "revision":1,"index":1,"at":2.5})
+        self.assertEqual(moved.status_code,200)
+        frame=self.client.get(self.url("edit/shot/frame")
+            +"?index=0&choice=0&revision=1",
+            base_url=ORIGIN,headers=headers)
+        self.assertEqual(frame.status_code,200)
+        self.assertEqual(frame.data,b"jpeg-stage-frame")
+        for forbidden in (
+            self.url("edit/timeline")+"?kind=show",
+            self.url("edit/shot")+"?index=../other",
+            self.url("edit/shot/frame")+"?index=0&choice=0&revision=1&path=/tmp",
+        ):
+            with self.subTest(forbidden=forbidden):
+                response=self.client.get(forbidden,base_url=ORIGIN,headers=headers)
+                self.assertEqual(response.status_code,404)
         self.assertEqual(self.ensured,[])
 
     def test_resumable_limits_do_not_start_engine_and_bad_metadata_denied(self):
