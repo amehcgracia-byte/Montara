@@ -44,19 +44,22 @@ def main():
     if (opened.status_code != 200 or inspected.status_code != 200 or
             not isinstance(loaded,(str,Path)) or Path(loaded).resolve() != folder.resolve()):
         raise RuntimeError("Real Engine did not attest expected opened project")
-    tmp = data / "ready.tmp"
-    tmp.write_text(json.dumps({"ready":True,"uid":os.getuid(),"folder":project_id}))
-    os.replace(tmp,data/"ready.json")
+    def announce_ready():
+        tmp = data / "ready.tmp"
+        tmp.write_text(json.dumps({"ready":True,"uid":os.getuid(),"folder":project_id}))
+        os.replace(tmp,data/"ready.json")
+
     signal.signal(signal.SIGTERM,lambda signum,frame:sys.exit(0))
     if generation is not None:
         # Private local IPC only for an explicitly generation-pinned Owner job.
-        # No TCP port and no generic HTTP routing to this Engine.
+        # Do not announce readiness until the local socket is actually bound.
         serve_stage_socket(
             data, project_id=project_id, generation=generation,
             read_snapshot=lambda: private_stage_snapshot(client, folder),
-            trusted_broker_uid=0,
+            trusted_broker_uid=0, on_listening=announce_ready,
         )
     else:
+        announce_ready()
         while True:
             time.sleep(2)
 
