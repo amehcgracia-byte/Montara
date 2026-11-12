@@ -20,6 +20,7 @@
     'api/v1/wizard/upload','montara/uploads','montara/branding',
     'api/v1/edit/shot', 'api/v1/edit/shot/frame',
     'api/v1/edit/native-recipe','api/v1/edit/native-master',
+    'api/v1/edit/timeline',
     'api/v1/settings/fillers','api/v1/settings/video-light',
     'api/v1/settings/camera-types','api/v1/settings/camera-subjects',
     'api/v1/settings/camera-roles','api/v1/settings/spherical-landmarks',
@@ -118,6 +119,10 @@
     if ((operation==='api/v1/edit/native-recipe' ||
          operation==='api/v1/edit/native-master' || nativeSource) &&
         !nativeExportQuery) return {kind:'blocked'};
+    const timelineQuery = operation==='api/v1/edit/timeline' &&
+      method==='GET' && params.size===1 && params.get('kind')==='music';
+    if (operation==='api/v1/edit/timeline' && !timelineQuery)
+      return {kind:'blocked'};
     const shotQuery = operation==='api/v1/edit/shot' &&
       method==='GET' && params.size===1 && params.has('index') &&
       /^[0-9]{1,4}$/.test(params.get('index')||'');
@@ -136,7 +141,7 @@
       params.has('path') && !!params.get('path') &&
       params.get('path').startsWith('/') && params.get('path').length <= 1800;
     if (audioRoute && !audioQuery) return {kind:'blocked'};
-    if (address.search && !isStatus && !review && !versionQuery && !audioQuery && !shotQuery && !shotFrame && !nativeExportQuery)
+    if (address.search && !isStatus && !review && !versionQuery && !audioQuery && !shotQuery && !shotFrame && !nativeExportQuery && !timelineQuery)
       return {kind:'blocked'};
     return {kind:'worker', path:nativePrefix + operation + address.search};
   };
