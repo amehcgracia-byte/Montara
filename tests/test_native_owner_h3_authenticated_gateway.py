@@ -46,6 +46,7 @@ class NativeOwnerH3AuthenticatedGatewayTests(unittest.TestCase):
         self.ensure_calls=[]
         self.native_calls=[]
         self.app=Flask(__name__)
+        self.app.config["MAX_CONTENT_LENGTH"]=300_000
 
         def ensure_worker(operation,token,csrf,workspace):
             raw=json.dumps({"op":operation,"session":token,"csrf":csrf,
@@ -318,6 +319,26 @@ class NativeOwnerH3AuthenticatedGatewayTests(unittest.TestCase):
         self.assertIn("upload-finish",events)
         self.assertIn("direct-upload",events)
         self.assertIn("sync",events)
+
+    def test_streaming_proxy_exceeds_control_plane_limit_without_buffering(self):
+        headers=self.user(self.a)
+        self.assertEqual(self.ensure(headers).status_code,200)
+        scope={**headers,"X-Montara-Engine-Generation":"1"}
+        large=b"p"*350_000  # larger than the Owner portal JSON cap
+        direct=self.rpc("POST","api/v1/wizard/upload",{
+            **scope,"Content-Type":"application/octet-stream",
+            "X-Zucker-Filename":"camera.small.mp4",
+        },data=large)
+        self.assertEqual(direct.status_code,200,direct.get_json())
+        uid="b"*32
+        chunk=self.rpc("PUT","montara/uploads/"+uid,{
+            **scope,"Content-Type":"application/octet-stream",
+            "Upload-Offset":"0"},data=large)
+        self.assertEqual(chunk.status_code,204)
+        self.assertIn(("owner-a","direct-upload",350_000,
+                       "camera.small.mp4"),self.native_calls)
+        self.assertIn(("owner-a","upload-chunk",uid,350_000,"0"),
+                      self.native_calls)
 
     def test_invalid_proxy_metadata_and_unsafe_direct_names_blocked(self):
         headers=self.user(self.a)
