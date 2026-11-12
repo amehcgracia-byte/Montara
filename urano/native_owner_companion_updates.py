@@ -19,6 +19,13 @@ def companion_update_blueprint(*, https_origin: str, release_dir: Path) -> Bluep
     bundle_bytes=archive.read_bytes()
     if hashlib.sha256(bundle_bytes).hexdigest()!=data["sha256"] or len(bundle_bytes)!=data["bytes"]:
         raise ValueError("Release digest/size mismatch")
+    bootstrap=root/"bootstrap.zip"
+    if bootstrap.is_symlink() or not bootstrap.is_file():
+        raise ValueError("Pinned bootstrap package required")
+    bootstrap_bytes=bootstrap.read_bytes()
+    if (hashlib.sha256(bootstrap_bytes).hexdigest()!=data.get("bootstrap_sha256")
+            or len(bootstrap_bytes)!=data.get("bootstrap_bytes")):
+        raise ValueError("Invalid H4 bootstrap integrity")
     encoded=manifest.read_bytes()
     bp=Blueprint("montara_h4_companion_updates",__name__,url_prefix="/urano/v1/companion-updates")
     def serve(blob: bytes, mimetype: str):
@@ -36,4 +43,7 @@ def companion_update_blueprint(*, https_origin: str, release_dir: Path) -> Bluep
     @bp.get("/package.zip")
     def release_file():
         return serve(bundle_bytes,"application/zip")
+    @bp.get("/bootstrap.zip")
+    def initial_install():
+        return serve(bootstrap_bytes,"application/zip")
     return bp
