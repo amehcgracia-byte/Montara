@@ -232,7 +232,9 @@ def google_login_blueprint(*, settings: OIDCSettings, pending: PendingLogins,
                     jwks=provider.jwks(),
                 )
                 owner_id = owners.resolve_beta_owner(identity, allowed_emails=settings.allowed_emails)
-                issued = sessions.issue(owner_id)
+                # H4 private beta: avoid expiring a long video edit after
+                # one hour. Sessions remain revocable, HttpOnly, SameSite=Lax.
+                issued = sessions.issue(owner_id, ttl_seconds=3*86400)
             except (GoogleIdentityDenied, ValueError, KeyError, HTTPError, URLError,
                     TimeoutError, UnicodeError, json.JSONDecodeError):
                 response = jsonify(error="Google authentication unavailable or denied")
