@@ -66,6 +66,32 @@ def native_stage_route(method: str, path: str, query: str = "") -> NativeStageTa
             return None
         return NativeStageTarget(path+"?"+urlencode(
             {k:values[k][0] for k in ("render","shot") if k in values}),"json")
+    # Original Chema local-quality export contract. URLs may carry only an
+    # owner-scoped saved project path and the signed edit revision.
+    if method in ("GET","HEAD") and (path in (
+            "/api/v1/edit/native-recipe",
+            "/api/v1/edit/native-master") or re.fullmatch(
+                r"/api/v1/edit/native-source/[0-9]{1,3}",path)):
+        if method=="HEAD" and "/native-source/" not in path:
+            return None
+        try:
+            values=parse_qs(query,strict_parsing=True,max_num_fields=2)
+        except ValueError:
+            return None
+        if (any(len(v)!=1 for v in values.values()) or
+                set(values)!=({"project_id"} if path.endswith("native-recipe")
+                              else {"project_id","revision"}) or
+                not values["project_id"][0].startswith("/") or
+                len(values["project_id"][0])>1800 or
+                ("revision" in values and not re.fullmatch(
+                     r"[a-f0-9]{20}",values["revision"][0]))):
+            return None
+        return NativeStageTarget(path+"?"+urlencode(
+            {k:values[k][0] for k in ("project_id","revision")
+             if k in values}),
+            "native-recipe" if path.endswith("native-recipe") else
+            "native-master" if path.endswith("native-master") else
+            "native-source")
     # Original Chema Stage shot editor: bounded index, generation-checked
     # edit revision and explicit camera choice. No arbitrary project query.
     if path=="/api/v1/edit/shot":
