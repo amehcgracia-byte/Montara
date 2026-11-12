@@ -24,7 +24,8 @@ $menu=New-Object System.Windows.Forms.ContextMenuStrip
 $status=$menu.Items.Add('Estado de Companion')
 $status.Add_Click({
   $s=Health
-  $msg=if($s){"Conectado · versión "+$s.version+" · "+$(if($s.busy){'Ocupado'}else{'Libre'})}else{'Sin conexión'}
+  $patch=Get-Content (Join-Path $home 'installed-version.txt') -ErrorAction SilentlyContinue | Select-Object -First 1
+  $msg=if($s){"Conectado · beta "+$patch+" (núcleo "+$s.version+") · "+$(if($s.busy){'Ocupado'}else{'Libre'})}else{'Sin conexión'}
   [System.Windows.Forms.MessageBox]::Show($msg,'Montara Companion')|Out-Null
 })
 $update=$menu.Items.Add('Buscar e instalar actualización...')
