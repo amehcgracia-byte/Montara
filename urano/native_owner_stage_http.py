@@ -77,7 +77,7 @@ def native_stage_route(method: str, path: str, query: str = "") -> NativeStageTa
         if (set(params)!={"path"} or len(params["path"])!=1 or
                 not params["path"][0].startswith("/") or
                 len(params["path"][0])>1800 or
-                any(c in params["path"][0] for c in "\\x00\\r\\n")):
+                any(c in params["path"][0] for c in (chr(0), chr(13), chr(10)))):
             return None
         return NativeStageTarget(path+"?"+urlencode({"path":params["path"][0]}),
                                  "audio-media")
