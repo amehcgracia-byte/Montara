@@ -14,7 +14,8 @@ from pathlib import Path
 LEGACY_WORKER = "/opt/montara/broker/private_broker_worker.py"
 SMART_PILOT_WORKER = "/opt/montara/broker-smart-candidate/private_broker_worker.py"
 NATIVE_CHEMA_WORKER = "/opt/montara/broker-smart-candidate/native_owner_systemd_worker.py"
-_ALLOWED = frozenset((LEGACY_WORKER, SMART_PILOT_WORKER, NATIVE_CHEMA_WORKER))
+H4_NATIVE_WORKER = "/opt/montara/broker-h4-native/native_owner_systemd_worker.py"
+_ALLOWED = frozenset((LEGACY_WORKER, SMART_PILOT_WORKER, NATIVE_CHEMA_WORKER, H4_NATIVE_WORKER))
 
 
 def trusted_operator_worker_script(worker_script: str | None,
@@ -23,7 +24,7 @@ def trusted_operator_worker_script(worker_script: str | None,
     selected = LEGACY_WORKER if worker_script is None else worker_script
     if not isinstance(selected, str) or selected not in _ALLOWED:
         raise ValueError("Unapproved root-owned worker runner")
-    if selected == NATIVE_CHEMA_WORKER and jm_bundle is None:
+    if selected in (NATIVE_CHEMA_WORKER,H4_NATIVE_WORKER) and jm_bundle is None:
         raise ValueError("Native Chema requires a pinned JM bundle")
     path = Path(selected)
     if path.is_symlink() or not path.is_file():
