@@ -194,6 +194,25 @@ class NativeOwnerH3AuthenticatedGatewayTests(unittest.TestCase):
                 }
             return b"mp4-preview",200,{"Content-Type":"video/mp4"}
 
+        @worker.get("/api/v1/edit/native-recipe")
+        def native_recipe():
+            self.native_calls.append((owner,"native-recipe"))
+            return jsonify(version=1,engine="a"*40,revision="a"*20,
+                           platform="youtube",
+                           sources=[{"key":0,"path":str(home/"WizardUploads"/"camera.mp4"),
+                                     "preview":True}],
+                           segments=[{"source":0}],fallbacks={})
+
+        @worker.get("/api/v1/edit/native-master")
+        def native_master():
+            self.native_calls.append((owner,"native-master"))
+            return send_file(home/"WizardUploads"/"song.wav",mimetype="audio/x-wav")
+
+        @worker.get("/api/v1/edit/native-source/<int:index>")
+        def native_source(index):
+            self.native_calls.append((owner,"native-source",index,request.method))
+            return send_file(home/"WizardUploads"/"camera.mp4",mimetype="video/mp4")
+
         @worker.get("/api/v1/edit/shot")
         def shot_document():
             self.native_calls.append((owner,"shot-get",request.args.get("index")))
@@ -457,6 +476,51 @@ class NativeOwnerH3AuthenticatedGatewayTests(unittest.TestCase):
                 },data=b"one-byte-proxy")
                 self.assertEqual(result.status_code,400)
                 self.assertEqual(len(self.native_calls),count)
+
+    def test_native_export_recipe_master_and_source_scoped_to_owner(self):
+        a=self.user(self.a)
+        self.assertEqual(self.ensure(a).status_code,200)
+        aw=self.registry.get("owner-a").workspace_id
+        folder=self.workers[aw][0]
+        scope={**a,"X-Montara-Engine-Generation":"1"}
+        saved=self.rpc("POST","api/v1/wizard/draft",scope,json={
+            "project_id":None,"videos":[str(folder/"WizardUploads"/"camera.mp4")]})
+        self.assertEqual(saved.status_code,200)
+        project=saved.json["project_id"]
+        qs={"project_id":project}
+        recipe=self.rpc("GET","api/v1/edit/native-recipe",scope,query_string=qs)
+        self.assertEqual(recipe.status_code,200,recipe.get_data(as_text=True))
+        self.assertEqual(recipe.json["sources"][0]["key"],0)
+        mediaq={**qs,"revision":"a"*20}
+        master=self.rpc("GET","api/v1/edit/native-master",scope,query_string=mediaq)
+        self.assertEqual(master.status_code,200,master.data)
+        self.assertTrue(master.data.startswith(b"RIFF"))
+        self.assertEqual(master.mimetype,"audio/x-wav")
+        head=self.rpc("HEAD","api/v1/edit/native-source/0",scope,query_string=mediaq)
+        self.assertEqual(head.status_code,200,head.data)
+        self.assertEqual(head.data,b"")
+        media=self.rpc("GET","api/v1/edit/native-source/0",scope,query_string=mediaq)
+        self.assertEqual(media.status_code,200,media.data)
+        self.assertEqual(media.data,b"private-camera")
+        before=len(self.native_calls)
+        for operation in ("api/v1/edit/native-recipe",
+                          "api/v1/edit/native-master",
+                          "api/v1/edit/native-source/0"):
+            extra=qs if operation.endswith("recipe") else mediaq
+            self.assertEqual(self.rpc("GET",operation,scope,
+                    query_string={**extra,"other":"x"}).status_code,404)
+            self.assertEqual(self.rpc("GET",operation,scope,
+                    query_string={**extra,"project_id":"/etc/passwd"}).status_code,403)
+        self.assertEqual(len(self.native_calls),before)
+        b=self.user(self.b)
+        self.assertEqual(self.ensure(b).status_code,200)
+        foreign={**b,"X-Montara-Engine-Generation":"1"}
+        for operation in ("api/v1/edit/native-recipe",
+                          "api/v1/edit/native-master",
+                          "api/v1/edit/native-source/0"):
+            extra=qs if operation.endswith("recipe") else mediaq
+            self.assertEqual(self.rpc("GET",operation,foreign,
+                    query_string=extra).status_code,403)
 
     def test_shot_editor_read_patch_and_private_frame_are_owner_scoped(self):
         a=self.user(self.a)
