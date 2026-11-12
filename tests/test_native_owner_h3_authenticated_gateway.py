@@ -471,7 +471,7 @@ class NativeOwnerH3AuthenticatedGatewayTests(unittest.TestCase):
         frame=self.rpc("GET","api/v1/edit/shot/frame",scope,
                        query_string={"index":"3","choice":"0",
                                      "revision":"a"*20})
-        self.assertEqual(frame.status_code,200,frame.get_data(as_text=True))
+        self.assertEqual(frame.status_code,200,frame.data)
         self.assertEqual(frame.mimetype,"image/jpeg")
         changed=self.rpc("PATCH","api/v1/edit/shot",scope,json={
             "project_id":own_project,"revision":"a"*20,"index":3,
