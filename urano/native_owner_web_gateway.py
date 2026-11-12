@@ -199,6 +199,8 @@ def native_owner_gateway_blueprint(
                     headers["X-Zucker-Filename"]=request.headers["X-Zucker-Filename"]
                 if kind=="upload-chunk":
                     headers["Upload-Offset"]=request.headers["Upload-Offset"]
+                if kind=="audio-media" and request.headers.get("Range"):
+                    return jsonify(error="Audio range unsupported in private beta"),416
                 if kind=="review-media" and request.headers.get("Range"):
                     ranged=request.headers["Range"]
                     if (len(ranged)>80 or
