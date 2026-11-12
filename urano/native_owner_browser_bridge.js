@@ -18,6 +18,7 @@
     'api/v1/wizard/review', 'api/v1/wizard/review/replace',
     'api/v1/wizard/review/render',
     'api/v1/wizard/upload','montara/uploads','montara/branding',
+    'api/v1/edit/shot', 'api/v1/edit/shot/frame',
     'api/v1/settings/fillers','api/v1/settings/video-light',
     'api/v1/settings/camera-types','api/v1/settings/camera-subjects',
     'api/v1/settings/camera-roles','api/v1/settings/spherical-landmarks',
@@ -101,11 +102,25 @@
     const versionQuery = (reviewedPreview || reviewedThumbnail) &&
       params.size === 1 && params.has('v') &&
       /^[A-Za-z0-9_.-]{0,80}$/.test(params.get('v')||'');
+    const shotQuery = operation==='api/v1/edit/shot' &&
+      method==='GET' && params.size===1 && params.has('index') &&
+      /^[0-9]{1,4}$/.test(params.get('index')||'');
+    const shotFrame = operation==='api/v1/edit/shot/frame' &&
+      method==='GET' && params.size===3 &&
+      [...params.keys()].every(k=>['index','choice','revision'].includes(k)) &&
+      /^[0-9]{1,4}$/.test(params.get('index')||'') &&
+      /^[0-9]{1,2}$/.test(params.get('choice')||'') &&
+      /^[a-f0-9]{20}$/.test(params.get('revision')||'');
+    if (operation==='api/v1/edit/shot' &&
+        !((method==='PATCH' && !address.search) || shotQuery))
+      return {kind:'blocked'};
+    if (operation==='api/v1/edit/shot/frame' && !shotFrame)
+      return {kind:'blocked'};
     const audioQuery = audioRoute && params.size === 1 &&
       params.has('path') && !!params.get('path') &&
       params.get('path').startsWith('/') && params.get('path').length <= 1800;
     if (audioRoute && !audioQuery) return {kind:'blocked'};
-    if (address.search && !isStatus && !review && !versionQuery && !audioQuery)
+    if (address.search && !isStatus && !review && !versionQuery && !audioQuery && !shotQuery && !shotFrame)
       return {kind:'blocked'};
     return {kind:'worker', path:nativePrefix + operation + address.search};
   };
@@ -237,6 +252,39 @@
             if (pending.get(this)!==task) return;
             descriptor.set.call(this,url);
             this.load();
+          }).catch(()=>{
+            if(pending.get(this)===task)this.dispatchEvent(new Event('error'));
+          });
+        }
+      });
+    }
+  }
+
+  // The original cut editor loads individual JPEG frames through new Image().
+  // Only the reviewed shot/frame GET is resolved to a private bounded blob;
+  // we never expose the Owner CSRF token in a URL or serve the source openly.
+  if (typeof HTMLImageElement !== 'undefined') {
+    const descriptor=Object.getOwnPropertyDescriptor(
+      HTMLImageElement.prototype,'src');
+    if (descriptor?.get && descriptor?.set) {
+      const pending=new WeakMap();
+      Object.defineProperty(HTMLImageElement.prototype,'src',{
+        configurable:true,enumerable:descriptor.enumerable,
+        get(){return pending.get(this)?.original || descriptor.get.call(this);},
+        set(value) {
+          const original=String(value);
+          const selected=route(original,'GET');
+          if (!selected || selected.kind!=='worker' ||
+              !selected.path.startsWith(nativePrefix+'api/v1/edit/shot/frame?')) {
+            pending.delete(this);
+            return descriptor.set.call(this,value);
+          }
+          const task={original};
+          pending.set(this,task);
+          descriptor.set.call(this,'');
+          reviewBlob(original).then(url=>{
+            if (pending.get(this)!==task) return;
+            descriptor.set.call(this,url);
           }).catch(()=>{
             if(pending.get(this)===task)this.dispatchEvent(new Event('error'));
           });
