@@ -158,6 +158,23 @@ class NativeOwnerWorkspaceGate:
             except (ValueError, TypeError, OSError):
                 return self._deny(environ, start_response)
             return self.app(environ, start_response)
+        if method in ("GET","HEAD") and (path in (
+                "/api/v1/edit/native-recipe","/api/v1/edit/native-master")
+                or re.fullmatch(r"/api/v1/edit/native-source/[0-9]{1,3}",path)):
+            from urllib.parse import parse_qs
+            try:
+                args=parse_qs(environ.get("QUERY_STRING",""),
+                              strict_parsing=True,max_num_fields=2)
+                keys={"project_id"} if path.endswith("native-recipe") else {
+                    "project_id","revision"}
+                if (set(args)!=keys or any(len(v)!=1 for v in args.values())
+                        or not self._safe_project(args["project_id"][0])
+                        or ("revision" in keys and not re.fullmatch(
+                             r"[a-f0-9]{20}",args["revision"][0]))):
+                    raise UntrustedNativeWorkspace("Untrusted export request")
+            except (ValueError,TypeError,KeyError):
+                return self._deny(environ,start_response)
+            return self.app(environ,start_response)
         if method == "GET" and path in _GUARDED_GET:
             # Chema may poll another *saved* project while a new video starts.
             # The query's project_id must still be owner-local.
