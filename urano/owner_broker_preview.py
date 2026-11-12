@@ -17,13 +17,13 @@ from urano.session_auth import SESSION_COOKIE,SessionStore
 SOCKET="/run/montara-i27-admission/control.sock"
 
 
-def _broker_frame_request(payload: dict) -> dict:
+def _broker_frame_request(payload: dict, *, socket_path: str = SOCKET) -> dict:
     frame=json.dumps(payload,separators=(",",":")).encode()
     if len(frame)>384:
         raise ValueError("Invalid owner frame")
     with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as client:
         client.settimeout(38)
-        client.connect(SOCKET)
+        client.connect(socket_path)
         client.sendall(frame)
         reply=client.recv(2048)
     result=json.loads(reply)
@@ -32,10 +32,11 @@ def _broker_frame_request(payload: dict) -> dict:
     return result
 
 
-def broker_request(operation: str, session: str, csrf: str, project: str) -> dict:
+def broker_request(operation: str, session: str, csrf: str, project: str,
+                   *, control_socket: str = SOCKET) -> dict:
     return _broker_frame_request({
         "op":operation, "session":session, "csrf":csrf, "project_id":project
-    })
+    }, socket_path=control_socket)
 
 
 def broker_stage_request(session: str, csrf: str, project: str,
