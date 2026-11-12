@@ -483,8 +483,7 @@ class NativeOwnerH3AuthenticatedGatewayTests(unittest.TestCase):
             "choice":0,"edit_component":"movement","movement":True,
             "apply_to_source":False,"playback_speed":1.0})
         self.assertEqual(changed.status_code,200,changed.get_data(as_text=True))
-        tunneled=self.rpc("POST","api/v1/edit/shot",{
-            **scope,"X-Montara-Shot-Method":"PATCH"},json={
+        tunneled=self.rpc("POST","api/v1/edit/shot/save",scope,json={
             "project_id":own_project,"revision":"a"*20,"index":3,
             "choice":0,"edit_component":"movement","movement":True,
             "apply_to_source":False,"playback_speed":1.0})
@@ -494,8 +493,8 @@ class NativeOwnerH3AuthenticatedGatewayTests(unittest.TestCase):
             "project_id":own_project,"revision":"a"*20,"index":3,
             "choice":0,"apply_to_source":False,
             "edit_component":"movement"}).status_code,404)
-        self.assertEqual(self.rpc("POST","api/v1/wizard/draft",{
-            **scope,"X-Montara-Shot-Method":"PATCH"},json={}).status_code,404)
+        self.assertEqual(self.rpc("POST","api/v1/edit/shot/save",scope,
+            query_string={"index":"3"},json={}).status_code,404)
         for query in ({"index":"0","another":"bad"},
                       {"index":"-1"},{"index":"x"}):
             self.assertEqual(self.rpc("GET","api/v1/edit/shot",scope,
@@ -521,8 +520,7 @@ class NativeOwnerH3AuthenticatedGatewayTests(unittest.TestCase):
             "project_id":own_project,"revision":"a"*20,"index":3,
             "choice":0,"apply_to_source":False,
             "edit_component":"movement"}).status_code,403)
-        self.assertEqual(self.rpc("POST","api/v1/edit/shot",{
-            **foreign,"X-Montara-Shot-Method":"PATCH"},json={
+        self.assertEqual(self.rpc("POST","api/v1/edit/shot/save",foreign,json={
             "project_id":own_project,"revision":"a"*20,"index":3,
             "choice":0,"apply_to_source":False,
             "edit_component":"movement"}).status_code,403)
