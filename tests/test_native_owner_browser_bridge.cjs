@@ -67,7 +67,7 @@ async function main() {
       return new Response(JSON.stringify({index:3,revision:'a'.repeat(20)}),
         {status:200,headers:{'Content-Type':'application/json'}});
     }
-    if(url==='/urano/v1/native/rpc/api/v1/edit/shot') {
+    if(url==='/urano/v1/native/rpc/api/v1/edit/shot/save') {
       return new Response(JSON.stringify({ok:true}),
         {status:200,headers:{'Content-Type':'application/json'}});
     }
@@ -158,9 +158,9 @@ async function main() {
   });
   assert.equal(shotPatch.status,200);
   const patchWire=calls.at(-1);
-  assert.equal(patchWire.url,'/urano/v1/native/rpc/api/v1/edit/shot');
+  assert.equal(patchWire.url,'/urano/v1/native/rpc/api/v1/edit/shot/save');
   assert.equal(patchWire.options.method,'POST');
-  assert.equal(patchWire.options.headers.get('X-Montara-Shot-Method'),'PATCH');
+  assert.equal(patchWire.options.headers.has('X-Montara-Shot-Method'),false);
   assert.equal(patchWire.options.headers.get('X-Urano-CSRF'),csrf);
   const image=new FakeImageElement();
   image.src=framePath;
