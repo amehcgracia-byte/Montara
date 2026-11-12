@@ -145,6 +145,9 @@ def native_owner_gateway_blueprint(
             }
             if not valid_first_upload(meta):
                 return jsonify(error="Invalid private media metadata"),400
+            # Owner app defaults to a 300 KB control-plane cap; only reviewed
+            # upload routes may widen Flask's per-request streaming limit.
+            request.max_content_length=_MAX_DIRECT_MEDIA
             body=request.stream
         elif kind=="upload-chunk":
             offset=request.headers.get("Upload-Offset","")
@@ -153,6 +156,7 @@ def native_owner_gateway_blueprint(
                     or not offset.isascii() or not offset.isdecimal()
                     or len(offset)>16):
                 return jsonify(error="Invalid private media chunk"),400
+            request.max_content_length=_MAX_CHUNK
             body=request.stream
         else:
             limit=8192 if kind=="upload-init" else _MAX_BODY
