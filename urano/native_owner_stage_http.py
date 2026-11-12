@@ -39,6 +39,7 @@ def native_stage_route(method: str, path: str, query: str = "") -> NativeStageTa
         return None
     static={
         ("GET","/api/v1/artifacts/sync"):"json",
+        ("POST","/montara/branding"):"branding",
         ("POST","/api/v1/wizard/review/replace"):"json",
         ("POST","/api/v1/wizard/review/render"):"json",
         ("POST","/api/v1/wizard/upload"):"upload-direct",
