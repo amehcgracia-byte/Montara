@@ -6,6 +6,7 @@ none may be supplied or overridden by a browser or project payload.
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -37,12 +38,12 @@ class NativeSystemdOwnerArgsTests(unittest.TestCase):
             "--private-proxy-limit-mib", "2048",
         ]
 
-    def validate(self, argv=None, state=None, runtime=None):
+    def validate(self, argv=None, state=None, runtime=None, **kwargs):
         return trusted_native_worker_args(
             self.argv if argv is None else argv,
             state_directory=str(self.state) if state is None else state,
             runtime_root=self.runtime if runtime is None else runtime,
-            runtime_base=self.run,
+            runtime_base=self.run, **kwargs,
         )
 
     def test_exact_operator_invocation_and_existing_broker_ready_identity(self):
@@ -101,6 +102,26 @@ class NativeSystemdOwnerArgsTests(unittest.TestCase):
         link.symlink_to(self.state, target_is_directory=True)
         with self.assertRaises(NativeSystemdOwnerError):
             self.validate(state=str(link))
+
+    def test_canonical_systemd_private_state_symlink_is_allowed(self):
+        # Matches DynamicUser: /var/lib/<name> -> private/<name>.
+        name = "montara-owner-" + "b" * 40
+        private = self.base / "private"
+        private.mkdir()
+        dest = private / name
+        dest.mkdir(mode=0o700)
+        link = self.base / name
+        link.symlink_to(Path("private") / name, target_is_directory=True)
+        data = self.validate(
+            state=str(link), systemd_state_parent=self.base,
+            systemd_link_uid=os.getuid())
+        self.assertEqual(data[0], dest)
+        link.unlink()
+        link.symlink_to(self.state, target_is_directory=True)
+        with self.assertRaises(NativeSystemdOwnerError):
+            self.validate(state=str(link),
+                          systemd_state_parent=self.base,
+                          systemd_link_uid=os.getuid())
 
     def test_runtime_directory_and_permissions_are_fixed_to_unit(self):
         other = self.run / ("montara-i24-job-" + "b" * 32)
