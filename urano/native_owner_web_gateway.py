@@ -12,6 +12,7 @@ large media are NOT enabled by this first H3 gate.
 """
 from __future__ import annotations
 
+import io
 import json
 import re
 from contextlib import closing
@@ -20,6 +21,8 @@ from http.client import HTTPException
 from flask import Blueprint, Response, jsonify, request
 
 from urano.native_owner_new_latest_http import native_new_latest_target
+from urano.native_owner_stage_http import native_stage_route
+from urano.first_valid_upload_gate import valid_first_upload
 from urano.native_owner_workspace_registry import (
     NativeOwnerWorkspaceRegistry, ExistingOwnerProjects,
 )
@@ -30,6 +33,9 @@ from urano.session_auth import SESSION_COOKIE, SessionStore
 _GEN = re.compile(r"[1-9][0-9]{0,9}\Z")
 _MAX_BODY = 256_000
 _MAX_REPLY = 1_000_000
+_MAX_DIRECT_MEDIA = 256_000_000
+_MAX_CHUNK = 16 * 1024 * 1024
+_MAX_PROXY = 2048 * 1024 * 1024
 
 
 def native_owner_gateway_blueprint(
@@ -99,11 +105,17 @@ def native_owner_gateway_blueprint(
               methods=["GET","POST"])
     def native_rpc(operation: str):
         path = "/" + operation
-        target = native_new_latest_target(
-            request.method,path,request.query_string.decode("ascii","strict")
-            if request.query_string.isascii() else "")
-        if target is None:
+        if not request.query_string.isascii():
+            return jsonify(error="Unsupported original editor query"),404
+        query=request.query_string.decode("ascii")
+        target = native_new_latest_target(request.method,path,query)
+        extra = None if target is not None else native_stage_route(
+            request.method,path,query)
+        if target is None and extra is None:
             return jsonify(error="Original editor operation not enabled"),404
+        if extra is not None:
+            target=extra.upstream
+        kind="json" if extra is None else extra.kind
         token,csrf,error = verified()
         if error is not None:
             return error
@@ -115,16 +127,38 @@ def native_owner_gateway_blueprint(
             return jsonify(error="Private Engine generation required"),409
         if request.headers.get("Transfer-Encoding"):
             return jsonify(error="Unsupported request framing"),400
-        if request.method == "GET":
-            if request.content_length not in (None,0):
+        length = request.content_length
+        if request.method == "GET" or request.method=="DELETE":
+            if length not in (None,0):
                 return jsonify(error="Body unsupported"),400
-            body = None
+            body=None
+        elif kind=="upload-direct":
+            if (type(length) is not int or not 0 < length <= _MAX_DIRECT_MEDIA
+                    or request.mimetype!="application/octet-stream"):
+                return jsonify(error="Invalid media transfer"),400
+            meta={
+                "PATH_INFO":"/api/v1/wizard/upload","REQUEST_METHOD":"POST",
+                "CONTENT_LENGTH":str(length),
+                "CONTENT_TYPE":request.content_type,
+                "HTTP_X_ZUCKER_FILENAME":request.headers.get("X-Zucker-Filename",""),
+            }
+            if not valid_first_upload(meta):
+                return jsonify(error="Invalid private media metadata"),400
+            body=request.stream
+        elif kind=="upload-chunk":
+            offset=request.headers.get("Upload-Offset","")
+            if (type(length) is not int or not 0 < length <= _MAX_CHUNK
+                    or request.mimetype!="application/octet-stream"
+                    or not offset.isascii() or not offset.isdecimal()
+                    or len(offset)>16):
+                return jsonify(error="Invalid private media chunk"),400
+            body=request.stream
         else:
-            length = request.content_length
+            limit=8192 if kind=="upload-init" else _MAX_BODY
             if (type(length) is not int or length < 2 or
-                    length > _MAX_BODY or request.mimetype != "application/json"):
+                    length > limit or request.mimetype != "application/json"):
                 return jsonify(error="Expected bounded JSON body"),400
-            body = request.get_data(cache=False)
+            body=request.get_data(cache=False)
             if len(body) != length:
                 return jsonify(error="Incomplete native request"),400
             try:
@@ -133,13 +167,34 @@ def native_owner_gateway_blueprint(
                 return jsonify(error="Invalid native JSON"),400
             if not isinstance(value,dict):
                 return jsonify(error="Invalid native JSON object"),400
+            if kind=="upload-init":
+                validation={
+                    "PATH_INFO":"/montara/uploads","REQUEST_METHOD":"POST",
+                    "CONTENT_LENGTH":str(length),
+                    "CONTENT_TYPE":request.content_type,
+                    "wsgi.input":io.BytesIO(body),
+                }
+                if not valid_first_upload(validation,max_proxy_bytes=_MAX_PROXY):
+                    return jsonify(error="Private proxy metadata rejected"),400
+        if kind=="upload-limits":
+            reply=jsonify(
+                max_file_bytes=_MAX_PROXY,
+                max_original_file_bytes=256*1024*1024,
+                chunk_bytes=4*1024*1024,free_bytes=None)
+            reply.headers["Cache-Control"]="no-store"
+            reply.headers["X-Montara-Engine-Generation"]=generation
+            return reply
         try:
             with closing(connect_worker(token,csrf,workspace.workspace_id,
                                          int(generation))) as conn:
                 headers={"Cache-Control":"no-store"}
                 if body is not None:
-                    headers["Content-Type"]="application/json"
-                    headers["Content-Length"]=str(len(body))
+                    headers["Content-Type"]=request.content_type
+                    headers["Content-Length"]=str(length)
+                if kind=="upload-direct":
+                    headers["X-Zucker-Filename"]=request.headers["X-Zucker-Filename"]
+                if kind=="upload-chunk":
+                    headers["Upload-Offset"]=request.headers["Upload-Offset"]
                 conn.request(request.method,target,body=body,headers=headers)
                 upstream=conn.getresponse()
                 reply=upstream.read(_MAX_REPLY+1)
@@ -147,8 +202,11 @@ def native_owner_gateway_blueprint(
                 content_type=upstream.getheader("Content-Type","application/json")
         except (OSError,ValueError,TimeoutError,RuntimeError,HTTPException):
             return jsonify(error="Private original editor unavailable"),503
+        empty_chunk_response=(
+            kind=="upload-chunk" and 200<=code<300 and not reply)
         if (len(reply)>_MAX_REPLY or not 100<=code<=599 or
-                not content_type.lower().startswith("application/json") or
+                (not content_type.lower().startswith("application/json")
+                 and not empty_chunk_response) or
                 any(c in content_type for c in "\r\n")):
             return jsonify(error="Unexpected native worker response"),503
         response=Response(reply,status=code,content_type=content_type)
