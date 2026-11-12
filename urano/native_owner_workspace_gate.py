@@ -140,8 +140,8 @@ class NativeOwnerWorkspaceGate:
             query = parse_qs(environ.get("QUERY_STRING", ""), keep_blank_values=True)
             ids = query.get("project_id", [])
             if (len(ids) > 1 or
-                    (ids and (not isinstance(ids[0], str) or
-                              not self._safe_project(ids[0])))):
+                    (ids and ids[0] not in ("", None)
+                     and not self._safe_project(ids[0]))):
                 return self._deny(environ, start_response)
             return self.app(environ, start_response)
         if method != "POST" or path not in _GUARDED_POST:
