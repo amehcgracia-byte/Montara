@@ -102,7 +102,7 @@ def native_owner_gateway_blueprint(
         return response
 
     @bp.route("/rpc/<path:operation>",
-              methods=["GET","POST"])
+              methods=["GET","POST","PUT","DELETE"])
     def native_rpc(operation: str):
         path = "/" + operation
         if not request.query_string.isascii():
