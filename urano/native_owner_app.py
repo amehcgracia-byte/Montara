@@ -19,6 +19,7 @@ from urano.google_flow import (
     OIDCSettings, GoogleProvider, PendingLogins, google_login_blueprint,
 )
 from urano.google_owner import GoogleOwnerStore
+from urano.native_owner_companion_updates import companion_update_blueprint
 from urano.native_owner_browser_surface import native_owner_browser_blueprint
 from urano.native_owner_web_gateway import native_owner_gateway_blueprint
 from urano.native_owner_workspace_registry import NativeOwnerWorkspaceRegistry
@@ -55,6 +56,12 @@ def create_native_owner_api(private_dir: Path, *, settings: OIDCSettings,
         success_path="/urano/v1/native/"))
     app.register_blueprint(native_owner_browser_blueprint(
         sessions,https_origin=origin,web_root=web))
+    # Exact read-only H4 update channel: no OAuth cookies, files or project data.
+    release_dir=Path(__import__("os").environ.get(
+        "MONTARA_H4_COMPANION_RELEASE_DIR", "/nonexistent"))
+    if release_dir.is_dir():
+        app.register_blueprint(companion_update_blueprint(
+            https_origin=origin,release_dir=release_dir))
     bridge={}
     if ensure_worker is not None:
         bridge["ensure_worker"]=ensure_worker
