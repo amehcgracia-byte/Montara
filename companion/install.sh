@@ -12,14 +12,40 @@ say() { printf '  %s\n' "$*"; }
 echo "Montara companion"
 
 PY=""
-for c in python3 /opt/homebrew/bin/python3 /usr/local/bin/python3 /usr/bin/python3; do
-  if command -v "$c" >/dev/null 2>&1 && "$c" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)' 2>/dev/null; then
-    PY="$(command -v "$c")"; break
+if [ "$(uname -s)" = Darwin ]; then
+  arch="$(uname -m)"
+  python311_ok() {
+    "$1" - "$arch" <<'PYTHON'
+import email.utils, platform, sys, threading
+if sys.version_info[:2] != (3, 11) or platform.machine() != sys.argv[1]:
+    sys.exit(1)
+result = []
+def probe():
+    for _ in range(100):
+        email.utils.formatdate(usegmt=True)
+    result.append(True)
+thread = threading.Thread(target=probe)
+thread.start()
+thread.join()
+sys.exit(0 if result else 1)
+PYTHON
+  }
+  for candidate in /opt/homebrew/opt/python@3.11/bin/python3.11 /usr/local/opt/python@3.11/bin/python3.11 /Library/Frameworks/Python.framework/Versions/3.11/bin/python3.11 "$(command -v python3.11 || true)"; do
+    if [ -x "$candidate" ] && python311_ok "$candidate"; then PY="$candidate"; break; fi
+  done
+  if [ -z "$PY" ] && command -v brew >/dev/null 2>&1; then
+    brew install python@3.11
+    candidate="$(brew --prefix python@3.11)/bin/python3.11"
+    if python311_ok "$candidate"; then PY="$candidate"; fi
   fi
-done
-if [ -z "$PY" ]; then
-  say "Python 3.9 or newer is needed. On a Mac run:  xcode-select --install   then run this command again."
-  exit 1
+  [ -n "$PY" ] || { say "A native Python 3.11 is required for Companion on macOS."; exit 1; }
+else
+  for c in python3 /usr/bin/python3; do
+    if command -v "$c" >/dev/null 2>&1 && "$c" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)' 2>/dev/null; then
+      PY="$(command -v "$c")"; break
+    fi
+  done
+  [ -n "$PY" ] || { say "Python 3.9 or newer is required."; exit 1; }
 fi
 say "python: $PY"
 
@@ -139,12 +165,14 @@ fi
 if [ "${1:-}" = "--video" ] || [ "${MONTARA_VIDEO:-}" = "1" ]; then
   VIDEO="$DIR/video"; ROOT_RAW="https://raw.githubusercontent.com/amehcgracia-byte/Montara/$REF"
   VPY=""
+  if [ "$(uname -s)" = Darwin ]; then VPY="$PY"; else
   for candidate in python3.11 python3.12 python3.10 "$DIR/mixer/venv/bin/python" "$PY"; do
     if command -v "$candidate" >/dev/null 2>&1 && "$candidate" -c 'import sys;sys.exit(0 if (3,10)<=sys.version_info[:2]<=(3,12) else 1)' 2>/dev/null; then VPY="$(command -v "$candidate")";break;fi
   done
   if [ -z "$VPY" ] && command -v brew >/dev/null 2>&1; then
     brew install python@3.11
     VPY="$(brew --prefix python@3.11)/bin/python3.11"
+  fi
   fi
   [ -n "$VPY" ] || { say "The video renderer needs Python 3.10–3.12. Install Python 3.11, then run this installer with --video."; exit 1; }
   SHA="${expected:-$(curl -fsSL "https://api.github.com/repos/amehcgracia-byte/Montara/contents/engine?ref=$REF" | "$VPY" -c 'import json,sys; print(json.load(sys.stdin)["sha"])')}"
@@ -156,9 +184,10 @@ if [ "${1:-}" = "--video" ] || [ "${MONTARA_VIDEO:-}" = "1" ]; then
   curl -fsSL "https://codeload.github.com/amehcgracia-byte/zucker_videos/tar.gz/$SHA" | tar -xz -C "$stage/engine" --strip-components=1
   for f in local_video.py video_recipe.py; do curl -fsSL "$RAW/$f" -o "$stage/$f"; done
   for f in montara-logo.png montara-watermark.png; do curl -fsSL "$ROOT_RAW/web/brand/$f" -o "$stage/brand/$f"; done
-  [ -x "$VIDEO/venv/bin/python" ] || "$VPY" -m venv "$VIDEO/venv"
-  "$VIDEO/venv/bin/python" -m pip install -q 'numpy>=1.26,<2' 'scipy>=1.11,<1.15' 'opencv-python-headless>=4.9,<4.12' 'pillow>=10' 'flask>=3'
-  (cd "$stage/engine" && ZUCKER_DATA_ROOT="$stage/smoke" "$VIDEO/venv/bin/python" -c 'from core.stages.export import ExportStage')
+  # Stage a fresh environment; a failed dependency install leaves the old one intact.
+  "$VPY" -m venv "$stage/venv"
+  "$stage/venv/bin/python" -m pip install -q 'numpy>=1.26,<2' 'scipy>=1.11,<1.15' 'opencv-python-headless>=4.9,<4.12' 'pillow>=10' 'flask>=3'
+  (cd "$stage/engine" && ZUCKER_DATA_ROOT="$stage/smoke" "$stage/venv/bin/python" -c 'import cv2, numpy, scipy; from core.stages.export import ExportStage')
   printf '%s\n' "$SHA" > "$stage/ENGINE_COMMIT"
   if [ "${MONTARA_REQUIRE_CLOSED:-0}" = 1 ] && lsof -t -iTCP:47820 -sTCP:LISTEN >/dev/null 2>&1; then
     say "Companion started during setup. Wait for work to finish and quit it first."; exit 1
@@ -166,11 +195,11 @@ if [ "${1:-}" = "--video" ] || [ "${MONTARA_VIDEO:-}" = "1" ]; then
   touch "$VIDEO/INSTALLING"
   if [ -d "$VIDEO/engine" ] || [ -d "$VIDEO/brand" ]; then
     previous=$(mktemp -d "$VIDEO/.previous.XXXXXXXX")
-    for f in engine ENGINE_COMMIT local_video.py video_recipe.py brand; do
+    for f in engine ENGINE_COMMIT local_video.py video_recipe.py brand venv; do
       [ ! -e "$VIDEO/$f" ] || mv "$VIDEO/$f" "$previous/$f"
     done
   fi
-  for f in engine local_video.py video_recipe.py brand ENGINE_COMMIT; do mv "$stage/$f" "$VIDEO/$f"; done
+  for f in engine local_video.py video_recipe.py brand venv ENGINE_COMMIT; do mv "$stage/$f" "$VIDEO/$f"; done
   rm -f "$VIDEO/INSTALLING"
   rm -rf "$stage"
   trap - EXIT

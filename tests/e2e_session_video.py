@@ -69,14 +69,24 @@ def main():
             assert all(sf.info(p).subtype=='OPUS' for p in compressed)
             assert not list((out/'data'/'Uploads').glob('*/*.wav')), 'No full-jam PCM expanded during upload'
             page.screenshot(path=str(out/'01-proxy-and-stems.png'),full_page=True)
-            # The user's manual instrument choice survives the compact source suffix.
-            page.locator('#audioFiles [data-track-type]').first.select_option('sax')
+            assert page.locator('#audioFiles [data-track-type]').count() == 0
             renders=[]
-            page.on('request',lambda request:renders.append(request.url) if '/montara/session/' in request.url and request.url.endswith('/render') else None)
+            page.on('request', lambda request: renders.append(request.post_data_json)
+                    if '/montara/session/' in request.url and request.url.endswith('/render') else None)
             page.locator('#continueFootage').click()
-            # No browser mixer preview or acceptance in the camera + stems path.
-            mixer_requests=[]
-            page.on('request',lambda request:mixer_requests.append(request.url) if '/montara/mix' in request.url else None)
+            page.locator('#useMix').wait_for(state='visible', timeout=600000)
+            page.wait_for_function("!document.querySelector('#useMix').disabled && document.querySelector('#useMix').textContent === 'Continue with this mix'", timeout=600000)
+            assert not renders, 'Stage must wait for the user to accept the mix'
+            assert page.locator('#playMix').is_visible()
+            assert not page.locator('#strips').is_visible()
+            page.locator('#showMixControls').click()
+            assert page.locator('#strips').is_visible()
+            reviewed = page.evaluate("""() => {
+                const track = mix.plan.tracks.find(t => t.active !== false);
+                track.fader_db += 1;
+                return {file: track.file, gain: track.fader_db};
+            }""")
+            page.locator('#useMix').click()
             page.wait_for_function("!document.querySelector('#cameras').hidden || /Could not|different songs|several songs|failed/i.test(document.querySelector('#toast:not([hidden])')?.textContent || '') || document.querySelector('#failed:not([hidden])')",timeout=600000)
             assert page.locator('#cameras').is_visible(),page.locator('#toast').inner_text()
             assert page.evaluate('fullSession.data.songs.filter(s=>s.selected).length')==1
@@ -88,7 +98,9 @@ def main():
             assert page.evaluate('!!state.mixMaster')
             assert len(renders)==1
             assert page.evaluate('fullSession.data.results.length')==1
-            assert not mixer_requests, 'Automatic master must not prepare/analyse a separate browser mixer'
+            sent = renders[0]['per_song'][str(song['id'])]
+            name = reviewed['file']
+            assert abs(sent['base_gains'][name] + sent['faders'][name] - reviewed['gain']) < .01
             assert not page.locator('#mix').is_visible()
             page.wait_for_function('range.duration>18 && range.duration<22',timeout=30000)
             download=page.request.get(url+page.locator('#mixedMasterDownload').get_attribute('href'))
@@ -115,14 +127,14 @@ def main():
             page.screenshot(path=str(out/'03-source-stems-recovered.png'),full_page=True)
             session_dir=out/'data'/'Sessions'/session_id
             session_data=json.loads((session_dir/'session.json').read_text())
-            assert session_data['track_types'].get('kick',{}).get('type')=='sax'
+            assert session_data['track_types'].get('kick',{}).get('type')=='kick'
             assert not (session_dir/'extras.log').exists(), 'Video mode must not launch full-song detection/listening extras'
             assert json.loads((session_dir/'waveform.json').read_text())['source']=='video-sync-guide'
             extracted=list((session_dir/'songs'/'1'/'tracks').glob('*.wav'))
             assert len(extracted)==2
             for track in extracted:
                 assert 18<sf.info(track).duration<22, 'Only camera-range PCM is extracted, not the whole jam/song'
-            summary={'passed':True,'panorama_proxy':True,'stems_mixed':2,'automatic_master':True,'browser_mixer_skipped':True,'compact_uploads':True,'downloadable_master':True,'matched_song':song,'master_before_range':True,'session_seconds':390,'mixed_seconds':round(song['end']-song['start'],3),'all_song_detection_skipped':True}
+            summary={'passed':True,'panorama_proxy':True,'stems_mixed':2,'reviewed_master':True,'confirmed_faders':True,'compact_uploads':True,'downloadable_master':True,'matched_song':song,'master_before_range':True,'session_seconds':390,'mixed_seconds':round(song['end']-song['start'],3),'all_song_detection_skipped':True}
             (out/'summary.json').write_text(json.dumps(summary,indent=2));print(json.dumps(summary),flush=True)
             browser.close()
     finally:

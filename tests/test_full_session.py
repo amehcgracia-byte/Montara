@@ -329,3 +329,39 @@ def test_latest_session_comes_from_server_not_old_browser_pointer(tmp_path):
     assert c.get('/montara/session/latest').json['id']=='b'*12
     (root/('b'*12)/'session.json').write_text('bad')
     assert c.get('/montara/session/latest').json['id']=='a'*12
+
+
+def test_reviewed_video_mix_passes_absolute_balance_to_renderer(tmp_path, monkeypatch):
+    import mixer_adapter.session as session
+    import mixer_adapter.single_song as single_song
+    from types import SimpleNamespace
+
+    track = 'Keys.wav'
+    folder = tmp_path / 'tracks'
+    folder.mkdir()
+    (tmp_path / "results").mkdir()
+    (folder / track).touch()
+    reviewed = {'base_gains': {track: -10}, 'faders': {track: 6}, 'mutes': {track: False}}
+    settings = full_session.mix_settings(reviewed, {track})
+    save(tmp_path / 'session.json', {
+        'songs': [{'id': 1, 'name': 'Excerpt', 'start': 0, 'end': 4}],
+        'tracks': [{'file': track}],
+        'settings': {'per_song': {'1': settings}},
+    })
+    monkeypatch.setattr(session, 'prepare_tracks', lambda *args, **kwargs: folder)
+    received = {}
+
+    class Mixer:
+        pipeline = SimpleNamespace()
+
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def render(self, faders, output, mutes, effects, **kwargs):
+            received.update(faders=faders, mutes=mutes, base_gains=kwargs['base_gains'])
+            return output
+
+    monkeypatch.setattr(single_song, 'SingleSongMix', Mixer)
+    monkeypatch.setenv('ZUCKER_MIXER_STATE_ROOT', str(tmp_path))
+    session.render_song(tmp_path, 1)
+    assert received == reviewed

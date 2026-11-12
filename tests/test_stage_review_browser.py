@@ -82,7 +82,7 @@ def test_stage_save_keeps_other_previews_and_offers_companion_recovery(tmp_path)
             middle_preview = middle.locator(".thumb").get_attribute("data-preview")
             middle.get_by_role("button", name="Edit").click()
             dialog = page.get_by_role("dialog")
-            dialog.get_by_role("checkbox", name="Movimiento").uncheck()
+            dialog.get_by_role("checkbox", name="Movement").uncheck()
             with page.expect_response(lambda r: r.request.method == "PATCH" and r.url.endswith("/api/v1/edit/shot")) as saved:
                 dialog.get_by_role("button", name="Save shot").click()
             assert saved.value.ok
@@ -100,8 +100,42 @@ def test_stage_save_keeps_other_previews_and_offers_companion_recovery(tmp_path)
             assert current[0] == initial[0] and current[2] == initial[2]
             assert current[1]["motion_enabled"] is False
             middle.get_by_role("button", name="Edit").click()
-            assert not dialog.get_by_role("checkbox", name="Movimiento").is_checked()
+            assert not dialog.get_by_role("checkbox", name="Movement").is_checked()
             dialog.get_by_role("button", name="Cancel").click()
+            # Exercise the first switch from a sphere to a flat camera,
+            # where its crop controls do not exist until update() mounts them.
+            import copy
+            view_doc = copy.deepcopy(page.request.get(url+'/api/v1/edit/shot?index=1').json())
+            view_doc.update(pose={'yaw':20,'pitch':0,'fov':90}, movement=False)
+            choice = view_doc['choices'][0]
+            view_doc['choices'] = [
+                {**choice,'label':'360 Singer','spherical':True,'pose':{'yaw':20,'pitch':0,'fov':90},'movement':False},
+                {**choice,'label':'Fixed Guitar','spherical':False,'framing':{'zoom':2,'x':.65,'y':.4},'movement':False},
+                {**choice,'label':'360 Piano','spherical':True,'pose':{'yaw':100,'pitch':-8,'fov':80},'movement':True},
+                {**choice,'label':'360 Drums','spherical':True,'pose':{'yaw':200,'pitch':5,'fov':100},'movement':False},
+            ]
+            view_doc['saved_views']=[{'name':'Guitar','source_path':choice['source_path'],
+                'flat_framing':{'zoom':2,'x':.65,'y':.4},'motion_enabled':False}]
+            def shot_fixture(route):
+                route.fulfill(json=view_doc)
+            page.route('**/api/v1/edit/shot?index=1',shot_fixture)
+            middle.get_by_role('button',name='Edit').click()
+            dialog=page.get_by_role('dialog')
+            camera_select=dialog.locator('[name=camera]')
+            camera_select.select_option('1')
+            assert float(dialog.get_by_role('slider',name='Close or open the shot').input_value()) == 2
+            camera_select.select_option('2')
+            assert dialog.locator('[name=yaw]').input_value() == '100'
+            assert dialog.get_by_role('checkbox',name='Movement',exact=True).is_checked()
+            camera_select.select_option('3')
+            assert dialog.locator('[name=yaw]').input_value() == '-160'
+            assert not dialog.get_by_role('checkbox',name='Movement',exact=True).is_checked()
+            dialog.get_by_role('button',name='Guitar',exact=True).click()
+            assert float(dialog.get_by_role('slider',name='Close or open the shot').input_value()) == 2
+            assert dialog.locator('[name=camera]').input_value() == '1'
+            dialog.get_by_role('button',name='Cancel',exact=True).click()
+            page.unroute('**/api/v1/edit/shot?index=1',shot_fixture)
+            assert json.loads(plan.read_text())['segments'] == current
             screenshot_dir = os.environ.get("MONTARA_TEST_SCREENSHOTS")
             if screenshot_dir:
                 page.screenshot(path=str(Path(screenshot_dir) / "stage-shot-saved.png"))

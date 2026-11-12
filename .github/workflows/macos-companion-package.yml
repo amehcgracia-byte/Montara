@@ -7,6 +7,8 @@ on:
       - fix/companion-pkg-user-staging-and-diagnostics-20261110
       - fix/companion-pkg-port-47820-collision-20261110
       - fix/jm-play-icon-and-honest-motion-state-20261110
+      - fix/companion-pkg-verified-running-but-false-failure-20261110
+      - fix/jm-safe-auto-framing-user-branch-20261110
   workflow_dispatch:
 permissions:
   contents: write

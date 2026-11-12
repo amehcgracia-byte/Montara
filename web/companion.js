@@ -24,8 +24,10 @@ const montaraCompanion = (() => {
   }
   async function readProxy(id, cancelled) {
     for (let attempt = 0; attempt < 3 && !cancelled(); attempt++) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 120000);
       try {
-        const response = await call(`/proxies/${id}/file`, {cache: 'no-store'});
+        const response = await call(`/proxies/${id}/file`, {cache: 'no-store', signal: controller.signal});
         if (response.ok) {
           const blob = await response.blob();
           if (cancelled()) return null;
@@ -35,7 +37,9 @@ const montaraCompanion = (() => {
           return null;
         }
       } catch (error) {
-        if (!(error instanceof TypeError) && error.name !== 'TypeError') throw error;
+        if (!controller.signal.aborted && !(error instanceof TypeError) && error.name !== 'TypeError') throw error;
+      } finally {
+        clearTimeout(timeout);
       }
       if (attempt < 2 && !cancelled()) await new Promise(resolve => setTimeout(resolve, 250 * (attempt + 1)));
     }
@@ -103,20 +107,23 @@ const montaraCompanion = (() => {
       const nowMs = () => typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now();
       const timings = {started: nowMs(), located: null, proxyReady: null, downloaded: null};
       let cacheHit = null;
+      const proxyRequest = (path, options = {}) => call(path, {...options, signal: AbortSignal.timeout(30000)});
       try {
         onProgress('Finding it on your computer', 0);
         const print = await fingerprint(file);
-        const located = await call('/locate', json({name: file.name, size: file.size, fingerprint: print}));
+        const located = await proxyRequest('/locate', json({name: file.name, size: file.size, fingerprint: print}));
         if (!located.ok) return located.status === 404 ? {missing: true} : null;
         const located_ = await located.json();
         timings.located = nowMs();
-        const queued = await call('/proxies', json({id: located_.id, preview}));
+        const queued = await proxyRequest('/proxies', json({id: located_.id, preview}));
         if (!queued.ok) return null;
         const {id, reused} = await queued.json();
         if (!id) return null;
         for (;;) {
           if (cancelled()) return null;
-          const state = await (await call(`/proxies/${id}`)).json();
+          const response = await proxyRequest(`/proxies/${id}`);
+          if (!response.ok) return {downloadFailed: true};
+          const state = await response.json();
           if (state.status === 'ready') { cacheHit = reused === true || state.cache_hit === true ? true : state.cache_hit ?? null; timings.proxyReady = nowMs(); break; }
           if (state.status === 'skipped' || state.status === 'failed') { console.info('Companion:', state.reason || state.error); return null; }
           onProgress(preview ? 'Light preview' : audio ? 'Lossless copy' : 'Small version', state.progress || 0);
@@ -141,8 +148,9 @@ const montaraCompanion = (() => {
         const wavpack = blob.type === 'audio/x-wavpack';  // float originals: WavPack instead of FLAC
         const name = preview ? file.name + '.opus' : audio ? file.name + (wavpack ? '.wv' : '.flac') : file.name.replace(/\.[^.]+$/, '') + '.small.mp4';
         const type = preview ? 'audio/ogg' : audio ? blob.type || 'audio/flac' : 'video/mp4';
-        return {file: new File([blob], name, {type}), preview, original: {name: file.name, size: file.size, lastModified: file.lastModified, fingerprint: print, companion: id}};
+        return {file: new File([blob], name, {type}), preview, audioIdentityRevision: audio ? info?.audio_identity_revision : undefined, original: {name: file.name, size: file.size, lastModified: file.lastModified, fingerprint: print, companion: id}};
       } catch (error) {
+        if (error.name === 'TimeoutError') return {downloadFailed: true};
         console.warn('Companion unavailable for this file', error);
         return null;
       }

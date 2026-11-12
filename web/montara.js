@@ -68,15 +68,17 @@ const state = {
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => [...document.querySelectorAll(sel)];
 
-async function api(path, body) {
+async function api(path, body, signal) {
   const options = body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
+  if (signal) options.signal = signal;
   const url = path.startsWith("/montara") ? path : `/api/v1${path}`;
   let response;
   for (let attempt = 0; ; attempt++) {
     try { response = await fetch(url, options); break; }
     catch (error) {
       // A dropped connection (tunnel, Wi-Fi) is retried for reads; never resend a POST blindly.
-      if (body === undefined && attempt < 2) { await new Promise((resolve) => setTimeout(resolve, 1500 * (attempt + 1))); continue; }
+      if (!signal?.aborted && body === undefined && attempt < 2) { await new Promise((resolve) => setTimeout(resolve, 1500 * (attempt + 1))); continue; }
+      if (signal?.reason?.name === "TimeoutError") throw new Error("Montara stopped responding. Add this file again to resume.");
       console.warn('Montara request failed', url, error);
       throw new Error(`Lost the connection to Montara (${url.split('?')[0]}). Check that the server window is still open, then retry.`);
     }
@@ -138,7 +140,27 @@ function rememberOpenEdit(id){
     files:state.files.filter(f=>f.path).map(({id,name,path,kind,small,original,projection,preview,duration,cameraType,usage})=>({id,name,path,kind,small,original,projection,preview,duration,cameraType,usage}))
   }));} catch {}
 }
+const defaultMixInstructions = $("#mixInstructions").textContent;
+function setMixReview(quick) {
+  const screen = $("#mix"), button = $("#showMixControls");
+  screen.dataset.quickReview = String(quick);
+  button.hidden = !quick;
+  button.setAttribute("aria-expanded", "false");
+  button.textContent = "Open mixer";
+  $("#mixInstructions").textContent = quick
+    ? "Listen to your automatic mix. If it sounds right, continue to your video."
+    : defaultMixInstructions;
+}
+$("#showMixControls").addEventListener("click", () => {
+  const button = $("#showMixControls");
+  const expanded = button.getAttribute("aria-expanded") !== "true";
+  $("#mix").dataset.quickReview = String(!expanded);
+  button.setAttribute("aria-expanded", String(expanded));
+  button.textContent = expanded ? "Hide mixer" : "Open mixer";
+});
+
 function show(id) {
+  if (id !== "mix") setMixReview(false);
   if (id !== "making" && !$("#making").hidden) $("#rangeAudio").pause();
   if (id !== 'footage' && trackAudition.audio) stopTrackAudition();
   rememberOpenEdit(id);
@@ -493,23 +515,25 @@ $("#rangeBar").addEventListener("click", (e) => {
 // ---------- companion: offer it on a Mac, notice when it starts ----------
 const isDesktopMac = /Macintosh|Mac OS X/.test(navigator.userAgent) && !/iPhone|iPad/.test(navigator.userAgent) && navigator.maxTouchPoints < 2;
 let companionWatch = null;
-let expectedCompanionEngine = null;
 let companionVersionRequest = null;
-// Proactive and read-only. The browser cannot execute an installer; the
-// downloadable .command is explicitly opened by the Mac owner in Terminal.
-async function checkCompanionUpdate({force=false}={}) {
+async function checkCompanionUpdate() {
   if (!isDesktopMac) return;
   const notice=$("#companionUpdateNotice");
+  if (companionVersionRequest) return companionVersionRequest;
+  companionVersionRequest = refreshCompanionUpdate(notice).finally(() => {
+    companionVersionRequest = null;
+  });
+  return companionVersionRequest;
+}
+async function refreshCompanionUpdate(notice) {
   try {
-    if (!expectedCompanionEngine || force) {
-      if (!companionVersionRequest || force) companionVersionRequest=fetch("/montara/companion/version",{cache:"no-store"}).then(async response=>{
-        if (!response.ok) throw new Error("Montara Companion version unavailable");
-        return response.json();
-      });
-      const expected=await companionVersionRequest;
-      expectedCompanionEngine=expected.engine;
-    }
-    const info=await montaraCompanion.detect();
+    const [response, info] = await Promise.all([
+      fetch("/montara/companion/version", {cache:"no-store"}),
+      montaraCompanion.detect(),
+    ]);
+    if (!response.ok) throw new Error("Montara Companion version unavailable");
+    const {engine: expectedCompanionEngine} = await response.json();
+    if (!/^[a-f0-9]{40}$/.test(expectedCompanionEngine)) throw new Error("Invalid engine version");
     const installed=info?.local_video?.engine;
     const needsUpdate=installed!==expectedCompanionEngine;
     notice.hidden=!needsUpdate;
@@ -520,7 +544,7 @@ async function checkCompanionUpdate({force=false}={}) {
         ? "Open Montara Companion on your Mac, or download it if it is not installed."
         : !installed
           ? "This Companion cannot render original-quality video yet. Install the video update."
-          : "The installed video renderer is older or incompatible with this Montara version. Update it before exporting.";
+          : 'This editor needs video engine ' + expectedCompanionEngine.slice(0,7) + ' (installed: ' + installed.slice(0,7) + '). Download the Companion installer from this page before exporting.';
     }
   }catch(error){
     // If the version endpoint temporarily fails, do not present an unverified
@@ -530,9 +554,9 @@ async function checkCompanionUpdate({force=false}={}) {
 }
 $("#companionUpdateRecheck").addEventListener("click",()=>{
   const b=$("#companionUpdateRecheck");b.disabled=true;
-  checkCompanionUpdate({force:true}).finally(()=>{b.disabled=false;});
+  checkCompanionUpdate().finally(()=>{b.disabled=false;});
 });
-window.addEventListener("focus",()=>{if(!$("#companionUpdateNotice").hidden)checkCompanionUpdate();});
+window.addEventListener("focus",()=>{void checkCompanionUpdate();});
 async function watchCompanion() {
   clearTimeout(companionWatch);
   const info = await montaraCompanion.detect();
@@ -610,13 +634,20 @@ async function uploadSmall(file, entry) {
     const preview = !['master','song'].includes(state.audioTask) && state.platform === 'youtube' && ($('#fullSessionOn').checked || (montaraCompanion.isAudio(file) && file.size > LONG_AUDIO_BYTES));
     small = await montaraCompanion.smallVersion(file, (phase, progress) => { entry.phase = phase; entry.progress = progress; renderFiles(); }, () => entry.removed, {preview});
   } catch (error) { console.warn(error); }
+  if (small?.downloadFailed && !entry.removed) {
+    entry.kind = "error";
+    entry.error = "Companion stopped responding or the prepared file could not be read. Add the same file again to retry.";
+    state.uploads -= 1;
+    renderFiles();
+    return;
+  }
   // Companion problems never trigger an automatic video-original upload.
   // An explicit confirmation retains this as an experimental escape hatch.
   if (!entry.removed && montaraCompanion.isVideo(file) && !small?.file) {
-    const message = small?.downloadFailed ? "Could not read the prepared proxy from Companion. Add the same file again to retry the proxy." : small?.missing
+    const message = small?.missing
       ? "Video not found on this computer. Check the file and retry with Companion."
       : "Companion could not prepare this video. Check Companion and retry.";
-    if (small?.downloadFailed || !confirmOriginalVideoUpload(file, entry, message)) {
+    if (!confirmOriginalVideoUpload(file, entry, message)) {
       entry.kind = "error";
       entry.error = message;
       entry.wholeFile = file;
@@ -629,14 +660,57 @@ async function uploadSmall(file, entry) {
   if (!entry.removed) {
     entry.phase = small ? (small.preview ? "Uploading preview" : montaraCompanion.isAudio(file) ? "Uploading lossless copy" : "Uploading small version") : montaraCompanion.info ? "Uploading the whole file" : "";
     entry.progress = 0;
-    if (small) { if (montaraCompanion.isVideo(file)) companionVideoFiles.add(small.file); entry.small = true; entry.preview = small.preview; entry.original = small.original; remember(entry); }
-    upload(small ? small.file : file, entry);
+    if (small) { entry.audioIdentityRevision = small.audioIdentityRevision; if (montaraCompanion.isVideo(file)) companionVideoFiles.add(small.file); entry.small = true; entry.preview = small.preview; entry.original = small.original; remember(entry); }
+    try { await performUpload(small ? small.file : file, entry); }
+    finally { state.uploads -= 1; renderFiles(); }
+    return;
   }
   state.uploads -= 1;
   renderFiles();
 }
 
+const audioUploadQueue = [];
+let activeAudioUploads = 0;
+
+function startQueuedAudioUploads() {
+  while (activeAudioUploads < 3 && audioUploadQueue.length) {
+    const {file, entry} = audioUploadQueue.shift();
+    if (entry.removed) continue;
+    activeAudioUploads++;
+    entry.phase = "Preparing audio";
+    renderFiles();
+    void runFootageUpload(file, entry).finally(() => {
+      activeAudioUploads--;
+      startQueuedAudioUploads();
+    });
+  }
+}
+
 function upload(file, entry) {
+  if (AUDIO_NAME.test(file.name)) {
+    entry.phase = "Queued";
+    audioUploadQueue.push({file, entry});
+    startQueuedAudioUploads();
+    renderFiles();
+    return;
+  }
+  return runFootageUpload(file, entry);
+}
+
+async function runFootageUpload(file, entry) {
+  try {
+    await performUpload(file, entry);
+  } catch (error) {
+    if (!entry.removed) {
+      entry.kind = "error";
+      entry.error = error.message || "Could not prepare this file. Add it again to retry.";
+    }
+  } finally {
+    renderFiles();
+  }
+}
+
+async function performUpload(file, entry) {
   // A local video normally uses Companion; importing its full original is
   // allowed only after per-file consent. Neither a filename nor restored
   // metadata proves that these particular bytes came from Companion.
@@ -654,7 +728,6 @@ function upload(file, entry) {
   if (montaraCompanion.info && !entry.viaCompanion && montaraCompanion.helps(file)) return uploadSmall(file, entry);
   // A lossless copy must reach the server through the resumable path, which restores the WAV.
   if (isCompanionProxy || file.size > 8 * 1024 * 1024 || /\.(wav|aiff?)\.(flac|opus|wv)$/i.test(file.name)) return uploadInParts(file, entry);
-  state.uploads += 1;
   const xhr = new XMLHttpRequest();
   entry.xhr = xhr;
   xhr.open("POST", "/api/v1/wizard/upload");
@@ -662,7 +735,6 @@ function upload(file, entry) {
   xhr.setRequestHeader("X-Zucker-Filename", encodeURIComponent(file.name));
   xhr.upload.onprogress = (e) => { if (e.lengthComputable) { entry.progress = e.loaded / e.total; renderFiles(); } };
   xhr.onload = () => {
-    state.uploads -= 1;
     let data = {};
     try { data = JSON.parse(xhr.responseText); } catch { /* handled below */ }
     if (xhr.status >= 400) {
@@ -684,9 +756,20 @@ function upload(file, entry) {
     }
     renderFiles();
   };
-  xhr.onerror = () => { state.uploads -= 1; entry.kind = "error"; entry.error = "Connection interrupted"; renderFiles(); };
-  xhr.onabort = () => { state.uploads -= 1; renderFiles(); };
-  xhr.send(file);
+  xhr.onerror = () => { entry.kind = "error"; entry.error = "Connection interrupted"; renderFiles(); };
+  xhr.ontimeout = () => { entry.kind = "error"; entry.error = "Upload timed out. Add this file again to retry."; };
+  xhr.timeout = 120000;
+  state.uploads += 1;
+  try {
+    await new Promise((resolve, reject) => {
+      xhr.onloadend = resolve;
+      try { xhr.send(file); } catch (error) { reject(error); }
+    });
+  } finally {
+    state.uploads -= 1;
+    delete entry.xhr;
+    renderFiles();
+  }
 }
 
 async function uploadInParts(file, entry) {
@@ -695,7 +778,7 @@ async function uploadInParts(file, entry) {
   entry.uploadController = controller;
   try {
     const extra = companionVideoFiles.has(file) && entry.original ? {video_preview:true,original:{name:entry.original.name,size:entry.original.size,fingerprint:entry.original.fingerprint}} : entry.manualOriginalUpload === file ? {original_video_consent:true} : /\.opus$/i.test(file.name) && entry.original ? {original: {name: entry.original.name, size: entry.original.size, fingerprint: entry.original.fingerprint}, compact_preview:state.platform==='youtube' && state.files.some(f=>f.kind==='video'||/\.(mp4|mov|mkv|mts|m2ts|webm|avi|m4v)$/i.test(f.name))} : {};
-    const data = await sendResumableUpload(file, (progress, phase) => { entry.progress = progress; if(phase)entry.phase=phase; renderFiles(); }, id => {entry.uploadId = id; if (!entry.removed) remember(entry);}, () => entry.removed, extra, controller.signal);
+    const data = await sendResumableUpload(file, (progress, phase) => { entry.progress = progress; if(phase)entry.phase=phase; renderFiles(); }, id => {entry.uploadId = id; if (!entry.removed) remember(entry);}, () => entry.removed, {...extra, audio_identity_revision: entry.audioIdentityRevision}, controller.signal);
     const found = ['videos', 'master', 'songs', 'ignored'].map(kind => [kind, (data[kind] || [])[0]]).find(([, item]) => item);
     if (!found) throw new Error('Not a usable media file');
     entry.kind = found[0] === 'videos' ? 'video' : found[0];
@@ -721,6 +804,8 @@ function fileLabel(f) {
   return KIND_LABEL[f.kind] || f.kind.toUpperCase();
 }
 // One bounded listening preview per uploaded audio track. Never changes the mix or classification.
+const auditionWindows = new WeakMap();
+const AUDITION_WINDOW_COUNT = 12;
 const trackAudition = { audio: null, id: null, window: 0, start: 0, token: 0 };
 function stopTrackAudition() {
   trackAudition.token++;
@@ -734,11 +819,12 @@ function stopTrackAudition() {
 async function playTrackAudition(file, next=false) {
   if(!file?.path && !file?.localFile)return;
   if(trackAudition.id===file.id && !next){stopTrackAudition();return;}
-  const windowIndex=trackAudition.id===file.id && next ? (trackAudition.window+1)%3 : 0;
+  const windowIndex=next ? ((auditionWindows.get(file) ?? -1)+1)%AUDITION_WINDOW_COUNT : (auditionWindows.get(file) ?? 0);
+  auditionWindows.set(file, windowIndex);
   stopTrackAudition();
   const token=trackAudition.token;
   const audio=new Audio();
-  Object.assign(trackAudition,{audio,id:file.id,window:windowIndex,start:0});
+  Object.assign(trackAudition,{audio,id:file.id,window:windowIndex,start:0,playing:false});
   audio.preload='metadata';audio.src=audioUrl(file);
   const button=[...document.querySelectorAll('[data-audition]')].find(b=>b.dataset.audition===file.id);
   if(button){button.textContent='Loading…';button.setAttribute('aria-pressed','true');}
@@ -758,11 +844,11 @@ async function playTrackAudition(file, next=false) {
     if(trackAudition.token!==token)return;
     const duration=Number.isFinite(audio.duration)?audio.duration:Number(file.duration)||0;
     const room=Math.max(0,duration-12);
-    const start=room ? Math.min(room,room*[.25,.5,.75][windowIndex]) : 0;
+    const start=room ? room * windowIndex / (AUDITION_WINDOW_COUNT - 1) : 0;
     trackAudition.start=start;
     if(start>0)audio.currentTime=start;
     await audio.play();
-    if(trackAudition.token===token && button)button.textContent='❚❚ Stop';
+    if(trackAudition.token===token) { trackAudition.playing=true; renderFiles(); }
   }catch(error){
     if(trackAudition.token===token){finish();toast('Cannot play this track. Try another audio format.',true);}
   }
@@ -787,17 +873,17 @@ function uploadEta(f) {
 }
 function fileRow(f, typed = false) {
   return `
-    <li>
+    <li data-footage-row="${f.id}">
       <span class="kind ${f.kind}">${fileLabel(f)}</span>
       <span class="name" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}</span>
-      <span class="state">${f.kind === "uploading" ? (f.phase ? escapeHtml(f.phase) + " " : "") + Math.round(f.progress * 100) + "%" + uploadEta(f) : state.syncExcluded.has(f.path) ? "No sync" : f.usage === "asset" ? "Ready" : f.small && f.kind === "video" ? "Ready · small version" : f.preview ? "Ready · preview" : f.small ? "Ready · lossless" : f.kind === "error" ? escapeHtml(f.error) : f.kind === "ignored" ? escapeHtml(f.reason || "not used") : "Ready"}</span>
+      <span class="state">${f.kind === "uploading" ? f.phase === "Queued" ? "Queued · waiting for an audio slot" : (f.phase ? escapeHtml(f.phase) + " " : "") + Math.round(f.progress * 100) + "%" + uploadEta(f) : state.syncExcluded.has(f.path) ? "No sync" : f.usage === "asset" ? "Ready" : f.small && f.kind === "video" ? "Ready · small version" : f.preview ? "Ready · preview" : f.small ? "Ready · lossless" : f.kind === "error" ? escapeHtml(f.error) : f.kind === "ignored" ? escapeHtml(f.reason || "not used") : "Ready"}</span>
       <button class="remove" data-remove-file="${f.id}" type="button" aria-label="Remove ${escapeHtml(f.name)}" title="Remove">×</button>
       ${f.wholeFile && f.kind === "error" ? `<button class="link whole" data-upload-whole="${f.id}" type="button">Upload the whole file (${(f.wholeFile.size / 1e9).toFixed(1)} GB)</button>` : ""}
       ${state.platform === 'youtube' && !state.audioTask && f.kind === 'uploading' && !isAudioEntry(f) ? `<label class="track-type">Camera type <select data-pending-camera="${f.id}" aria-label="Camera type for ${escapeHtml(f.name)}"><option value="">Automatic</option>${[['360','360'],['fixed','Fixed camera'],['moving','Moving camera']].map(([value,label])=>`<option value="${value}" ${f.cameraType===value?'selected':''}>${label}</option>`).join('')}</select></label>` : ''}
       ${state.platform === 'youtube' && f.kind === 'video' && !isSphere(f) ? `<label class="track-type">Use as <select data-video-usage="${f.id}" aria-label="Use for ${escapeHtml(f.name)}"><option value="camera" ${!['filler','asset'].includes(f.usage) ? 'selected' : ''}>Camera</option><option value="filler" ${f.usage === 'filler' ? 'selected' : ''}>Insert · optional, no sync</option><option value="asset" ${f.usage === 'asset' ? 'selected' : ''}>Asset / logo · keep out of montage</option></select></label>` : ''}
       ${state.syncExcluded.has(f.path) ? '<span class="source-note">Not used in this song: no reliable audio match. Kept in your library.</span>' : ''}
-      ${f.path && (f.kind === "master" || f.kind === "songs") && state.audioTask !== 'master' ? `<span class="track-audition"><button type="button" data-audition="${f.id}" aria-pressed="false" aria-label="Listen to ${escapeHtml(f.name)} for 12 seconds">▶ Listen 12 s</button><button type="button" data-audition-next="${f.id}" aria-label="Listen to another part of ${escapeHtml(f.name)}">Another part</button></span>` : ""}
-      ${typed && (f.kind === "master" || f.kind === "songs") ? TrackTypes.controls(f.name) : ""}
+      ${f.path && (f.kind === "master" || f.kind === "songs") && state.audioTask !== 'master' ? `<span class="track-audition"><button type="button" data-audition="${f.id}" aria-pressed="${trackAudition.id===f.id}" aria-label="Listen to ${escapeHtml(f.name)} for 12 seconds">${trackAudition.id===f.id ? (trackAudition.playing ? "❚❚ Stop" : "Loading…") : "▶ Listen 12 s"}</button><button type="button" data-audition-next="${f.id}" aria-label="Listen to another part of ${escapeHtml(f.name)}">Another part${auditionWindows.has(f) ? ` · ${auditionWindows.get(f)+1}/${AUDITION_WINDOW_COUNT}` : ""}</button></span>` : ""}
+      ${typed && TrackTypes.needsLabel(f.name) && (f.kind === "master" || f.kind === "songs") ? TrackTypes.controls(f.name) : ""}
       ${f.kind === "uploading" ? `<span class="bar"><i style="width:${Math.round(f.progress * 100)}%"></i></span>` : ""}
     </li>`;
 }
@@ -846,7 +932,32 @@ document.addEventListener('click', event => {
   if (!state.files.some(f => f.sample)) $('#sampleNote').hidden = true;
   renderFiles();
 });
+$("#resetAudioImport").addEventListener("click", async () => {
+  const selected = state.files.filter(isAudioEntry);
+  const names = new Set(selected.map(file => file.name));
+  const remembered = (await footageMemory.list(state.platform))
+    .filter(file => (file.task || "video") === (state.audioTask || "video") && names.has(file.name));
+  for (const file of selected) {
+    file.removed = true;
+    file.uploadController?.abort();
+    file.xhr?.abort();
+    if (file.objectUrl) URL.revokeObjectURL(file.objectUrl);
+  }
+  stopTrackAudition();
+  TrackTypes.forget([...selected, ...remembered].map(file => file.name));
+  state.files = state.files.filter(file => !selected.includes(file));
+  await Promise.all([...new Set([...selected, ...remembered].map(file => file.id))].map(id => footageMemory.forget(id)));
+  await offerRestore();
+  renderFiles();
+  toast("Audio import cleared. Add your tracks again.");
+});
+
+function footageIsPreparing() {
+  return state.files.some(file => !file.removed && file.kind === "uploading");
+}
+
 function renderFiles() {
+  const preparing = footageIsPreparing();
   $('#stageSessionOptions').hidden = state.platform !== 'youtube' || !!state.audioTask && state.audioTask!=='session';
   $('#stageAudioOptions').hidden=!!state.audioTask;
   $('#taskHelp').textContent=state.audioTask ? AUDIO_TASKS[state.audioTask][1] : state.platform==='youtube' ? 'Add the cameras and a finished mix of the same performance. A 360 video lets you turn the view inside the picture; use a stitched MP4.' : 'Choose your clips, then the part you want to turn into a reel.';
@@ -858,30 +969,41 @@ function renderFiles() {
   $('[data-drop="video"]').closest('.box').hidden = state.platform === 'youtube' && $('#stageAudioOnly').checked;
   // Several tracks of one recording: each one says what it is (pre-filled from its name).
   const typed = state.platform === "youtube" && audioTracks().length >= 2;
-  // Do not rebuild the list under an open track-type menu (other uploads keep reporting progress).
-  if (!document.activeElement?.closest?.("#audioFiles .track-type"))
-    $("#audioFiles").innerHTML = state.files.filter(isAudioEntry).map(f => fileRow(f, typed)).join("");
+  // Progress on one track must not replace another track's playback controls.
+  const audioList = $("#audioFiles");
+  $("#resetAudioImport").hidden = !state.files.some(isAudioEntry);
+  const audioRows = new Map([...audioList.children].map(row => [row.dataset.footageRow, row]));
+  for (const file of state.files.filter(isAudioEntry)) {
+    const markup = fileRow(file, typed);
+    const row = audioRows.get(file.id);
+    if (!row) audioList.insertAdjacentHTML("beforeend", markup);
+    else if (row.footageMarkup !== markup && !row.querySelector(".track-type")?.contains(document.activeElement)) row.outerHTML = markup;
+    const current = audioList.querySelector(`[data-footage-row="${CSS.escape(file.id)}"]`);
+    if (current !== row || !row?.querySelector(".track-type")?.contains(document.activeElement)) current.footageMarkup = markup;
+    audioRows.delete(file.id);
+  }
+  for (const row of audioRows.values()) row.remove();
   $("#audioFiles").classList.toggle("compact", state.files.filter(isAudioEntry).length > 4);
   const focusedCamera = document.activeElement?.closest?.('[data-pending-camera]');
   if (!state.files.some(f => f.id === focusedCamera?.dataset.pendingCamera && f.kind === 'uploading'))
     $("#videoFiles").innerHTML = state.files.filter((f) => !isAudioEntry(f)).map(fileRow).join("");
   const master = state.files.find((f) => f.kind === "master");
   let hint = "";
-  let ready = (videos().length > 0 || audioOnly()) && state.uploads === 0;
+  let ready = (videos().length > 0 || audioOnly()) && !preparing;
   if (mixerMode()) hint = `${audioTracks().length} separate tracks: Montara will mix them for you, then you can adjust every fader.`;
   else if (state.platform === "youtube" && !master) { hint = "Stage needs the master audio (one mixed track of the song) to sync every camera."; ready = false; }
   if (state.platform === "reel" && !master && videos().length > 1) hint = "Tip: add the song so the reel cuts on the music.";
   if (state.platform === "reel" && master) hint = "The reel uses your song master. Camera sound is muted.";
   if (state.platform === "reel" && state.files.some(f=>f.sample) && !master) { hint = "The example song master is missing. Reopen the example."; ready = false; }
-  if (state.uploads) hint = state.platform === "youtube" && !state.audioTask ? "Files are preparing in the background. You can name the project and choose camera types now." : "Uploading…";
-  if (state.platform === 'youtube' && $('#fullSessionOn').checked && !state.uploads && audioTracks().length) hint = 'Find and review the songs, then export their mixes. This session step exports audio.';
+  if (preparing) hint = state.platform === "youtube" && !state.audioTask ? "Files are preparing in the background. You can name the project and choose camera types now." : "Uploading…";
+  if (state.platform === 'youtube' && $('#fullSessionOn').checked && !preparing && audioTracks().length) hint = 'Find and review the songs, then export their mixes. This session step exports audio.';
   const longest = Math.max(0, ...state.files.filter(isAudioEntry).map(f => f.duration || 0));
-  if (state.platform === 'youtube' && !$('#fullSessionOn').checked && !state.uploads && longest > 20 * 60) hint = `Your audio is ${Math.round(longest / 60)} min long. If it is a whole session and you want one song, tick Full session to find the songs first, or trim the tracks to that song.`;
+  if (state.platform === 'youtube' && !$('#fullSessionOn').checked && !preparing && longest > 20 * 60) hint = `Your audio is ${Math.round(longest / 60)} min long. If it is a whole session and you want one song, tick Full session to find the songs first, or trim the tracks to that song.`;
   // Long sessions: everything scales with how much audio comes in.
   if (state.platform === 'youtube' && longest > 30 * 60) hint = `${hint ? hint + ' ' : ''}Tip: only send what you need. If you want a few songs from a ${Math.round(longest / 60)} min session, export just that part of the tracks: uploading, finding songs and mixing all take much less time.`;
-  if (state.platform === 'youtube' && videos().length && (audioTracks().length >= 2 || state.files.some(f=>f.preview)) && !state.uploads)
+  if (state.platform === 'youtube' && videos().length && (audioTracks().length >= 2 || state.files.some(f=>f.preview)) && !preparing)
     hint = 'Montara will find, mix and master the song in your videos.';
-  if(state.audioTask==='master'){hint=audioTracks().length>1?'Choose one finished mix for mastering.':'';ready=audioTracks().length===1 && state.uploads===0;}
+  if(state.audioTask==='master'){hint=audioTracks().length>1?'Choose one finished mix for mastering.':'';ready=audioTracks().length===1 && !preparing;}
   if (!audioOnly() && state.branding === "mine" && !state.hasLogo) { hint = "Choose your logo, or pick another option."; ready = false; }
   $("#footageHint").textContent = hint;
   $("#continueFootage").disabled = !ready;
@@ -956,7 +1078,7 @@ function isWholeSession() {
 }
 
 async function registerProject({mixed = false} = {}) {
-  if (state.uploads) return toast('Wait for the files to finish preparing.');
+  if (footageIsPreparing()) return toast('Wait for the files to finish preparing.');
   if(state.audioTask==='master')return runMasterOnly().catch(fail);
   if(work.cancelling)return toast('Wait for cancellation to finish.');
   if(!mixed){state.mixMaster=null;state.mixDownload=null;state.syncExcluded.clear();}
@@ -1990,6 +2112,7 @@ function pollFrames() {
   },1500);
 }
 async function openFrames() {
+  void checkCompanionUpdate();
   const generation=work.generation;
   state.waitingFrames=true;
   state.framesPending=true;
