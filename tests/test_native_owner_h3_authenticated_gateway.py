@@ -367,9 +367,16 @@ class NativeOwnerH3AuthenticatedGatewayTests(unittest.TestCase):
         self.assertEqual(preview.status_code,206)
         self.assertEqual(preview.data,b"mp")
         self.assertEqual(preview.headers.get("Content-Range"),"bytes 0-1/10")
+        # The test client still carries owner-a's cookie, so the request
+        # without CSRF must be denied 403. Without a cookie it must be 401.
         self.assertEqual(self.rpc("GET",
             "api/v1/wizard/review/thumbnail/assets-v2/frame-0.jpg",
-            {"Origin":ORIGIN}).status_code,401)
+            {"Origin":ORIGIN}).status_code,403)
+        self.client.delete_cookie(SESSION_COOKIE,domain="montara.test")
+        self.assertEqual(self.rpc("GET",
+            "api/v1/wizard/review/thumbnail/assets-v2/frame-0.jpg",
+            scope).status_code,401)
+        self.user(self.a)
         self.assertEqual(self.rpc("GET","api/v1/wizard/review/preview/0",
             {**scope,"Range":"bytes=0-1,2-3"}).status_code,416)
         self.assertEqual(self.rpc("GET","api/v1/wizard/review/preview/0",
