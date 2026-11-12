@@ -23,8 +23,8 @@ class NativeProgressWindowsTests(unittest.TestCase):
             if len(events) < 3:
                 raise PermissionError(5, "Access denied")
 
-        with patch.object(video.os, "name", "nt"), patch.object(video.time, "sleep") as sleep:
-            self.assertTrue(video.write_render_progress(writer, Path("progress.json"), {"progress": 0.4}))
+        with patch.object(video.time, "sleep") as sleep:
+            self.assertTrue(video.write_render_progress(writer, Path("progress.json"), {"progress": 0.4}, windows=True))
         self.assertEqual(len(events), 3)
         self.assertEqual(sleep.call_count, 2)
 
@@ -33,24 +33,22 @@ class NativeProgressWindowsTests(unittest.TestCase):
             raise PermissionError(5, "Access denied")
 
         with patch.object(video.os, "name", "nt"), patch.object(video.time, "sleep") as sleep:
-            self.assertFalse(video.write_render_progress(writer, Path("progress.json"), {"progress": 0.5}))
+            self.assertFalse(video.write_render_progress(writer, Path("progress.json"), {"progress": 0.5}, windows=True))
         self.assertEqual(sleep.call_count, 4)
 
     def test_nonwindows_permission_denied_is_not_swallowed(self):
         def writer(path, payload):
             raise PermissionError(13, "Access denied")
 
-        with patch.object(video.os, "name", "posix"):
-            with self.assertRaises(PermissionError):
-                video.write_render_progress(writer, Path("progress.json"), {"progress": 0.7})
+        with self.assertRaises(PermissionError):
+            video.write_render_progress(writer, Path("progress.json"), {"progress": 0.7}, windows=False)
 
     def test_non_permission_failure_is_never_swallowed(self):
         def writer(path, payload):
             raise OSError(28, "Disk full")
 
-        with patch.object(video.os, "name", "nt"):
-            with self.assertRaises(OSError):
-                video.write_render_progress(writer, Path("progress.json"), {"progress": 0.7})
+        with self.assertRaises(OSError):
+            video.write_render_progress(writer, Path("progress.json"), {"progress": 0.7}, windows=True)
 
 
 if __name__ == "__main__":
