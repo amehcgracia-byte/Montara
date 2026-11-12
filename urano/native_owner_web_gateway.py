@@ -111,19 +111,16 @@ def native_owner_gateway_blueprint(
         if not request.query_string.isascii():
             return jsonify(error="Unsupported original editor query"),404
         query=request.query_string.decode("ascii")
-        # The public H4 Cloudflare front door does not forward PATCH.
-        # POST + exact private marker is translated ONLY for Chema's single
-        # reviewed Stage shot endpoint, after CSRF/owner admission as usual.
-        # The worker still receives its original PATCH method unchanged.
+        # H4 Cloudflare accepts POST but rejects PATCH and can strip custom
+        # transport headers. Use one dedicated, non-generic save alias; only
+        # the verified Owner gateway restores the original Engine PATCH.
         shot_tunnel=(request.method=="POST" and
-                     path=="/api/v1/edit/shot" and not query and
-                     request.headers.get("X-Montara-Shot-Method")=="PATCH")
-        if request.headers.get("X-Montara-Shot-Method") and not shot_tunnel:
-            return jsonify(error="Unsupported native method marker"),404
+                     path=="/api/v1/edit/shot/save" and not query)
         upstream_method="PATCH" if shot_tunnel else request.method
-        target = native_new_latest_target(upstream_method,path,query)
+        upstream_path="/api/v1/edit/shot" if shot_tunnel else path
+        target = native_new_latest_target(upstream_method,upstream_path,query)
         extra = None if target is not None else native_stage_route(
-            upstream_method,path,query)
+            upstream_method,upstream_path,query)
         if target is None and extra is None:
             return jsonify(error="Original editor operation not enabled"),404
         if extra is not None:
