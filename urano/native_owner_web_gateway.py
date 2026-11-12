@@ -33,6 +33,7 @@ from urano.session_auth import SESSION_COOKIE, SessionStore
 _GEN = re.compile(r"[1-9][0-9]{0,9}\Z")
 _MAX_BODY = 256_000
 _MAX_REPLY = 1_000_000
+_MAX_PREVIEW = 128 * 1024 * 1024
 _MAX_DIRECT_MEDIA = 256_000_000
 _MAX_CHUNK = 16 * 1024 * 1024
 _MAX_PROXY = 2048 * 1024 * 1024
@@ -195,24 +196,48 @@ def native_owner_gateway_blueprint(
                     headers["X-Zucker-Filename"]=request.headers["X-Zucker-Filename"]
                 if kind=="upload-chunk":
                     headers["Upload-Offset"]=request.headers["Upload-Offset"]
+                if kind=="review-media" and request.headers.get("Range"):
+                    ranged=request.headers["Range"]
+                    if (len(ranged)>80 or
+                            re.fullmatch(r"bytes=[0-9]{1,12}-[0-9]{0,12}",
+                                         ranged) is None):
+                        return jsonify(error="Unsupported private preview range"),416
+                    headers["Range"]=ranged
                 conn.request(request.method,target,body=body,headers=headers)
                 upstream=conn.getresponse()
-                reply=upstream.read(_MAX_REPLY+1)
+                read_limit=_MAX_PREVIEW if kind=="review-media" else _MAX_REPLY
+                reply=upstream.read(read_limit+1)
                 code=upstream.status
                 content_type=upstream.getheader("Content-Type","application/json")
+                content_range=upstream.getheader("Content-Range")
+                accept_ranges=upstream.getheader("Accept-Ranges")
         except (OSError,ValueError,TimeoutError,RuntimeError,HTTPException):
             return jsonify(error="Private original editor unavailable"),503
         empty_chunk_response=(
             kind=="upload-chunk" and 200<=code<300 and not reply)
-        if (len(reply)>_MAX_REPLY or not 100<=code<=599 or
+        empty_delete_response=(
+            request.method=="DELETE" and 200<=code<300 and not reply)
+        media_type=content_type.split(";",1)[0].lower().strip()
+        binary_media=(
+            kind=="review-media" and 200<=code<300 and
+            media_type in ("image/jpeg","image/png","image/webp",
+                           "video/mp4","application/octet-stream"))
+        limit=_MAX_PREVIEW if kind=="review-media" else _MAX_REPLY
+        if (len(reply)>limit or not 100<=code<=599 or
                 (not content_type.lower().startswith("application/json")
-                 and not empty_chunk_response) or
+                 and not empty_chunk_response and not empty_delete_response
+                 and not binary_media) or
                 any(c in content_type for c in "\r\n")):
             return jsonify(error="Unexpected native worker response"),503
         response=Response(reply,status=code,content_type=content_type)
         response.headers["Cache-Control"]="no-store"
         response.headers["X-Content-Type-Options"]="nosniff"
         response.headers["X-Montara-Engine-Generation"]=generation
+        if binary_media and code==206 and content_range and re.fullmatch(
+                r"bytes [0-9]+-[0-9]+/[0-9]+",content_range):
+            response.headers["Content-Range"]=content_range
+        if binary_media and accept_ranges=="bytes":
+            response.headers["Accept-Ranges"]="bytes"
         return response
 
     return bp
