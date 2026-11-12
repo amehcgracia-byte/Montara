@@ -464,6 +464,11 @@ class NativeOwnerH3AuthenticatedGatewayTests(unittest.TestCase):
         aw=self.registry.get("owner-a").workspace_id
         own_project=str(self.workers[aw][0]/"Projects"/"new.zuckervid")
         scope={**a,"X-Montara-Engine-Generation":"1"}
+        created=self.rpc("POST","api/v1/wizard/draft",scope,json={
+            "project_id":None,"name":"Stage shot",
+            "videos":[str(self.workers[aw][0]/"WizardUploads"/"camera.mp4")]})
+        self.assertEqual(created.status_code,200)
+        self.assertEqual(created.json["project_id"],own_project)
         read=self.rpc("GET","api/v1/edit/shot",scope,
                       query_string={"index":"3"})
         self.assertEqual(read.status_code,200,read.get_data(as_text=True))
