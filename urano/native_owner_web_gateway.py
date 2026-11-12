@@ -183,14 +183,8 @@ def native_owner_gateway_blueprint(
                 }
                 if not valid_first_upload(validation,max_proxy_bytes=proxy_cap):
                     return jsonify(error="Private proxy metadata rejected"),400
-        if kind=="upload-limits":
-            reply=jsonify(
-                max_file_bytes=proxy_cap,
-                max_original_file_bytes=256*1024*1024,
-                chunk_bytes=4*1024*1024,free_bytes=None)
-            reply.headers["Cache-Control"]="no-store"
-            reply.headers["X-Montara-Engine-Generation"]=generation
-            return reply
+        # Chema's original GET /montara/uploads reports the real private
+        # disk quota and negotiated chunk size. Never fabricate that reply.
         try:
             with closing(connect_worker(token,csrf,workspace.workspace_id,
                                          int(generation))) as conn:
