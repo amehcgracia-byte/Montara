@@ -66,6 +66,21 @@ def native_stage_route(method: str, path: str, query: str = "") -> NativeStageTa
             return None
         return NativeStageTarget(path+"?"+urlencode(
             {k:values[k][0] for k in ("render","shot") if k in values}),"json")
+    if method=="GET" and path=="/montara/audio":
+        if not query or len(query)>_MAX_QUERY:
+            return None
+        try:
+            params=parse_qs(query,keep_blank_values=False,strict_parsing=True,
+                            max_num_fields=1)
+        except ValueError:
+            return None
+        if (set(params)!={"path"} or len(params["path"])!=1 or
+                not params["path"][0].startswith("/") or
+                len(params["path"][0])>1800 or
+                any(c in params["path"][0] for c in "\\x00\\r\\n")):
+            return None
+        return NativeStageTarget(path+"?"+urlencode({"path":params["path"][0]}),
+                                 "audio-media")
     if method=="GET" and (_PREVIEW.fullmatch(path) or _THUMB.fullmatch(path)):
         if query:
             try:
