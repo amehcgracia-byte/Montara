@@ -83,9 +83,10 @@
       return { kind:'metadata', data:{mode:'montara',has_logo:false} };
     const operation = p.substring(1);
     const resumable = /^montara\/uploads\/[a-f0-9]{32}(?:\/finish)?$/.test(operation);
+    const audioRoute = operation === 'montara/audio' && method === 'GET';
     const reviewedPreview = /^api\/v1\/wizard\/review\/preview\/[0-9]{1,5}$/.test(operation);
     const reviewedThumbnail = /^api\/v1\/wizard\/review\/thumbnail\/(?:assets-v2|[a-f0-9]{16,128})\/[A-Za-z0-9_.-]{1,180}$/.test(operation);
-    if (address.hash || (!routes.has(operation) && !resumable &&
+    if (address.hash || (!routes.has(operation) && !audioRoute && !resumable &&
                          !reviewedPreview && !reviewedThumbnail))
       return {kind:'blocked'};
     const params = address.searchParams;
@@ -100,7 +101,11 @@
     const versionQuery = (reviewedPreview || reviewedThumbnail) &&
       params.size === 1 && params.has('v') &&
       /^[A-Za-z0-9_.-]{0,80}$/.test(params.get('v')||'');
-    if (address.search && !isStatus && !review && !versionQuery)
+    const audioQuery = audioRoute && params.size === 1 &&
+      params.has('path') && !!params.get('path') &&
+      params.get('path').startsWith('/') && params.get('path').length <= 1800;
+    if (audioRoute && !audioQuery) return {kind:'blocked'};
+    if (address.search && !isStatus && !review && !versionQuery && !audioQuery)
       return {kind:'blocked'};
     return {kind:'worker', path:nativePrefix + operation + address.search};
   };
@@ -234,6 +239,41 @@
             this.load();
           }).catch(()=>{
             if(pending.get(this)===task)this.dispatchEvent(new Event('error'));
+          });
+        }
+      });
+    }
+  }
+
+  // The original Chema song picker sets HTMLAudioElement.src, which cannot
+  // attach the private Owner CSRF header. Resolve reviewed private audio into
+  // a bounded browser-local blob; never expose the source path without Owner.
+  if (typeof HTMLAudioElement !== 'undefined' &&
+      typeof HTMLMediaElement !== 'undefined') {
+    const descriptor=Object.getOwnPropertyDescriptor(
+      HTMLMediaElement.prototype,'src');
+    if (descriptor?.get && descriptor?.set) {
+      const pending=new WeakMap();
+      Object.defineProperty(HTMLAudioElement.prototype,'src',{
+        configurable:true,enumerable:descriptor.enumerable,
+        get(){return pending.get(this)?.original || descriptor.get.call(this);},
+        set(value) {
+          const original=String(value);
+          const selected=route(original,'GET');
+          if (!selected || selected.kind!=='worker' ||
+              !selected.path.startsWith(nativePrefix+'montara/audio?')) {
+            pending.delete(this);
+            return descriptor.set.call(this,value);
+          }
+          const task={original};
+          pending.set(this,task);
+          descriptor.set.call(this,'');
+          reviewBlob(original).then(url=>{
+            if (pending.get(this)!==task) return;
+            descriptor.set.call(this,url);
+            this.load();
+          }).catch(()=>{
+            if (pending.get(this)===task)this.dispatchEvent(new Event('error'));
           });
         }
       });
