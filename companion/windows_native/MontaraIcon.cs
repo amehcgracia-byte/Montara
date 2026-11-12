@@ -25,7 +25,16 @@ internal static class MontaraIcon
             using var back = new SolidBrush(Color.FromArgb(12, 12, 15));
             using var outline = new Pen(Color.FromArgb(53, 54, 60), 1.5f);
             using var rounded = new GraphicsPath();
-            rounded.AddRoundedRectangle(new Rectangle(1, 1, 62, 62), new Size(14, 14));
+            // Explicit arcs work on net8.0-windows (AddRoundedRectangle is
+            // only available in newer WinForms frameworks).
+            const float edge = 1f, span = 62f, radius = 14f;
+            const float diameter = radius * 2f;
+            rounded.AddArc(edge, edge, diameter, diameter, 180, 90);
+            rounded.AddArc(edge + span - diameter, edge, diameter, diameter, 270, 90);
+            rounded.AddArc(edge + span - diameter, edge + span - diameter,
+                           diameter, diameter, 0, 90);
+            rounded.AddArc(edge, edge + span - diameter, diameter, diameter, 90, 90);
+            rounded.CloseFigure();
             g.FillPath(back, rounded);
             g.DrawPath(outline, rounded);
 
