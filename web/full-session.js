@@ -447,9 +447,10 @@ async function openSongMixer(i) {
       $$('#strips .strip').forEach((strip, index) => { if (mix.plan.tracks[index].active === false) strip.querySelectorAll('input,button').forEach(el => { el.disabled = true; }); });
       fullSession.mixCache[song.id] = { key: songKey(song), job: mix.job, plan: mix.plan, buffers: mix.buffers, fxBuffers: mix.fxBuffers };
     }
-    $('#useMix').textContent = fullSession.forVideo ? 'Use this mix for the video' : 'Save mix for this song';
+    setMixReview(fullSession.forVideo);
+    $('#useMix').textContent = fullSession.forVideo ? 'Continue with this mix' : 'Save mix for this song';
     $('#mixAll').hidden = fullSession.forVideo; $('#mixAll').disabled = false;
-    $('#mixStatusText').textContent = fullSession.forVideo ? 'Adjust your tracks, then use this mix as the audio for your video.' : `${song.name}: ${Math.ceil(mix.plan.duration)} s from the busiest part. Changes apply to this song only; the others keep their automatic mix.`;
+    $('#mixStatusText').textContent = fullSession.forVideo ? 'Your automatic mix is ready to listen.' : `${song.name}: ${Math.ceil(mix.plan.duration)} s from the busiest part. Changes apply to this song only; the others keep their automatic mix.`;
   } catch (error) { toast(error.message, true); show('sessionReview'); }
 }
 
@@ -553,7 +554,7 @@ async function renderFullSession(forVideo = false) {
   const songs = songList();
   if (!songs.some(s => s.selected)) return toast('Select at least one song.', true);
   if(forVideo && songs.filter(s=>s.selected).length!==1)return toast('Choose one song for this video.',true);
-  if(forVideo && !fullSession.mixes[songs.find(s=>s.selected).id]?.base_gains) return toast('Review the song mix and choose Use this mix for the video.', true);
+  if(forVideo && !fullSession.mixes[songs.find(s=>s.selected).id]?.base_gains) return toast('Listen to the song mix and choose Continue with this mix.', true);
   $('#sessionMix').hidden = true;
   fullSession.cancelRequested = false;
   fullSession.exportRun = (fullSession.exportRun || 0) + 1;

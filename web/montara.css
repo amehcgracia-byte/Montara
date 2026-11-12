@@ -606,3 +606,5 @@ body.is-intro .top,body.is-intro footer,body.is-intro #version{visibility:hidden
 .companion-update-notice p{margin:0 0 12px}
 .companion-update-notice .actions{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 10px}
 .companion-update-notice small{display:block;color:var(--muted);line-height:1.5}
+
+#mix[data-quick-review="true"] :is(#strips, #referenceRow, #resetMix) { display: none; }

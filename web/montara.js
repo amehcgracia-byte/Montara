@@ -140,7 +140,27 @@ function rememberOpenEdit(id){
     files:state.files.filter(f=>f.path).map(({id,name,path,kind,small,original,projection,preview,duration,cameraType,usage})=>({id,name,path,kind,small,original,projection,preview,duration,cameraType,usage}))
   }));} catch {}
 }
+const defaultMixInstructions = $("#mixInstructions").textContent;
+function setMixReview(quick) {
+  const screen = $("#mix"), button = $("#showMixControls");
+  screen.dataset.quickReview = String(quick);
+  button.hidden = !quick;
+  button.setAttribute("aria-expanded", "false");
+  button.textContent = "Open mixer";
+  $("#mixInstructions").textContent = quick
+    ? "Listen to your automatic mix. If it sounds right, continue to your video."
+    : defaultMixInstructions;
+}
+$("#showMixControls").addEventListener("click", () => {
+  const button = $("#showMixControls");
+  const expanded = button.getAttribute("aria-expanded") !== "true";
+  $("#mix").dataset.quickReview = String(!expanded);
+  button.setAttribute("aria-expanded", String(expanded));
+  button.textContent = expanded ? "Hide mixer" : "Open mixer";
+});
+
 function show(id) {
+  if (id !== "mix") setMixReview(false);
   if (id !== "making" && !$("#making").hidden) $("#rangeAudio").pause();
   if (id !== 'footage' && trackAudition.audio) stopTrackAudition();
   rememberOpenEdit(id);
