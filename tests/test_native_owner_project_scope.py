@@ -64,6 +64,7 @@ class PrivateNativeChemaProjects(unittest.TestCase):
             "",
             str(self.root),
             str(self.a_new / "project.json"),
+            str(self.a_new) + "\\x00suffix",
         ):
             with self.subTest(candidate=candidate):
                 with self.assertRaises(UnsafeNativeProject):
