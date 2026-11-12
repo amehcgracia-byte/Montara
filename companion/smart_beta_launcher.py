@@ -36,9 +36,9 @@ def main() -> int:
         Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "MontaraSMARTBeta"
     )
     os.environ["MONTARA_COMPANION_PORT"] = "47820"
-    # Exact HTTPS origin: never use an unrestricted wildcard for localhost HTTP.
+    # Explicitly allow only the original Owner beta and isolated H4 origin.
     os.environ["MONTARA_COMPANION_ORIGINS"] = (
-        "https://montara-owner\\.memoriainvalida001\\.workers\\.dev"
+        "https://montara-owner(?:-h4)?\\.memoriainvalida001\\.workers\\.dev"
     )
     print("Montara SMART Beta - original Chema Companion, private isolated data")
     print("Beta origin:", ORIGIN)
