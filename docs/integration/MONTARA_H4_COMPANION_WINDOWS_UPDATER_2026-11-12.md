@@ -1,4 +1,4 @@
-# Montara Companion Windows — actualizador manual H4 (0.6.11-h4.1)
+> **RETIRADO POR SEGURIDAD — 2026-11-13.** Microsoft Defender detectó `Trojan:Script/Wacatac.B!ml` en el bootstrap ZIP. Este documento es histórico y no constituye instrucciones de instalación. No descargar, restaurar ni ejecutar el paquete anterior. El canal H4 está suspendido (404) y los scripts PowerShell se eliminaron de la rama activa. Sustitución en curso: `docs/integration/MONTARA_COMPANION_NATIVE_WINDOWS_SECURITY_AND_RELEASE_GATE_2026-11-13.md`.\n\n# Montara Companion Windows — actualizador manual H4 (0.6.11-h4.1)
 
 Fecha: 2026-11-12. Rama `fernando/chema-native-owner`. Estado: desplegado el canal HTTPS de H4; **pendiente de validación humana en Windows 10**.
 
