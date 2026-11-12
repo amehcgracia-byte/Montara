@@ -83,7 +83,10 @@
       return { kind:'metadata', data:{mode:'montara',has_logo:false} };
     const operation = p.substring(1);
     const resumable = /^montara\/uploads\/[a-f0-9]{32}(?:\/finish)?$/.test(operation);
-    if (address.hash || (!routes.has(operation) && !resumable))
+    const reviewedPreview = /^api\/v1\/wizard\/review\/preview\/[0-9]{1,5}$/.test(operation);
+    const reviewedThumbnail = /^api\/v1\/wizard\/review\/thumbnail\/(?:assets-v2|[a-f0-9]{16,128})\/[A-Za-z0-9_.-]{1,180}$/.test(operation);
+    if (address.hash || (!routes.has(operation) && !resumable &&
+                         !reviewedPreview && !reviewedThumbnail))
       return {kind:'blocked'};
     const params = address.searchParams;
     const isStatus = operation === 'api/v1/wizard/status' &&
@@ -94,7 +97,10 @@
       [...params.keys()].every(key => key === 'render' || key === 'shot') &&
       ['0','1'].includes(params.get('render')) &&
       (!params.has('shot') || /^[0-9]{1,5}$/.test(params.get('shot')||''));
-    if (address.search && !isStatus && !review)
+    const versionQuery = (reviewedPreview || reviewedThumbnail) &&
+      params.size === 1 && params.has('v') &&
+      /^[A-Za-z0-9_.-]{0,80}$/.test(params.get('v')||'');
+    if (address.search && !isStatus && !review && !versionQuery)
       return {kind:'blocked'};
     return {kind:'worker', path:nativePrefix + operation + address.search};
   };
@@ -126,6 +132,49 @@
     return footagePromise;
   };
 
+  // Chema places original thumbnails directly in the review JSON. Native
+  // <img>/<video> cannot attach Owner CSRF, so convert ONLY approved media
+  // to local blob URLs fetched through the same authenticated gateway.
+  const reviewBlobs = new Map();
+  const reviewBlob = async nativeUrl => {
+    if (!reviewBlobs.has(nativeUrl)) {
+      const promise = (async () => {
+        const response=await window.fetch(nativeUrl,{cache:'no-store'});
+        if (!response.ok) throw new Error('Private Stage preview unavailable');
+        const length=Number(response.headers.get('Content-Length')||0);
+        if (length > 128*1024*1024)
+          throw new Error('Private preview exceeds browser memory limit');
+        const blob=await response.blob();
+        if (blob.size > 128*1024*1024)
+          throw new Error('Private preview exceeds browser memory limit');
+        return URL.createObjectURL(blob);
+      })();
+      reviewBlobs.set(nativeUrl,promise);
+      promise.catch(()=>{if(reviewBlobs.get(nativeUrl)===promise)
+        reviewBlobs.delete(nativeUrl);});
+    }
+    return reviewBlobs.get(nativeUrl);
+  };
+  const decorateReview = async response => {
+    if (!response.ok) return response;
+    const result=await response.clone().json();
+    if (!Array.isArray(result.items) || result.items.length>200)
+      return response;
+    await Promise.all(result.items.map(async item => {
+      if (typeof item.thumbnail === 'string' &&
+          /^\/api\/v1\/wizard\/review\/thumbnail\//.test(item.thumbnail)) {
+        try {item.thumbnail=await reviewBlob(item.thumbnail);}
+        catch {item.thumbnail=null;}
+      }
+    }));
+    const headers=new Headers(response.headers);
+    headers.delete('Content-Length');
+    headers.delete('Content-Encoding');
+    return new Response(JSON.stringify(result),{
+      status:response.status,headers
+    });
+  };
+
   window.fetch = async (input, init={}) => {
     const method = String(init.method || input?.method || 'GET').toUpperCase();
     const selected = route(input,method);
@@ -150,8 +199,46 @@
     });
     const next = Number(response.headers.get('X-Montara-Engine-Generation'));
     if (Number.isSafeInteger(next) && next > 0) generation = next;
+    if (method==='GET' && selected.path.startsWith(
+        nativePrefix + 'api/v1/wizard/review') &&
+        selected.path.split('?')[0] === nativePrefix + 'api/v1/wizard/review') {
+      return decorateReview(response);
+    }
     return response;
   };
+
+  if (typeof HTMLVideoElement !== 'undefined' &&
+      typeof HTMLMediaElement !== 'undefined') {
+    const descriptor=Object.getOwnPropertyDescriptor(
+      HTMLMediaElement.prototype,'src');
+    if (descriptor?.get && descriptor?.set) {
+      const pending=new WeakMap();
+      Object.defineProperty(HTMLVideoElement.prototype,'src',{
+        configurable:true,enumerable:descriptor.enumerable,
+        get(){return pending.get(this)?.original || descriptor.get.call(this);},
+        set(value) {
+          const original=String(value);
+          const selected=route(original,'GET');
+          if (!selected || selected.kind!=='worker' ||
+              !selected.path.startsWith(
+                nativePrefix+'api/v1/wizard/review/preview/')) {
+            pending.delete(this);
+            return descriptor.set.call(this,value);
+          }
+          const task={original};
+          pending.set(this,task);
+          descriptor.set.call(this,'');
+          reviewBlob(original).then(url=>{
+            if (pending.get(this)!==task) return;
+            descriptor.set.call(this,url);
+            this.load();
+          }).catch(()=>{
+            if(pending.get(this)===task)this.dispatchEvent(new Event('error'));
+          });
+        }
+      });
+    }
+  }
 
   // Chema also uses XHR for imported media. Keep the original XHR event
   // semantics; no replacement uploader or form is created here.
