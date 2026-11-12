@@ -168,9 +168,9 @@ async function main() {
     body:JSON.stringify({mode:'montara'})
   });
   assert.equal(branding.status,200);
-  assert.equal(calls[6].url,'/urano/v1/native/rpc/montara/branding');
-  assert.equal(calls[6].options.headers.get('X-Urano-CSRF'),csrf);
-  assert.equal(calls[6].options.headers.get('X-Montara-Engine-Generation'),'4');
+  assert.equal(calls.at(-1).url,'/urano/v1/native/rpc/montara/branding');
+  assert.equal(calls.at(-1).options.headers.get('X-Urano-CSRF'),csrf);
+  assert.equal(calls.at(-1).options.headers.get('X-Montara-Engine-Generation'),'4');
 
   await assert.rejects(
     () => window.fetch('/api/v1/internal/other'),
@@ -178,14 +178,14 @@ async function main() {
   await assert.rejects(
     () => window.fetch('/montara/session/secret'),
     /not enabled/);
-  assert.equal(calls.length,7);
+  assert.equal(calls.length,10);
   const sound = new FakeAudioElement();
   sound.src='/montara/audio?path='+encodeURIComponent('/private/WizardUploads/song.wav');
   await new Promise(resolve=>setTimeout(resolve,30));
   assert.ok(sound.loaded,'Original song player must load its private audio blob');
   assert.ok(sound._src.startsWith('blob:'),'Audio bytes must use a browser-local blob');
-  assert.equal(calls[7].url,'/urano/v1/native/rpc/montara/audio?path='+encodeURIComponent('/private/WizardUploads/song.wav'));
-  assert.equal(calls[7].options.headers.get('X-Urano-CSRF'),csrf);
+  assert.equal(calls.at(-1).url,'/urano/v1/native/rpc/montara/audio?path='+encodeURIComponent('/private/WizardUploads/song.wav'));
+  assert.equal(calls.at(-1).options.headers.get('X-Urano-CSRF'),csrf);
   console.log('H3_NATIVE_BROWSER_BRIDGE_PASS startup-lazy, csrf, owner-worker, new, secured-thumbnail-blob, blocked-routes');
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});
