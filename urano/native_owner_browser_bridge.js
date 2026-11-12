@@ -13,7 +13,15 @@
     'api/v1/wizard/projects/open', 'api/v1/wizard/projects/delete',
     'api/v1/wizard/draft', 'api/v1/wizard/prepare', 'api/v1/wizard/start',
     'api/v1/wizard/cancel', 'api/v1/wizard/status',
-    'api/v1/project', 'montara/recovery/latest'
+    'api/v1/project', 'montara/recovery/latest',
+    'api/v1/artifacts/sync',
+    'api/v1/wizard/review', 'api/v1/wizard/review/replace',
+    'api/v1/wizard/review/render',
+    'api/v1/wizard/upload','montara/uploads',
+    'api/v1/settings/fillers','api/v1/settings/video-light',
+    'api/v1/settings/camera-types','api/v1/settings/camera-subjects',
+    'api/v1/settings/camera-roles','api/v1/settings/spherical-landmarks',
+    'api/v1/settings/stage-performers'
   ]);
   const nativePrefix = '/urano/v1/native/rpc/';
   let csrfPromise = null;
@@ -60,7 +68,7 @@
     return ensurePromise;
   };
 
-  const route = input => {
+  const route = (input, method = 'GET') => {
     const raw = typeof input === 'string' ? input :
       input instanceof URL ? input.href : input?.url;
     if (typeof raw !== 'string') return null;
@@ -69,20 +77,25 @@
     const p = address.pathname;
     if (!p.startsWith('/api/v1/') && !p.startsWith('/montara/'))
       return null;
-    if (p === '/montara/version')
+    if (p === '/montara/version' && method === 'GET')
       return { kind:'metadata', data:{version:'Montara Owner Beta'} };
-    if (p === '/montara/branding')
+    if (p === '/montara/branding' && method === 'GET')
       return { kind:'metadata', data:{mode:'montara',has_logo:false} };
     const operation = p.substring(1);
-    if (address.hash || !routes.has(operation))
+    const resumable = /^montara\/uploads\/[a-f0-9]{32}(?:\/finish)?$/.test(operation);
+    if (address.hash || (!routes.has(operation) && !resumable))
       return {kind:'blocked'};
-    if (address.search) {
-      const params = address.searchParams;
-      if (operation !== 'api/v1/wizard/status' ||
-          params.size !== 1 || !params.has('project_id') ||
-          (params.get('project_id')||'').length > 4096)
-        return {kind:'blocked'};
-    }
+    const params = address.searchParams;
+    const isStatus = operation === 'api/v1/wizard/status' &&
+      params.size === 1 && params.has('project_id') &&
+      (params.get('project_id')||'').length <= 4096;
+    const review = operation === 'api/v1/wizard/review' &&
+      params.size >= 1 && params.size <= 2 &&
+      [...params.keys()].every(key => key === 'render' || key === 'shot') &&
+      ['0','1'].includes(params.get('render')) &&
+      (!params.has('shot') || /^[0-9]{1,5}$/.test(params.get('shot')||''));
+    if (address.search && !isStatus && !review)
+      return {kind:'blocked'};
     return {kind:'worker', path:nativePrefix + operation + address.search};
   };
 
@@ -114,7 +127,8 @@
   };
 
   window.fetch = async (input, init={}) => {
-    const selected = route(input);
+    const method = String(init.method || input?.method || 'GET').toUpperCase();
+    const selected = route(input,method);
     if (!selected) return originalFetch(input, init);
     if (selected.kind === 'blocked')
       throw new Error('Original Montara operation not enabled in this private beta');
@@ -131,7 +145,6 @@
     const csrf = await token();
     await ensure();
     const headers = authHeaders(init.headers || input?.headers, csrf);
-    const method = String(init.method || input?.method || 'GET').toUpperCase();
     const response = await originalFetch(selected.path, {
       ...init, method, headers, credentials:'same-origin', cache:'no-store'
     });
@@ -148,8 +161,8 @@
     const abort = XMLHttpRequest.prototype.abort;
     const selection = new WeakMap();
     XMLHttpRequest.prototype.open = function(method, url, ...other) {
-      const target = route(url);
       const nativeMethod = String(method).toUpperCase();
+      const target = route(url,nativeMethod);
       const asynchronous = other[0] !== false;
       if (target && (!asynchronous || target.kind === 'blocked' ||
                      target.kind === 'metadata')) {
