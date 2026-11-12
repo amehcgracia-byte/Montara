@@ -212,8 +212,11 @@ class NativeOwnerH3AuthenticatedGatewayTests(unittest.TestCase):
         valid={**headers,"X-Montara-Engine-Generation":"1"}
         stale={**headers,"X-Montara-Engine-Generation":"2"}
         self.assertEqual(self.rpc("GET","montara/recovery/latest",stale).status_code,503)
+        # The route is now enabled for validated proxy bytes; a JSON
+        # object is not a legal direct media upload and must fail before
+        # any worker descriptor is used.
         self.assertEqual(self.rpc("POST","api/v1/wizard/upload",valid,
-                                  json={}).status_code,404)
+                                  json={}).status_code,400)
         self.assertEqual(self.rpc("GET","api/v1/secret",valid).status_code,404)
         self.assertEqual(self.rpc("POST","api/v1/wizard/projects/new",
                                   valid,json=[]).status_code,400)
