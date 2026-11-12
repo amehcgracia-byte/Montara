@@ -194,6 +194,24 @@ class NativeOwnerH3AuthenticatedGatewayTests(unittest.TestCase):
                 }
             return b"mp4-preview",200,{"Content-Type":"video/mp4"}
 
+        @worker.get("/api/v1/edit/shot")
+        def shot_document():
+            self.native_calls.append((owner,"shot-get",request.args.get("index")))
+            return jsonify(project_id=str(home/"Projects"/"new.zuckervid"),
+                           index=int(request.args["index"]),
+                           revision="a"*20,choices=[{"label":"Camera 1","spherical":False}])
+
+        @worker.patch("/api/v1/edit/shot")
+        def save_shot():
+            payload=request.get_json()
+            self.native_calls.append((owner,"shot-patch",payload["index"]))
+            return jsonify(ok=True,index=payload["index"])
+
+        @worker.get("/api/v1/edit/shot/frame")
+        def shot_frame():
+            self.native_calls.append((owner,"shot-frame",request.args.get("index")))
+            return b"\xff\xd8\xff\xd9",200,{"Content-Type":"image/jpeg"}
+
         @worker.get("/api/v1/artifacts/sync")
         def sync():
             self.native_calls.append((owner,"sync"))
@@ -439,6 +457,53 @@ class NativeOwnerH3AuthenticatedGatewayTests(unittest.TestCase):
                 },data=b"one-byte-proxy")
                 self.assertEqual(result.status_code,400)
                 self.assertEqual(len(self.native_calls),count)
+
+    def test_shot_editor_read_patch_and_private_frame_are_owner_scoped(self):
+        a=self.user(self.a)
+        self.assertEqual(self.ensure(a).status_code,200)
+        aw=self.registry.get("owner-a").workspace_id
+        own_project=str(self.workers[aw][0]/"Projects"/"new.zuckervid")
+        scope={**a,"X-Montara-Engine-Generation":"1"}
+        read=self.rpc("GET","api/v1/edit/shot",scope,
+                      query_string={"index":"3"})
+        self.assertEqual(read.status_code,200,read.get_data(as_text=True))
+        self.assertEqual(read.json["index"],3)
+        frame=self.rpc("GET","api/v1/edit/shot/frame",scope,
+                       query_string={"index":"3","choice":"0",
+                                     "revision":"a"*20})
+        self.assertEqual(frame.status_code,200,frame.get_data(as_text=True))
+        self.assertEqual(frame.mimetype,"image/jpeg")
+        changed=self.rpc("PATCH","api/v1/edit/shot",scope,json={
+            "project_id":own_project,"revision":"a"*20,"index":3,
+            "choice":0,"edit_component":"movement","movement":True,
+            "apply_to_source":False,"playback_speed":1.0})
+        self.assertEqual(changed.status_code,200,changed.get_data(as_text=True))
+        before=len(self.native_calls)
+        for query in ({"index":"0","another":"bad"},
+                      {"index":"-1"},{"index":"x"}):
+            self.assertEqual(self.rpc("GET","api/v1/edit/shot",scope,
+                         query_string=query).status_code,404)
+        for query in ({"index":"3","choice":"0","revision":"a"*20,
+                       "path":"/etc/passwd"},
+                      {"index":"3","choice":"0","revision":"bad"}):
+            self.assertEqual(self.rpc("GET","api/v1/edit/shot/frame",scope,
+                         query_string=query).status_code,404)
+        self.assertEqual(self.rpc("PATCH","api/v1/edit/shot",scope,json={
+            "project_id":"/etc/passwd","revision":"a"*20,"index":3,
+            "choice":0,"apply_to_source":False,
+            "edit_component":"movement"}).status_code,403)
+        self.assertEqual(self.rpc("PATCH","api/v1/edit/shot",scope,json={
+            "project_id":own_project,"revision":"a"*20,"index":3,
+            "choice":0,"apply_to_source":True,
+            "edit_component":"movement"}).status_code,400)
+        self.assertEqual(len(self.native_calls),before)
+        b=self.user(self.b)
+        self.assertEqual(self.ensure(b).status_code,200)
+        foreign={**b,"X-Montara-Engine-Generation":"1"}
+        self.assertEqual(self.rpc("PATCH","api/v1/edit/shot",foreign,json={
+            "project_id":own_project,"revision":"a"*20,"index":3,
+            "choice":0,"apply_to_source":False,
+            "edit_component":"movement"}).status_code,403)
 
     def test_private_audio_playback_rejects_foreign_and_arbitrary_paths(self):
         a=self.user(self.a)
