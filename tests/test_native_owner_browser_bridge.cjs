@@ -55,6 +55,10 @@ async function main() {
       return new Response(new Uint8Array([255,216,255,217]),{
         status:200,headers:{'Content-Type':'image/jpeg'}});
     }
+    if(url==='/urano/v1/native/rpc/montara/branding') {
+      return new Response(JSON.stringify({mode:'montara',has_logo:false}),{
+        status:200,headers:{'Content-Type':'application/json'}});
+    }
     if(url==='/montara/companion/version') {
       return new Response(JSON.stringify({version:'0.6.5'}),{status:200});
     }
