@@ -45,6 +45,7 @@ class NativeOwnerH3AuthenticatedGatewayTests(unittest.TestCase):
         self.workers={}
         self.ensure_calls=[]
         self.native_calls=[]
+        self.transport_timeouts=[]
         self.app=Flask(__name__)
         self.app.config["MAX_CONTENT_LENGTH"]=300_000
 
@@ -70,7 +71,13 @@ class NativeOwnerH3AuthenticatedGatewayTests(unittest.TestCase):
             if requested!=1 or claimed!=workspace:
                 raise PermissionError("Stale worker generation")
             directory=self.workers[workspace][1]
-            return VerifiedJMUnixConnection(
+            owner_test=self
+            class AuditedConnection(VerifiedJMUnixConnection):
+                def request(self, method, url, *args, **kwargs):
+                    owner_test.transport_timeouts.append(
+                        (method,url,self.timeout))
+                    return super().request(method,url,*args,**kwargs)
+            return AuditedConnection(
                 directory/"jm-editor-http.sock",
                 expected_pid=os.getpid(),expected_uid=os.getuid())
 
@@ -357,6 +364,18 @@ class NativeOwnerH3AuthenticatedGatewayTests(unittest.TestCase):
         self.assertIn("upload-finish",events)
         self.assertIn("direct-upload",events)
         self.assertIn("sync",events)
+        media_timeouts=[(url,timeout) for method,url,timeout
+                        in self.transport_timeouts
+                        if method in ("PUT","POST") and
+                        (url.startswith("/montara/uploads/") or
+                         url=="/api/v1/wizard/upload")]
+        self.assertTrue(media_timeouts)
+        self.assertTrue(all(timeout==35.0 for _,timeout in media_timeouts),
+                        media_timeouts)
+        self.assertTrue(any(timeout<=10 for method,url,timeout
+                            in self.transport_timeouts
+                            if url=="/montara/uploads"),
+                        self.transport_timeouts)
 
     def test_streaming_proxy_exceeds_control_plane_limit_without_buffering(self):
         headers=self.user(self.a)
