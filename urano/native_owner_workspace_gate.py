@@ -40,6 +40,14 @@ _MEDIA_BODY = {
     "/api/v1/wizard/draft",
     "/api/v1/wizard/prepare",
     "/api/v1/wizard/start",
+    "/api/v1/wizard/review/replace",
+    "/api/v1/wizard/review/render",
+    *{
+        "/api/v1/settings/" + key for key in (
+            "fillers", "video-light", "camera-types", "camera-subjects",
+            "camera-roles", "spherical-landmarks", "stage-performers"
+        )
+    },
 }
 _GUARDED_POST = _PROJECT_BODY | _MEDIA_BODY | {
     "/api/v1/wizard/projects/new",
@@ -192,10 +200,14 @@ class NativeOwnerWorkspaceGate:
             # The original Chema handler creates a new project for null ID.
             if project not in (None, ""):
                 verified_native_project(self.root, project)
-        elif not isinstance(project, str) or not project:
-            # Prepare/start belong to an existing saved project.
-            raise UntrustedNativeWorkspace("Selected project unavailable")
-        else:
+        elif path in ("/api/v1/wizard/prepare","/api/v1/wizard/start"):
+            # The original Engine must have an active saved private edit.
+            if not isinstance(project,str) or not project:
+                raise UntrustedNativeWorkspace("Selected project unavailable")
+            verified_native_project(self.root, project)
+        elif project not in (None,""):
+            # Native setting/review endpoints may omit project_id, but if
+            # supplied it must never refer to a different Owner workspace.
             verified_native_project(self.root, project)
         videos = body.get("videos", [])
         if (not isinstance(videos, list) or len(videos) > 200
@@ -211,6 +223,24 @@ class NativeOwnerWorkspaceGate:
                      body.get("spherical_source_path"), *audio_paths):
             if item not in (None, ""):
                 verified_private_media(self.root, item)
+        if path == "/api/v1/settings/fillers":
+            for key in ("fillers","cutaways"):
+                collection=body.get(key,[])
+                if not isinstance(collection,list) or len(collection)>200:
+                    raise UntrustedNativeWorkspace("Untrusted media selection")
+                for item in collection:
+                    verified_private_media(self.root,item)
+        if path in (
+            "/api/v1/settings/camera-types",
+            "/api/v1/settings/camera-subjects",
+            "/api/v1/settings/camera-roles",
+        ):
+            for key in ("camera_types","camera_subjects","camera_roles"):
+                mapping=body.get(key,{})
+                if not isinstance(mapping,dict) or len(mapping)>200:
+                    raise UntrustedNativeWorkspace("Untrusted camera settings")
+                for native_path in mapping:
+                    verified_private_media(self.root,native_path)
 
     @staticmethod
     def _deny(environ, start_response):
