@@ -25,7 +25,7 @@ Estas operaciones deben conservarse, en vez de sustituirlas por las restriccione
 | `tests/test_native_owner_workspace_gate.py` | Contrato HTTP WSGI y el **`recovery.py` real de Chema** | La creación real del Engine está simulada por rutas Flask de prueba; todavía no E2E |
 | `tests/test_native_owner_workspace_registry.py` | Concurrencia (24 altas de un usuario), migración explícita, no pérdida de proyectos y control cruzado de propietarios | SQLite real en temp |
 
-**Resultado inicial:** 25 pruebas Python y 15 subpruebas completadas correctamente (pendiente repetir tras el ajuste menor a Status vacío). No cambia `web/` de `main`.
+**Resultado verificado tras la corrección de Status vacío:** 25 pruebas Python y 15 subpruebas PASS en Oracle, con recuperación nativa de Chema, SQLite y pasarela WSGI sobre archivos temporales. `web/` permanece idéntico a `main` (cero archivos modificados). La beta GCP conservaba 1 worker `running`, 13 `stopped`, portal/broker/túnel activos y `/healthz` HTTP 200; no se tocó su ejecución.
 
 ## Frontera que falta conectar antes de probar en Chrome
 
