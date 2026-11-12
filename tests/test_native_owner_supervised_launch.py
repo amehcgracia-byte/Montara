@@ -64,8 +64,9 @@ class NativeOwnerSupervisedLaunchTests(unittest.TestCase):
                 self.last_unit = item.split("=", 1)[1]
         return subprocess.CompletedProcess(args, 0, "", "")
 
-    def fake_ready(self, encoding=None):
-        if self.name != "ready.json":
+    @staticmethod
+    def fake_ready(path, encoding=None):
+        if path.name != "ready.json":
             raise AssertionError("Unexpected host file read")
         return json.dumps({
             "ready": True, "uid": os.getuid() + 30000,
