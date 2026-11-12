@@ -29,6 +29,7 @@ from urano.private_editor_connect_admission import verify_editor_connect_request
 from urano.private_editor_fd_handoff import (
     EditorFdLease, open_verified_editor_socket, send_editor_fd
 )
+from urano.native_owner_broker_policy import trusted_operator_worker_script
 from urano.job_recovery_ledger import JobRecoveryLedger,BusyOwner,StaleJob
 from urano.restricted_broker_ipc import authenticate_peer,parse_stop
 from urano.restricted_systemd_broker import (
@@ -64,19 +65,10 @@ class SystemdDirect:
 class DemoBroker:
     def __init__(self,bundle,*,jm_bundle=None,resources=None,private_preview_limit_mib=256,worker_script=None):
         self.bundle=Path(bundle)
-        # Fixed operator runner; never taken from an HTTP or owner frame.
-        if worker_script is None:
-            worker_script="/opt/montara/broker/private_broker_worker.py"
-        if worker_script not in (
-            "/opt/montara/broker/private_broker_worker.py",
-            "/opt/montara/broker-smart-candidate/private_broker_worker.py",
-        ):
-            raise ValueError("Unapproved root-owned worker runner")
-        selected=Path(worker_script)
-        if (selected.is_symlink() or not selected.is_file()
-                or selected.stat().st_uid!=0 or selected.stat().st_mode & 0o022):
-            raise ValueError("Untrusted private worker runner")
-        self.worker_script=worker_script
+        # Only an operator-selected, root-owned script may enter this
+        # existing systemd worker launcher; never a browser value.
+        self.worker_script=trusted_operator_worker_script(
+            worker_script, jm_bundle=jm_bundle)
         self.jm_bundle=Path(jm_bundle) if jm_bundle is not None else None
         from urano.jm_private_proxy_overlay import private_proxy_limit_mib
         self.private_preview_limit_mib=private_proxy_limit_mib(private_preview_limit_mib)
