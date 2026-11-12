@@ -2,14 +2,14 @@
 param([switch]$RestartAfter)
 $ErrorActionPreference='Stop'
 Add-Type -AssemblyName System.Windows.Forms
-$home=Split-Path -Parent $MyInvocation.MyCommand.Path
-$c=Get-Content -Raw (Join-Path $home 'config.json') | ConvertFrom-Json
+$updaterDir=Split-Path -Parent $MyInvocation.MyCommand.Path
+$c=Get-Content -Raw (Join-Path $updaterDir 'config.json') | ConvertFrom-Json
 function Info($text,$level='Information'){
   [System.Windows.Forms.MessageBox]::Show($text,'Montara Companion','OK',$level)|Out-Null
 }
 function RestartTray {
   if($RestartAfter){
-    $tray=Join-Path $home 'Montara-Bandeja.ps1'
+    $tray=Join-Path $updaterDir 'Montara-Bandeja.ps1'
     Start-Process -FilePath (Join-Path $PSHOME 'powershell.exe') -ArgumentList @('-NoProfile','-STA','-WindowStyle','Hidden','-ExecutionPolicy','Bypass','-File',('"'+$tray+'"'))
   }
 }
@@ -23,7 +23,7 @@ try {
      $manifest.bytes -lt 100 -or $manifest.bytes -gt 1000000) {
     throw 'El manifiesto H4 no es válido.'
   }
-  $installed=Get-Content (Join-Path $home 'installed-version.txt') -ErrorAction SilentlyContinue | Select-Object -First 1
+  $installed=Get-Content (Join-Path $updaterDir 'installed-version.txt') -ErrorAction SilentlyContinue | Select-Object -First 1
   if($installed -eq $manifest.version){
     Info ("Ya tienes la versión "+$installed+".")
     RestartTray
@@ -56,8 +56,8 @@ try {
       'video_recipe.py'=(Join-Path $program 'video_recipe.py')
       'windows_support.py'=(Join-Path $program 'windows_support.py')
       'spherical_proxy.py'=(Join-Path $program 'spherical_proxy.py')
-      'Montara-Bandeja.ps1'=(Join-Path $home 'Montara-Bandeja.ps1')
-      'Montara-Actualizar.ps1'=(Join-Path $home 'Montara-Actualizar.ps1')
+      'Montara-Bandeja.ps1'=(Join-Path $updaterDir 'Montara-Bandeja.ps1')
+      'Montara-Actualizar.ps1'=(Join-Path $updaterDir 'Montara-Actualizar.ps1')
     }
     $files=@(Get-ChildItem $expanded -Force)
     $allowed=@($files|ForEach-Object {$_.Name})
@@ -73,7 +73,7 @@ try {
       foreach($file in $allowed){
         Copy-Item -LiteralPath (Join-Path $expanded $file) -Destination $targets[$file] -Force
       }
-      Set-Content (Join-Path $home 'installed-version.txt') $manifest.version -Encoding ASCII
+      Set-Content (Join-Path $updaterDir 'installed-version.txt') $manifest.version -Encoding ASCII
     } catch {
       foreach($file in $allowed){
         if(Test-Path ($targets[$file]+'.rollback')){
