@@ -45,6 +45,9 @@ class NativeOwnerAppAssemblyTests(unittest.TestCase):
         self.assertTrue(start.location.startswith(
             "https://accounts.google.com/o/oauth2/v2/auth?"))
         self.assertIn("code_challenge=",start.location)
+        # Google must offer the chooser rather than silently preselecting
+        # Chrome's default account (which may not be beta-allowlisted).
+        self.assertIn("prompt=select_account",start.location)
         self.assertNotIn("test-secret",start.location)
         issued=self.sessions.issue("owner-a")
         self.client.set_cookie(SESSION_COOKIE,issued.token,domain="montara.test")
