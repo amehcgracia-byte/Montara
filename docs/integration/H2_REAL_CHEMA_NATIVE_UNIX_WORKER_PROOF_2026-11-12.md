@@ -30,3 +30,27 @@ El mismo Chema que llegará a `main` puede iniciar un proyecto, generar draft y 
 
 ## Limpieza y operación
 Las pruebas de GCP se realizaron en `/tmp/montara-chema-native-smoke.*` y `/tmp/montara-native-socket.*`, con `trap rm -rf` al salir y sin procesos persistentes. Los tests de Oracle utilizaron carpetas temporales `/tmp`. No se instalaron paquetes, no se creó otro venv, no se modificó la web original ni `main`. Preservar el Worker, Tunnel y la beta actual hasta que exista el nuevo entorno aislado de aceptación.
+
+
+## Actualización de hito 2 — Entrada administrativa del worker supervisado
+
+Tras la prueba con Chema real por socket privado, se ha implementado **la selección de la variante nativa desde el mismo broker root** sin modificar el comportamiento predeterminado de la beta:
+
+- `native_owner_systemd_worker.py` + `urano/native_owner_systemd_entry.py`: entrada separada de la antigua, diseñada para ser **seleccionada por el operador**, nunca por el navegador. Valida los argumentos existentes del broker, el UUID del workspace, `STATE_DIRECTORY`, `RuntimeDirectory`, versión/generación, quotas de proxy y dependencia exacta entre los bundles Engine/JM. Conserva `PYTHONPATH` del mixer fijado y emite `ready.json` **solo tras haber comprobado ambos sockets**.
+- `urano/native_owner_broker_policy.py`: whitelist de tres rutas exactas de script, de las cuales las dos originales siguen permitidas. La nueva solo admite JM pinneado y exige ejecutable Python regular propiedad de root, sin escritura por terceros ni enlaces simbólicos. El broker conserva la versión anterior como default.
+- `urano/private_broker_service.py`: portado selectivamente del trabajo revisado de `fernando/integracion` y conectado a esa whitelist. No se cambió su política de autorización, ledger, cgroups ni comandos `systemd-run`.
+- Se portaron también **solo las dependencias de seguridad realmente utilizadas** del broker/Unix (ledger de reservas, verificación de credenciales y procesos, políticas systemd, handoff del descriptor, límites JM/Engine y snapshot), sin incorporar dashboard ni selector multiproyecto. El pequeño soporte atómico opcional de `recipe` de `ProjectCatalog.create` se recuperó porque las pruebas de seguridad posteriores dependían de él. Eso no habilita catálogo visible.
+- `tests/test_native_owner_supervised_launch.py` ejercita el constructor de comandos del **broker real**, sustituyendo únicamente la ejecución privilegiada `systemd-run` y el marcador del kernel. Demuestra la línea de comandos nativa, todos los límites y el comportamiento de la ruta antigua, **sin iniciar ningún servicio**.
+
+### Regresión acreditada
+
+- **66 pruebas Python nuevas + 84 subpruebas** PASS (incluyen los dos casos del comando de arranque).
+- **44 pruebas históricas de I24/I25/socket/ledger + 42 subpruebas** PASS, ejecutadas contra las versiones portadas en la rama limpia.
+- Paquete original Chema + Engine nativo en GCP: New/Draft/Latest y socket privado `0600`, HTTP 200, verificados en la prueba anterior; no se confunde con ejecución de un worker systemd.
+- `web/` original de Chema no se modifica. **El broker instalado en GCP no ha cambiado y continúa utilizando el worker anterior**.
+
+### Condición necesaria para terminar el hito 2 operativo
+
+Realizar **una única** validación supervisada del nuevo script, pero solo con un contexto Owner de validación aislado de los datos actuales. Primero deben estar presentes en el despliegue sus archivos revisados y dependencias fijadas, y debe definirse la forma de habilitarlo sin sustituir al broker actual, sin interrupción ni creación de un segundo servicio persistente. No reiniciar ni limpiar el worker activo para forzar la prueba.
+
+La comprobación de autorización externa Chrome → Google Owner/CSRF → broker → WSGI + la sustitución del picker corresponden al hito siguiente y **no están terminadas**.
