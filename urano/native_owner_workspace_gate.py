@@ -141,6 +141,23 @@ class NativeOwnerWorkspaceGate:
     def __call__(self, environ, start_response):
         method = environ.get("REQUEST_METHOD")
         path = environ.get("PATH_INFO")
+        if method == "GET" and path == "/montara/audio":
+            from urllib.parse import parse_qs
+            try:
+                args = parse_qs(environ.get("QUERY_STRING", ""),
+                                keep_blank_values=False, strict_parsing=True,
+                                max_num_fields=1)
+                if set(args) != {"path"} or len(args["path"]) != 1:
+                    raise UntrustedNativeWorkspace("Invalid audio query")
+                media = verified_private_media(self.root, args["path"][0])
+                if media.suffix.lower() not in {
+                    ".wav", ".mp3", ".m4a", ".aif", ".aiff",
+                    ".flac", ".ogg", ".opus"
+                }:
+                    raise UntrustedNativeWorkspace("Not private audio")
+            except (ValueError, TypeError, OSError):
+                return self._deny(environ, start_response)
+            return self.app(environ, start_response)
         if method == "GET" and path in _GUARDED_GET:
             # Chema may poll another *saved* project while a new video starts.
             # The query's project_id must still be owner-local.
