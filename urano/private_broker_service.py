@@ -45,6 +45,22 @@ LEDGER=Path("/var/lib/montara-i26-broker/jobs.sqlite3")
 H4_SOCKET=Path("/run/montara-h4-broker/control.sock")
 H4_OWNER_SOCKET=Path("/run/montara-h4-owner-admission/control.sock")
 H4_LEDGER=Path("/var/lib/montara-h4-broker/jobs.sqlite3")
+
+
+def operator_broker_namespace(*, isolated_h4: bool, owner_db_root: str | None,
+                              worker_script: str | None,
+                              jm_bundle: str | None):
+    """Resolve ONE operator-pinned IPC namespace. Never accept browser paths."""
+    if type(isolated_h4) is not bool:
+        raise ValueError("Invalid operator broker mode")
+    if isolated_h4:
+        if (owner_db_root != "/run/montara-h4-owner-ro"
+                or worker_script !=
+                "/opt/montara/broker-h4-native/native_owner_systemd_worker.py"
+                or jm_bundle is None):
+            raise ValueError("H4 requires its exact private namespace")
+        return H4_SOCKET,H4_OWNER_SOCKET,H4_LEDGER
+    return SOCKET,OWNER_SOCKET,LEDGER
 READY_FILE="ready.json"
 
 
@@ -346,15 +362,11 @@ def main():
     args=parser.parse_args()
     # H4 has fixed, distinct sockets and ledger. Never infer IPC paths from
     # HTTP, and never let a new isolated broker unlink a live beta socket.
-    broker_socket=H4_SOCKET if args.h4_native_isolated else SOCKET
-    owner_socket=H4_OWNER_SOCKET if args.h4_native_isolated else OWNER_SOCKET
-    ledger_path=H4_LEDGER if args.h4_native_isolated else LEDGER
-    if args.h4_native_isolated and (
-            args.owner_db_root!="/run/montara-h4-owner-ro"
-            or args.worker_script!=
-            "/opt/montara/broker-h4-native/native_owner_systemd_worker.py"
-            or args.jm_bundle is None):
-        raise ValueError("H4 requires exact separate Owner DB and native worker")
+    broker_socket,owner_socket,ledger_path=operator_broker_namespace(
+        isolated_h4=args.h4_native_isolated,
+        owner_db_root=args.owner_db_root,
+        worker_script=args.worker_script,
+        jm_bundle=args.jm_bundle)
     if os.geteuid()!=0:
         raise RuntimeError("Only root-owned service may manage the isolated systemd units")
     if args.trusted_uid<=0 or args.trusted_uid==args.web_uid:
