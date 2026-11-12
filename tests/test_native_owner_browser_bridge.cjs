@@ -116,9 +116,14 @@ async function main() {
     '/urano/v1/native/rpc/api/v1/wizard/review?render=0');
   assert.equal(calls[5].url,
     '/urano/v1/native/rpc/api/v1/wizard/review/thumbnail/assets-v2/frame-0.jpg');
-  await assert.rejects(
-    () => window.fetch('/montara/branding',{method:'POST'}),
-    /not enabled/);
+  const branding=await window.fetch('/montara/branding',{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({mode:'montara'})
+  });
+  assert.equal(branding.status,200);
+  assert.equal(calls[6].url,'/urano/v1/native/rpc/montara/branding');
+  assert.equal(calls[6].options.headers.get('X-Urano-CSRF'),csrf);
+  assert.equal(calls[6].options.headers.get('X-Montara-Engine-Generation'),'4');
 
   await assert.rejects(
     () => window.fetch('/api/v1/internal/other'),
@@ -126,7 +131,7 @@ async function main() {
   await assert.rejects(
     () => window.fetch('/montara/session/secret'),
     /not enabled/);
-  assert.equal(calls.length,6);
+  assert.equal(calls.length,7);
   console.log('H3_NATIVE_BROWSER_BRIDGE_PASS startup-lazy, csrf, owner-worker, new, secured-thumbnail-blob, blocked-routes');
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});
