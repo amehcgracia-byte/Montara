@@ -42,6 +42,9 @@ PROJECT="i26-demo-project"
 SOCKET=Path("/run/montara-i26-broker/control.sock")
 OWNER_SOCKET=Path("/run/montara-i27-admission/control.sock")
 LEDGER=Path("/var/lib/montara-i26-broker/jobs.sqlite3")
+H4_SOCKET=Path("/run/montara-h4-broker/control.sock")
+H4_OWNER_SOCKET=Path("/run/montara-h4-owner-admission/control.sock")
+H4_LEDGER=Path("/var/lib/montara-h4-broker/jobs.sqlite3")
 READY_FILE="ready.json"
 
 
@@ -63,7 +66,7 @@ class SystemdDirect:
 
 
 class DemoBroker:
-    def __init__(self,bundle,*,jm_bundle=None,resources=None,private_preview_limit_mib=256,worker_script=None):
+    def __init__(self,bundle,*,jm_bundle=None,resources=None,private_preview_limit_mib=256,worker_script=None,ledger_path=None):
         self.bundle=Path(bundle)
         # Only an operator-selected, root-owned script may enter this
         # existing systemd worker launcher; never a browser value.
@@ -73,7 +76,7 @@ class DemoBroker:
         from urano.jm_private_proxy_overlay import private_proxy_limit_mib
         self.private_preview_limit_mib=private_proxy_limit_mib(private_preview_limit_mib)
         self.resources=resources if resources is not None else WorkerResourceProfile()
-        self.ledger=JobRecoveryLedger(LEDGER)
+        self.ledger=JobRecoveryLedger(LEDGER if ledger_path is None else ledger_path)
         self.control=RestrictedTargetControl(self.ledger,SystemdDirect())
         # Recover ONLY exact I24 names recorded before a crash. No TTL.
         for orphan in self.ledger.recover_after_restart():
@@ -339,7 +342,19 @@ def main():
     parser.add_argument("--worker-tasks-max",type=int,default=64)
     parser.add_argument("--private-proxy-limit-mib",type=int,default=256)
     parser.add_argument("--worker-script")
+    parser.add_argument("--h4-native-isolated",action="store_true")
     args=parser.parse_args()
+    # H4 has fixed, distinct sockets and ledger. Never infer IPC paths from
+    # HTTP, and never let a new isolated broker unlink a live beta socket.
+    broker_socket=H4_SOCKET if args.h4_native_isolated else SOCKET
+    owner_socket=H4_OWNER_SOCKET if args.h4_native_isolated else OWNER_SOCKET
+    ledger_path=H4_LEDGER if args.h4_native_isolated else LEDGER
+    if args.h4_native_isolated and (
+            args.owner_db_root!="/run/montara-h4-owner-ro"
+            or args.worker_script!=
+            "/opt/montara/broker-h4-native/native_owner_systemd_worker.py"
+            or args.jm_bundle is None):
+        raise ValueError("H4 requires exact separate Owner DB and native worker")
     if os.geteuid()!=0:
         raise RuntimeError("Only root-owned service may manage the isolated systemd units")
     if args.trusted_uid<=0 or args.trusted_uid==args.web_uid:
@@ -383,33 +398,34 @@ def main():
                                     args.worker_tasks_max)
     broker=DemoBroker(args.bundle,jm_bundle=args.jm_bundle,resources=resources,
                       private_preview_limit_mib=args.private_proxy_limit_mib,
-                      worker_script=args.worker_script)
-    if SOCKET.is_symlink():
+                      worker_script=args.worker_script,
+                      ledger_path=ledger_path)
+    if broker_socket.is_symlink():
         raise RuntimeError("Socket symlink forbidden")
-    if SOCKET.exists():
-        SOCKET.unlink()
+    if broker_socket.exists():
+        broker_socket.unlink()
     srv=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
     owner_srv=None
     try:
-        srv.bind(str(SOCKET))
-        os.chmod(SOCKET,0o660)
+        srv.bind(str(broker_socket))
+        os.chmod(broker_socket,0o660)
         srv.listen(8)
         if args.owner_db_root:
             if (args.web_gid is None or args.web_uid<=0 or args.web_gid<=0
                 or Path(args.owner_db_root).is_symlink()):
                 raise ValueError("Invalid owner identity or readonly DB mount")
-            if OWNER_SOCKET.parent.is_symlink():
+            if owner_socket.parent.is_symlink():
                 raise RuntimeError("Owner socket path linked")
-            OWNER_SOCKET.parent.mkdir(mode=0o710,parents=True,exist_ok=True)
-            os.chown(OWNER_SOCKET.parent,0,args.web_gid)
-            os.chmod(OWNER_SOCKET.parent,0o710)
-            if OWNER_SOCKET.is_symlink():
+            owner_socket.parent.mkdir(mode=0o710,parents=True,exist_ok=True)
+            os.chown(owner_socket.parent,0,args.web_gid)
+            os.chmod(owner_socket.parent,0o710)
+            if owner_socket.is_symlink():
                 raise RuntimeError("Owner socket symlink forbidden")
-            OWNER_SOCKET.unlink(missing_ok=True)
+            owner_socket.unlink(missing_ok=True)
             owner_srv=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
-            owner_srv.bind(str(OWNER_SOCKET))
-            os.chown(OWNER_SOCKET,0,args.web_gid)
-            os.chmod(OWNER_SOCKET,0o660)
+            owner_srv.bind(str(owner_socket))
+            os.chown(owner_socket,0,args.web_gid)
+            os.chmod(owner_socket,0o660)
             owner_srv.listen(8)
         listeners=[srv]+([owner_srv] if owner_srv is not None else [])
         while True:
@@ -441,8 +457,8 @@ def main():
         srv.close()
         if owner_srv is not None:
             owner_srv.close()
-            OWNER_SOCKET.unlink(missing_ok=True)
-        SOCKET.unlink(missing_ok=True)
+            owner_socket.unlink(missing_ok=True)
+        broker_socket.unlink(missing_ok=True)
 
 
 if __name__=="__main__":
