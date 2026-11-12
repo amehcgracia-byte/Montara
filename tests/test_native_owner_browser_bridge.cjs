@@ -55,6 +55,10 @@ async function main() {
       return new Response(new Uint8Array([255,216,255,217]),{
         status:200,headers:{'Content-Type':'image/jpeg'}});
     }
+    if(url.startsWith('/urano/v1/native/rpc/montara/audio?path=')) {
+      return new Response(new Uint8Array([82,73,70,70,0,0,0,0]),{
+        status:200,headers:{'Content-Type':'audio/x-wav'}});
+    }
     if(url==='/urano/v1/native/rpc/montara/branding') {
       return new Response(JSON.stringify({mode:'montara',has_logo:false}),{
         status:200,headers:{'Content-Type':'application/json'}});
@@ -65,6 +69,15 @@ async function main() {
     throw Error('Unexpected real network call '+url);
   }
 
+  class FakeMediaElement {
+    constructor() {this._src='';this.loaded=false;}
+    load(){this.loaded=true;}
+    dispatchEvent(){}
+  }
+  Object.defineProperty(FakeMediaElement.prototype,'src',{
+    configurable:true,get(){return this._src;},set(v){this._src=v;}
+  });
+  class FakeAudioElement extends FakeMediaElement {}
   const window = {fetch:network};
   const context = {
     window, location:{
@@ -74,6 +87,7 @@ async function main() {
     document:{getElementById:id => id==='footage'?footage:null},
     MutationObserver:FakeObserver,URL,Response,Headers,
     XMLHttpRequest:undefined,
+    HTMLMediaElement:FakeMediaElement,HTMLAudioElement:FakeAudioElement,
   };
   vm.runInNewContext(source,context,{filename:'native_owner_browser_bridge.js'});
   assert.equal(typeof window.fetch,'function');
@@ -132,6 +146,13 @@ async function main() {
     () => window.fetch('/montara/session/secret'),
     /not enabled/);
   assert.equal(calls.length,7);
+  const sound = new FakeAudioElement();
+  sound.src='/montara/audio?path='+encodeURIComponent('/private/WizardUploads/song.wav');
+  await new Promise(resolve=>setTimeout(resolve,30));
+  assert.ok(sound.loaded,'Original song player must load its private audio blob');
+  assert.ok(sound._src.startsWith('blob:'),'Audio bytes must use a browser-local blob');
+  assert.equal(calls[7].url,'/urano/v1/native/rpc/montara/audio?path='+encodeURIComponent('/private/WizardUploads/song.wav'));
+  assert.equal(calls[7].options.headers.get('X-Urano-CSRF'),csrf);
   console.log('H3_NATIVE_BROWSER_BRIDGE_PASS startup-lazy, csrf, owner-worker, new, secured-thumbnail-blob, blocked-routes');
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});
