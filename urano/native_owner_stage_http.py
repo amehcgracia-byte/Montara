@@ -15,6 +15,10 @@ _SETTINGS = frozenset({
     "camera-roles", "spherical-landmarks", "stage-performers",
 })
 _UUID = re.compile(r"[a-f0-9]{32}\Z")
+_PREVIEW = re.compile(r"/api/v1/wizard/review/preview/[0-9]{1,5}\\Z")
+_THUMB = re.compile(
+    r"/api/v1/wizard/review/thumbnail/(?:assets-v2|[a-f0-9]{16,128})/"
+    r"[A-Za-z0-9_.-]{1,180}\\Z")
 _MAX_QUERY = 2048
 
 
@@ -61,6 +65,20 @@ def native_stage_route(method: str, path: str, query: str = "") -> NativeStageTa
             return None
         return NativeStageTarget(path+"?"+urlencode(
             {k:values[k][0] for k in ("render","shot") if k in values}),"json")
+    if method=="GET" and (_PREVIEW.fullmatch(path) or _THUMB.fullmatch(path)):
+        if query:
+            try:
+                params=parse_qs(query,keep_blank_values=True,strict_parsing=True,
+                                max_num_fields=1)
+            except ValueError:
+                return None
+            if (set(params)!={"v"} or len(params["v"])!=1 or
+                    not re.fullmatch(r"[A-Za-z0-9_.-]{0,80}",
+                                     params["v"][0])):
+                return None
+            return NativeStageTarget(path+"?"+urlencode({"v":params["v"][0]}),
+                                     "review-media")
+        return NativeStageTarget(path,"review-media")
     prefix="/montara/uploads/"
     if path.startswith(prefix):
         tail=path[len(prefix):]
