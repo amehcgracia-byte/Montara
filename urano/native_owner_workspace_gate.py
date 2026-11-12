@@ -161,7 +161,12 @@ class NativeOwnerWorkspaceGate:
                 if body:
                     raise UntrustedNativeWorkspace("New needs no client project")
             elif path in _PROJECT_BODY:
-                if set(body) != {"path"}:
+                keys = set(body)
+                if (not {"path"} <= keys
+                        or keys - ({"path", "keep_exports"}
+                                   if path.endswith("/delete") else {"path"})
+                        or ("keep_exports" in body and
+                            type(body["keep_exports"]) is not bool)):
                     raise UntrustedNativeWorkspace("Invalid project selection")
                 verified_native_project(self.root, body["path"])
             else:
