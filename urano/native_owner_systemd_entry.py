@@ -24,6 +24,10 @@ _UNIT = re.compile(r"montara-i24-job-[a-f0-9]{32}\Z")
 _WORKSPACE = re.compile(
     r"[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\Z")
 _STATE_DIR = re.compile(r"montara-owner-[a-f0-9]{40}\Z")
+# Operator-pinned, read-only Engine bundle for the current H4 pilot.
+# This is the exact commit of engine-b867b3... verified against the VM
+# immutable bundle. The browser never supplies it.
+_H4_ENGINE_REVISION = "b867b3c72af8fe4685b487bcf1e09ffcc2a7c82b"
 _REQUIRED_SITE = (
     "numpy", "scipy", "numba", "librosa", "soundfile",
     "pyloudnorm", "matchering",
@@ -151,6 +155,10 @@ def main(argv: list[str] | None = None):
     if not cache_dir.is_dir() or cache_dir.stat().st_mode & 0o077:
         raise NativeSystemdOwnerError("Unsafe private Numba cache permissions")
     os.environ["NUMBA_CACHE_DIR"] = str(cache_dir)
+    # The DynamicUser must not inspect a root-owned Git repository during a
+    # user render. The immutable operator-pinned Engine identity is already
+    # established by the H4 broker's exact BindReadOnlyPaths mount.
+    os.environ["MONTARA_ENGINE_SHA"] = _H4_ENGINE_REVISION
     prepare_native_owner_runtime(
         engine_root=bundle, jm_root=jm, proxy_limit_mib=quota)
 
