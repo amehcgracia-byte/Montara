@@ -157,6 +157,11 @@ async function main() {
       index:3,choice:0,apply_to_source:false,edit_component:'movement'})
   });
   assert.equal(shotPatch.status,200);
+  const patchWire=calls.at(-1);
+  assert.equal(patchWire.url,'/urano/v1/native/rpc/api/v1/edit/shot');
+  assert.equal(patchWire.options.method,'POST');
+  assert.equal(patchWire.options.headers.get('X-Montara-Shot-Method'),'PATCH');
+  assert.equal(patchWire.options.headers.get('X-Urano-CSRF'),csrf);
   const image=new FakeImageElement();
   image.src=framePath;
   await new Promise(resolve=>setImmediate(resolve));
