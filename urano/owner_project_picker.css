@@ -1,0 +1,77 @@
+/* Minimal contextual project overlay; original Chema UI remains unchanged. */
+.montara-owner-dialog{position:fixed;inset:0;margin:auto;width:min(560px,calc(100vw - 32px));max-height:80vh;overflow:auto;
+  background:#1e1e22;color:#f4f1ef;border:1px solid #666;border-radius:16px;
+  padding:22px;box-shadow:0 18px 75px #0009}
+.montara-owner-dialog::backdrop{background:#0009}
+.montara-owner-top{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.montara-owner-top h2{font-size:1.15rem;margin:0}
+.montara-owner-dialog input,.montara-owner-dialog select{min-width:0;max-width:100%;
+  background:#29292e;color:inherit;border:1px solid #555;border-radius:8px;padding:10px}
+.montara-owner-dialog input[type=search]{width:100%;margin:16px 0 8px}
+.montara-owner-list{list-style:none;padding:0;margin:0;max-height:38vh;overflow:auto}
+.montara-owner-list li{margin:0;border-bottom:1px solid #3b3b40}
+.montara-owner-choice{display:flex;flex-direction:column;align-items:flex-start;gap:3px;
+  border:0;background:transparent;color:inherit;width:100%;padding:12px;
+  text-align:left;cursor:pointer;border-radius:8px}
+.montara-owner-choice:hover,.montara-owner-choice:focus-visible{background:#34343b}
+.montara-owner-choice small{color:#bab7b5}
+.montara-owner-new{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;align-items:center}
+.montara-owner-new input{flex:1 1 180px}
+.montara-owner-new select{flex:0 1 100px}
+
+/* Owner controls belong to the existing Chema header, not a second toolbar. */
+header.top #montaraOwnerProjectsButton{flex-shrink:0}
+header.top #montaraOwnerAccount{margin-left:auto;flex-shrink:0}
+.montara-owner-account{max-width:330px}
+body #sessionResume{display:none!important}
+/* The original global Latest recovery bypasses Owner project authorization.
+   Keep Chema's element and handlers intact but expose only Owner Projects. */
+body #newVideo{display:none!important}
+
+/* Recovery uses Chema's existing intro logo, not a second editing wizard. */
+#montaraOwnerResumeSplash{position:fixed;inset:0;z-index:999;
+  display:flex;align-items:center;justify-content:center;
+  background:#0c0c0f;color:#f5f3ef;pointer-events:auto}
+#montaraOwnerResumeSplash .intro-name{margin:0;transform:none}
+
+/* The first Home animation belongs to the authenticated entry. Do not show
+   half of the native Home animation during an explicit Stage launch. */
+html.montara-owner-stage-entry #home{visibility:hidden!important;animation:none!important}
+
+/* Read-only Engine status. Green = independently verified running;
+   red = broker-confirmed off; amber = unknown. Never an ON/OFF toggle. */
+header.top .montara-owner-engine{display:flex;align-items:center;gap:7px;
+  flex-shrink:1;min-width:0;max-width:min(40vw,340px);margin-left:auto;
+  font-size:11px;letter-spacing:.03em;color:#bbb6b1}
+header.top .montara-owner-engine-led{width:8px;height:8px;min-width:8px;
+  border-radius:50%;background:#d5a346;box-shadow:0 0 6px #d5a3467a}
+header.top .montara-owner-engine[data-status=on] .montara-owner-engine-led{
+  background:#52cc79;box-shadow:0 0 8px #52cc7988}
+header.top .montara-owner-engine[data-status=off] .montara-owner-engine-led{
+  background:#e86d62;box-shadow:0 0 7px #e86d6288}
+header.top #montaraOwnerEngineLabel{display:block;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap;min-width:0}
+header.top #montaraOwnerOpenActive{font-size:11px;flex-shrink:0}
+header.top #montaraOwnerOpenActive[hidden]{display:none!important}
+header.top #montaraOwnerAccount{margin-left:0;flex-shrink:0}
+@media(max-width:650px){
+  header.top .montara-owner-engine{max-width:115px}
+  header.top #montaraOwnerOpenActive{font-size:0}
+  header.top #montaraOwnerOpenActive:not([hidden])::after{
+    content:"Open";font-size:11px}
+}
+
+/* Do not swallow an XHR failure: keep the verified transport reason visible. */
+.montara-owner-upload-issue{padding:11px 14px;border:1px solid #d95b47;
+  border-radius:10px;background:#2b1c1a;color:#f3d2cb;
+  margin:0 0 14px;font-size:13px;line-height:1.5}
+.montara-owner-upload-issue[hidden]{display:none!important}
+
+/* The Owner-scoped Chema JS now shows the native f.error for every
+   ERROR row. Never mask its diagnostic with a generic CSS pseudo-label. */
+#footage li:has(.kind.error) .state{color:#ea8576}
+
+/* Compatibility safety: if an older deployed picker still constructs the
+   Engine ON/OFF button, hide it. A cosmetic toggle cannot safely stop a
+   broker-owned worker. The read-only state indicator remains visible. */
+header.top .montara-owner-engine-switch{display:none!important}

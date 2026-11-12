@@ -1,0 +1,172 @@
+name: SMART Windows Companion beta with native renderer
+on:
+  push:
+    branches: [fernando/integracion]
+    paths:
+      - 'companion/build_smart_beta.py'
+      - 'companion/smart_beta_launcher.py'
+      - 'companion/windows_video_jobs_compat.py'
+      - 'companion/windows_tray_smart.ps1'
+      - 'companion/INSTALAR-RENDER-SMART.ps1'
+      - 'tests/test_smart_windows_native_render_smoke.py'
+      - '.github/workflows/fer-smart-companion-package.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package-windows-companion:
+    runs-on: windows-latest
+    timeout-minutes: 24
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - uses: actions/checkout@v4
+        with:
+          repository: amehcgracia-byte/zucker_videos
+          ref: b867b3c72af8fe4685b487bcf1e09ffcc2a7c82b
+          path: reviewed-engine
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Fetch pinned original Chema editor in root repository
+        shell: pwsh
+        run: |
+          git fetch --no-tags --depth=1 origin 14cce126137a0ef30a987351ff35b750f54473bd
+          if ($LASTEXITCODE -ne 0) { throw "Could not fetch pinned editor SHA" }
+      - name: Build full self-contained-source Windows beta
+        shell: pwsh
+        run: |
+          python companion/build_smart_beta.py --repo . --engine-repo reviewed-engine --out dist/Montara-SMART-Beta-Windows-COMPLETO.zip
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m zipfile -t dist/Montara-SMART-Beta-Windows-COMPLETO.zip
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Parse Windows tray and installer scripts
+        shell: pwsh
+        run: |
+          $parsed = @(
+            "companion/windows_tray_smart.ps1",
+            "companion/INSTALAR-RENDER-SMART.ps1"
+          )
+          foreach ($path in $parsed) {
+            $tokens = $null
+            $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $path).Path, [ref]$tokens, [ref]$errors
+            )
+            if ($errors.Count -ne 0) {
+              $errors | Format-Table -AutoSize
+              throw "Invalid PowerShell syntax in $path"
+            }
+          }
+      - name: Validate full package content and pinned engine
+        shell: pwsh
+        run: |
+          @'
+          import json,zipfile
+          p='dist/Montara-SMART-Beta-Windows-COMPLETO.zip'
+          with zipfile.ZipFile(p) as z:
+              root='Montara-SMART-Beta/'
+              manifest=json.loads(z.read(root+'smart-beta-manifest.json'))
+              assert manifest['renderer_sources_bundled'] is True
+              assert manifest['engine']=='b867b3c72af8fe4685b487bcf1e09ffcc2a7c82b'
+              for filename in (
+                  'renderer/ENGINE_COMMIT','renderer/engine/core/stages/export.py',
+                  'renderer/local_video.py','windows_tray_smart.ps1',
+                  'INSTALAR-RENDER-SMART.ps1','INICIAR-SMART-BETA.cmd',
+                  'companion.py','video_jobs.py',
+              ):
+                  assert root+filename in z.namelist(),filename
+          print('WINDOWS_FULL_COMPANION_BUNDLE_PASS')
+          '@ | python -
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Windows-native render setup and localhost Companion smoke
+        shell: pwsh
+        run: |
+          if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
+            choco install ffmpeg --no-progress -y
+            if ($LASTEXITCODE -ne 0) { throw 'Windows runner FFmpeg unavailable' }
+          }
+          if (-not (Get-Command ffprobe -ErrorAction SilentlyContinue)) {
+            $env:PATH = "C:\\ProgramData\\chocolatey\\bin;" + $env:PATH
+          }
+          if (-not (Get-Command ffprobe -ErrorAction SilentlyContinue)) {
+            throw 'Windows runner ffprobe unavailable'
+          }
+          $extract = Join-Path $env:RUNNER_TEMP 'smart-unpacked'
+          New-Item -ItemType Directory -Path $extract -Force | Out-Null
+          Expand-Archive dist/Montara-SMART-Beta-Windows-COMPLETO.zip -DestinationPath $extract -Force
+          $dir = Join-Path $extract 'Montara-SMART-Beta'
+          $env:LOCALAPPDATA = Join-Path $env:RUNNER_TEMP 'montara-localappdata'
+          New-Item -ItemType Directory -Path $env:LOCALAPPDATA -Force | Out-Null
+          & (Join-Path $dir 'INSTALAR-RENDER-SMART.ps1')
+          if ($LASTEXITCODE -ne 0) { throw 'Windows native Engine install failed' }
+          $python = Join-Path $env:LOCALAPPDATA 'MontaraSMARTBeta\video\venv\Scripts\python.exe'
+          & $python -c "from pathlib import Path; import sys; sys.path.insert(0, str(Path(sys.executable).parents[2] / 'engine')); from core.stages.export import ExportStage; print('WIN_NATIVE_RENDER_IMPORT_PASS')"
+          if ($LASTEXITCODE -ne 0) { throw 'Windows native export smoke failed' }
+          $out = Join-Path $env:RUNNER_TEMP 'companion-stdout.log'
+          $err = Join-Path $env:RUNNER_TEMP 'companion-stderr.log'
+          $process = Start-Process -FilePath (Get-Command python).Source -ArgumentList @('smart_beta_launcher.py') -WorkingDirectory $dir -PassThru -RedirectStandardOutput $out -RedirectStandardError $err
+          try {
+            $status = $null
+            for ($i=0; $i -lt 30; $i++) {
+              Start-Sleep -Milliseconds 500
+              try {
+                $status = Invoke-RestMethod -Uri 'http://127.0.0.1:47820/health' -TimeoutSec 2
+                if ($status.app -eq 'montara-companion') { break }
+              } catch {}
+            }
+            if (-not $status -or $status.app -ne 'montara-companion') {
+              Get-Content $out, $err -ErrorAction SilentlyContinue
+              throw 'Native Windows Companion never became healthy'
+            }
+            if (-not $status.ffmpeg -or $status.local_video.engine -ne 'b867b3c72af8fe4685b487bcf1e09ffcc2a7c82b') {
+              throw ('Companion failed exact renderer matching: ' + ($status | ConvertTo-Json -Compress))
+            }
+            if ($status.busy) { throw 'Companion incorrectly reports active work' }
+            $target = 'http://127.0.0.1:47820/not-a-route'
+            $accepted = Invoke-WebRequest -Uri $target -Headers @{
+              Origin = 'https://montara-owner.memoriainvalida001.workers.dev'
+            } -SkipHttpErrorCheck -TimeoutSec 5
+            if ([int]$accepted.StatusCode -ne 404) {
+              throw 'Official Montara beta origin rejected by Companion'
+            }
+            $acceptedH4 = Invoke-WebRequest -Uri $target -Headers @{
+              Origin = 'https://montara-owner-h4.memoriainvalida001.workers.dev'
+            } -SkipHttpErrorCheck -TimeoutSec 5
+            if ([int]$acceptedH4.StatusCode -ne 404 -or
+                $acceptedH4.Headers['Access-Control-Allow-Origin'] -ne
+                  'https://montara-owner-h4.memoriainvalida001.workers.dev') {
+              throw 'Isolated H4 beta origin rejected by Companion CORS'
+            }
+            $rejected = Invoke-WebRequest -Uri $target -Headers @{
+              Origin = 'https://untrusted.example'
+            } -SkipHttpErrorCheck -TimeoutSec 5
+            if ([int]$rejected.StatusCode -ne 403) {
+              throw 'Untrusted browser origin incorrectly accepted'
+            }
+            Write-Host 'SMART_WINDOWS_COMPANION_FULL_RENDERER_HEALTH_AND_CORS_PASS'
+          } finally {
+            if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force }
+            $process.Dispose()
+          }
+      - name: Render an actual 1080p MP4 on Windows from local originals
+        shell: pwsh
+        run: |
+          $env:LOCALAPPDATA = Join-Path $env:RUNNER_TEMP 'montara-localappdata'
+          $env:PATH = "C:\\ProgramData\\chocolatey\\bin;" + $env:PATH
+          $env:MONTARA_SMART_PACKAGE_ROOT = Join-Path $env:RUNNER_TEMP 'smart-unpacked\\Montara-SMART-Beta'
+          python tests/test_smart_windows_native_render_smoke.py
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Native Windows original-to-MP4 render failed'
+          }
+      - name: Upload complete private beta ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: Montara-SMART-Beta-Windows-COMPLETO
+          path: dist/Montara-SMART-Beta-Windows-COMPLETO.zip
+          retention-days: 14
+          if-no-files-found: error

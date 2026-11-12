@@ -1,0 +1,46 @@
+name: FER I55 original JM private long proxy limits
+on:
+  pull_request:
+    paths:
+      - 'urano/jm_private_proxy_overlay.py'
+      - 'urano/first_valid_upload_gate.py'
+      - 'urano/owner_original_jm_rpc.py'
+      - 'urano/full_jm_worker.py'
+      - 'urano/private_broker_worker.py'
+      - 'urano/jm_bundle_manifest.py'
+      - 'tests/test_urano_jm_bundle_manifest.py'
+      - 'tests/test_urano_jm_private_proxy_overlay.py'
+      - 'tests/test_urano_jm_original_private_proxy_http.py'
+      - '.github/workflows/fer-i55-original-jm-long-proxy.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  original-jm-proxy-quota:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install only Flask for private HTTP protocol tests
+        run: python -m pip install 'Flask>=3,<4'
+      - name: Pin the reviewed original JM source, never modify Chema branch
+        shell: bash
+        run: |
+          git fetch --no-tags --depth=1 origin refs/heads/fix/jm-native-video-save-project-recovery-20261110
+          test "$(git rev-parse FETCH_HEAD)" = '14cce126137a0ef30a987351ff35b750f54473bd'
+          git show FETCH_HEAD:resumable_upload.py > "$RUNNER_TEMP/jm-original-resumable-upload.py"
+          echo "MONTARA_ORIGINAL_JM_UPLOAD_SOURCE=$RUNNER_TEMP/jm-original-resumable-upload.py" >> "$GITHUB_ENV"
+      - name: Execute immutable overlay contracts and actual reviewed Chema HTTP
+        run: |
+          python -m unittest discover -s tests -p test_urano_jm_private_proxy_overlay.py -v
+          MONTARA_REVIEWED_JM_GIT_REPO="$GITHUB_WORKSPACE" python -m unittest discover -s tests -p test_urano_jm_bundle_manifest.py -v
+          python -m unittest discover -s tests -p test_urano_jm_original_private_proxy_http.py -v
+          python -m unittest discover -s tests -p test_urano_first_valid_upload_gate.py -v
+          python -m unittest discover -s tests -p test_urano_owner_original_jm_rpc.py -v
+          python -m py_compile urano/jm_private_proxy_overlay.py urano/full_jm_worker.py urano/private_broker_worker.py

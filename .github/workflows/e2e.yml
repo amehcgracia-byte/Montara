@@ -71,7 +71,9 @@ jobs:
         if: matrix.mode == 'session'
         env:
           MONTARA_CONTINUITY_PROOF: e2e-output/optional-continuity
-        run: python -m pytest tests -q
+        run: |
+          python -m pip install -r requirements-urano-oidc.txt
+          python -m pytest tests -q
       - name: Session video matching policy
         if: matrix.mode == 'session'
         run: node --test tests/test_session_video.cjs tests/test_sync_selection.cjs tests/test_native_export.cjs

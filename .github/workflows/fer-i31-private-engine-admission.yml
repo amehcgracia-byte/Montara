@@ -1,0 +1,32 @@
+name: FER I31 private Engine admission and editor project contracts
+on:
+  pull_request:
+    paths:
+      - 'urano/private_engine_route_contract.py'
+      - 'urano/editor_project_bridge.py'
+      - 'urano/project_catalog.py'
+      - 'urano/minimal_owner_api.py'
+      - 'tests/test_urano_private_engine_route_contract.py'
+      - 'tests/test_urano_editor_project_bridge.py'
+      - '.github/workflows/fer-i31-private-engine-admission.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline-contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install minimal test requirements
+        run: python -m pip install 'Flask>=3,<4' -r requirements-urano-oidc.txt
+      - name: Reject wrong owner, stale generation and forbidden routes
+        run: |
+          python -m unittest discover -s tests -p test_urano_private_engine_route_contract.py -v
+          python -m unittest discover -s tests -p test_urano_editor_project_bridge.py -v
+          python -m py_compile urano/private_engine_route_contract.py urano/editor_project_bridge.py

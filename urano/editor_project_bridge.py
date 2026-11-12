@@ -1,0 +1,94 @@
+"""Owner-scoped project choices for the ORIGINAL JM Stage / Push / Show editor.
+
+Read-only adapter. No extra editor, global Engine routing or new catalog.
+The session identity is obtained from the trusted existing SessionStore.
+"""
+from __future__ import annotations
+
+from dataclasses import asdict
+
+from flask import Blueprint, jsonify, request
+
+from urano.project_catalog import ProjectCatalog, ProjectNotFound
+from urano.session_auth import SESSION_COOKIE, SessionStore
+
+from urano.editor_mode import MODES, project_mode
+
+
+def editor_project_bridge_blueprint(
+    catalog: ProjectCatalog, sessions: SessionStore, *, https_origin: str
+) -> Blueprint:
+    bp = Blueprint("urano_editor_project_bridge", __name__, url_prefix="/urano/v1/editor")
+
+    @bp.before_request
+    def verified_owner():
+        if request.host_url.rstrip("/") != https_origin:
+            return jsonify(error="Trusted HTTPS origin required"), 403
+        session = sessions.verify(request.cookies.get(SESSION_COOKIE))
+        if session is None:
+            return jsonify(error="Authentication required"), 401
+        request.environ["montara.editor.owner"] = session.owner_id
+
+    def owner():
+        return request.environ["montara.editor.owner"]
+
+    def public(project):
+        return {
+            "id": project.id,
+            "title": project.title,
+            "mode": project_mode(project),
+            "revision": project.revision,
+            "updated_at": project.updated_at,
+        }
+
+    @bp.post("/projects")
+    def create():
+        # Only the existing same-origin authenticated editor may create a
+        # project. Never infer ownership from JSON/headers supplied by browser.
+        session = sessions.verify(request.cookies.get(SESSION_COOKIE))
+        if (request.headers.get("Origin") != https_origin or session is None
+                or not session.matches_csrf(request.headers.get("X-Urano-CSRF"))):
+            return jsonify(error="Trusted editor session and CSRF required"), 403
+        body = request.get_json(silent=True)
+        if (not isinstance(body, dict) or set(body) != {"title", "mode"}
+                or not isinstance(body.get("mode"), str)
+                or body["mode"] not in MODES):
+            return jsonify(error="Choose a title and Stage, Push or Show"), 400
+        try:
+            project = catalog.create(owner(), body["title"], recipe={
+                "montara_beta_workspace": {"version": 1, "mode": body["mode"]}
+            })
+        except ValueError:
+            return jsonify(error="Invalid project title"), 400
+        return jsonify(project=public(project)), 201
+
+    @bp.get("/projects")
+    def choices():
+        mode = request.args.get("mode", "")
+        if mode not in MODES:
+            return jsonify(error="Choose a Stage, Push or Show mode"), 400
+        return jsonify(mode=mode, projects=[
+            public(project) for project in catalog.list_for(owner())
+            if project_mode(project) == mode
+        ])
+
+    @bp.get("/projects/<project_id>")
+    def selected(project_id: str):
+        mode = request.args.get("mode", "")
+        if mode not in MODES:
+            return jsonify(error="Choose a Stage, Push or Show mode"), 400
+        try:
+            project = catalog.get(owner(), project_id)
+        except (ProjectNotFound, ValueError):
+            return jsonify(error="Project not found"), 404
+        if project_mode(project) != mode:
+            return jsonify(error="Project not found"), 404
+        return jsonify(project=public(project))
+
+    @bp.after_request
+    def private(response):
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        return response
+
+    return bp

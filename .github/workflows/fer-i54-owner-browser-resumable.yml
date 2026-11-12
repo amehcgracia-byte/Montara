@@ -1,0 +1,52 @@
+name: FER I54 original Chema Owner browser and resumable Stage
+on:
+  pull_request:
+    paths:
+      - 'urano/owner_original_jm_rpc.py'
+      - 'urano/owner_browser_bridge.js'
+      - 'urano/original_jm_owner_assets.py'
+      - 'urano/minimal_owner_api.py'
+      - 'urano/owner_first_stage_wizard.py'
+      - 'urano/full_jm_worker.py'
+      - 'urano/private_broker_worker.py'
+      - 'urano/restricted_systemd_broker.py'
+      - 'urano/worker_state_policy.py'
+      - 'tests/test_urano_owner_original_jm_rpc.py'
+      - 'tests/test_urano_original_jm_owner_assets.py'
+      - 'tests/test_urano_owner_first_stage_wizard.py'
+      - 'tests/test_urano_worker_resource_profile.py'
+      - 'tests/test_owner_browser_bridge.cjs'
+      - 'tests/test_owner_review_bridge.cjs'
+      - '.github/workflows/fer-i54-owner-browser-resumable.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  owner-browser-and-media:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install minimal Flask/WSGI contract dependencies
+        run: python -m pip install 'Flask>=3,<4'
+      - name: Original Chema browser mapping without global Engine leaks
+        run: |
+          node --check urano/owner_browser_bridge.js
+          node tests/test_owner_browser_bridge.cjs
+          node tests/test_owner_review_bridge.cjs
+      - name: Private Owner HTTP, media and persisted Stage contracts
+        run: |
+          python -m unittest discover -s tests -p test_urano_owner_original_jm_rpc.py -v
+          python -m unittest discover -s tests -p test_urano_original_jm_owner_assets.py -v
+          python -m unittest discover -s tests -p test_urano_owner_first_stage_wizard.py -v
+          python -m unittest discover -s tests -p test_urano_worker_resource_profile.py -v
+          python -m unittest discover -s tests -p test_urano_i25_restricted_broker.py -v
+          python -m py_compile urano/owner_original_jm_rpc.py urano/full_jm_worker.py urano/private_broker_worker.py

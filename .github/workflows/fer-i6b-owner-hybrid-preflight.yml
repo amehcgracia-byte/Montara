@@ -1,0 +1,31 @@
+name: FER I6B C8 owner and Companion offline preflight contracts
+on:
+  pull_request:
+    paths:
+      - 'tests/urano_owner_hybrid_preflight.py'
+      - 'tests/test_urano_owner_hybrid_preflight.py'
+      - '.github/workflows/fer-i6b-owner-hybrid-preflight.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  owner-companion-preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install offline contract deps
+        run: python -m pip install pytest psutil
+      - name: Check no fake one-person benchmark and protected portal
+        env:
+          PYTHONPATH: tests
+        run: |
+          python -m pytest -q \
+            tests/test_urano_owner_hybrid_preflight.py \
+            tests/test_urano_remote_hybrid_preflight.py \
+            tests/test_urano_browser_transfer.py \
+            tests/test_urano_hybrid_node_telemetry.py
+          python -m py_compile tests/urano_owner_hybrid_preflight.py

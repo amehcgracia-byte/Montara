@@ -103,12 +103,17 @@ class ProjectCatalog:
             revision=row["revision"], created_at=row["created_at"], updated_at=row["updated_at"],
         )
 
-    def create(self, owner_id: str, title: str) -> Project:
+    def create(self, owner_id: str, title: str, *,
+               recipe: dict[str, Any] | None = None) -> Project:
         owner_id, title = self._principal(owner_id), self._title(title)
+        # An initial mode/recipe must be inserted atomically with its owner:
+        # a crash must not leave a detached or unclassified editor project.
+        payload = self._recipe(recipe) if recipe is not None else "{}"
         project_id = str(uuid.uuid4())
         with self._connect() as db:
-            db.execute("INSERT INTO urano_projects(project_id,owner_id,title) VALUES(?,?,?)",
-                       (project_id, owner_id, title))
+            db.execute("""INSERT INTO urano_projects
+                       (project_id,owner_id,title,recipe_json) VALUES(?,?,?,?)""",
+                       (project_id, owner_id, title, payload))
             row = db.execute("SELECT * FROM urano_projects WHERE project_id=?", (project_id,)).fetchone()
         return self._to_project(row)
 

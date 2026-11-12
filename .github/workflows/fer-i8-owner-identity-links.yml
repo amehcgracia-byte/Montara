@@ -1,0 +1,33 @@
+name: FER I8 verified owner identity linking contracts
+on:
+  pull_request:
+    paths:
+      - 'urano/owner_identity_links.py'
+      - 'tests/test_owner_identity_links.py'
+      - '.github/workflows/fer-i8-owner-identity-links.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  safe-owner-reconciliation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install test requirements
+        run: python -m pip install 'Flask>=3,<4' pytest -r requirements-urano-oidc.txt
+      - name: Check both login orders and no email-only takeover
+        env:
+          PYTHONPATH: tests
+        run: |
+          python -m pytest -q \
+            tests/test_owner_identity_links.py \
+            tests/test_urano_lab_auth.py \
+            tests/test_c1_minimal_owner_api.py \
+            tests/test_c4_owner_dashboard.py \
+            tests/test_c8_google_owner_ui_bridge.py \
+            tests/test_google_oidc_contract.py
+          python -m py_compile urano/owner_identity_links.py

@@ -1,0 +1,40 @@
+name: FER I4 private runtime foundation (no Docker deployment)
+on:
+  pull_request:
+    paths:
+      - 'urano/engine_bindings.py'
+      - 'urano/runtime_activation.py'
+      - 'urano/engine_worker_process.py'
+      - 'urano/private_worker_supervisor.py'
+      - 'tests/test_urano_engine_bindings.py'
+      - 'tests/test_urano_runtime_activation.py'
+      - 'tests/test_urano_engine_worker_process.py'
+      - 'tests/test_urano_private_supervisor.py'
+      - '.github/workflows/fer-i4-private-runtime-foundation.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  private-runtime-contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install minimal test requirements
+        run: python -m pip install 'Flask>=3,<4' pytest -r requirements-urano-oidc.txt
+      - name: Run isolated runtime and owner contracts
+        run: |
+          python -m pytest -q \
+            tests/test_urano_engine_bindings.py \
+            tests/test_urano_runtime_activation.py \
+            tests/test_urano_engine_worker_process.py \
+            tests/test_urano_private_supervisor.py \
+            tests/test_urano_project_catalog.py \
+            tests/test_urano_session_http.py \
+            tests/test_c1_minimal_owner_api.py \
+            tests/test_c4_owner_dashboard.py
+      - name: Compile private modules
+        run: python -m py_compile urano/engine_bindings.py urano/runtime_activation.py urano/engine_worker_process.py urano/private_worker_supervisor.py

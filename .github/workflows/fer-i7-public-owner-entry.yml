@@ -1,0 +1,21 @@
+name: FER I7 public landing to private owner entry
+on:
+  pull_request:
+    paths:
+      - 'deployment/cloudflare-beta/public/**'
+      - 'tests/test_c8_public_owner_entry.py'
+      - '.github/workflows/fer-i7-public-owner-entry.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  owner-landing-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify beta landing links to exact trusted Owner origin
+        run: python -m unittest discover -s tests -p test_c8_public_owner_entry.py -v
