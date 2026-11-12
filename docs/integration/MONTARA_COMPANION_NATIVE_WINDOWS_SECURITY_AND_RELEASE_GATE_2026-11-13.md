@@ -15,6 +15,28 @@ Se adopta la dirección **controlador nativo Windows**, sin Powershell, con **in
 - **Actualización:** canal dedicado HTTPS estático, manifiesto/release versionado, **paquete firmado con identidad de editor confiable** y verificación por el instalador del sistema operativo. La descarga del instalador y el cierre/reinicio deben esperar al final del render; ninguna actualización periódica ni silenciosa.
 - **Distribución:** preferencia inicial MSIX/App Installer si la identidad y el acceso a recursos locales del proceso full-trust son compatibles en Windows 10 22H2. De no serlo, MSI firmado y un updater que verifique la cadena Authenticode y el editor antes de ejecutar. **No** inventar un descargador propio que ejecuta bytes del servidor.
 
+## Limpieza verificada el 13/11/2026
+
+- Se han **eliminado** de la VM de H4 los archivos `bootstrap.zip`, `package.zip`, `manifest.json` y su carpeta exclusiva de publicación, así como las copias temporales de scripts `.ps1` detectadas en el staging de GCP y Oracle.
+- H4 y la beta anterior continúan respondiendo HTTP 200; el antiguo endpoint público de bootstrap responde HTTP 404.
+- Eliminados de la **rama activa** los tres scripts `companion/beta_windows/*.ps1` y `urano/native_owner_companion_updates.py`, y su registro opcional en `native_owner_app.py`. El documento de instalación anterior queda marcado como retirado.
+- **Historial Git:** los blobs antiguos pueden seguir recuperándose en commits previos. No hay credenciales privadas en el paquete publicado según el inventario anterior; no reescribir el historial de repositorio compartido sin coordinación con el propietario. La recomendación es mantener los antiguos commits no distribuibles y no volver a incluir esos scripts en builds.
+- El ordenador Windows del usuario puede conservar copias locales bloqueadas por Defender; no se manipulan remotamente ni se recomienda restaurarlas.
+
+## Identidad visual Montara
+
+- `companion/windows_native/MontaraIcon.cs` reproduce el logo existente de Chema: cinco barras verticales crema con centro naranja `#FF4F2E`, en fondo oscuro y formas redondeadas legibles en la bandeja del sistema.
+- `Program.cs` muestra ese icono en lugar de `SystemIcons.Application`. A futuro, convertir la misma marca a iconos del instalador/ejecutable y verificar contraste en la bandeja Windows clara/oscura; no inventar otra identidad.
+- Es código fuente propio: aún falta compilarlo en Windows. No considerar probada la apariencia en Windows 10 hasta validación humana.
+
+## Firma y uso de CMD
+
+- **Un `.cmd` es viable como lanzador local** de la versión existente o de una app instalada, sin privilegios y sin descargar/ejecutar componentes externos. **No** certifica el origen del software, ni sustituye la firma, ni elimina una alerta de Defender. No usarlo como rodeo a la detección.
+- **Certificado autofirmado**: gratuito para ensayos de desarrollo, pero Windows solo confía en él si se instala deliberadamente el certificado público. No recomendado como solución a la alerta actual ni para usuarios finales; nunca distribuir la clave privada.
+- **MSIX en producción**: requiere paquete firmado y una cadena de confianza del editor; opciones a revisar son Microsoft Store (firma de la Store), Azure Artifact Signing para editor elegible, o CA comercial. Definir la titularidad del producto antes de adquirir nada.
+- La firma acredita editor e integridad, **no garantiza** ausencia de malware ni elimina automáticamente SmartScreen.
+- No hay pago ni firma pendientes que el usuario tenga que realizar ahora para seguir desarrollando el código fuente.
+
 ## Trabajo realizado
 
 Archivos nuevos:
