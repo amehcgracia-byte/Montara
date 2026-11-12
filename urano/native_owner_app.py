@@ -30,7 +30,8 @@ def create_native_owner_api(private_dir: Path, *, settings: OIDCSettings,
                             chema_web_root: Path,
                             provider: GoogleProvider | None = None,
                             ensure_worker=None,
-                            connect_worker=None) -> Flask:
+                            connect_worker=None,
+                            private_preview_limit_mib: int = 256) -> Flask:
     root=Path(private_dir)
     if root.is_symlink() or not root.is_dir():
         raise ValueError("Existing private Owner SQLite directory required")
@@ -60,7 +61,8 @@ def create_native_owner_api(private_dir: Path, *, settings: OIDCSettings,
     if connect_worker is not None:
         bridge["connect_worker"]=connect_worker
     app.register_blueprint(native_owner_gateway_blueprint(
-        sessions,registry,https_origin=origin,**bridge))
+        sessions,registry,https_origin=origin,
+        private_preview_limit_mib=private_preview_limit_mib,**bridge))
 
     @app.post("/urano/v1/session/refresh")
     def refresh_csrf():
