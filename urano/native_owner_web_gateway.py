@@ -23,6 +23,7 @@ from flask import Blueprint, Response, jsonify, request
 from urano.native_owner_new_latest_http import native_new_latest_target
 from urano.native_owner_stage_http import native_stage_route
 from urano.first_valid_upload_gate import valid_first_upload
+from urano.jm_private_proxy_overlay import private_proxy_limit_mib
 from urano.native_owner_workspace_registry import (
     NativeOwnerWorkspaceRegistry, ExistingOwnerProjects,
 )
@@ -36,14 +37,15 @@ _MAX_REPLY = 1_000_000
 _MAX_PREVIEW = 128 * 1024 * 1024
 _MAX_DIRECT_MEDIA = 256_000_000
 _MAX_CHUNK = 16 * 1024 * 1024
-_MAX_PROXY = 2048 * 1024 * 1024
 
 
 def native_owner_gateway_blueprint(
         sessions: SessionStore, registry: NativeOwnerWorkspaceRegistry,
         *, https_origin: str, ensure_worker=broker_request,
         connect_worker=authenticated_private_jm_connection,
+        private_preview_limit_mib: int = 256,
 ) -> Blueprint:
+    proxy_cap=private_proxy_limit_mib(private_preview_limit_mib)*1024**2
     bp = Blueprint("urano_native_chema_owner_gateway", __name__,
                    url_prefix="/urano/v1/native")
 
@@ -179,11 +181,11 @@ def native_owner_gateway_blueprint(
                     "CONTENT_TYPE":request.content_type,
                     "wsgi.input":io.BytesIO(body),
                 }
-                if not valid_first_upload(validation,max_proxy_bytes=_MAX_PROXY):
+                if not valid_first_upload(validation,max_proxy_bytes=proxy_cap):
                     return jsonify(error="Private proxy metadata rejected"),400
         if kind=="upload-limits":
             reply=jsonify(
-                max_file_bytes=_MAX_PROXY,
+                max_file_bytes=proxy_cap,
                 max_original_file_bytes=256*1024*1024,
                 chunk_bytes=4*1024*1024,free_bytes=None)
             reply.headers["Cache-Control"]="no-store"
