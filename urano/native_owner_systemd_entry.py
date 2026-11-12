@@ -37,7 +37,9 @@ class NativeSystemdOwnerError(ValueError):
 def trusted_native_worker_args(argv: list[str], *,
                                state_directory: str,
                                runtime_root: Path,
-                               runtime_base: Path = Path("/run")):
+                               runtime_base: Path = Path("/run"),
+                               systemd_state_parent: Path = Path("/var/lib"),
+                               systemd_link_uid: int = 0):
     """Strict existing systemd argv; never accept paths, IDs from HTTP."""
     if (len(argv) not in (6, 8) or
             argv[4:6] != ["--jm-bundle", "/opt/montara-jm"] or
@@ -59,11 +61,20 @@ def trusted_native_worker_args(argv: list[str], *,
             or not state_directory or not isinstance(runtime_root, Path)):
         raise NativeSystemdOwnerError("One private StateDirectory is required")
     state = Path(state_directory)
-    if (state.is_symlink() or not state.is_dir() or
-            not _STATE_DIR.fullmatch(state.name) or
-            state.stat().st_mode & 0o077 or
-            not state.is_absolute()):
+    if (not state.is_dir() or not _STATE_DIR.fullmatch(state.name)
+            or state.stat().st_mode & 0o077 or not state.is_absolute()):
         raise NativeSystemdOwnerError("Unverified persistent Owner state")
+    # systemd DynamicUser uses a ROOT-OWNED /var/lib/<name> symlink into
+    # /var/lib/private/<name>. The already-running beta has this layout.
+    # Accept *only* that precise systemd-created link, not arbitrary links.
+    if state.is_symlink():
+        if (state.parent != systemd_state_parent
+                or state.readlink() != Path("private") / state.name
+                or state.lstat().st_uid != systemd_link_uid
+                or state.resolve(strict=True)
+                    != (systemd_state_parent / "private" / state.name)
+                        .resolve(strict=True)):
+            raise NativeSystemdOwnerError("Untrusted StateDirectory symlink")
     runtime = Path(runtime_root)
     if (runtime.is_symlink() or not runtime.is_dir() or
             runtime.stat().st_mode & 0o077 or
