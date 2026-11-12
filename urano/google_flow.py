@@ -198,6 +198,10 @@ def google_login_blueprint(*, settings: OIDCSettings, pending: PendingLogins,
             "redirect_uri": callback, "scope": "openid email",
             "state": state, "nonce": nonce,
             "code_challenge": challenge, "code_challenge_method": "S256",
+            # On the private beta always show Google's account chooser. It
+            # prevents Chrome's currently active, non-allowlisted account
+            # being silently selected. This does not bypass OAuth allowlists.
+            "prompt": "select_account",
         }
         response = redirect(GOOGLE_AUTH_URL + "?" + urlencode(params), code=302)
         response.set_cookie(FLOW_COOKIE, binding, secure=True, httponly=True,
