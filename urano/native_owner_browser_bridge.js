@@ -93,6 +93,26 @@
     return h;
   }
 
+  // Chema probes Latest at JS startup. Do not wake a cloud worker merely
+  // because Google login displayed the Home/Music/Video intro. Resolve the
+  // original promise when the genuine Footage/Stage screen is entered.
+  let footagePromise = null;
+  const whenFootageIsVisible = () => {
+    const element = document.getElementById('footage');
+    if (!element || !element.hidden) return Promise.resolve();
+    if (!footagePromise) {
+      footagePromise = new Promise(resolve => {
+        const observer = new MutationObserver(() => {
+          if (element.hidden) return;
+          observer.disconnect();
+          resolve();
+        });
+        observer.observe(element, {attributes:true,attributeFilter:['hidden']});
+      });
+    }
+    return footagePromise;
+  };
+
   window.fetch = async (input, init={}) => {
     const selected = route(input);
     if (!selected) return originalFetch(input, init);
@@ -103,6 +123,11 @@
         status:200, headers:{'Content-Type':'application/json',
                             'Cache-Control':'no-store'}
       });
+    // Initial GET from full-session.js is a non-blocking probe. It must not
+    // start a VM worker while Home/Video/Music navigation is still visible.
+    if (selected.path.startsWith(nativePrefix + 'montara/recovery/latest')) {
+      await whenFootageIsVisible();
+    }
     const csrf = await token();
     await ensure();
     const headers = authHeaders(init.headers || input?.headers, csrf);
