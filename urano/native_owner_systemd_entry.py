@@ -36,7 +36,8 @@ class NativeSystemdOwnerError(ValueError):
 
 def trusted_native_worker_args(argv: list[str], *,
                                state_directory: str,
-                               runtime_root: Path):
+                               runtime_root: Path,
+                               runtime_base: Path = Path("/run")):
     """Strict existing systemd argv; never accept paths, IDs from HTTP."""
     if (len(argv) not in (6, 8) or
             argv[4:6] != ["--jm-bundle", "/opt/montara-jm"] or
@@ -66,7 +67,7 @@ def trusted_native_worker_args(argv: list[str], *,
     runtime = Path(runtime_root)
     if (runtime.is_symlink() or not runtime.is_dir() or
             runtime.stat().st_mode & 0o077 or
-            runtime != Path("/run") / unit):
+            runtime != runtime_base / unit):
         raise NativeSystemdOwnerError("Unverified systemd runtime")
     return state.resolve(strict=True), runtime.resolve(strict=True), workspace, generation, limit
 
@@ -104,9 +105,13 @@ def prepare_native_owner_runtime(*, engine_root: Path, jm_root: Path,
     else:
         os.environ.pop("MONTARA_PRIVATE_PROXY_LIMIT_MIB", None)
 
-    if str(jm) not in sys.path:
-        sys.path.insert(0, str(jm))
-    os.environ["PYTHONPATH"] = vendor_site_for_native_worker(engine)
+    pinned_site = vendor_site_for_native_worker(engine)
+    # Same import precedence as the existing production worker: original JM
+    # modules first, then pinned vendor packages and the exact Engine bundle.
+    sys.path[:0] = [
+        str(jm), pinned_site, str(engine / "app"), str(engine / "engine"),
+    ]
+    os.environ["PYTHONPATH"] = pinned_site
     os.environ["MONTARA_SESSION_TOKEN"] = secrets.token_hex(32)
 
 
