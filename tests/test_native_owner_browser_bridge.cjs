@@ -63,6 +63,20 @@ async function main() {
       return new Response(JSON.stringify({mode:'montara',has_logo:false}),{
         status:200,headers:{'Content-Type':'application/json'}});
     }
+    if(url.startsWith('/urano/v1/native/rpc/api/v1/edit/native-recipe?')) {
+      return new Response(JSON.stringify({version:1,engine:'a'.repeat(40),
+        revision:'a'.repeat(20),sources:[],segments:[]}),
+        {status:200,headers:{'Content-Type':'application/json'}});
+    }
+    if(url.startsWith('/urano/v1/native/rpc/api/v1/edit/native-master?')) {
+      return new Response(new Uint8Array([82,73,70,70]),
+        {status:200,headers:{'Content-Type':'audio/x-wav'}});
+    }
+    if(url.startsWith('/urano/v1/native/rpc/api/v1/edit/native-source/0?')) {
+      return new Response(options.method==='HEAD'?null:
+        new Uint8Array([0,0,0,1]),{
+        status:200,headers:{'Content-Type':'video/mp4'}});
+    }
     if(url==='/urano/v1/native/rpc/api/v1/edit/shot?index=3') {
       return new Response(JSON.stringify({index:3,revision:'a'.repeat(20)}),
         {status:200,headers:{'Content-Type':'application/json'}});
@@ -147,6 +161,21 @@ async function main() {
     '/urano/v1/native/rpc/api/v1/wizard/review?render=0');
   assert.equal(calls[5].url,
     '/urano/v1/native/rpc/api/v1/wizard/review/thumbnail/assets-v2/frame-0.jpg');
+  const project='/private/Projects/test.zuckervid';
+  const recipeUrl='/api/v1/edit/native-recipe?project_id='+encodeURIComponent(project);
+  const mediaQuery=new URLSearchParams({project_id:project,revision:'a'.repeat(20)});
+  const recipe=await window.fetch(recipeUrl);
+  assert.equal(recipe.status,200);
+  assert.equal((await recipe.json()).engine,'a'.repeat(40));
+  const master=await window.fetch('/api/v1/edit/native-master?'+mediaQuery);
+  assert.equal(master.status,200);
+  assert.equal((await master.blob()).size,4);
+  const source=await window.fetch('/api/v1/edit/native-source/0?'+mediaQuery,
+    {method:'HEAD'});
+  assert.equal(source.status,200);
+  assert.equal(calls.at(-1).options.method,'HEAD');
+  for(const c of calls.slice(-3))
+    assert.equal(c.options.headers.get('X-Urano-CSRF'),csrf);
   const framePath='/api/v1/edit/shot/frame?index=3&choice=0&revision='+('a'.repeat(20));
   const shot=await window.fetch('/api/v1/edit/shot?index=3');
   assert.equal(shot.status,200);
@@ -183,7 +212,7 @@ async function main() {
   await assert.rejects(
     () => window.fetch('/montara/session/secret'),
     /not enabled/);
-  assert.equal(calls.length,10);
+  assert.equal(calls.length,13);
   const sound = new FakeAudioElement();
   sound.src='/montara/audio?path='+encodeURIComponent('/private/WizardUploads/song.wav');
   await new Promise(resolve=>setTimeout(resolve,30));
