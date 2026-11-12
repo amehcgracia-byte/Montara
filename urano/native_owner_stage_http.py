@@ -15,10 +15,10 @@ _SETTINGS = frozenset({
     "camera-roles", "spherical-landmarks", "stage-performers",
 })
 _UUID = re.compile(r"[a-f0-9]{32}\Z")
-_PREVIEW = re.compile(r"/api/v1/wizard/review/preview/[0-9]{1,5}\\Z")
+_PREVIEW = re.compile(r"/api/v1/wizard/review/preview/[0-9]{1,5}\Z")
 _THUMB = re.compile(
     r"/api/v1/wizard/review/thumbnail/(?:assets-v2|[a-f0-9]{16,128})/"
-    r"[A-Za-z0-9_.-]{1,180}\\Z")
+    r"[A-Za-z0-9_.-]{1,180}\Z")
 _MAX_QUERY = 2048
 
 
