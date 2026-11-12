@@ -130,6 +130,10 @@ class NativeOwnerWorkspaceRouteTests(unittest.TestCase):
                           query_string={"project_id":str(self.a_old)})
         self.assertEqual(status.status_code,200)
         self.assertEqual(self.received[-1],("status",str(self.a_old)))
+        # Chema polls before the initial draft exists: the empty identifier
+        # is not a foreign project and must behave like native idle status.
+        self.assertEqual(self.client.get("/api/v1/wizard/status",
+                         query_string={"project_id": ""}).status_code, 200)
 
     def test_outside_owner_media_and_symlinks_are_denied_before_native(self):
         outside = self.owner_a / "WizardUploads" / "foreign.mp4"
