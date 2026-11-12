@@ -47,18 +47,20 @@ def retain_spherical_cache(shared, targets, *, restore=False):
     return count
 
 
-def write_render_progress(writer, path, payload):
+def write_render_progress(writer, path, payload, *, windows=None):
     """Keep the native render alive if Windows briefly locks its status JSON.
 
     Only the observer/status file is best-effort. Engine plans, segment files
     and final MP4 still use their original strict atomic-write semantics.
     """
+    if windows is None:
+        windows = os.name == 'nt'
     for attempt in range(5):
         try:
             writer(path, payload)
             return True
         except PermissionError:
-            if os.name != 'nt':
+            if not windows:
                 raise
             if attempt < 4:
                 time.sleep(0.05 * (attempt + 1))
