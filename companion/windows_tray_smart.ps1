@@ -58,6 +58,11 @@ try {
     $openBeta.Add_Click({ Start-Process $origin })
     [void]$menu.Items.Add($openBeta)
 
+    $openH4 = New-Object System.Windows.Forms.ToolStripMenuItem
+    $openH4.Text = "Abrir Montara H4 (pruebas)"
+    $openH4.Add_Click({ Start-Process "https://montara-owner-h4.memoriainvalida001.workers.dev" })
+    [void]$menu.Items.Add($openH4)
+
     $check = New-Object System.Windows.Forms.ToolStripMenuItem
     $check.Text = "Comprobar Companion local"
     $check.Add_Click({ Start-Process "http://127.0.0.1:47820/health" })
