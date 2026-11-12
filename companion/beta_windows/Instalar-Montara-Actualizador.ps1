@@ -40,6 +40,13 @@ try {
   New-Item -ItemType Directory -Path $home -Force|Out-Null
   $target=Join-Path $video 'local_video.py'
   if(!(Test-Path $target)){throw ('No se encuentra '+$target)}
+  # We deliberately refuse a different rendering implementation instead of
+  # overwriting Windows-specific fixes from an unknown historical build.
+  $old=Get-Content -Raw -LiteralPath $target
+  if($old -notmatch 'atomic_write_json\(progress,' -or
+     $old -notmatch 'ExportStage\(\)\.run\(p,update\)'){
+    throw 'La versión local de render no coincide con la H4 revisada. No se ha modificado el render.'
+  }
   Copy-Item $target (Join-Path $home 'local_video.anterior.py') -Force
   $fresh=Join-Path $here 'local_video.py'
   if(!(Test-Path $fresh)){throw 'El paquete no incluye local_video.py.'}
