@@ -63,6 +63,18 @@ async function main() {
       return new Response(JSON.stringify({mode:'montara',has_logo:false}),{
         status:200,headers:{'Content-Type':'application/json'}});
     }
+    if(url==='/urano/v1/native/rpc/api/v1/edit/shot?index=3') {
+      return new Response(JSON.stringify({index:3,revision:'a'.repeat(20)}),
+        {status:200,headers:{'Content-Type':'application/json'}});
+    }
+    if(url==='/urano/v1/native/rpc/api/v1/edit/shot') {
+      return new Response(JSON.stringify({ok:true}),
+        {status:200,headers:{'Content-Type':'application/json'}});
+    }
+    if(url==='/urano/v1/native/rpc/api/v1/edit/shot/frame?index=3&choice=0&revision='+('a'.repeat(20))) {
+      return new Response(new Uint8Array([255,216,255,217]),
+        {status:200,headers:{'Content-Type':'image/jpeg'}});
+    }
     if(url==='/montara/companion/version') {
       return new Response(JSON.stringify({version:'0.6.5'}),{status:200});
     }
@@ -78,6 +90,10 @@ async function main() {
     configurable:true,get(){return this._src;},set(v){this._src=v;}
   });
   class FakeAudioElement extends FakeMediaElement {}
+  class FakeImageElement extends FakeMediaElement {}
+  Object.defineProperty(FakeImageElement.prototype,'src',{
+    configurable:true,get(){return this._src;},set(v){this._src=v;}
+  });
   const window = {fetch:network};
   const context = {
     window, location:{
@@ -88,6 +104,7 @@ async function main() {
     MutationObserver:FakeObserver,URL,Response,Headers,
     XMLHttpRequest:undefined,
     HTMLMediaElement:FakeMediaElement,HTMLAudioElement:FakeAudioElement,
+    HTMLImageElement:FakeImageElement,
   };
   vm.runInNewContext(source,context,{filename:'native_owner_browser_bridge.js'});
   assert.equal(typeof window.fetch,'function');
@@ -130,6 +147,22 @@ async function main() {
     '/urano/v1/native/rpc/api/v1/wizard/review?render=0');
   assert.equal(calls[5].url,
     '/urano/v1/native/rpc/api/v1/wizard/review/thumbnail/assets-v2/frame-0.jpg');
+  const framePath='/api/v1/edit/shot/frame?index=3&choice=0&revision='+('a'.repeat(20));
+  const shot=await window.fetch('/api/v1/edit/shot?index=3');
+  assert.equal(shot.status,200);
+  assert.equal((await shot.json()).index,3);
+  const shotPatch=await window.fetch('/api/v1/edit/shot',{
+    method:'PATCH',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({project_id:'/owner/Projects/test',revision:'a'.repeat(20),
+      index:3,choice:0,apply_to_source:false,edit_component:'movement'})
+  });
+  assert.equal(shotPatch.status,200);
+  const image=new FakeImageElement();
+  image.src=framePath;
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.ok(image._src.startsWith('blob:'),image._src);
+  assert.equal(image.src,framePath);
+  assert.equal(calls.at(-1).url,'/urano/v1/native/rpc/'+framePath.slice(1));
   const branding=await window.fetch('/montara/branding',{
     method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({mode:'montara'})
