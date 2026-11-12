@@ -245,6 +245,28 @@ def native_owner_gateway_blueprint(
                  and not binary_media) or
                 any(c in content_type for c in "\r\n")):
             return jsonify(error="Unexpected native worker response"),503
+        # H4 offers a smaller, still worker-valid proxy chunk to avoid
+        # long single-request uploads across Cloudflare/Tunnel. The original
+        # Chema worker accepts any chunk <= its advertised maximum. Keep the
+        # authoritative received offset, identity and completion unchanged.
+        # This applies equally to initial, resumed and limit responses.
+        if 200<=code<300 and media_type=="application/json" and (
+            kind in ("upload-init","upload-limits") or
+            (request.method=="GET" and
+             re.fullmatch(r"/montara/uploads/[a-f0-9]{32}",path))):
+            try:
+                payload=json.loads(reply)
+                if not isinstance(payload,dict):
+                    raise ValueError("Not an upload JSON object")
+                field=("chunk_bytes" if kind=="upload-limits"
+                       else "chunk_size")
+                advertised=payload.get(field)
+                if type(advertised) is not int or not 0<advertised<=16*1024**2:
+                    raise ValueError("Unexpected chunk negotiation")
+                payload[field]=min(advertised,4*1024**2)
+                reply=json.dumps(payload,separators=(",",":")).encode()
+            except (ValueError,TypeError):
+                return jsonify(error="Invalid native upload negotiation"),503
         response=Response(reply,status=code,content_type=content_type)
         response.headers["Cache-Control"]="no-store"
         response.headers["X-Content-Type-Options"]="nosniff"
