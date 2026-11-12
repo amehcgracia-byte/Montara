@@ -19,6 +19,7 @@
     'api/v1/wizard/review/render',
     'api/v1/wizard/upload','montara/uploads','montara/branding',
     'api/v1/edit/shot', 'api/v1/edit/shot/frame',
+    'api/v1/edit/native-recipe','api/v1/edit/native-master',
     'api/v1/settings/fillers','api/v1/settings/video-light',
     'api/v1/settings/camera-types','api/v1/settings/camera-subjects',
     'api/v1/settings/camera-roles','api/v1/settings/spherical-landmarks',
@@ -85,10 +86,12 @@
     const operation = p.substring(1);
     const resumable = /^montara\/uploads\/[a-f0-9]{32}(?:\/finish)?$/.test(operation);
     const audioRoute = operation === 'montara/audio' && method === 'GET';
+    const nativeSource = /^api\/v1\/edit\/native-source\/[0-9]{1,3}$/.test(
+      operation) && (method==='HEAD' || method==='GET');
     const reviewedPreview = /^api\/v1\/wizard\/review\/preview\/[0-9]{1,5}$/.test(operation);
     const reviewedThumbnail = /^api\/v1\/wizard\/review\/thumbnail\/(?:assets-v2|[a-f0-9]{16,128})\/[A-Za-z0-9_.-]{1,180}$/.test(operation);
     if (address.hash || (!routes.has(operation) && !audioRoute && !resumable &&
-                         !reviewedPreview && !reviewedThumbnail))
+                         !reviewedPreview && !reviewedThumbnail && !nativeSource))
       return {kind:'blocked'};
     const params = address.searchParams;
     const isStatus = operation === 'api/v1/wizard/status' &&
@@ -102,6 +105,19 @@
     const versionQuery = (reviewedPreview || reviewedThumbnail) &&
       params.size === 1 && params.has('v') &&
       /^[A-Za-z0-9_.-]{0,80}$/.test(params.get('v')||'');
+    const nativeExportQuery = (operation==='api/v1/edit/native-recipe' ||
+      operation==='api/v1/edit/native-master' || nativeSource) &&
+      (method==='GET' || (nativeSource && method==='HEAD')) &&
+      params.has('project_id') && !!params.get('project_id') &&
+      params.get('project_id').startsWith('/') &&
+      params.get('project_id').length<=1800 &&
+      params.size === (operation==='api/v1/edit/native-recipe'?1:2) &&
+      (operation==='api/v1/edit/native-recipe' ||
+       (params.has('revision') &&
+        /^[a-f0-9]{20}$/.test(params.get('revision')||'')));
+    if ((operation==='api/v1/edit/native-recipe' ||
+         operation==='api/v1/edit/native-master' || nativeSource) &&
+        !nativeExportQuery) return {kind:'blocked'};
     const shotQuery = operation==='api/v1/edit/shot' &&
       method==='GET' && params.size===1 && params.has('index') &&
       /^[0-9]{1,4}$/.test(params.get('index')||'');
@@ -120,7 +136,7 @@
       params.has('path') && !!params.get('path') &&
       params.get('path').startsWith('/') && params.get('path').length <= 1800;
     if (audioRoute && !audioQuery) return {kind:'blocked'};
-    if (address.search && !isStatus && !review && !versionQuery && !audioQuery && !shotQuery && !shotFrame)
+    if (address.search && !isStatus && !review && !versionQuery && !audioQuery && !shotQuery && !shotFrame && !nativeExportQuery)
       return {kind:'blocked'};
     return {kind:'worker', path:nativePrefix + operation + address.search};
   };
