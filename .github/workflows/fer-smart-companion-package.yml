@@ -134,6 +134,14 @@ jobs:
             if ([int]$accepted.StatusCode -ne 404) {
               throw 'Official Montara beta origin rejected by Companion'
             }
+            $acceptedH4 = Invoke-WebRequest -Uri $target -Headers @{
+              Origin = 'https://montara-owner-h4.memoriainvalida001.workers.dev'
+            } -SkipHttpErrorCheck -TimeoutSec 5
+            if ([int]$acceptedH4.StatusCode -ne 404 -or
+                $acceptedH4.Headers['Access-Control-Allow-Origin'] -ne
+                  'https://montara-owner-h4.memoriainvalida001.workers.dev') {
+              throw 'Isolated H4 beta origin rejected by Companion CORS'
+            }
             $rejected = Invoke-WebRequest -Uri $target -Headers @{
               Origin = 'https://untrusted.example'
             } -SkipHttpErrorCheck -TimeoutSec 5
