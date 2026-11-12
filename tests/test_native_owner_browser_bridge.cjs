@@ -1,0 +1,104 @@
+/* H3: native Chema browser bridge is tested without jsdom or a second UI.
+ * Node's built-in VM supplies only the actual browser primitives it needs.
+ */
+'use strict';
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+
+async function main() {
+  const source = fs.readFileSync(
+    path.join(__dirname,'../urano/native_owner_browser_bridge.js'),'utf8');
+  const calls = [];
+  const csrf = 'a'.repeat(64);
+  const footage = {hidden:true};
+  let observed = null;
+  class FakeObserver {
+    constructor(callback) { this.callback=callback; }
+    observe(target, options) {
+      assert.equal(target,footage);
+      assert.deepEqual(Array.from(options.attributeFilter),['hidden']);
+      observed=this.callback;
+    }
+    disconnect() {observed=null;}
+  }
+
+  async function network(url,options={}) {
+    calls.push({url,options});
+    if(url==='/urano/v1/session/refresh') {
+      return new Response(JSON.stringify({csrf}),{
+        status:200,headers:{'Content-Type':'application/json'}});
+    }
+    if(url==='/urano/v1/native/ensure') {
+      return new Response(JSON.stringify({state:'ready',generation:4}),{
+        status:200,headers:{'Content-Type':'application/json'}});
+    }
+    if(url==='/urano/v1/native/rpc/montara/recovery/latest') {
+      return new Response(JSON.stringify({error:'No saved project'}),{
+        status:404,headers:{'Content-Type':'application/json'}});
+    }
+    if(url==='/urano/v1/native/rpc/api/v1/wizard/projects/new') {
+      return new Response(JSON.stringify({ok:true}),{
+        status:200,headers:{'Content-Type':'application/json',
+                            'X-Montara-Engine-Generation':'4'}});
+    }
+    if(url==='/montara/companion/version') {
+      return new Response(JSON.stringify({version:'0.6.5'}),{status:200});
+    }
+    throw Error('Unexpected real network call '+url);
+  }
+
+  const window = {fetch:network};
+  const context = {
+    window, location:{
+      origin:'https://montara.test',
+      href:'https://montara.test/urano/v1/native/'
+    },
+    document:{getElementById:id => id==='footage'?footage:null},
+    MutationObserver:FakeObserver,URL,Response,Headers,
+    XMLHttpRequest:undefined,
+  };
+  vm.runInNewContext(source,context,{filename:'native_owner_browser_bridge.js'});
+  assert.equal(typeof window.fetch,'function');
+
+  // Chema calls Latest on startup: neither Google CSRF nor the Engine may
+  // be contacted until Chema itself shows its original Footage/Stage screen.
+  const startup = window.fetch('/montara/recovery/latest');
+  await Promise.resolve();
+  assert.equal(calls.length,0);
+  assert.equal(typeof observed,'function');
+
+  // Original Home version is a lightweight local label, not an Engine start.
+  const version=await window.fetch('/montara/version');
+  assert.equal(version.status,200);
+  assert.equal(calls.length,0);
+
+  footage.hidden=false;
+  observed();
+  const latest=await startup;
+  assert.equal(latest.status,404);
+  assert.deepEqual(calls.map(c=>c.url),[
+    '/urano/v1/session/refresh','/urano/v1/native/ensure',
+    '/urano/v1/native/rpc/montara/recovery/latest']);
+  assert.equal(calls[2].options.headers.get('X-Urano-CSRF'),csrf);
+  assert.equal(calls[2].options.headers.get('X-Montara-Engine-Generation'),'4');
+
+  const created=await window.fetch('/api/v1/wizard/projects/new',{
+    method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+  assert.equal(created.status,200);
+  assert.equal(calls.length,4); // same worker and same rotating CSRF
+  assert.equal(calls[3].url,
+    '/urano/v1/native/rpc/api/v1/wizard/projects/new');
+  assert.equal(calls[3].options.method,'POST');
+
+  await assert.rejects(
+    () => window.fetch('/api/v1/internal/other'),
+    /not enabled/);
+  await assert.rejects(
+    () => window.fetch('/montara/session/secret'),
+    /not enabled/);
+  assert.equal(calls.length,4);
+  console.log('H3_NATIVE_BROWSER_BRIDGE_PASS startup-lazy, csrf, owner-worker, new, blocked-routes');
+}
+main().catch(error=>{console.error(error);process.exitCode=1;});
