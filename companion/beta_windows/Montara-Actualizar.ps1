@@ -46,18 +46,27 @@ try {
     if((Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant() -ne $manifest.sha256){throw 'SHA-256 incorrecto.'}
     $expanded=Join-Path $stage 'content'
     Expand-Archive -LiteralPath $zip -DestinationPath $expanded
-    $allowed=@('local_video.py','Montara-Bandeja.ps1','Montara-Actualizar.ps1')
-    $files=@(Get-ChildItem $expanded -Force)
-    if($files.Count -ne 3 -or @($files|Where-Object {$_.PSIsContainer -or $_.Name -notin $allowed}).Count){
-      throw 'El paquete contiene archivos inesperados.'
-    }
+    # Fixed destination map. Future releases can update Companion modules,
+    # never engine/venv, external paths, arbitrary ZIP entries or user data.
+    $program=Split-Path -Parent $c.companion_path
     $targets=@{
       'local_video.py'=(Join-Path $c.video_path 'local_video.py')
+      'companion.py'=$c.companion_path
+      'video_jobs.py'=(Join-Path $program 'video_jobs.py')
+      'video_recipe.py'=(Join-Path $program 'video_recipe.py')
+      'windows_support.py'=(Join-Path $program 'windows_support.py')
+      'spherical_proxy.py'=(Join-Path $program 'spherical_proxy.py')
       'Montara-Bandeja.ps1'=(Join-Path $home 'Montara-Bandeja.ps1')
       'Montara-Actualizar.ps1'=(Join-Path $home 'Montara-Actualizar.ps1')
     }
+    $files=@(Get-ChildItem $expanded -Force)
+    $allowed=@($files|ForEach-Object {$_.Name})
+    if($files.Count -lt 1 -or $files.Count -gt 8 -or
+       @($files|Where-Object {$_.PSIsContainer -or !$targets.ContainsKey($_.Name)}).Count){
+      throw 'El paquete contiene archivos inesperados.'
+    }
     foreach($file in $allowed){
-      if(!(Test-Path (Join-Path $expanded $file))){throw "Falta $file."}
+      if(!(Test-Path -LiteralPath $targets[$file])){throw ("Falta el archivo local "+$file+"; actualiza mediante instalador revisado.") }
       Copy-Item -LiteralPath $targets[$file] -Destination ($targets[$file]+'.rollback') -Force
     }
     try {
