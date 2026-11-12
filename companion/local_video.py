@@ -47,6 +47,30 @@ def retain_spherical_cache(shared, targets, *, restore=False):
     return count
 
 
+def write_render_progress(writer, path, payload):
+    """Keep the native render alive if Windows briefly locks its status JSON.
+
+    Only the observer/status file is best-effort. Engine plans, segment files
+    and final MP4 still use their original strict atomic-write semantics.
+    """
+    for attempt in range(5):
+        try:
+            writer(path, payload)
+            return True
+        except PermissionError:
+            if os.name != 'nt':
+                raise
+            if attempt < 4:
+                time.sleep(0.05 * (attempt + 1))
+                continue
+            # The status is advisory; video rendering must not be cancelled
+            # merely because Windows Defender/indexing/another reader holds
+            # the destination at the instant of os.replace.
+            print('[Montara native timing] progress snapshot locked; '
+                  'continuing export without this update', flush=True)
+            return False
+
+
 def timing(**data):
     print('[Montara native timing] '+json.dumps(data,sort_keys=True),flush=True)
 
@@ -77,7 +101,11 @@ def run(manifest):
             now=time.monotonic()
             if now-last_progress_write<.2 and value<100 and (not task or task.get('percent')!=100):return
             last_progress_write=now
-            atomic_write_json(progress,{'status':'rendering','progress':min(.99,max(0,float(value)/100)),'message':str(message)[:200],'tasks':list(tasks.values())})
+            write_render_progress(atomic_write_json,progress,{
+                'status':'rendering',
+                'progress':min(.99,max(0,float(value)/100)),
+                'message':str(message)[:200],
+                'tasks':list(tasks.values())})
     update(0,'Preparing original-quality video')
     timing(phase='locate originals',seconds=body.get('source_lookup_sec'),sources=len(body['source_files']))
     probe_started=time.monotonic()
@@ -160,7 +188,8 @@ def run(manifest):
     outputs=sorted(p.exports_dir.glob('*.mp4'),key=lambda v:v.stat().st_mtime)
     if not outputs:raise RuntimeError('No final video was produced')
     destination=Path(body['output']);outputs[-1].replace(destination)
-    atomic_write_json(progress,{'status':'ready','progress':1.,'seconds':round(time.monotonic()-started,1)})
+    write_render_progress(atomic_write_json,progress,{
+        'status':'ready','progress':1.,'seconds':round(time.monotonic()-started,1)})
     # Segment caches are reproducible; keep the final result, plan and diagnostics.
     shutil.rmtree(state/'Cache',ignore_errors=True)
     return destination
