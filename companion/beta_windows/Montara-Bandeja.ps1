@@ -30,6 +30,21 @@ $status.Add_Click({
 })
 $update=$menu.Items.Add('Buscar e instalar actualización...')
 $update.Add_Click({
+  # A simple check must not interrupt a running Companion if already current.
+  try {
+    $next=Invoke-RestMethod -Uri $c.update_url -TimeoutSec 12
+    $version=Get-Content (Join-Path $home 'installed-version.txt') -ErrorAction SilentlyContinue | Select-Object -First 1
+    if($next.channel -ne 'montara-h4-windows'){
+      throw 'La fuente de actualizaciones no es válida.'
+    }
+    if($next.version -eq $version){
+      [System.Windows.Forms.MessageBox]::Show('Companion ya está actualizado: '+$version,'Montara')|Out-Null
+      return
+    }
+  } catch {
+    [System.Windows.Forms.MessageBox]::Show('No se pudo comprobar H4: '+$_.Exception.Message,'Montara')|Out-Null
+    return
+  }
   $s=Health
   if($s -and $s.busy){
     [System.Windows.Forms.MessageBox]::Show('Hay un render activo. Vuelve a intentarlo al terminar.','Montara')|Out-Null
