@@ -20,6 +20,7 @@ from typing import Callable
 
 from urano.native_owner_project_scope import verified_native_project
 from urano.native_owner_stage_snapshot import native_owner_stage_snapshot
+from urano.native_owner_storage_guard import verify_owner_storage_config
 from urano.native_owner_workspace_gate import NativeOwnerWorkspaceGate
 
 
@@ -48,6 +49,7 @@ def bind_native_owner_application(*, app_factory: Callable,
     if root.stat().st_mode & 0o077:
         raise NativeWorkerBindingError("Private data root permissions too broad")
     root = root.resolve(strict=True)
+    verify_owner_storage_config(root)
 
     # The sole application entrypoint is Chema's existing app. In particular
     # there is no Owner-generated "Projects/<uuid>/project.json" bootstrap
