@@ -138,7 +138,7 @@ def native_owner_gateway_blueprint(
         if request.headers.get("Transfer-Encoding"):
             return jsonify(error="Unsupported request framing"),400
         length = request.content_length
-        if request.method == "GET" or request.method=="DELETE":
+        if request.method in ("GET","HEAD","DELETE"):
             if length not in (None,0):
                 return jsonify(error="Body unsupported"),400
             body=None
@@ -220,7 +220,7 @@ def native_owner_gateway_blueprint(
                 # obtaining the owner-checked FD may a bounded media operation
                 # wait for slow upload chunks / local fsync / preview restore.
                 # Never widen timeouts for ordinary JSON control-plane RPCs.
-                if kind in ("upload-chunk", "upload-finish", "upload-direct", "shot-frame"):
+                if kind in ("upload-chunk", "upload-finish", "upload-direct", "shot-frame", "native-source", "native-master"):
                     conn.timeout = 35.0
                     if conn.sock is not None:
                         conn.sock.settimeout(35.0)
@@ -243,7 +243,7 @@ def native_owner_gateway_blueprint(
                     headers["Range"]=ranged
                 conn.request(upstream_method,target,body=body,headers=headers)
                 upstream=conn.getresponse()
-                read_limit=_MAX_PREVIEW if kind in ("review-media","audio-media","shot-frame") else _MAX_REPLY
+                read_limit=_MAX_PREVIEW if kind in ("review-media","audio-media","shot-frame","native-master","native-source") else _MAX_REPLY
                 reply=upstream.read(read_limit+1)
                 code=upstream.status
                 content_type=upstream.getheader("Content-Type","application/json")
@@ -257,14 +257,19 @@ def native_owner_gateway_blueprint(
             request.method=="DELETE" and 200<=code<300 and not reply)
         media_type=content_type.split(";",1)[0].lower().strip()
         binary_media=(
-            kind in ("review-media","audio-media","shot-frame") and 200<=code<300 and
+            kind in ("review-media","audio-media","shot-frame","native-master","native-source") and 200<=code<300 and
             media_type in (("image/jpeg",) if kind=="shot-frame" else
+                           ("video/mp4","application/octet-stream") if kind=="native-source" else
+                           ("audio/mpeg","audio/mp4","audio/wav","audio/x-wav",
+                            "audio/wave","audio/aiff","audio/x-aiff",
+                            "audio/flac","audio/ogg","audio/opus",
+                            "application/octet-stream") if kind=="native-master" else
                            ("image/jpeg","image/png","image/webp",
                            "video/mp4","application/octet-stream") if kind=="review-media"
                            else ("audio/wav","audio/x-wav","audio/wave","audio/mpeg",
                                  "audio/mp4","audio/aiff","audio/x-aiff","audio/flac",
                                  "audio/ogg","audio/opus","application/octet-stream")))
-        limit=_MAX_PREVIEW if kind in ("review-media","audio-media","shot-frame") else _MAX_REPLY
+        limit=_MAX_PREVIEW if kind in ("review-media","audio-media","shot-frame","native-master","native-source") else _MAX_REPLY
         if (len(reply)>limit or not 100<=code<=599 or
                 (not content_type.lower().startswith("application/json")
                  and not empty_chunk_response and not empty_delete_response
