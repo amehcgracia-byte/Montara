@@ -13,7 +13,7 @@ import threading
 import unittest
 from pathlib import Path
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_file
 from recovery import register_recovery
 
 from urano.native_owner_web_gateway import native_owner_gateway_blueprint
@@ -87,6 +87,7 @@ class NativeOwnerH3AuthenticatedGatewayTests(unittest.TestCase):
         for sub in ("Projects","Sessions","WizardUploads"):
             (home/sub).mkdir()
         (home/"WizardUploads"/"camera.mp4").write_bytes(b"private-camera")
+        (home/"WizardUploads"/"song.wav").write_bytes(b"RIFF"+b"\x00"*64)
         worker=Flask("worker-"+workspace)
         register_recovery(worker,home)
 
@@ -118,6 +119,10 @@ class NativeOwnerH3AuthenticatedGatewayTests(unittest.TestCase):
             self.native_calls.append((owner,"direct-upload",len(received),
                                       request.headers.get("X-Zucker-Filename")))
             return jsonify(videos=[{"path":str(home/"WizardUploads"/"camera.mp4")}])
+
+        @worker.get("/montara/audio")
+        def native_audio():
+            return send_file(request.args["path"],mimetype="audio/x-wav")
 
         @worker.post("/montara/branding")
         def branding():
@@ -402,6 +407,28 @@ class NativeOwnerH3AuthenticatedGatewayTests(unittest.TestCase):
                 },data=b"one-byte-proxy")
                 self.assertEqual(result.status_code,400)
                 self.assertEqual(len(self.native_calls),count)
+
+    def test_private_audio_playback_rejects_foreign_and_arbitrary_paths(self):
+        a=self.user(self.a)
+        self.assertEqual(self.ensure(a).status_code,200)
+        aw=self.registry.get("owner-a").workspace_id
+        own=str(self.workers[aw][0]/"WizardUploads"/"song.wav")
+        scope={**a,"X-Montara-Engine-Generation":"1"}
+        ok=self.rpc("GET","montara/audio",scope,query_string={"path":own})
+        self.assertEqual(ok.status_code,200,ok.get_data(as_text=True))
+        self.assertEqual(ok.data[:4],b"RIFF")
+        self.assertEqual(ok.mimetype,"audio/x-wav")
+        for query in ({"path":"/etc/passwd"},{"path":own,"other":"x"},
+                      {"path":own+"../bad"},{"path":own,"owner_id":"owner-b"}):
+            response=self.rpc("GET","montara/audio",scope,query_string=query)
+            self.assertIn(response.status_code,(403,404))
+        b=self.user(self.b)
+        self.assertEqual(self.ensure(b).status_code,200)
+        other={**b,"X-Montara-Engine-Generation":"1"}
+        foreign=self.rpc("GET","montara/audio",other,query_string={"path":own})
+        self.assertEqual(foreign.status_code,403)
+        self.assertEqual(self.rpc("GET","montara/audio",
+                         {"Origin":ORIGIN},query_string={"path":own}).status_code,403)
 
     def test_private_review_thumbnails_and_video_range_keep_google_csrf(self):
         headers=self.user(self.a)
