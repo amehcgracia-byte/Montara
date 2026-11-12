@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import os
 import re
+from functools import partial
 from pathlib import Path
 
 from urano.c6_beta_preflight import validate_beta_settings
@@ -21,7 +22,11 @@ from urano.jm_bundle_manifest import (
 )
 from urano.jm_private_proxy_overlay import private_proxy_limit_mib
 from urano.native_owner_app import create_native_owner_api
+from urano.owner_broker_preview import broker_request
+from urano.owner_private_http_client import authenticated_private_jm_connection
 from urano.trusted_local_https import TrustedLocalHTTPSBoundary
+
+_H4_BROKER_SOCKET="/run/montara-h4-owner-admission/control.sock"
 
 _PINNED_BUNDLE = re.compile(r"/opt/montara/bundles/jm-[a-f0-9]{40}\Z")
 _SHA = re.compile(r"[a-f0-9]{40}\Z")
@@ -77,6 +82,11 @@ def create_loopback_native_owner_application(*, config=None, provider=None):
     app=create_native_owner_api(
         root,settings=beta.settings,chema_web_root=jm/"web",
         provider=provider,private_preview_limit_mib=limit,
+        ensure_worker=partial(
+            broker_request,control_socket=_H4_BROKER_SOCKET),
+        connect_worker=partial(
+            authenticated_private_jm_connection,
+            control_socket=Path(_H4_BROKER_SOCKET)),
     )
     app.wsgi_app=TrustedLocalHTTPSBoundary(
         app.wsgi_app,origin=beta.origin)
