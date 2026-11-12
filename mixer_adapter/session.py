@@ -171,6 +171,8 @@ def local_mix_signature(data, settings):
     """Never reuse a local master after its faders, source set or master policy changed."""
     from mixer_adapter.single_song import AUTO_MASTER_TARGET_LUFS
     values = {key: settings.get(key) or {} for key in ('faders', 'mutes', 'eq')}
+    if settings.get('base_gains'):
+        values['base_gains'] = settings['base_gains']
     values.update(effects=settings.get('effects'), reference=settings.get('reference') or None,
                   target_lufs=AUTO_MASTER_TARGET_LUFS, track_types=data.get('track_types') or {},
                   tracks=[t['file'] for t in used_tracks(data)])
@@ -194,7 +196,7 @@ def local_results(work, data=None):
                 continue
             settings = data.get('settings') or {}
             mine = (settings.get('per_song') or {}).get(str(song['id'])) or {}
-            effective = {key: mine.get(key, settings.get(key)) for key in ('faders', 'mutes', 'effects', 'eq', 'reference')}
+            effective = {key: mine.get(key, settings.get(key)) for key in ('faders', 'mutes', 'effects', 'eq', 'reference', 'base_gains')}
             if not version or item.get('mixer') != version or item.get('mix_signature') != local_mix_signature(data, effective):
                 continue
         if Path(item.get('path', '')).is_file():
@@ -543,14 +545,14 @@ def render_song(work, song_id):
     folder = prepare_tracks(work, song, progress=progress)
     present = {p.name for p in folder.glob('*.wav')}
     only = lambda values: None if values is None else {k: v for k, v in values.items() if k in present}  # empty tracks are not mixed
-    mine = {k: only(v) if k in ('faders', 'mutes', 'effects', 'eq') and isinstance(v, dict) else v for k, v in mine.items()}
+    mine = {k: only(v) if k in ('faders', 'mutes', 'effects', 'eq', 'base_gains') and isinstance(v, dict) else v for k, v in mine.items()}
     settings = {k: only(v) if k in ('faders', 'mutes', 'effects') and isinstance(v, dict) else v for k, v in settings.items()}
     mixer = SingleSongMix(folder, work / 'songs' / str(song_id) / 'mix', reference=mine.get('reference') or settings.get('reference'),
                           track_types=data.get('track_types'))
     mixer.pipeline.PROGRESS_HOOK = progress.callback
     out = mixer.render(mine.get('faders', settings.get('faders', {})), work / 'exports' / f'song-{song_id:03d}.mp3',
                        mine.get('mutes', settings.get('mutes', {})), mine.get('effects', settings.get('effects')),
-                       eq=mine.get('eq'))  # per-song automatic mix; faders are offsets
+                       base_gains=mine.get('base_gains'), eq=mine.get('eq'))  # per-song automatic mix; faders are offsets
     progress.finish()
     save(work / 'results' / f'{song_id}.json', dict(id=song_id, name=song['name'], start=song['start'], end=song['end'], path=str(out)))
 

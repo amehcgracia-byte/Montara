@@ -46,7 +46,9 @@ def extras_running(work):
 def mix_settings(body, names):
     """Fader offsets, mutes and effects the person changed for one mix (validated)."""
     settings = {}
-    for key in ('faders', 'mutes'):
+    for key in ('faders', 'mutes', 'base_gains'):
+        if key == 'base_gains' and key not in body:
+            continue
         values = body.get(key, {})
         if not isinstance(values, dict) or set(values) - names:
             raise ValueError('Unknown track settings.')
