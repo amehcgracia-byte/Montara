@@ -42,3 +42,24 @@ Antes de aplicar:
 ## Cambios explícitamente NO realizados
 
 No se ha modificado `main`, la web HTML/JS original, Cloudflare, el proyecto Pages, el Tunnel, GCP, el servicio del broker ni un worker activo. No se han eliminado ni migrado proyectos, ni instalado librerías, ni añadido un servidor permanente. La beta existente sigue accesible como referencia de recuperación.
+
+
+## Actualización del bloque — 12 noviembre, integración nativa completa de módulos sin despliegue
+
+Se añaden cuatro componentes enfocados que **no sustituyen funciones de Chema**:
+
+- `native_owner_stage_snapshot.py`: permite que el broker conserve el **UUID estable del workspace** cuando Chema todavía no ha abierto ninguna edición, crea una nueva o recupera otra. Verifica que la edición cargada pertenece al mismo almacenamiento Owner y solo expone estados/cantidad de cámaras.
+- `native_owner_worker_binding.py`: fábrica de montaje de la **aplicación Flask original**, sin abrir a la fuerza `Projects/<uuid>`, sin nuevo editor, y con verificación de ruta cargada antes de servir.
+- `native_owner_storage_guard.py`: verifica `config.json` original antes de que Chema lo lea; impide `project_root`, `project_roots`, `source_folders`, `inbox_path` o `last_project_path` externos, enlazados o malformados; comprobado contra la **forma real** de la configuración del Owner de GCP por lectura sin cambios.
+- `native_owner_new_latest_http.py`: matriz cerrada de **11 rutas y métodos originales** (New, Open, Delete, Draft, Prepare, Start, Cancel, Status, Project, Projects, Recovery/Latest). No es proxy público: faltan aplicación de sesión/CSRF/broker y todas las operaciones restantes del editor.
+
+También se ajusta la puerta WSGI para aceptar el `keep_exports` booleano que admite el handler nativo de Chema, sin aceptar valores arbitrarios.
+
+**Evidencia:** **48 tests y 37 subpruebas PASS** con Flask, SQLite, WSGI y el `recovery.py` real sobre directorios efímeros de Oracle; **0 diferencias en `web/` de Chema**. No es todavía un ciclo E2E de vídeo ni una garantía de desplegabilidad.
+
+**Bloqueos exactos de prueba humana:**
+1. Portar el montaje del worker al **broker y socket Unix existentes** sin reiniciar el worker activo, cambiar cgroups ni abrir rutas globales; demostrar New/Latest con el Engine original, no solo Flask de prueba.
+2. Unir el contrato HTTP a la **sesión Google/CSRF y gateway real**, y completar las llamadas que haga Stage (vídeo, audio, Music/Mixer y exportación) sin permitir rutas arbitrarias. Retirar la pantalla/selector duplicados solo tras sustituir sus funciones internas.
+3. Publicar un **entorno de aceptación aislado** en GCP + Cloudflare y efectuar comprobación humana en Windows/Companion, preservando los proyectos anteriores.
+
+**Operación confirmada:** no se desplegó código en GCP, no se modificaron Pages, Worker ni Tunnel, y no se tocó `main`. No ejecutar migraciones automáticas sobre Owners con proyectos previos.
