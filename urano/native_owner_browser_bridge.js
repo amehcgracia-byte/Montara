@@ -17,7 +17,7 @@
     'api/v1/artifacts/sync',
     'api/v1/wizard/review', 'api/v1/wizard/review/replace',
     'api/v1/wizard/review/render',
-    'api/v1/wizard/upload','montara/uploads',
+    'api/v1/wizard/upload','montara/uploads','montara/branding',
     'api/v1/settings/fillers','api/v1/settings/video-light',
     'api/v1/settings/camera-types','api/v1/settings/camera-subjects',
     'api/v1/settings/camera-roles','api/v1/settings/spherical-landmarks',
