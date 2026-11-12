@@ -54,3 +54,7 @@ Tras la prueba con Chema real por socket privado, se ha implementado **la selecc
 Realizar **una única** validación supervisada del nuevo script, pero solo con un contexto Owner de validación aislado de los datos actuales. Primero deben estar presentes en el despliegue sus archivos revisados y dependencias fijadas, y debe definirse la forma de habilitarlo sin sustituir al broker actual, sin interrupción ni creación de un segundo servicio persistente. No reiniciar ni limpiar el worker activo para forzar la prueba.
 
 La comprobación de autorización externa Chrome → Google Owner/CSRF → broker → WSGI + la sustitución del picker corresponden al hito siguiente y **no están terminadas**.
+
+## Actualización final — prueba systemd real aprobada (12 noviembre 2026)
+
+La validación técnica aislada del arranque systemd **ya se ha completado**. Ver `docs/integration/H2_SYSTEMD_NATIVE_ACCEPTANCE_2026-11-12.md`: unidad transient con DynamicUser/cgroup, ambos sockets 0600, New y Stage status reales, limpieza acreditada y 67 pruebas PASS. **Pendiente para el hito 3:** activar el worker a través del broker y la sesión Owner real, sin tocar todavía la beta existente. No interpretar esta aceptación aislada como un despliegue completo.
