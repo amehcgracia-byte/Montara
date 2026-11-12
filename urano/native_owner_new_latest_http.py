@@ -32,7 +32,8 @@ _NATIVE = frozenset({
 def native_new_latest_target(method: str, path: str,
                              query: str = "") -> str | None:
     """Return a reviewed private JM URL, or None (never a generic fallback)."""
-    if not isinstance(method, str) or not isinstance(path, str):
+    if (not isinstance(method, str) or not isinstance(path, str)
+            or not isinstance(query, str)):
         return None
     if (method, path) not in _NATIVE or len(query) > 4096:
         return None
