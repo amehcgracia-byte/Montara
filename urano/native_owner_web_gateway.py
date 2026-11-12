@@ -174,6 +174,24 @@ def native_owner_gateway_blueprint(
                 return jsonify(error="Invalid native JSON"),400
             if not isinstance(value,dict):
                 return jsonify(error="Invalid native JSON object"),400
+            if kind=="shot-patch":
+                keys=set(value)
+                allowed={"project_id","revision","index","choice",
+                         "edit_component","apply_to_source","movement",
+                         "playback_speed","flat_framing","yaw","pitch","fov",
+                         "performer_roles","remember_musician"}
+                if (keys-allowed or
+                        not isinstance(value.get("project_id"),str) or
+                        not re.fullmatch(r"[a-f0-9]{20}",
+                                         str(value.get("revision",""))) or
+                        type(value.get("index")) is not int or
+                        not 0<=value["index"]<=9999 or
+                        type(value.get("choice")) is not int or
+                        not 0<=value["choice"]<=99 or
+                        value.get("apply_to_source") is not False or
+                        value.get("edit_component") not in
+                        ("framing","movement")):
+                    return jsonify(error="Invalid private shot edit"),400
             if kind=="branding":
                 if set(value) != {"mode"} or value["mode"] not in ("montara","mine","none") or type(value["mode"]) is not str:
                     return jsonify(error="Unsupported branding mode"),400
@@ -218,7 +236,7 @@ def native_owner_gateway_blueprint(
                     headers["Range"]=ranged
                 conn.request(request.method,target,body=body,headers=headers)
                 upstream=conn.getresponse()
-                read_limit=_MAX_PREVIEW if kind in ("review-media","audio-media") else _MAX_REPLY
+                read_limit=_MAX_PREVIEW if kind in ("review-media","audio-media","shot-frame") else _MAX_REPLY
                 reply=upstream.read(read_limit+1)
                 code=upstream.status
                 content_type=upstream.getheader("Content-Type","application/json")
@@ -232,13 +250,14 @@ def native_owner_gateway_blueprint(
             request.method=="DELETE" and 200<=code<300 and not reply)
         media_type=content_type.split(";",1)[0].lower().strip()
         binary_media=(
-            kind in ("review-media","audio-media") and 200<=code<300 and
-            media_type in (("image/jpeg","image/png","image/webp",
+            kind in ("review-media","audio-media","shot-frame") and 200<=code<300 and
+            media_type in (("image/jpeg",) if kind=="shot-frame" else
+                           ("image/jpeg","image/png","image/webp",
                            "video/mp4","application/octet-stream") if kind=="review-media"
                            else ("audio/wav","audio/x-wav","audio/wave","audio/mpeg",
                                  "audio/mp4","audio/aiff","audio/x-aiff","audio/flac",
                                  "audio/ogg","audio/opus","application/octet-stream")))
-        limit=_MAX_PREVIEW if kind in ("review-media","audio-media") else _MAX_REPLY
+        limit=_MAX_PREVIEW if kind in ("review-media","audio-media","shot-frame") else _MAX_REPLY
         if (len(reply)>limit or not 100<=code<=599 or
                 (not content_type.lower().startswith("application/json")
                  and not empty_chunk_response and not empty_delete_response
