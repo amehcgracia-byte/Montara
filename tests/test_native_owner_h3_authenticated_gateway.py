@@ -141,13 +141,20 @@ class NativeOwnerH3AuthenticatedGatewayTests(unittest.TestCase):
             self.native_calls.append((owner,"upload-limits"))
             return jsonify(max_file_bytes=256*1024*1024,
                           max_original_file_bytes=256*1024*1024,
-                          chunk_bytes=4*1024*1024,free_bytes=128*1024*1024)
+                          chunk_bytes=16*1024*1024,free_bytes=128*1024*1024)
 
         @worker.post("/montara/uploads")
         def start_resumable():
             payload=request.get_json()
             self.native_calls.append((owner,"upload-init",payload.get("name")))
-            return jsonify(id="b"*32,chunk_bytes=4*1024*1024)
+            return jsonify(id="b"*32,received=0,size=1000,
+                           complete=False,chunk_size=16*1024*1024)
+
+        @worker.get("/montara/uploads/<uid>")
+        def resume_upload(uid):
+            self.native_calls.append((owner,"upload-resume",uid))
+            return jsonify(id=uid,received=640,size=1000,
+                           complete=False,chunk_size=16*1024*1024)
 
         @worker.put("/montara/uploads/<uid>")
         def upload_chunk(uid):
@@ -344,6 +351,12 @@ class NativeOwnerH3AuthenticatedGatewayTests(unittest.TestCase):
         started=self.rpc("POST","montara/uploads",scope,json=metadata)
         self.assertEqual(started.status_code,200,started.get_json())
         uid=started.json["id"]
+        self.assertEqual(started.json["chunk_size"],4*1024*1024)
+        self.assertEqual(started.json["received"],0)
+        resumed=self.rpc("GET","montara/uploads/"+uid,scope)
+        self.assertEqual(resumed.status_code,200,resumed.get_json())
+        self.assertEqual(resumed.json["received"],640)
+        self.assertEqual(resumed.json["chunk_size"],4*1024*1024)
         part=self.rpc("PUT","montara/uploads/"+uid,{
             **scope,"Content-Type":"application/octet-stream",
             "Upload-Offset":"0"},data=b"proxy-part")
