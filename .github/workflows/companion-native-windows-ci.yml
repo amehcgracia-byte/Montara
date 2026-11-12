@@ -1,0 +1,37 @@
+name: Companion native Windows compile (internal)
+on:
+  push:
+    branches:
+      - fernando/chema-native-owner
+    paths:
+      - 'companion/windows_native/**'
+      - '.github/workflows/companion-native-windows-ci.yml'
+  pull_request:
+    paths:
+      - 'companion/windows_native/**'
+      - '.github/workflows/companion-native-windows-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compile-only:
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Build native Companion tray
+        shell: pwsh
+        run: dotnet build companion/windows_native/Montara.Companion.csproj --configuration Release --nologo -warnaserror
+      - name: Assert legacy PowerShell updater stays excluded
+        shell: pwsh
+        run: |
+          $compiled = Get-ChildItem companion/windows_native/bin/Release/net8.0-windows -Filter Montara.Companion.exe -Recurse
+          if ($compiled.Count -ne 1) { throw 'Missing native executable build.' }
+          Write-Output 'Native tray compiled; unsigned artifact is NOT distributed.'
+      # Intentionally no artifact upload, package publishing or auto-signing.
+      # A trusted publisher identity and a release gate are prerequisites.
