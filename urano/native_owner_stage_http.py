@@ -1,0 +1,77 @@
+"""Reviewed first Stage media routes for the ORIGINAL Chema browser.
+
+Other Music, Push, Show, native export and preview URLs stay denied until
+their separate contract is verified. Never forward a browser-supplied path,
+owner, worker generation or arbitrary query through a generic proxy.
+"""
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass
+from urllib.parse import parse_qs, urlencode
+
+_SETTINGS = frozenset({
+    "fillers", "video-light", "camera-types", "camera-subjects",
+    "camera-roles", "spherical-landmarks", "stage-performers",
+})
+_UUID = re.compile(r"[a-f0-9]{32}\Z")
+_MAX_QUERY = 2048
+
+
+@dataclass(frozen=True)
+class NativeStageTarget:
+    upstream: str
+    kind: str  # "json", "upload-init", "upload-chunk", "upload-direct"
+
+
+def native_stage_route(method: str, path: str, query: str = "") -> NativeStageTarget | None:
+    if (not isinstance(method,str) or not isinstance(path,str)
+            or not isinstance(query,str) or len(query)>_MAX_QUERY):
+        return None
+    if path.startswith("/api/v1/settings/"):
+        key=path.removeprefix("/api/v1/settings/")
+        if key in _SETTINGS and method=="POST" and not query:
+            return NativeStageTarget(path,"json")
+        return None
+    static={
+        ("GET","/api/v1/artifacts/sync"):"json",
+        ("POST","/api/v1/wizard/review/replace"):"json",
+        ("POST","/api/v1/wizard/review/render"):"json",
+        ("POST","/api/v1/wizard/upload"):"upload-direct",
+        ("GET","/montara/uploads"):"upload-limits",
+        ("POST","/montara/uploads"):"upload-init",
+    }
+    kind=static.get((method,path))
+    if kind is not None:
+        return NativeStageTarget(path,kind) if not query else None
+    if method=="GET" and path=="/api/v1/wizard/review":
+        if not query:
+            return NativeStageTarget(path,"json")
+        try:
+            values=parse_qs(query,keep_blank_values=True,strict_parsing=True,
+                            max_num_fields=2)
+        except ValueError:
+            return None
+        if (not set(values) <= {"render","shot"}
+                or any(len(v)!=1 for v in values.values())
+                or any(k not in values for k in ("render",))
+                or values.get("render",["0"])[0] not in ("0","1")
+                or ("shot" in values and
+                    (not re.fullmatch(r"[0-9]{1,5}",values["shot"][0])))):
+            return None
+        return NativeStageTarget(path+"?"+urlencode(
+            {k:values[k][0] for k in ("render","shot") if k in values}),"json")
+    prefix="/montara/uploads/"
+    if path.startswith(prefix):
+        tail=path[len(prefix):]
+        sections=tail.split("/")
+        uid=sections[0] if sections else ""
+        if not _UUID.fullmatch(uid):
+            return None
+        if len(sections)==1 and method=="PUT" and not query:
+            return NativeStageTarget(path,"upload-chunk")
+        if len(sections)==1 and method in ("GET","DELETE") and not query:
+            return NativeStageTarget(path,"json")
+        if len(sections)==2 and sections[1]=="finish" and method=="POST" and not query:
+            return NativeStageTarget(path,"upload-finish")
+    return None
