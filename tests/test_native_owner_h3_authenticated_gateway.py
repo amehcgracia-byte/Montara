@@ -111,6 +111,41 @@ class NativeOwnerH3AuthenticatedGatewayTests(unittest.TestCase):
             self.native_calls.append((owner,"open"))
             return jsonify(ok=True)
 
+        @worker.post("/api/v1/wizard/upload")
+        def direct_upload():
+            received=request.get_data()
+            self.native_calls.append((owner,"direct-upload",len(received),
+                                      request.headers.get("X-Zucker-Filename")))
+            return jsonify(videos=[{"path":str(home/"WizardUploads"/"camera.mp4")}])
+
+        @worker.post("/montara/uploads")
+        def start_resumable():
+            payload=request.get_json()
+            self.native_calls.append((owner,"upload-init",payload.get("name")))
+            return jsonify(id="b"*32,chunk_bytes=4*1024*1024)
+
+        @worker.put("/montara/uploads/<uid>")
+        def upload_chunk(uid):
+            chunk=request.get_data()
+            self.native_calls.append((owner,"upload-chunk",uid,len(chunk),
+                                      request.headers.get("Upload-Offset")))
+            return b"",204
+
+        @worker.post("/montara/uploads/<uid>/finish")
+        def finish_upload(uid):
+            self.native_calls.append((owner,"upload-finish",uid))
+            return jsonify(path=str(home/"WizardUploads"/"camera.mp4"))
+
+        @worker.get("/api/v1/artifacts/sync")
+        def sync():
+            self.native_calls.append((owner,"sync"))
+            return jsonify(status="pending",clips={})
+
+        @worker.post("/api/v1/settings/camera-types")
+        def camera_types():
+            self.native_calls.append((owner,"camera-types"))
+            return jsonify(ok=True)
+
         @worker.get("/api/v1/wizard/status")
         def status():
             self.native_calls.append((owner,"status"))
@@ -222,6 +257,92 @@ class NativeOwnerH3AuthenticatedGatewayTests(unittest.TestCase):
                                   valid,json=[]).status_code,400)
         self.assertEqual(self.rpc("GET","api/v1/wizard/status",valid,
                           query_string={"owner_id":"owner-b"}).status_code,404)
+
+    def test_companion_proxy_direct_and_resumable_stage_upload(self):
+        headers=self.user(self.a)
+        self.assertEqual(self.ensure(headers).status_code,200)
+        scope={**headers,"X-Montara-Engine-Generation":"1"}
+        limits=self.rpc("GET","montara/uploads",scope)
+        self.assertEqual(limits.status_code,200)
+        self.assertEqual(limits.json["chunk_bytes"],4*1024*1024)
+        metadata={
+            "name":"camera.small.mp4","size":1000,"fingerprint":"f"*64,
+            "video_preview":True,"original":{"filename":"camera.mov"},
+        }
+        started=self.rpc("POST","montara/uploads",scope,json=metadata)
+        self.assertEqual(started.status_code,200,started.get_json())
+        uid=started.json["id"]
+        part=self.rpc("PUT","montara/uploads/"+uid,{
+            **scope,"Content-Type":"application/octet-stream",
+            "Upload-Offset":"0"},data=b"proxy-part")
+        self.assertEqual(part.status_code,204)
+        done=self.rpc("POST","montara/uploads/"+uid+"/finish",
+                      scope,json={})
+        self.assertEqual(done.status_code,200)
+        direct=self.rpc("POST","api/v1/wizard/upload",{
+            **scope,"Content-Type":"application/octet-stream",
+            "X-Zucker-Filename":"clip.small.mp4",
+        },data=b"tiny-video")
+        self.assertEqual(direct.status_code,200)
+        sync=self.rpc("GET","api/v1/artifacts/sync",scope)
+        self.assertEqual(sync.status_code,200)
+        events=[event[1] for event in self.native_calls]
+        self.assertIn("upload-init",events)
+        self.assertIn("upload-chunk",events)
+        self.assertIn("upload-finish",events)
+        self.assertIn("direct-upload",events)
+        self.assertIn("sync",events)
+
+    def test_invalid_proxy_metadata_and_unsafe_direct_names_blocked(self):
+        headers=self.user(self.a)
+        self.assertEqual(self.ensure(headers).status_code,200)
+        scope={**headers,"X-Montara-Engine-Generation":"1"}
+        malformed={
+            "name":"camera.small.mp4","size":1000,"fingerprint":"f"*64,
+            "video_preview":True,"original":{"filename":"camera.mov"},
+        }
+        for payload in (
+            {**malformed,"name":"../../etc/passwd"},
+            {**malformed,"size":3*1024**3},
+            {**malformed,"fingerprint":"bad"},
+            {**malformed,"video_preview":False,
+             "size":600*1024**2},
+        ):
+            with self.subTest(payload=payload):
+                count=len(self.native_calls)
+                response=self.rpc("POST","montara/uploads",scope,json=payload)
+                self.assertEqual(response.status_code,400)
+                self.assertEqual(len(self.native_calls),count)
+        for filename in ("../../secret.mp4","file.exe","\\x00.mp4"):
+            with self.subTest(filename=filename):
+                count=len(self.native_calls)
+                result=self.rpc("POST","api/v1/wizard/upload",{
+                    **scope,"Content-Type":"application/octet-stream",
+                    "X-Zucker-Filename":filename,
+                },data=b"one-byte-proxy")
+                self.assertEqual(result.status_code,400)
+                self.assertEqual(len(self.native_calls),count)
+
+    def test_stage_settings_reject_other_users_camera_paths(self):
+        headers=self.user(self.a)
+        self.assertEqual(self.ensure(headers).status_code,200)
+        wa=self.registry.get("owner-a")
+        foreign=str(self.workers[wa.workspace_id][0]/
+                    "WizardUploads"/"camera.mp4")
+        bh=self.user(self.b)
+        self.assertEqual(self.ensure(bh).status_code,200)
+        scope={**bh,"X-Montara-Engine-Generation":"1"}
+        bad=self.rpc("POST","api/v1/settings/camera-types",scope,
+                     json={"camera_types":{foreign:"wide"}})
+        self.assertEqual(bad.status_code,403)
+        self.assertNotIn(("owner-b","camera-types"),self.native_calls)
+        wb=self.registry.get("owner-b")
+        own=str(self.workers[wb.workspace_id][0]/
+                "WizardUploads"/"camera.mp4")
+        ok=self.rpc("POST","api/v1/settings/camera-types",scope,
+                    json={"camera_types":{own:"wide"}})
+        self.assertEqual(ok.status_code,200)
+        self.assertIn(("owner-b","camera-types"),self.native_calls)
 
     def test_foreign_media_paths_are_denied_by_the_private_worker(self):
         aheaders=self.user(self.a)
