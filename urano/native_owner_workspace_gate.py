@@ -169,6 +169,31 @@ class NativeOwnerWorkspaceGate:
                      and not self._safe_project(ids[0]))):
                 return self._deny(environ, start_response)
             return self.app(environ, start_response)
+        if method=="PATCH" and path=="/api/v1/edit/shot":
+            try:
+                length=int(environ.get("CONTENT_LENGTH") or "")
+                if not 2<=length<=8192:
+                    raise UntrustedNativeWorkspace("Invalid shot edit size")
+                data=environ["wsgi.input"].read(length)
+                if len(data)!=length:
+                    raise UntrustedNativeWorkspace("Incomplete shot edit")
+                body=json.loads(data)
+                if not isinstance(body,dict):
+                    raise UntrustedNativeWorkspace("Invalid shot edit")
+                verified_native_project(self.root,body["project_id"])
+                if (type(body.get("index")) is not int or
+                        type(body.get("choice")) is not int or
+                        not 0<=body["index"]<=9999 or
+                        not 0<=body["choice"]<=99 or
+                        body.get("apply_to_source") is not False):
+                    raise UntrustedNativeWorkspace("Invalid private shot selection")
+            except (ValueError,KeyError,TypeError,OSError,json.JSONDecodeError,
+                    UnsafeNativeProject):
+                return self._deny(environ,start_response)
+            copy=dict(environ)
+            copy["wsgi.input"]=io.BytesIO(data)
+            copy["CONTENT_LENGTH"]=str(len(data))
+            return self.app(copy,start_response)
         if method != "POST" or path not in _GUARDED_POST:
             # All other APIs require review at the *outer* CSRF/Owner gateway.
             return self.app(environ, start_response)
