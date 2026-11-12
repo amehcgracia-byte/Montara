@@ -24,7 +24,8 @@ def verified_native_project(data_root: Path, supplied: str) -> Path:
     regular non-symlink project.json with a JSON object. The caller must
     obtain data_root from the authenticated worker, not an HTTP parameter.
     """
-    if not isinstance(supplied, str) or not supplied or len(supplied) > 4096:
+    if (not isinstance(supplied, str) or not supplied
+            or len(supplied) > 4096 or "\\x00" in supplied):
         raise UnsafeNativeProject("Invalid native project path")
 
     try:
