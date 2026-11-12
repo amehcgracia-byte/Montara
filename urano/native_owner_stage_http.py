@@ -66,6 +66,35 @@ def native_stage_route(method: str, path: str, query: str = "") -> NativeStageTa
             return None
         return NativeStageTarget(path+"?"+urlencode(
             {k:values[k][0] for k in ("render","shot") if k in values}),"json")
+    # Original Chema Stage shot editor: bounded index, generation-checked
+    # edit revision and explicit camera choice. No arbitrary project query.
+    if path=="/api/v1/edit/shot":
+        if method=="PATCH" and not query:
+            return NativeStageTarget(path,"shot-patch")
+        if method=="GET":
+            try:
+                args=parse_qs(query,strict_parsing=True,max_num_fields=1)
+            except ValueError:
+                return None
+            if set(args)=={"index"} and len(args["index"])==1 and re.fullmatch(
+                    r"[0-9]{1,4}",args["index"][0]):
+                return NativeStageTarget(path+"?"+urlencode(
+                    {"index":args["index"][0]}),"json")
+        return None
+    if method=="GET" and path=="/api/v1/edit/shot/frame":
+        try:
+            args=parse_qs(query,strict_parsing=True,max_num_fields=3)
+        except ValueError:
+            return None
+        if (set(args)=={"index","choice","revision"} and
+                all(len(v)==1 for v in args.values()) and
+                re.fullmatch(r"[0-9]{1,4}",args["index"][0]) and
+                re.fullmatch(r"[0-9]{1,2}",args["choice"][0]) and
+                re.fullmatch(r"[a-f0-9]{20}",args["revision"][0])):
+            return NativeStageTarget(path+"?"+urlencode(
+                {k:args[k][0] for k in ("index","choice","revision")}),
+                "shot-frame")
+        return None
     if method=="GET" and path=="/montara/audio":
         if not query or len(query)>_MAX_QUERY:
             return None
