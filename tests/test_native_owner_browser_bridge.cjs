@@ -43,6 +43,18 @@ async function main() {
         status:200,headers:{'Content-Type':'application/json',
                             'X-Montara-Engine-Generation':'4'}});
     }
+    if(url==='/urano/v1/native/rpc/api/v1/wizard/review?render=0') {
+      return new Response(JSON.stringify({
+        items:[{index:0,
+          thumbnail:'/api/v1/wizard/review/thumbnail/assets-v2/frame-0.jpg',
+          preview:'/api/v1/wizard/review/preview/0?v=123abc'}],
+        platform:'youtube'
+      }),{status:200,headers:{'Content-Type':'application/json'}});
+    }
+    if(url==='/urano/v1/native/rpc/api/v1/wizard/review/thumbnail/assets-v2/frame-0.jpg') {
+      return new Response(new Uint8Array([255,216,255,217]),{
+        status:200,headers:{'Content-Type':'image/jpeg'}});
+    }
     if(url==='/montara/companion/version') {
       return new Response(JSON.stringify({version:'0.6.5'}),{status:200});
     }
@@ -92,13 +104,25 @@ async function main() {
     '/urano/v1/native/rpc/api/v1/wizard/projects/new');
   assert.equal(calls[3].options.method,'POST');
 
+  const review=await window.fetch('/api/v1/wizard/review?render=0');
+  assert.equal(review.status,200);
+  const reviewResult=await review.json();
+  assert.ok(reviewResult.items[0].thumbnail.startsWith('blob:'));
+  assert.equal(calls[4].url,
+    '/urano/v1/native/rpc/api/v1/wizard/review?render=0');
+  assert.equal(calls[5].url,
+    '/urano/v1/native/rpc/api/v1/wizard/review/thumbnail/assets-v2/frame-0.jpg');
+  await assert.rejects(
+    () => window.fetch('/montara/branding',{method:'POST'}),
+    /not enabled/);
+
   await assert.rejects(
     () => window.fetch('/api/v1/internal/other'),
     /not enabled/);
   await assert.rejects(
     () => window.fetch('/montara/session/secret'),
     /not enabled/);
-  assert.equal(calls.length,4);
-  console.log('H3_NATIVE_BROWSER_BRIDGE_PASS startup-lazy, csrf, owner-worker, new, blocked-routes');
+  assert.equal(calls.length,6);
+  console.log('H3_NATIVE_BROWSER_BRIDGE_PASS startup-lazy, csrf, owner-worker, new, secured-thumbnail-blob, blocked-routes');
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});
