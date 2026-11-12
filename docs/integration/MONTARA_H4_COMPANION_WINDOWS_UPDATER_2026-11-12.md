@@ -25,9 +25,9 @@ El instalador exige que exista la ruta de Engine `%LOCALAPPDATA%\MontaraSMARTBet
 - El icono consulta manualmente `GET /urano/v1/companion-updates/manifest.json`, ofrecido por **la beta H4 de Cloudflare**. No necesita credenciales GitHub ni expone tokens OAuth.
 - Comprueba versión y pide confirmación; no detiene trabajos activos ni procesos que el icono no haya iniciado.
 - Descarga el ZIP versionado sobre HTTPS, comprueba tamaño máximo de 1 MB y SHA-256 del manifiesto.
-- Extrae y verifica lista cerrada de 3 archivos: `local_video.py`, `Montara-Bandeja.ps1`, `Montara-Actualizar.ps1`; crea rollback `.rollback` antes de sustituirlos.
+- Extrae y verifica una lista cerrada de destinos autorizados. La primera actualización contiene 3 archivos (`local_video.py`, `Montara-Bandeja.ps1`, `Montara-Actualizar.ps1`); el actualizador también puede recibir, en futuras versiones revisadas, `companion.py`, `video_jobs.py`, `video_recipe.py`, `windows_support.py` y `spherical_proxy.py`. No acepta otros nombres ni directorios, y crea rollback `.rollback` antes de sustituirlos.
 - Cierra su Companion local controlado, instala la versión y reabre el icono/Companion. Si falla, intenta restaurar el backup y reabrir el icono.
-- No se efectúan cambios en motor ni datos del usuario. En el futuro, añadir archivos al contrato requerirá una nueva versión/revisión del actualizador.
+- No se efectúan cambios en motor ni datos del usuario. Las futuras actualizaciones del Engine o de dependencias siguen requiriendo un instalador de runtime explícito; no se permite que este actualizador sobrescriba el Engine.
 
 ## Servicio H4
 
@@ -36,7 +36,7 @@ El instalador exige que exista la ruta de Engine `%LOCALAPPDATA%\MontaraSMARTBet
 - Almacenamiento privado en VM: `~/.config/montara-h4-native/companion-updates/`, tres archivos `manifest.json`, `package.zip`, `bootstrap.zip`.
 - El servicio verifica sha256 y longitud de los dos paquetes al iniciar. Responde solo al Host/origen H4 previsto.
 - **Limitación beta:** este feed público sirve código de Companion sin secretos y depende de la VM H4 encendida. En la versión distribuida del producto habrá que trasladarlo a almacenamiento estático disponible permanentemente y con firma independiente del manifiesto (SHA-256 + TLS no sustituyen firma de publicación).
-- Como el repositorio es privado, no utilizar GitHub raw ni almacenar PAT en el ordenador del usuario.
+- Como el repositorio es privado, no utilizar GitHub raw ni almacenar PAT en el ordenador del usuario. Una comprobación manual que detecta la versión actual no cierra ni reinicia Companion.
 
 ## Verificaciones ya realizadas
 
