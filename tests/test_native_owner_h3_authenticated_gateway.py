@@ -119,6 +119,13 @@ class NativeOwnerH3AuthenticatedGatewayTests(unittest.TestCase):
                                       request.headers.get("X-Zucker-Filename")))
             return jsonify(videos=[{"path":str(home/"WizardUploads"/"camera.mp4")}])
 
+        @worker.get("/montara/uploads")
+        def native_upload_limits():
+            self.native_calls.append((owner,"upload-limits"))
+            return jsonify(max_file_bytes=256*1024*1024,
+                          max_original_file_bytes=256*1024*1024,
+                          chunk_bytes=4*1024*1024,free_bytes=128*1024*1024)
+
         @worker.post("/montara/uploads")
         def start_resumable():
             payload=request.get_json()
@@ -292,6 +299,8 @@ class NativeOwnerH3AuthenticatedGatewayTests(unittest.TestCase):
         limits=self.rpc("GET","montara/uploads",scope)
         self.assertEqual(limits.status_code,200)
         self.assertEqual(limits.json["chunk_bytes"],4*1024*1024)
+        self.assertEqual(limits.json["free_bytes"],128*1024*1024)
+        self.assertIn(("owner-a","upload-limits"),self.native_calls)
         metadata={
             "name":"camera.small.mp4","size":1000,"fingerprint":"f"*64,
             "video_preview":True,"original":{"filename":"camera.mov"},
