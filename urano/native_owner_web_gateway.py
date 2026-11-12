@@ -191,6 +191,14 @@ def native_owner_gateway_blueprint(
         try:
             with closing(connect_worker(token,csrf,workspace.workspace_id,
                                          int(generation))) as conn:
+                # Broker authorization retains its short timeout. Only after
+                # obtaining the owner-checked FD may a bounded media operation
+                # wait for slow upload chunks / local fsync / preview restore.
+                # Never widen timeouts for ordinary JSON control-plane RPCs.
+                if kind in ("upload-chunk", "upload-finish", "upload-direct"):
+                    conn.timeout = 35.0
+                    if conn.sock is not None:
+                        conn.sock.settimeout(35.0)
                 headers={"Cache-Control":"no-store"}
                 if body is not None:
                     headers["Content-Type"]=request.content_type
