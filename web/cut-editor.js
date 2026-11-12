@@ -146,7 +146,7 @@ function renderMusicCuts(){
   const host=$('#musicCuts');if(!musicTimeline?.shots.length)return;host.replaceChildren(makeCutTrack(musicTimeline,{start:musicTimeline.shots[0].start,end:musicTimeline.shots.at(-1).end},'Video cuts',shot=>openMusicShot(shot.index)));
 }
 async function openMusicShot(index){
-  try{const doc=await api('/edit/shot?index='+index),dialog=document.createElement('dialog');dialog.className='cut-dialog';dialog.innerHTML='<form><h3>Camera / viewpoint</h3><label>Shot<select name="camera"></select></label><div class="music-flat" hidden></div><div class="music-performers" hidden></div><img class="music-spherical" alt="Drag the 360 picture to aim this shot" draggable="false" hidden style="width:100%;cursor:grab;touch-action:none"><label>Look left / right<input name="yaw" type="range" min="-180" max="180" step="1"></label><label>Look up / down<input name="pitch" type="range" min="-85" max="85" step="1"></label><label>Field of view<input name="fov" type="range" min="30" max="120" step="1"></label><label><input type="checkbox" name="movement"> Movement</label><label>Shot speed <output class="music-shot-speed-value">1×</output><input name="playback_speed" type="range" min="0.5" max="2" step="0.05" value="1"></label><p class="hint">Speed changes only this camera shot; the master song stays in time. Faster motion requires enough source footage.</p><p class="hint music-sphere-hint">360 controls affect this shot only. Preview or render after saving.</p><p class="cut-error"></p><div class="actions"><button type="button">Cancel</button><button class="btn primary">Save shot</button></div></form>';
+  try{const doc=await api('/edit/shot?index='+index),dialog=document.createElement('dialog');dialog.className='cut-dialog';dialog.innerHTML='<form><h3>Camera / viewpoint</h3><label>Shot<select name="camera"></select></label><div class="music-flat" hidden></div><div class="music-performers" hidden></div><img class="music-spherical" alt="Drag the 360 picture to aim this shot" draggable="false" hidden style="width:100%;cursor:grab;touch-action:none"><label>Look left / right<input name="yaw" type="range" min="-180" max="180" step="1"></label><label>Look up / down<input name="pitch" type="range" min="-85" max="85" step="1"></label><label>Field of view<input name="fov" type="range" min="30" max="120" step="1"></label><label><input type="checkbox" name="movement"> Movement</label><p class="hint music-movement-hint"></p><label>Shot speed <output class="music-shot-speed-value">1×</output><input name="playback_speed" type="range" min="0.5" max="2" step="0.05" value="1"></label><p class="hint">Speed changes only this camera shot; the master song stays in time. Faster motion requires enough source footage.</p><p class="hint music-sphere-hint">360 controls affect this shot only. Preview or render after saving.</p><p class="cut-error"></p><div class="actions"><button type="button">Cancel</button><button class="btn primary">Save shot</button></div></form>';
     const field=n=>dialog.querySelector(`[name="${n}"]`);doc.choices.forEach((c,i)=>field('camera').add(new Option(c.label,i)));field('yaw').value=(((Number(doc.pose.yaw)||0)+180)%360+360)%360-180;field('pitch').value=doc.pose.pitch||0;field('fov').value=doc.pose.fov||95;field('movement').checked=doc.movement===true;field('playback_speed').value=doc.playback_speed ?? 1;field('playback_speed').oninput=()=>{dialog.querySelector('.music-shot-speed-value').textContent=Number(field('playback_speed').value).toFixed(2).replace(/0+$/,'').replace(/\.$/,'')+'×';};field('playback_speed').oninput();let flatUI=null;const sphericalImage=new Image(),sphereTarget=dialog.querySelector('.music-spherical');
     const drawSphere=()=>{if(!doc.choices[Number(field('camera').value)].spherical || !sphericalImage.naturalWidth)return;try{sphereTarget.src=webSphericalStill(sphericalImage,{yaw:Number(field('yaw').value),pitch:Number(field('pitch').value),fov:Number(field('fov').value)});}catch(error){dialog.querySelector('.cut-error').textContent=error.message;}};
     sphericalImage.onload=drawSphere;['yaw','pitch','fov'].forEach(n=>field(n).oninput=drawSphere);
@@ -191,7 +191,11 @@ async function openMusicShot(index){
     const performerSettings=()=>field('markMusician').checked && field('rememberMusician').value.trim()
       ? {remember_musician:field('rememberMusician').value.trim()} : {};
     const frameUrl=choice=>'/api/v1/edit/shot/frame?'+new URLSearchParams({index,choice,revision:doc.revision});
-    const update=()=>{const choice=Number(field('camera').value),sphere=doc.choices[choice].spherical;['yaw','pitch','fov'].forEach(n=>field(n).closest('label').hidden=!sphere);dialog.querySelector('.music-flat').hidden=sphere;musicians.hidden=doc.platform!=='youtube';sphereTarget.hidden=!sphere;if(sphere)sphericalImage.src=frameUrl(choice);dialog.querySelector('.music-sphere-hint').hidden=!sphere;
+    const update=()=>{const choice=Number(field('camera').value),sphere=doc.choices[choice].spherical;
+      dialog.querySelector('.music-movement-hint').textContent=sphere
+        ? 'New movement pans up to 8°. The saved preview shows the move.'
+        : 'New movement adds up to 14% zoom. The saved preview shows the move.';
+['yaw','pitch','fov'].forEach(n=>field(n).closest('label').hidden=!sphere);dialog.querySelector('.music-flat').hidden=sphere;musicians.hidden=doc.platform!=='youtube';sphereTarget.hidden=!sphere;if(sphere)sphericalImage.src=frameUrl(choice);dialog.querySelector('.music-sphere-hint').hidden=!sphere;
       if(!sphere){flatUI ||= mountFlatCamera(dialog.querySelector('.music-flat'),choice===0?doc.framing:{},{aspect:doc.platform==='reel'?9/16:null,contain:doc.reel_contain});flatUI.setImage(frameUrl(choice));}
     };
     field('camera').onchange=()=>{selectedViewName='';
@@ -224,6 +228,7 @@ async function openMusicShot(index){
       if(selectedViewName)performers.selected_musician_view=selectedViewName;
       const movementOnly=doc.platform==='youtube' && choice===0 &&
         !Object.keys(performers).length && JSON.stringify(crop)===initialFraming;
+      const previewMovement=field('movement').checked && (choice!==0 || !doc.movement);
       const save=dialog.querySelector('button.primary');
       save.disabled=true;
       try {
@@ -240,7 +245,7 @@ async function openMusicShot(index){
       }
       dialog.close();
       $('#musicCutStatus').textContent='Shot saved.';
-      try{await refreshMusicReview(index);await loadMusicCuts();}
+      try{await refreshMusicReview(index);await loadMusicCuts();if(previewMovement)previewMusicShot(index,{autoplay:true});}
       catch(error){toast('Shot saved. Could not refresh the review: '+error.message,true);}
     };
     document.body.append(dialog);dialog.showModal();
@@ -248,8 +253,41 @@ async function openMusicShot(index){
 }
 document.addEventListener('montara:show-scene',renderCutTimelines);
 
-function previewMusicShot(index){
-  const dialog=document.createElement('dialog');dialog.className='cut-dialog';dialog.style.maxWidth='850px';const title=document.createElement('h3');title.textContent=`Shot ${index+1}`;const video=document.createElement('video');video.controls=true;video.style.width='100%';video.src='/api/v1/wizard/review/preview/'+index+'?v='+Date.now();const close=document.createElement('button');close.className='btn';close.textContent='Close preview';close.onclick=()=>dialog.close();dialog.onclose=()=>{video.pause();video.removeAttribute('src');dialog.remove();};dialog.append(title,video,close);document.body.append(dialog);dialog.showModal();
+function previewMusicShot(index, {autoplay = false} = {}) {
+  const dialog = document.createElement('dialog');
+  dialog.className = 'cut-dialog';
+  dialog.style.maxWidth = '850px';
+  const title = document.createElement('h3');
+  title.textContent = `Shot ${index + 1}`;
+  const status = document.createElement('p');
+  status.className = 'hint';
+  status.setAttribute('role', 'status');
+  status.textContent = 'Preparing shot preview…';
+  const video = document.createElement('video');
+  video.controls = true;
+  video.autoplay = autoplay;
+  video.muted = autoplay;
+  video.playsInline = true;
+  video.style.width = '100%';
+  video.oncanplay = () => { status.hidden = true; };
+  video.onerror = () => {
+    status.hidden = false;
+    status.textContent = 'Could not load the shot preview. Close it and try Preview again.';
+  };
+  const close = document.createElement('button');
+  close.className = 'btn';
+  close.textContent = 'Close preview';
+  close.onclick = () => dialog.close();
+  dialog.onclose = () => {
+    video.pause();
+    video.removeAttribute('src');
+    video.load();
+    dialog.remove();
+  };
+  dialog.append(title, status, video, close);
+  document.body.append(dialog);
+  dialog.showModal();
+  video.src = '/api/v1/wizard/review/preview/' + index + '?v=' + Date.now();
 }
 
 async function refreshMusicReview(index){
