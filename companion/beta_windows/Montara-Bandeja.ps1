@@ -2,8 +2,8 @@
 $ErrorActionPreference='Stop'
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
-$home=Split-Path -Parent $MyInvocation.MyCommand.Path
-$c=Get-Content -Raw (Join-Path $home 'config.json') | ConvertFrom-Json
+$updaterDir=Split-Path -Parent $MyInvocation.MyCommand.Path
+$c=Get-Content -Raw (Join-Path $updaterDir 'config.json') | ConvertFrom-Json
 $env:MONTARA_COMPANION_HOME=Split-Path -Parent $c.video_path
 $owned=$null
 function Health {
@@ -24,7 +24,7 @@ $menu=New-Object System.Windows.Forms.ContextMenuStrip
 $status=$menu.Items.Add('Estado de Companion')
 $status.Add_Click({
   $s=Health
-  $patch=Get-Content (Join-Path $home 'installed-version.txt') -ErrorAction SilentlyContinue | Select-Object -First 1
+  $patch=Get-Content (Join-Path $updaterDir 'installed-version.txt') -ErrorAction SilentlyContinue | Select-Object -First 1
   $msg=if($s){"Conectado · beta "+$patch+" (núcleo "+$s.version+") · "+$(if($s.busy){'Ocupado'}else{'Libre'})}else{'Sin conexión'}
   [System.Windows.Forms.MessageBox]::Show($msg,'Montara Companion')|Out-Null
 })
@@ -33,7 +33,7 @@ $update.Add_Click({
   # A simple check must not interrupt a running Companion if already current.
   try {
     $next=Invoke-RestMethod -Uri $c.update_url -TimeoutSec 12
-    $version=Get-Content (Join-Path $home 'installed-version.txt') -ErrorAction SilentlyContinue | Select-Object -First 1
+    $version=Get-Content (Join-Path $updaterDir 'installed-version.txt') -ErrorAction SilentlyContinue | Select-Object -First 1
     if($next.channel -ne 'montara-h4-windows'){
       throw 'La fuente de actualizaciones no es válida.'
     }
@@ -59,7 +59,7 @@ $update.Add_Click({
     Start-Sleep -Milliseconds 800
     if(Health){[System.Windows.Forms.MessageBox]::Show('No se pudo cerrar el proceso propio.','Montara')|Out-Null;return}
   }
-  $script=Join-Path $home 'Montara-Actualizar.ps1'
+  $script=Join-Path $updaterDir 'Montara-Actualizar.ps1'
   Start-Process -FilePath (Join-Path $PSHOME 'powershell.exe') -ArgumentList @('-NoProfile','-STA','-ExecutionPolicy','Bypass','-File',('"'+$script+'"'),'-RestartAfter')
   $icon.Visible=$false
   [System.Windows.Forms.Application]::Exit()
