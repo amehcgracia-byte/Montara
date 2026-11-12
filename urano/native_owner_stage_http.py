@@ -66,6 +66,17 @@ def native_stage_route(method: str, path: str, query: str = "") -> NativeStageTa
             return None
         return NativeStageTarget(path+"?"+urlencode(
             {k:values[k][0] for k in ("render","shot") if k in values}),"json")
+    # Exact Stage timeline read for native Chema editor; no arbitrary
+    # workspace selection or write-method forwarding.
+    if method=="GET" and path=="/api/v1/edit/timeline":
+        try:
+            args=parse_qs(query,strict_parsing=True,max_num_fields=1)
+        except ValueError:
+            return None
+        if (set(args)=={"kind"} and len(args["kind"])==1
+                and args["kind"][0]=="music"):
+            return NativeStageTarget(path+"?kind=music","json")
+        return None
     # Original Chema local-quality export contract. URLs may carry only an
     # owner-scoped saved project path and the signed edit revision.
     if method in ("GET","HEAD") and (path in (
