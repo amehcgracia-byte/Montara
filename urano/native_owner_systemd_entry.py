@@ -141,6 +141,16 @@ def main(argv: list[str] | None = None):
         runtime_root=Path("/run") / args[1])
     bundle = Path("/opt/montara-engine")
     jm = Path("/opt/montara-jm")
+    # The pinned read-only Librosa wheel is not writable by systemd
+    # DynamicUser. Numba must cache into this worker's private RuntimeDirectory,
+    # not the shared immutable Engine bundle or another Owner's HOME.
+    cache_dir = runtime / "numba-cache"
+    if cache_dir.is_symlink():
+        raise NativeSystemdOwnerError("Unsafe private Numba cache")
+    cache_dir.mkdir(mode=0o700, exist_ok=True)
+    if not cache_dir.is_dir() or cache_dir.stat().st_mode & 0o077:
+        raise NativeSystemdOwnerError("Unsafe private Numba cache permissions")
+    os.environ["NUMBA_CACHE_DIR"] = str(cache_dir)
     prepare_native_owner_runtime(
         engine_root=bundle, jm_root=jm, proxy_limit_mib=quota)
 
