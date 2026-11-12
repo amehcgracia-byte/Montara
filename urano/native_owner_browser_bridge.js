@@ -214,8 +214,15 @@
     const csrf = await token();
     await ensure();
     const headers = authHeaders(init.headers || input?.headers, csrf);
+    // H4's edge rejects PATCH before it reaches Owner. Convert only the
+    // reviewed shot-save operation to POST with a scoped transport marker.
+    // The authenticated Owner gateway restores PATCH for Chema's Engine.
+    const shotSave=method==='PATCH' &&
+      selected.path===nativePrefix+'api/v1/edit/shot';
+    if (shotSave) headers.set('X-Montara-Shot-Method','PATCH');
     const response = await originalFetch(selected.path, {
-      ...init, method, headers, credentials:'same-origin', cache:'no-store'
+      ...init, method:shotSave?'POST':method, headers,
+      credentials:'same-origin', cache:'no-store'
     });
     const next = Number(response.headers.get('X-Montara-Engine-Generation'));
     if (Number.isSafeInteger(next) && next > 0) generation = next;
