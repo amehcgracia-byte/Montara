@@ -111,9 +111,19 @@ def native_owner_gateway_blueprint(
         if not request.query_string.isascii():
             return jsonify(error="Unsupported original editor query"),404
         query=request.query_string.decode("ascii")
-        target = native_new_latest_target(request.method,path,query)
+        # The public H4 Cloudflare front door does not forward PATCH.
+        # POST + exact private marker is translated ONLY for Chema's single
+        # reviewed Stage shot endpoint, after CSRF/owner admission as usual.
+        # The worker still receives its original PATCH method unchanged.
+        shot_tunnel=(request.method=="POST" and
+                     path=="/api/v1/edit/shot" and not query and
+                     request.headers.get("X-Montara-Shot-Method")=="PATCH")
+        if request.headers.get("X-Montara-Shot-Method") and not shot_tunnel:
+            return jsonify(error="Unsupported native method marker"),404
+        upstream_method="PATCH" if shot_tunnel else request.method
+        target = native_new_latest_target(upstream_method,path,query)
         extra = None if target is not None else native_stage_route(
-            request.method,path,query)
+            upstream_method,path,query)
         if target is None and extra is None:
             return jsonify(error="Original editor operation not enabled"),404
         if extra is not None:
@@ -234,7 +244,7 @@ def native_owner_gateway_blueprint(
                                          ranged) is None):
                         return jsonify(error="Unsupported private preview range"),416
                     headers["Range"]=ranged
-                conn.request(request.method,target,body=body,headers=headers)
+                conn.request(upstream_method,target,body=body,headers=headers)
                 upstream=conn.getresponse()
                 read_limit=_MAX_PREVIEW if kind in ("review-media","audio-media","shot-frame") else _MAX_REPLY
                 reply=upstream.read(read_limit+1)
