@@ -119,6 +119,11 @@ class NativeOwnerH3AuthenticatedGatewayTests(unittest.TestCase):
                                       request.headers.get("X-Zucker-Filename")))
             return jsonify(videos=[{"path":str(home/"WizardUploads"/"camera.mp4")}])
 
+        @worker.post("/montara/branding")
+        def branding():
+            self.native_calls.append((owner,"branding",request.get_json().get("mode")))
+            return jsonify(mode=request.get_json()["mode"],has_logo=False)
+
         @worker.get("/montara/uploads")
         def native_upload_limits():
             self.native_calls.append((owner,"upload-limits"))
@@ -291,6 +296,25 @@ class NativeOwnerH3AuthenticatedGatewayTests(unittest.TestCase):
                                   valid,json=[]).status_code,400)
         self.assertEqual(self.rpc("GET","api/v1/wizard/status",valid,
                           query_string={"owner_id":"owner-b"}).status_code,404)
+
+    def test_original_chema_branding_post_is_authenticated_and_bounded(self):
+        headers=self.user(self.a)
+        self.assertEqual(self.ensure(headers).status_code,200)
+        scope={**headers,"X-Montara-Engine-Generation":"1"}
+        ok=self.rpc("POST","montara/branding",scope,json={"mode":"montara"})
+        self.assertEqual(ok.status_code,200,ok.get_json())
+        self.assertEqual(ok.json["mode"],"montara")
+        self.assertIn(("owner-a","branding","montara"),self.native_calls)
+        before=len(self.native_calls)
+        for payload in ({"mode":"invalid"},{"mode":"montara","path":"/etc/passwd"},
+                        {"mode":["montara"]},{}):
+            self.assertEqual(self.rpc("POST","montara/branding",scope,
+                                      json=payload).status_code,400)
+        self.assertEqual(len(self.native_calls),before)
+        self.assertEqual(self.rpc("POST","montara/branding",{
+            "Origin":ORIGIN,"X-Montara-Engine-Generation":"1"},
+            json={"mode":"montara"}).status_code,403)
+        self.assertEqual(self.rpc("GET","montara/branding",scope).status_code,404)
 
     def test_companion_proxy_direct_and_resumable_stage_upload(self):
         headers=self.user(self.a)
