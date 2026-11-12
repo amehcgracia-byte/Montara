@@ -170,9 +170,9 @@ async function main() {
   const master=await window.fetch('/api/v1/edit/native-master?'+mediaQuery);
   assert.equal(master.status,200);
   assert.equal((await master.blob()).size,4);
-  const source=await window.fetch('/api/v1/edit/native-source/0?'+mediaQuery,
+  const sourceCheck=await window.fetch('/api/v1/edit/native-source/0?'+mediaQuery,
     {method:'HEAD'});
-  assert.equal(source.status,200);
+  assert.equal(sourceCheck.status,200);
   assert.equal(calls.at(-1).options.method,'HEAD');
   for(const c of calls.slice(-3))
     assert.equal(c.options.headers.get('X-Urano-CSRF'),csrf);
