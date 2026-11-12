@@ -142,7 +142,7 @@ class NativeOwnerWorkspaceGate:
             if (len(ids) > 1 or
                     (ids and (not isinstance(ids[0], str) or
                               not self._safe_project(ids[0])))):
-                return self._deny(start_response)
+                return self._deny(environ, start_response)
             return self.app(environ, start_response)
         if method != "POST" or path not in _GUARDED_POST:
             # All other APIs require review at the *outer* CSRF/Owner gateway.
@@ -168,7 +168,7 @@ class NativeOwnerWorkspaceGate:
                 self._validate_media_request(path, body)
         except (KeyError, ValueError, TypeError, OSError,
                 json.JSONDecodeError, UnsafeNativeProject):
-            return self._deny(start_response)
+            return self._deny(environ, start_response)
         copy = dict(environ)
         copy["wsgi.input"] = io.BytesIO(data)
         copy["CONTENT_LENGTH"] = str(len(data))
@@ -208,7 +208,7 @@ class NativeOwnerWorkspaceGate:
                 verified_private_media(self.root, item)
 
     @staticmethod
-    def _deny(start_response):
+    def _deny(environ, start_response):
         return Response(
             json.dumps({"error": {"code": "private_workspace",
                                    "message": "Private workspace resource unavailable"}}),
@@ -216,4 +216,4 @@ class NativeOwnerWorkspaceGate:
             content_type="application/json",
             headers={"Cache-Control": "no-store",
                      "X-Content-Type-Options": "nosniff"},
-        )(None, start_response)
+        )(environ, start_response)
