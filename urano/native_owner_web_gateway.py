@@ -174,6 +174,9 @@ def native_owner_gateway_blueprint(
                 return jsonify(error="Invalid native JSON"),400
             if not isinstance(value,dict):
                 return jsonify(error="Invalid native JSON object"),400
+            if kind=="branding":
+                if set(value) != {"mode"} or value["mode"] not in ("montara","mine","none") or type(value["mode"]) is not str:
+                    return jsonify(error="Unsupported branding mode"),400
             if kind=="upload-init":
                 validation={
                     "PATH_INFO":"/montara/uploads","REQUEST_METHOD":"POST",
