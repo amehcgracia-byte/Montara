@@ -135,6 +135,18 @@ class NativeOwnerWorkspaceRouteTests(unittest.TestCase):
         self.assertEqual(self.client.get("/api/v1/wizard/status",
                          query_string={"project_id": ""}).status_code, 200)
 
+    def test_native_delete_preserves_chema_keep_exports_semantics(self):
+        accepted = self.client.post("/api/v1/wizard/projects/delete", json={
+            "path":str(self.a_old), "keep_exports":True})
+        self.assertEqual(accepted.status_code,200)
+        self.assertEqual(self.received[-1], ("delete", {
+            "path":str(self.a_old), "keep_exports":True}))
+        before = len(self.received)
+        bad = self.client.post("/api/v1/wizard/projects/delete", json={
+            "path":str(self.a_old), "keep_exports":"yes"})
+        self.assertEqual(bad.status_code,403)
+        self.assertEqual(len(self.received),before)
+
     def test_outside_owner_media_and_symlinks_are_denied_before_native(self):
         outside = self.owner_a / "WizardUploads" / "foreign.mp4"
         outside.symlink_to(self.b_video)
