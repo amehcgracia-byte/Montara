@@ -32,7 +32,7 @@ class NativeProgressWindowsTests(unittest.TestCase):
         def writer(path, payload):
             raise PermissionError(5, "Access denied")
 
-        with patch.object(video.os, "name", "nt"), patch.object(video.time, "sleep") as sleep:
+        with patch.object(video.time, "sleep") as sleep:
             self.assertFalse(video.write_render_progress(writer, Path("progress.json"), {"progress": 0.5}, windows=True))
         self.assertEqual(sleep.call_count, 4)
 
