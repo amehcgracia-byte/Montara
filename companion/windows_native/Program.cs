@@ -49,6 +49,7 @@ internal sealed record LocalConfiguration(string PythonExe, string CompanionScri
 internal sealed class CompanionTray : ApplicationContext
 {
     private readonly NotifyIcon _tray;
+    private readonly Icon _brandIcon;
     private readonly ToolStripMenuItem _startItem;
     private readonly ToolStripMenuItem _statusItem;
     private readonly ToolStripMenuItem _updateItem;
@@ -73,10 +74,11 @@ internal sealed class CompanionTray : ApplicationContext
         menu.Items.AddRange([_statusItem, _startItem, configure,
             new ToolStripSeparator(), _updateItem, new ToolStripSeparator(), exit]);
 
+        _brandIcon = MontaraIcon.Create();
         _tray = new NotifyIcon
         {
-            Icon = SystemIcons.Application, // Identity icon comes from signed installer.
-            Text = "Montara Companion (beta nativa)",
+            Icon = _brandIcon,
+            Text = "Montara Companion",
             Visible = true,
             ContextMenuStrip = menu
         };
@@ -213,6 +215,7 @@ internal sealed class CompanionTray : ApplicationContext
         // Closing the tray icon does not terminate processes or change files.
         _tray.Visible = false;
         _tray.Dispose();
+        _brandIcon.Dispose();
         _client.Dispose();
         _started?.Dispose();
         base.ExitThreadCore();
