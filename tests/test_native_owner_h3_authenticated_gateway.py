@@ -136,6 +136,32 @@ class NativeOwnerH3AuthenticatedGatewayTests(unittest.TestCase):
             self.native_calls.append((owner,"upload-finish",uid))
             return jsonify(path=str(home/"WizardUploads"/"camera.mp4"))
 
+        @worker.get("/api/v1/wizard/review")
+        def review():
+            self.native_calls.append((owner,"review"))
+            return jsonify(items=[{
+                "index":0,
+                "thumbnail":"/api/v1/wizard/review/thumbnail/assets-v2/frame-0.jpg",
+                "preview":"/api/v1/wizard/review/preview/0?v=123abc",
+            }],platform="youtube")
+
+        @worker.get("/api/v1/wizard/review/thumbnail/assets-v2/frame-0.jpg")
+        def thumbnail():
+            self.native_calls.append((owner,"thumbnail"))
+            return b"jpeg-frame",200,{"Content-Type":"image/jpeg"}
+
+        @worker.get("/api/v1/wizard/review/preview/0")
+        def preview():
+            range_request=request.headers.get("Range")
+            self.native_calls.append((owner,"preview",range_request))
+            if range_request=="bytes=0-1":
+                return b"mp",206,{
+                    "Content-Type":"video/mp4",
+                    "Content-Range":"bytes 0-1/10",
+                    "Accept-Ranges":"bytes",
+                }
+            return b"mp4-preview",200,{"Content-Type":"video/mp4"}
+
         @worker.get("/api/v1/artifacts/sync")
         def sync():
             self.native_calls.append((owner,"sync"))
@@ -322,6 +348,32 @@ class NativeOwnerH3AuthenticatedGatewayTests(unittest.TestCase):
                 },data=b"one-byte-proxy")
                 self.assertEqual(result.status_code,400)
                 self.assertEqual(len(self.native_calls),count)
+
+    def test_private_review_thumbnails_and_video_range_keep_google_csrf(self):
+        headers=self.user(self.a)
+        self.assertEqual(self.ensure(headers).status_code,200)
+        scope={**headers,"X-Montara-Engine-Generation":"1"}
+        review=self.rpc("GET","api/v1/wizard/review",scope,
+                        query_string={"render":"0"})
+        self.assertEqual(review.status_code,200)
+        self.assertEqual(review.json["items"][0]["index"],0)
+        thumb=self.rpc("GET",
+            "api/v1/wizard/review/thumbnail/assets-v2/frame-0.jpg",scope)
+        self.assertEqual(thumb.status_code,200)
+        self.assertEqual(thumb.data,b"jpeg-frame")
+        self.assertTrue(thumb.content_type.startswith("image/jpeg"))
+        preview=self.rpc("GET","api/v1/wizard/review/preview/0",
+            {**scope,"Range":"bytes=0-1"},query_string={"v":"123abc"})
+        self.assertEqual(preview.status_code,206)
+        self.assertEqual(preview.data,b"mp")
+        self.assertEqual(preview.headers.get("Content-Range"),"bytes 0-1/10")
+        self.assertEqual(self.rpc("GET",
+            "api/v1/wizard/review/thumbnail/assets-v2/frame-0.jpg",
+            {"Origin":ORIGIN}).status_code,401)
+        self.assertEqual(self.rpc("GET","api/v1/wizard/review/preview/0",
+            {**scope,"Range":"bytes=0-1,2-3"}).status_code,416)
+        self.assertEqual(self.rpc("GET","api/v1/wizard/review/preview/0",
+            scope,query_string={"source":"/etc/passwd"}).status_code,404)
 
     def test_stage_settings_reject_other_users_camera_paths(self):
         headers=self.user(self.a)
