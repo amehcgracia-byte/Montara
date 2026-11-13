@@ -11,4 +11,9 @@
     <Version>0.1.0</Version>
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
   </PropertyGroup>
+  <ItemGroup>
+    <Content Include="../local_video.py" Link="render-patch/local_video.py"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="Always" />
+  </ItemGroup>
 </Project>
