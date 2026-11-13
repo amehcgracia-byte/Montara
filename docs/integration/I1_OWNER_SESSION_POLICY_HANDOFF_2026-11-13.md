@@ -5,11 +5,11 @@ Fecha: 2026-11-13 · Issue #216 · fuente: beta funcional `fernando/chema-native
 
 ## Contrato de esta pieza
 - `urano/session_auth.py`: el valor predeterminado de `SessionStore.issue` **continúa siendo 3600 segundos**. El emisor solo puede pedir una duración mayor **explícitamente**, hasta 10 días (864000 s), para la beta privada acordada con Fernando. No se crean rutas públicas ni se relaja CSRF, Secure/HttpOnly/SameSite, revocación o separación de identidades.
-- `tests/test_h4_google_session_ttl.py`: frontera exacta de caducidad, rechazo de un segundo fuera de límite y comportamiento por defecto. No contienen secretos ni credenciales reales.
+- `tests/test_h4_google_session_ttl.py`: frontera exacta a los tres días, rechazo de un segundo fuera del máximo y mismo valor por defecto. No contienen secretos ni credenciales reales.
 - `docs/lab/STATUS-FER.md`: recupera el estado del laboratorio propio, 40 líneas o menos, sin modificar `STATUS-JM.md` de Chema.
 
 ## A–E según `docs/COLLABORATION.md`
-**A. Novedades:** nueva opción explícita de TTL de sesión para futuros emisores Owner.
+**A. Novedades:** política uniforme de 3 días para sesiones propias de Montara.
 
 **B. Duplicidades:** se reutiliza `SessionStore` ya incluido en `main`; no se trae una segunda tabla de sesiones ni se cambia `ProjectCatalog`.
 
