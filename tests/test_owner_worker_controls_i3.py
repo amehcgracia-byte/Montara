@@ -128,14 +128,22 @@ class WorkerIsolationContracts(unittest.TestCase):
         control.systemd.stop_exact.assert_not_called()
         self.assertEqual(self.ledger.unverified_for_owner("alice")[0].state,"running")
 
-    def test_stage_owner_admission_cannot_use_foreign_user(self):
-        # Stage admission may require an explicit operation; verify the
-        # independently authenticated normal request contract without
-        # admitting another user's project.
-        valid=request("ensure_owner",self.a,self.pa.id)
-        with self.assertRaises((OwnerAdmissionDenied, ValueError)):
-            verify_stage_owner_request(request("ensure_owner",self.a,self.pb.id),
-                                       owner_db_root=self.root)
+    def test_stage_snapshot_requires_real_owner_and_matching_generation(self):
+        def stage(session, project_id, generation=1):
+            return json.dumps({"op":"stage_snapshot_owner",
+                               "session":session.token,"csrf":session.csrf,
+                               "project_id":project_id,
+                               "generation":generation}).encode()
+        result=verify_stage_owner_request(stage(self.a,self.pa.id),owner_db_root=self.root)
+        self.assertEqual(result,("alice",self.pa.id,1))
+        with self.assertRaises(OwnerAdmissionDenied):
+            verify_stage_owner_request(stage(self.a,self.pb.id),owner_db_root=self.root)
+        with self.assertRaises(OwnerAdmissionDenied):
+            verify_stage_owner_request(stage(self.b,self.pa.id),owner_db_root=self.root)
+        for generation in (0,True,-1,2**31):
+            with self.subTest(generation=generation),self.assertRaises(ValueError):
+                verify_stage_owner_request(stage(self.a,self.pa.id,generation),
+                                           owner_db_root=self.root)
 
 
 if __name__=="__main__":
