@@ -51,10 +51,10 @@ class VideoJobs:
         temporary.write_text(json.dumps(dict(list(rows.items())[-30:])))
         temporary.replace(self.home/'completed-jobs.json')
 
-    def renderer_python(self):
+    def renderer_python(self, *, platform=None):
         # The renderer is installed independently from the native MSIX tray.
         # Preserve POSIX runtimes while using the Windows venv convention.
-        if os.name == 'nt':
+        if (os.name if platform is None else platform) == 'nt':
             return self.home / 'venv' / 'Scripts' / 'python.exe'
         return self.home / 'venv' / 'bin' / 'python'
 
