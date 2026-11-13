@@ -69,10 +69,13 @@ internal sealed class CompanionTray : ApplicationContext
             (_, _) => Configure());
         _updateItem = new ToolStripMenuItem("Buscar actualizaciones…", null,
             (_, _) => ShowUpdateInformation());
+        var fixRender = new ToolStripMenuItem("Instalar corrección de render…", null,
+            async (_, _) => await ApplyRenderFixAsync());
         var exit = new ToolStripMenuItem("Cerrar icono de Montara", null, (_, _) => ExitThread());
 
         menu.Items.AddRange([_statusItem, _startItem, configure,
-            new ToolStripSeparator(), _updateItem, new ToolStripSeparator(), exit]);
+            fixRender, new ToolStripSeparator(), _updateItem,
+            new ToolStripSeparator(), exit]);
 
         _brandIcon = MontaraIcon.Create();
         _tray = new NotifyIcon
@@ -192,6 +195,19 @@ internal sealed class CompanionTray : ApplicationContext
                 "Montara Companion", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         finally { _startItem.Enabled = true; }
+    }
+
+    private async Task ApplyRenderFixAsync()
+    {
+        if (await IsCompanionRunningAsync())
+        {
+            MessageBox.Show(
+                "Cierra primero el proceso de Companion. No se interrumpirá ningún render activo.",
+                "Montara Companion", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        MessageBox.Show(RenderPatch.DescribeAndApply(), "Montara Companion",
+            MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
     private void ShowUpdateInformation()
