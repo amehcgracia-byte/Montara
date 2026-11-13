@@ -286,6 +286,23 @@ def create_montara_app(data_root: Path = DEFAULT_DATA, samples: bool = True):
         return send_file(package, mimetype="application/octet-stream", as_attachment=True,
                          download_name=f"Montara-Companion-{engine[:8]}.pkg", max_age=0)
 
+    # I5: opt-in release selection. No unsigned QA installer is published here.
+    # Keep the legacy Mac QA endpoint unchanged until Chema validates migration.
+    from companion.release_catalog import companion_releases_blueprint
+
+    def _current_companion_engine_sha():
+        try:
+            return subprocess.check_output(
+                ["git", "-C", str(ENGINE), "rev-parse", "HEAD"],
+                text=True, stderr=subprocess.DEVNULL, timeout=5,
+            ).strip()
+        except (OSError, subprocess.SubprocessError):
+            return os.environ.get("MONTARA_ENGINE_SHA", "")
+
+    app.register_blueprint(companion_releases_blueprint(
+        data_root / "Installers", _current_companion_engine_sha,
+    ))
+
     _apply_branding(str(load_global_config().get("montara_branding_mode") or "montara"), data_root)
 
     @app.get("/montara/samples")
