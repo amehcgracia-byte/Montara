@@ -9,6 +9,11 @@ if($LASTEXITCODE -ne 0){throw 'dotnet publish failed'}
 if(Test-Path $stage){Remove-Item $stage -Force -Recurse}
 New-Item -ItemType Directory -Path $stage -Force|Out-Null
 Get-ChildItem $publish | ForEach-Object {Copy-Item $_.FullName $stage -Recurse -Force}
+$bundledService=Join-Path $PSScriptRoot 'service-bundle/Montara.Companion.Service'
+if(!(Test-Path (Join-Path $bundledService 'Montara.Companion.Service.exe'))){
+  throw 'Companion runtime service is missing. Refusing to package a Python-picker-only tray.'
+}
+Copy-Item $bundledService (Join-Path $stage 'service') -Recurse -Force
 Copy-Item (Join-Path $PSScriptRoot 'Package.appxmanifest') (Join-Path $stage 'AppxManifest.xml')
 $assets=Join-Path $stage 'Assets'
 New-Item -ItemType Directory -Path $assets -Force|Out-Null
