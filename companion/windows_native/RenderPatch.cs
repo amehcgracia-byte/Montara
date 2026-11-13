@@ -79,8 +79,24 @@ internal static class RenderPatch
 
     private static bool HasSha(string file, string expected)
     {
-        using var input = File.OpenRead(file);
-        return Convert.ToHexString(SHA256.HashData(input))
-            .Equals(expected, StringComparison.OrdinalIgnoreCase);
+        byte[] raw = File.ReadAllBytes(file);
+        string literalHash = Convert.ToHexString(SHA256.HashData(raw));
+        if (literalHash.Equals(expected, StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        // Git checkout on Windows may use CRLF instead of LF. Accept only
+        // this lossless newline transformation of the exact reviewed text.
+        try
+        {
+            string text = new System.Text.UTF8Encoding(false, true).GetString(raw);
+            byte[] normalized = System.Text.Encoding.UTF8.GetBytes(
+                text.Replace("\r\n", "\n", StringComparison.Ordinal));
+            return Convert.ToHexString(SHA256.HashData(normalized))
+                .Equals(expected, StringComparison.OrdinalIgnoreCase);
+        }
+        catch (System.Text.DecoderFallbackException)
+        {
+            return false;
+        }
     }
 }
