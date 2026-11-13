@@ -2,8 +2,10 @@
 import tempfile
 import unittest
 from pathlib import Path
+import sys
 
-from companion import video_jobs
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "companion"))
+import video_jobs
 
 
 class RendererPathTests(unittest.TestCase):
