@@ -36,6 +36,17 @@ jobs:
             throw ('Render patch SHA256 differs: ' + $hash)
           }
           Write-Output 'Reviewed WinError5 render patch hash verified.'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Bundle Companion service without external Python dependency
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check pyinstaller==6.15.0
+          python -m PyInstaller --noconfirm --clean --onedir --name Montara.Companion.Service --distpath companion/windows_native/service-bundle --workpath companion/windows_native/pyinstaller-build --specpath companion/windows_native/pyinstaller-build --paths companion --hidden-import windows_support --hidden-import spherical_proxy companion/companion.py
+          if (!(Test-Path 'companion/windows_native/service-bundle/Montara.Companion.Service/Montara.Companion.Service.exe')) {
+            throw 'Missing bundled Companion service.'
+          }
       - name: Compile Montara native Windows tray
         shell: pwsh
         run: dotnet build companion/windows_native/Montara.Companion.csproj --configuration Release --nologo -warnaserror
@@ -49,6 +60,9 @@ jobs:
           $files = Get-ChildItem $dir -Filter '*.msix'
           if (@($files).Count -ne 1) { throw 'Expected exactly one MSIX.' }
           if (!(Test-Path (Join-Path $dir 'Montara-Development.cer'))) { throw 'Missing PUBLIC dev certificate.' }
+          if (!(Test-Path (Join-Path $dir 'package-root/service/Montara.Companion.Service.exe'))) {
+            throw 'Python-free Companion service missing from MSIX.'
+          }
           $stage = Join-Path $dir 'package-root/render-patch/local_video.py'
           if (!(Test-Path $stage)) { throw 'Native package lacks WinError5 repair.' }
           $normalizedStage = [IO.File]::ReadAllText($stage).Replace(([string][char]13 + [string][char]10), [string][char]10)
