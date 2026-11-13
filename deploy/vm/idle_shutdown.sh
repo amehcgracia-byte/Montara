@@ -17,20 +17,9 @@ remember_activity() {
 keep() { echo "$1: keep"; exit 0; }
 if (( up < GRACE_MIN * 60 )); then keep "boot grace $((up / 60)) min of $GRACE_MIN"; fi
 
-# Private per-owner Engine jobs are transient systemd units, not necessarily
-# ffmpeg processes. A quiet worker can still hold an owner project/session.
-# Never stop the VM while even one such unit is active: only the authorized
-# broker may prove it is safe to release that owner-bound worker.
-# Do not "remember activity" for this guard: an idle-only worker can be
-# released later without restarting the full two-hour inactivity clock.
-if ! units=$(systemctl --system list-units \
-  --type=service --state=active --no-legend --plain \
-  'montara-i*-job-*.service' 2>/dev/null); then
-  keep "private worker unit status unavailable (fail safe)"
-fi
-if [[ -n "$units" ]]; then
-  keep "private owner worker active; broker must release it before shutdown"
-fi
+# A persistent private Owner worker alone does NOT represent activity.
+# systemd stops worker cgroups during orderly poweroff. Only SSH, recent
+# web activity or genuinely running engine/benchmark work keep the VM up.
 
 # Real engine work or a held lab benchmark lock must never be interrupted.
 if pgrep -x ffmpeg >/dev/null || pgrep -x ffprobe >/dev/null || pgrep -f "mixer_adapter.session" >/dev/null; then
@@ -71,6 +60,15 @@ while IFS= read -r -d '' f; do
   fi
   if [[ "$stamp" =~ ^[0-9]+$ ]] && (( stamp > latest )); then latest=$stamp; fi
 done < <(find /home -mindepth 2 -maxdepth 4 -type f -name .last-activity -print0 2>/dev/null)
+
+# H4 Owner projects live below /var/lib/private rather than /home. Their
+# .last-activity markers reflect actual owner worker activity, not merely an
+# idle open worker service. Never retain a VM just because a unit exists.
+while IFS= read -r -d '' f; do
+  web_paths=$((web_paths+1))
+  stamp=$(stat -c %Y "$f" 2>/dev/null || echo 0)
+  if [[ "$stamp" =~ ^[0-9]+$ ]] && (( stamp > latest )); then latest=$stamp; fi
+done < <(find /var/lib/private -mindepth 2 -maxdepth 2 -type f -name .last-activity -print0 2>/dev/null)
 if (( latest > now )); then latest=$now; fi
 inactive=$(((now - latest) / 60))
 if (( inactive < IDLE_MIN )); then
