@@ -31,3 +31,17 @@ Fecha: 2026-11-13 · PR #202 · **protección aplicada, cierre de ciclo de vida 
 
 - PR #202 añade la semántica 120 min/SSH; sumar la salvaguarda del commit anterior antes de revisarlo.
 - Para el plan Owner/Stage de main, enlazar este documento desde `MONTARA_MAIN_INTEGRATION_HANDOFF_OWNER_COMPANION_2026-11-13.md` y tratar el cierre verificado como un **gate operativo para el despliegue con autoapagado**. No paralizar toda la integración de código si la operación está separada en flags, pero no declarar producción completa mientras faltan las pruebas de worker release.
+
+## Rectificación solicitada por Fernando: prioridad de costes y criterios (13/11/2026)
+
+Fernando confirmó que **no debe impedir el autoapagado un worker simplemente abierto**. El criterio operativo se mantiene **120 minutos desde la última actividad de web o SSH, evaluados cada 20 minutos**, con salvaguardas limitadas a operaciones reales FFmpeg/ffprobe/mixer/benchmark. Un proceso Owner inactivo **no** renueva la hora de actividad ni bloquea automáticamente el apagado. La terminal Windows Companion se ejecuta en su equipo y no crea una sesión SSH en la VM.
+
+**Nueva política instalada y verificada:** commit `a0cd45a1c640973303f29f748fcce6b6832c1f87` de `deploy/vm/idle_shutdown.sh`: elimina el bloqueo indiscriminado `montara-i*-job-*.service`; mantiene SSH y trabajo FFmpeg; añade los marcadores de actividad `/var/lib/private/montara-owner-*/.last-activity` (datos de propiedad privada Owner/Engine) a los de `/home`. No inspecciona archivos de los usuarios ni los altera. Un worker vacío puede detenerse cuando systemd apague la VM. Cuando haya edición HTTP real, su marcador se considera actividad web. Este modo prima ahorro de créditos sobre persistencia indefinida de procesos in-memory.
+
+Pruebas reales: `bash -n` PASS, instalador idempotente con copia en `/usr/local/bin/montara-idle-shutdown.backup-20261113-before-final-policy`; `sudo env MONTARA_IDLE_GRACE_MINUTES=0 MONTARA_IDLE_DRY_RUN=1 /usr/local/bin/montara-idle-shutdown` dio `SSH connection established: keep` (la auditoría se realizó mediante SSH), el timer continuó activo y se reconocieron 11 marcadores Owner. **No** se hizo poweroff real ni se validó aún la salida bajo 120 minutos sin conexión SSH (requiere prueba segura fuera de uso). La unidad transient tiene `KillMode=control-group` y `TimeoutStopSec=3s`: persiste una mejora diferida del apagado cooperativo de jobs para evitar pérdidas si alguna operación no usa FFmpeg y no ha registrado actividad reciente.
+
+Aclaración: el bloqueo temporal indiscriminado descrito en secciones previas de este documento **fue reemplazado y ya no es la configuración activa**. Si se fusiona PR #202, utilizar HEAD actualizado que incluye la rectificación, no el commit intermedio `577761a`.
+
+## Facturación: permisos insuficientes desde la VM
+
+`gcloud beta billing projects describe` ejecutado desde la VM utiliza la cuenta de servicio de Compute Engine, **no** la identidad humana del titular. La API devolvió `ACCESS_TOKEN_SCOPE_INSUFFICIENT`; no se intentó alterar IAM ni scopes. Para conocer saldo real de créditos y costes, usar Console → Facturación → Créditos (saldo y vencimiento) y Facturación → Informes (filtrar proyecto `montara-pruebas-10292226`), o autorizar un acceso de solo lectura con permisos apropiados más adelante. No estimar un gasto real sin esos datos.
