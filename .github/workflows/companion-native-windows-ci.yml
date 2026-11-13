@@ -30,7 +30,8 @@ jobs:
         shell: pwsh
         run: |
           $render = 'companion/local_video.py'
-          $hash = (Get-FileHash $render -Algorithm SHA256).Hash.ToLowerInvariant()
+          $normalized = [IO.File]::ReadAllText($render).Replace(([string][char]13 + [string][char]10), [string][char]10)
+          $hash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($normalized))).ToLowerInvariant()
           if ($hash -ne 'd547858a3959c7ca59e0d3d4892dd12a14d5f23ce88527f527a3b6106b606d13') {
             throw ('Render patch SHA256 differs: ' + $hash)
           }
@@ -50,7 +51,9 @@ jobs:
           if (!(Test-Path (Join-Path $dir 'Montara-Development.cer'))) { throw 'Missing PUBLIC dev certificate.' }
           $stage = Join-Path $dir 'package-root/render-patch/local_video.py'
           if (!(Test-Path $stage)) { throw 'Native package lacks WinError5 repair.' }
-          if ((Get-FileHash $stage -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'd547858a3959c7ca59e0d3d4892dd12a14d5f23ce88527f527a3b6106b606d13') {
+          $normalizedStage = [IO.File]::ReadAllText($stage).Replace(([string][char]13 + [string][char]10), [string][char]10)
+          $stageHash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($normalizedStage))).ToLowerInvariant()
+          if ($stageHash -ne 'd547858a3959c7ca59e0d3d4892dd12a14d5f23ce88527f527a3b6106b606d13') {
             throw 'Packaged render patch mismatched.'
           }
           $forbidden = Get-ChildItem (Join-Path $dir 'package-root') -Recurse -File | Where-Object {
