@@ -66,12 +66,12 @@ class SessionStore:
         db.execute("PRAGMA busy_timeout=10000")
         return db
 
-    def issue(self, verified_owner_id: str, *, ttl_seconds: int = 3600,
+    def issue(self, verified_owner_id: str, *, ttl_seconds: int = 3 * 86400,
               now: int | None = None) -> IssuedSession:
         """Called ONLY after real login validates a user; not a public route."""
         owner_id = ProjectCatalog._principal(verified_owner_id)
-        if type(ttl_seconds) is not int or not 1 <= ttl_seconds <= 86400:
-            raise ValueError("Session TTL must be 1..86400 seconds")
+        if type(ttl_seconds) is not int or not 1 <= ttl_seconds <= 3 * 86400:
+            raise ValueError("Session TTL must be 1..259200 seconds")
         timestamp = int(time.time()) if now is None else now
         token, csrf = secrets.token_hex(32), secrets.token_hex(32)
         expires_at = timestamp + ttl_seconds
