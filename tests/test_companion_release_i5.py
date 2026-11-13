@@ -52,8 +52,8 @@ class CompanionReleaseI5Tests(unittest.TestCase):
         self.assertEqual({(x["os"], x["arch"]) for x in response.json["releases"]},
                          {("windows", "x64"), ("macos", "arm64")})
         self.assertNotIn("filename", response.json["releases"][0])
-        self.assertEqual(self.client.get("/montara/companion/releases/download?os=macos&arch=arm64").status_code, 200)
-        self.assertEqual(self.client.get("/montara/companion/releases/download?os=windows&arch=x64").status_code, 200)
+        with self.client.get("/montara/companion/releases/download?os=macos&arch=arm64") as response:\n            self.assertEqual(response.status_code, 200)
+        with self.client.get("/montara/companion/releases/download?os=windows&arch=x64") as response:\n            self.assertEqual(response.status_code, 200)
         self.engine = "b" * 40
         self.assertEqual(self.client.get("/montara/companion/releases").json["releases"], [])
 
