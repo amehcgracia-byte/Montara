@@ -68,6 +68,17 @@ La opción `Buscar actualizaciones...` está **bloqueada de manera segura** hast
 
 La incidencia humana real del primer MP4 (`WinError 5` al sustituir `progress.json`) se corrigió con una política de reintentos específicos en `companion/local_video.py`, protegida por `tests/test_companion_windows_render_progress.py` (4 pruebas PASS). **Ese parche sigue solo en la rama de desarrollo**, no está instalado en el Windows del usuario. No pedirle que reintente el render en la versión antigua como si estuviera corregida.
 
+## Primer MSIX de desarrollo — compilación verificada (2026-11-13)
+
+- GitHub Actions Windows 2022 **PASS**, run `43335599568`: https://github.com/amehcgracia-byte/Montara/actions/runs/43335599568
+- Artefacto interno: `Montara.Companion.Dev_0.6.11.1_x64.msix`, 67.043.431 bytes; SHA-256 `3304172666a0e26cadc7daca15ac54b01f1f00fac33611793d46a77152769ea1`.
+- Firma MSIX de prueba `CN=Montara Development`, certificado público `Montara-Development.cer`. La huella SHA-256 del certificado es `9102b788b448cc6dc2aee92e17f3ad76b5951e5a3cc3a69a386526f799aeb75b`. La clave privada fue temporal y no se distribuyó.
+- El paquete contiene el ejecutable nativo, iconos Montara y `render-patch/local_video.py` con hash LF normalizado `d547858a3959c7ca59e0d3d4892dd12a14d5f23ce88527f527a3b6106b606d13`; se verificó en el runner Windows y posteriormente el ZIP/MSIX offline. No contiene los viejos scripts `.ps1`.
+- **El arreglo del render NO se aplica automáticamente**: el menú `Instalar corrección de render…` exige Companion cerrado, solicita confirmación, contrasta SHA normalizado de la versión anterior `b225e473e5dfd0e3173abe44267a46de2da05819650b4f8ea5b8f1d41afca7fc`, guarda copia y sustituye solamente `%LOCALAPPDATA%/MontaraSMARTBeta/video/local_video.py`. Una versión distinta se rechaza.
+- **Limitación importante:** el botón `Buscar actualizaciones…` todavía informa que el canal firmado estable no está configurado. El primer MSIX habilita el controlador y la reparación puntual, **no completa todavía la actualización automática**.
+- **Pendiente:** instalación en Windows 10 real, aprobación del antivirus, firma de desarrollo explícitamente confiada en el equipo de pruebas (`TrustedPeople`, nunca `TrustedRoot`), relanzamiento Companion y MP4 real. Que un paquete esté firmado no demuestra que Defender lo considere seguro.
+- El MSIX es firmado con certificado autofirmado de **uso temporal** creado por cada ejecución CI. Es adecuado para un primer test aislado, **no** para distribuir versiones que tengan que actualizarse entre sí: deberá establecerse una identidad de firma de desarrollo persistente y protegida si se continúa con MSIX fuera de la Store.
+
 ## Próximas entregas acotadas
 
 - **Gate A:** compilar el tray en runner Windows y corregir errores de build. No distribuir unsigned.
