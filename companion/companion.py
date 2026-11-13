@@ -941,4 +941,15 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    # Offline/port-free verification of the bundled Windows Companion service.
+    # CI must not touch personal media or start FFmpeg during this self-test.
+    if os.environ.get("MONTARA_COMPANION_BUNDLE_SELFTEST") == "1":
+        import windows_support
+        import spherical_proxy
+        from video_jobs import VideoJobs
+        assert callable(VideoJobs.runtime)
+        assert callable(windows_support.search_roots)
+        assert callable(spherical_proxy.preserve_panorama)
+        print("MONTARA_COMPANION_BUNDLE_SELFTEST_PASS", flush=True)
+        raise SystemExit(0)
     raise SystemExit(main())

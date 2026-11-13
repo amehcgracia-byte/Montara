@@ -1,0 +1,101 @@
+name: Companion native Windows MSIX (development verification)
+on:
+  push:
+    branches:
+      - main
+      - fernando/integracion-i5b-windows-native-20261113
+    paths:
+      - 'companion/windows_native/**'
+      - 'companion/local_video.py'
+      - '.github/workflows/companion-native-windows-ci.yml'
+  pull_request:
+    paths:
+      - 'companion/windows_native/**'
+      - 'companion/local_video.py'
+      - '.github/workflows/companion-native-windows-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-dev-package:
+    runs-on: windows-2022
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Verify pinned render fix content
+        shell: pwsh
+        run: |
+          $render = 'companion/local_video.py'
+          $normalized = [IO.File]::ReadAllText($render).Replace(([string][char]13 + [string][char]10), [string][char]10)
+          $hash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($normalized))).ToLowerInvariant()
+          if ($hash -ne 'd547858a3959c7ca59e0d3d4892dd12a14d5f23ce88527f527a3b6106b606d13') {
+            throw ('Render patch SHA256 differs: ' + $hash)
+          }
+          Write-Output 'Reviewed WinError5 render patch hash verified.'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Bundle Companion service without external Python dependency
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check pyinstaller==6.15.0
+          python -m PyInstaller --noconfirm --clean --onedir --name Montara.Companion.Service --distpath companion/windows_native/service-bundle --workpath companion/windows_native/pyinstaller-build --specpath companion/windows_native/pyinstaller-build --paths companion --hidden-import windows_support --hidden-import spherical_proxy companion/companion.py
+          $service = 'companion/windows_native/service-bundle/Montara.Companion.Service/Montara.Companion.Service.exe'
+          if (!(Test-Path $service)) { throw 'Missing bundled Companion service.' }
+          $env:MONTARA_COMPANION_BUNDLE_SELFTEST = '1'
+          try {
+            & $service
+            if ($LASTEXITCODE -ne 0) { throw ('Bundled Companion self-test exited '+$LASTEXITCODE) }
+          } finally {
+            Remove-Item Env:MONTARA_COMPANION_BUNDLE_SELFTEST -ErrorAction SilentlyContinue
+          }
+      - name: Verify local video renderer path for Windows
+        shell: pwsh
+        run: |
+          python -m unittest discover -s tests -p test_companion_native_renderer_path.py -v
+      - name: Compile Montara native Windows tray
+        shell: pwsh
+        run: dotnet build companion/windows_native/Montara.Companion.csproj --configuration Release --nologo -warnaserror
+      - name: Assemble and development-sign isolated MSIX
+        shell: pwsh
+        run: '& ./companion/windows_native/build-dev-msix.ps1'
+      - name: Validate development package contents
+        shell: pwsh
+        run: |
+          $dir = 'companion/windows_native/dist'
+          $files = Get-ChildItem $dir -Filter '*.msix'
+          if (@($files).Count -ne 1) { throw 'Expected exactly one MSIX.' }
+          if (!(Test-Path (Join-Path $dir 'Montara-Development.cer'))) { throw 'Missing PUBLIC dev certificate.' }
+          if (!(Test-Path (Join-Path $dir 'package-root/service/Montara.Companion.Service.exe'))) {
+            throw 'Python-free Companion service missing from MSIX.'
+          }
+          $stage = Join-Path $dir 'package-root/render-patch/local_video.py'
+          if (!(Test-Path $stage)) { throw 'Native package lacks WinError5 repair.' }
+          $normalizedStage = [IO.File]::ReadAllText($stage).Replace(([string][char]13 + [string][char]10), [string][char]10)
+          $stageHash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($normalizedStage))).ToLowerInvariant()
+          if ($stageHash -ne 'd547858a3959c7ca59e0d3d4892dd12a14d5f23ce88527f527a3b6106b606d13') {
+            throw 'Packaged render patch mismatched.'
+          }
+          $forbidden = Get-ChildItem (Join-Path $dir 'package-root') -Recurse -File | Where-Object {
+            $_.Name -in @('Montara-Bandeja.ps1','Montara-Actualizar.ps1','Instalar-Montara-Actualizador.ps1')
+          }
+          if ($forbidden) { throw 'Retired scripts must never ship.' }
+          Write-Output 'MSIX internal build validated. Not production signed.'
+      - name: Keep temporary development artifact for private review
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: montara-companion-msix-development
+          path: |
+            companion/windows_native/dist/*.msix
+            companion/windows_native/dist/*.cer
+            companion/windows_native/dist/SHA256.txt
+          retention-days: 3
+          if-no-files-found: error
+      # No Store publication, Cloudflare deployment or auto-update.
+      # Ephemeral self-signed certificate is for isolated dev tests ONLY.

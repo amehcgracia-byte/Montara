@@ -51,8 +51,15 @@ class VideoJobs:
         temporary.write_text(json.dumps(dict(list(rows.items())[-30:])))
         temporary.replace(self.home/'completed-jobs.json')
 
+    def renderer_python(self, *, platform=None):
+        # The renderer is installed independently from the native MSIX tray.
+        # Preserve POSIX runtimes while using the Windows venv convention.
+        if (os.name if platform is None else platform) == 'nt':
+            return self.home / 'venv' / 'Scripts' / 'python.exe'
+        return self.home / 'venv' / 'bin' / 'python'
+
     def runtime(self):
-        python=self.home/'venv/bin/python';marker=self.home/'ENGINE_COMMIT'
+        python=self.renderer_python();marker=self.home/'ENGINE_COMMIT'
         if (self.home/'INSTALLING').exists():return None
         if not os.access(python, os.X_OK) or not (self.home/'local_video.py').is_file():return None
         if not (self.home/'engine/core/stages/export.py').is_file():return None
@@ -139,7 +146,7 @@ class VideoJobs:
                 with (job['work']/'render.log').open('wb') as log:
                     with self.lock:
                         if job['status']=='cancelled':return
-                        process=subprocess.Popen([str(self.home/'venv/bin/python'),str(self.home/'local_video.py'),str(job['work']/'render.json')],stdout=log,stderr=subprocess.STDOUT,start_new_session=True)
+                        process=subprocess.Popen([str(self.renderer_python()),str(self.home/'local_video.py'),str(job['work']/'render.json')],stdout=log,stderr=subprocess.STDOUT,start_new_session=True)
                         job['process']=process
                     try:code=process.wait(timeout=21600)
                     except subprocess.TimeoutExpired:
