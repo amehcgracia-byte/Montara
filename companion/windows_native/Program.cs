@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using System.Drawing;
-using System.Net.Http.Json;
 using System.Text.Json;
 using System.Windows.Forms;
 
@@ -16,68 +15,31 @@ internal static class Program
     }
 }
 
-internal sealed record LocalConfiguration(string PythonExe, string CompanionScript)
-{
-    private static string SettingsPath => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "Montara", "Companion", "launcher-settings.json");
-
-    internal static LocalConfiguration? Load()
-    {
-        try
-        {
-            if (!File.Exists(SettingsPath)) return null;
-            var config = JsonSerializer.Deserialize<LocalConfiguration>(File.ReadAllText(SettingsPath));
-            return config is not null && File.Exists(config.PythonExe) &&
-                File.Exists(config.CompanionScript) ? config : null;
-        }
-        catch (JsonException) { return null; }
-        catch (IOException) { return null; }
-        catch (UnauthorizedAccessException) { return null; }
-    }
-
-    internal void Save()
-    {
-        var dir = Path.GetDirectoryName(SettingsPath)!;
-        Directory.CreateDirectory(dir);
-        var temp = SettingsPath + ".new";
-        File.WriteAllText(temp, JsonSerializer.Serialize(this));
-        File.Move(temp, SettingsPath, true);
-    }
-}
-
 internal sealed class CompanionTray : ApplicationContext
 {
     private readonly NotifyIcon _tray;
     private readonly Icon _brandIcon;
-    private readonly ToolStripMenuItem _startItem;
-    private readonly ToolStripMenuItem _statusItem;
-    private readonly ToolStripMenuItem _updateItem;
-    private readonly HttpClient _client = new() { Timeout = TimeSpan.FromSeconds(6) };
-    private LocalConfiguration? _config;
-    private Process? _started;
+    private readonly HttpClient _client = new() { Timeout = TimeSpan.FromSeconds(5) };
+    private CompanionDashboard? _dashboard;
+    private Process? _service;
 
     internal CompanionTray()
     {
-        _config = LocalConfiguration.Load();
-        var menu = new ContextMenuStrip();
-        _statusItem = new ToolStripMenuItem("Estado de Companion", null,
-            async (_, _) => await ShowStatusAsync());
-        _startItem = new ToolStripMenuItem("Iniciar Companion", null,
-            async (_, _) => await StartCompanionAsync());
-        var configure = new ToolStripMenuItem("Configurar Companion…", null,
-            (_, _) => Configure());
-        _updateItem = new ToolStripMenuItem("Buscar actualizaciones…", null,
-            (_, _) => ShowUpdateInformation());
-        var fixRender = new ToolStripMenuItem("Instalar corrección de render…", null,
-            async (_, _) => await ApplyRenderFixAsync());
-        var exit = new ToolStripMenuItem("Cerrar icono de Montara", null, (_, _) => ExitThread());
-
-        menu.Items.AddRange([_statusItem, _startItem, configure,
-            fixRender, new ToolStripSeparator(), _updateItem,
-            new ToolStripSeparator(), exit]);
-
         _brandIcon = MontaraIcon.Create();
+        var menu = new ContextMenuStrip();
+        menu.Items.Add(new ToolStripMenuItem("Abrir Montara Companion", null,
+            (_, _) => ShowDashboard()));
+        menu.Items.Add(new ToolStripMenuItem("Iniciar servicio local", null,
+            async (_, _) => await StartServiceAsync()));
+        menu.Items.Add(new ToolStripMenuItem("Estado de conexión", null,
+            async (_, _) => await ShowStatusAsync()));
+        menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add(new ToolStripMenuItem("Buscar actualizaciones…", null,
+            (_, _) => ShowDashboard()));
+        menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add(new ToolStripMenuItem("Cerrar icono de Montara", null,
+            (_, _) => ExitThread()));
+
         _tray = new NotifyIcon
         {
             Icon = _brandIcon,
@@ -85,155 +47,286 @@ internal sealed class CompanionTray : ApplicationContext
             Visible = true,
             ContextMenuStrip = menu
         };
-        _tray.DoubleClick += async (_, _) => await ShowStatusAsync();
+        _tray.DoubleClick += (_, _) => ShowDashboard();
+
+        // Open a proper branded window on first launch; the tray remains
+        // available after the user closes it.
+        ShowDashboard();
     }
 
-    private async Task<bool> IsCompanionRunningAsync()
+    private void ShowDashboard()
+    {
+        if (_dashboard is not null && !_dashboard.IsDisposed)
+        {
+            _dashboard.Show();
+            _dashboard.WindowState = FormWindowState.Normal;
+            _dashboard.Activate();
+            return;
+        }
+
+        _dashboard = new CompanionDashboard(_brandIcon,
+            startService: StartServiceAsync,
+            getStatus: ReadStatusAsync,
+            repairRender: ApplyRenderFixAsync);
+        _dashboard.FormClosed += (_, _) => _dashboard = null;
+        _dashboard.Show();
+    }
+
+    private async Task<LocalStatus> ReadStatusAsync()
     {
         try
         {
             using var response = await _client.GetAsync(
                 "http://127.0.0.1:47820/health",
-                HttpCompletionOption.ResponseHeadersRead);
-            return response.IsSuccessStatusCode;
+                HttpCompletionOption.ResponseContentRead);
+            if (!response.IsSuccessStatusCode) return LocalStatus.Disconnected;
+            using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            var payload = json.RootElement;
+            if (!payload.TryGetProperty("app", out var app) ||
+                app.GetString() != "montara-companion")
+                return LocalStatus.Disconnected;
+
+            string version = payload.TryGetProperty("version", out var v) &&
+                v.ValueKind == JsonValueKind.String ? v.GetString() ?? "?" : "?";
+            bool busy = payload.TryGetProperty("busy", out var b) &&
+                b.ValueKind == JsonValueKind.True;
+            bool renderer = payload.TryGetProperty("local_video", out var e) &&
+                e.ValueKind == JsonValueKind.Object;
+            return new LocalStatus(true, busy, renderer, version);
         }
-        catch (HttpRequestException) { return false; }
-        catch (TaskCanceledException) { return false; }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or
+                                   JsonException or IOException)
+        {
+            return LocalStatus.Disconnected;
+        }
     }
 
     private async Task ShowStatusAsync()
     {
-        _statusItem.Enabled = false;
-        try
-        {
-            var connected = await IsCompanionRunningAsync();
-            MessageBox.Show(connected
-                    ? "Companion responde en localhost:47820."
-                    : "Companion no está conectado. Puedes iniciarlo desde el menú.",
-                "Montara Companion", MessageBoxButtons.OK,
-                connected ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
-        }
-        finally { _statusItem.Enabled = true; }
+        var status = await ReadStatusAsync();
+        MessageBox.Show(status.Connected
+                ? $"Companion {status.Version} conectado.\n" +
+                  (status.Busy ? "Trabajo activo: no actualizar." : "Libre para trabajar.")
+                : "Companion no está conectado. Abre Montara para iniciar el servicio.",
+            "Montara Companion", MessageBoxButtons.OK,
+            status.Connected ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
     }
 
-    private void Configure()
+    private async Task StartServiceAsync()
     {
-        using var python = new OpenFileDialog
+        var status = await ReadStatusAsync();
+        if (status.Connected)
         {
-            Title = "Selecciona el python.exe de tu Companion actual",
-            Filter = "Python|python.exe",
-            CheckFileExists = true
-        };
-        if (python.ShowDialog() != DialogResult.OK) return;
-
-        using var script = new OpenFileDialog
-        {
-            Title = "Selecciona el companion.py que ya utilizabas",
-            Filter = "Companion|companion.py",
-            CheckFileExists = true
-        };
-        if (script.ShowDialog() != DialogResult.OK) return;
-
-        _config = new LocalConfiguration(python.FileName, script.FileName);
-        try
-        {
-            _config.Save();
-            MessageBox.Show("Rutas guardadas. No se han movido archivos ni vídeos.",
+            MessageBox.Show("Companion ya está en marcha. No se abrirá otra instancia.",
                 "Montara Companion");
+            return;
         }
-        catch (IOException e)
-        {
-            MessageBox.Show("No se pudo guardar la configuración: " + e.Message,
-                "Montara Companion", MessageBoxButtons.OK, MessageBoxIcon.Error);
-        }
-        catch (UnauthorizedAccessException e)
-        {
-            MessageBox.Show("Acceso denegado al guardar: " + e.Message,
-                "Montara Companion", MessageBoxButtons.OK, MessageBoxIcon.Error);
-        }
-    }
-
-    private async Task StartCompanionAsync()
-    {
-        _startItem.Enabled = false;
         try
         {
-            if (await IsCompanionRunningAsync())
-            {
-                MessageBox.Show("Companion ya está ejecutándose. No se abrirá otra instancia.",
-                    "Montara Companion");
-                return;
-            }
-
-            if (_config is null)
-            {
-                Configure();
-                if (_config is null) return;
-            }
-
-            if (!File.Exists(_config.PythonExe) || !File.Exists(_config.CompanionScript))
-            {
-                MessageBox.Show("No se encuentran los archivos. Revisa Configurar Companion.",
-                    "Montara Companion", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
-            }
-
-            var start = new ProcessStartInfo(_config.PythonExe)
-            {
-                WorkingDirectory = Path.GetDirectoryName(_config.CompanionScript)!,
-                UseShellExecute = false,
-                CreateNoWindow = false
-            };
-            start.ArgumentList.Add(_config.CompanionScript);
-            _started = Process.Start(start);
-            if (_started is null) throw new InvalidOperationException("No se inició Python.");
+            // Fully bundled service: never ask the user to select python.exe
+            // or companion.py; no downloading or executing scripts.
+            _service = BundledService.Start();
+            await Task.Delay(550);
+            if (_service.HasExited)
+                throw new InvalidOperationException(
+                    "El servicio local terminó al arrancar. Comprueba FFmpeg y el runtime de vídeo.");
         }
-        catch (Exception e) when (e is IOException or System.ComponentModel.Win32Exception
-                                  or InvalidOperationException)
+        catch (Exception ex) when (ex is FileNotFoundException or IOException or
+                                   System.ComponentModel.Win32Exception or InvalidOperationException)
         {
-            MessageBox.Show("No se pudo iniciar Companion: " + e.Message,
-                "Montara Companion", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show("No se pudo iniciar Companion: " + ex.Message,
+                "Montara Companion", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
-        finally { _startItem.Enabled = true; }
+        if (_dashboard is not null && !_dashboard.IsDisposed)
+            await _dashboard.RefreshStatusAsync();
     }
 
     private async Task ApplyRenderFixAsync()
     {
-        if (await IsCompanionRunningAsync())
+        var status = await ReadStatusAsync();
+        if (status.Connected)
         {
-            MessageBox.Show(
-                "Cierra primero el proceso de Companion. No se interrumpirá ningún render activo.",
+            MessageBox.Show("Cierra primero el servicio Companion. " +
+                            "No se detendrán renders ni procesos automáticamente.",
                 "Montara Companion", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
-        MessageBox.Show(RenderPatch.DescribeAndApply(), "Montara Companion",
-            MessageBoxButtons.OK, MessageBoxIcon.Information);
-    }
 
-    private void ShowUpdateInformation()
-    {
-        // The old beta scripts were removed from the release channel after
-        // Windows Defender detected Trojan:Script/Wacatac.B!ml.
-        // This native host DOES NOT download or execute code.
-        // A future release will delegate installs to Windows' trusted,
-        // publisher-signed package/update mechanism.
-        MessageBox.Show(
-            "Canal de actualización firmado todavía no configurado.\n\n" +
-            "No se descargará ni ejecutará ningún archivo. " +
-            "Los instaladores deberán tener firma válida antes de activar esta función.",
-            "Actualizaciones de Montara", MessageBoxButtons.OK,
-            MessageBoxIcon.Information);
+        var result = RenderPatch.DescribeAndApply();
+        MessageBox.Show(result, "Montara · Corrección de render",
+            MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
     protected override void ExitThreadCore()
     {
-        // Never terminate a rendering Companion automatically.
-        // Closing the tray icon does not terminate processes or change files.
+        // The local video service may have a job in progress: closing the tray
+        // must never terminate it. Jobs and their files survive.
+        if (_dashboard is not null && !_dashboard.IsDisposed) _dashboard.Close();
         _tray.Visible = false;
         _tray.Dispose();
         _brandIcon.Dispose();
         _client.Dispose();
-        _started?.Dispose();
+        _service?.Dispose();
         base.ExitThreadCore();
+    }
+}
+
+internal sealed record LocalStatus(bool Connected, bool Busy, bool RenderReady, string Version)
+{
+    internal static readonly LocalStatus Disconnected = new(false, false, false, "");
+}
+
+internal sealed class CompanionDashboard : Form
+{
+    private static readonly Color Coal = Color.FromArgb(16, 16, 20);
+    private static readonly Color Panel = Color.FromArgb(31, 31, 36);
+    private static readonly Color Ivory = Color.FromArgb(245, 243, 239);
+    private static readonly Color Muted = Color.FromArgb(169, 170, 177);
+    private static readonly Color Coral = Color.FromArgb(255, 79, 46);
+
+    private readonly Func<Task> _start;
+    private readonly Func<Task<LocalStatus>> _status;
+    private readonly Func<Task> _repair;
+    private readonly Label _statusLabel;
+    private readonly Label _subLabel;
+    private readonly Button _startButton;
+    private readonly Button _repairButton;
+
+    internal CompanionDashboard(Icon icon,
+        Func<Task> startService,
+        Func<Task<LocalStatus>> getStatus,
+        Func<Task> repairRender)
+    {
+        _start = startService;
+        _status = getStatus;
+        _repair = repairRender;
+
+        Text = "Montara Companion";
+        Icon = icon;
+        BackColor = Coal;
+        ForeColor = Ivory;
+        ClientSize = new Size(462, 455);
+        FormBorderStyle = FormBorderStyle.FixedDialog;
+        MaximizeBox = false;
+        StartPosition = FormStartPosition.CenterScreen;
+        Font = new Font("Segoe UI", 10f);
+        AutoScaleMode = AutoScaleMode.Dpi;
+
+        var logo = new PictureBox
+        {
+            Image = icon.ToBitmap(),
+            SizeMode = PictureBoxSizeMode.Zoom,
+            Location = new Point(24, 24),
+            Size = new Size(55, 55),
+            BackColor = Coal
+        };
+        Controls.Add(logo);
+        Controls.Add(TextLabel("MONTARA", 90, 22, 322, 38,
+            new Font("Segoe UI", 23f, FontStyle.Bold), Ivory));
+        Controls.Add(TextLabel("COMPANION  ·  BETA WINDOWS", 94, 63, 325, 26,
+            new Font("Segoe UI", 9f, FontStyle.Bold), Coral));
+
+        var line = new Panel
+        {
+            Location = new Point(24, 104),
+            Size = new Size(414, 1),
+            BackColor = Color.FromArgb(56, 56, 63)
+        };
+        Controls.Add(line);
+
+        var card = new Panel
+        {
+            Location = new Point(24, 125),
+            Size = new Size(414, 111),
+            BackColor = Panel
+        };
+        _statusLabel = TextLabel("Comprobando servicio…", 16, 17, 380, 35,
+            new Font("Segoe UI", 14f, FontStyle.Bold), Ivory);
+        _subLabel = TextLabel("Tus originales permanecen en este equipo.", 16, 58,
+            390, 42, new Font("Segoe UI", 9f), Muted);
+        card.Controls.Add(_statusLabel);
+        card.Controls.Add(_subLabel);
+        Controls.Add(card);
+
+        _startButton = ActionButton("INICIAR COMPANION", 24, 258, 414, Coral, Coal);
+        _startButton.Click += async (_, _) =>
+        {
+            _startButton.Enabled = false;
+            try { await _start(); } finally
+            {
+                _startButton.Enabled = true;
+                await RefreshStatusAsync();
+            }
+        };
+        Controls.Add(_startButton);
+
+        _repairButton = ActionButton("CORREGIR RENDER LOCAL", 24, 311, 201, Panel, Ivory);
+        _repairButton.Click += async (_, _) =>
+        {
+            await _repair();
+            await RefreshStatusAsync();
+        };
+        Controls.Add(_repairButton);
+
+        var update = ActionButton("BUSCAR ACTUALIZACIONES", 237, 311, 201, Panel, Ivory);
+        update.Click += (_, _) => MessageBox.Show(
+            "El canal de actualizaciones firmadas está en preparación.\n\n" +
+            "No descargaremos ni ejecutaremos software sin una firma de confianza.",
+            "Montara · Actualizaciones", MessageBoxButtons.OK,
+            MessageBoxIcon.Information);
+        Controls.Add(update);
+
+        Controls.Add(TextLabel("H4  ·  Originales locales  ·  Sin subidas de vídeo", 24, 384, 420, 24,
+            new Font("Segoe UI", 9f), Muted));
+        Controls.Add(TextLabel("Cerrar esta ventana no interrumpe los renders.", 24, 412, 420, 22,
+            new Font("Segoe UI", 9f), Muted));
+
+        Shown += async (_, _) => await RefreshStatusAsync();
+    }
+
+    internal async Task RefreshStatusAsync()
+    {
+        if (IsDisposed) return;
+        LocalStatus state = await _status();
+        if (IsDisposed) return;
+
+        _statusLabel.Text = state.Connected
+            ? state.Busy ? "●  Procesando vídeo" : "●  Companion conectado"
+            : "○  Servicio desconectado";
+        _statusLabel.ForeColor = state.Connected ? Coral : Ivory;
+        _subLabel.Text = state.Connected
+            ? $"Versión {state.Version}   ·   " +
+              (state.RenderReady ? "Motor local detectado" : "Motor local sin verificar")
+            : "Pulsa Iniciar para conectar el servicio local.";
+        _startButton.Enabled = !state.Connected;
+        _repairButton.Enabled = !state.Connected;
+    }
+
+    private static Label TextLabel(string text, int x, int y, int width, int height,
+        Font font, Color color) => new()
+        {
+            Text = text,
+            Location = new Point(x, y),
+            Size = new Size(width, height),
+            Font = font,
+            ForeColor = color,
+            AutoSize = false
+        };
+
+    private static Button ActionButton(string text, int x, int y, int width,
+        Color background, Color foreground)
+    {
+        return new Button
+        {
+            Text = text,
+            Location = new Point(x, y),
+            Size = new Size(width, 42),
+            Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+            BackColor = background,
+            ForeColor = foreground,
+            FlatStyle = FlatStyle.Flat,
+            UseVisualStyleBackColor = false,
+            Cursor = Cursors.Hand
+        };
     }
 }
