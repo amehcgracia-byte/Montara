@@ -1,5 +1,5 @@
 # STATUS — laboratorio Fernando
-Actualizado: 2026-11-13 · Responsable: equipo Fernando · rama I3b: `fernando/integracion-i3b-private-broker-20261113`
+Actualizado: 2026-11-13 · Responsable: equipo Fernando · rama I4: `fernando/integracion-i4-native-editor-20261113`
 ## Fuentes de verdad y coordinación
 - Acuerdo: `docs/COLLABORATION.md` y `AGENTS.md`. Issue compartido #216 reactiva ambos STATUS (JM actualiza SOLO STATUS-JM).
 - La autorización posterior de Chema permite a Fernando preparar integración a main; revisión y PR pequeños siguen siendo obligatorias.
@@ -12,7 +12,7 @@ Actualizado: 2026-11-13 · Responsable: equipo Fernando · rama I3b: `fernando/i
 - Pendientes: doble espera de miniaturas al guardar tomas, handling localhost WinError 10053, instalador Companion por SO, multiusuario E2E real de dos cuentas y rollback.
 - VM: watchdog 120 min, timer 20 min, SSH/web + trabajos FFmpeg; worker vacío no bloquea el apagado (PR #202). Cierre cooperativo avanzado pendiente.
 ## Integración a main por piezas
-- **I1 integrado en main:** PR #217, política de sesión Montara uniforme de 3 días y pruebas. El portal H4 aislado también emite 3 días.\n- **I2 integrado en main:** PR #218 Google RS256+PKCE, Owner por sub y catálogo privado opt-in; 15/15 pruebas aisladas PASS.\n- **I3a integrado en main:** PR #219, admisión privada y ledger de recuperación, 19/19 pruebas aisladas PASS.\n- **I3b candidato:** broker opt-in y entrada systemd para workers, 15/15 pruebas aisladas PASS. Falta conexión al editor y ensayo OS real con dos usuarios en I4/I7.
+- **I1 integrado en main:** PR #217, política de sesión Montara uniforme de 3 días y pruebas. El portal H4 aislado también emite 3 días.\n- **I2 integrado en main:** PR #218 Google RS256+PKCE, Owner por sub y catálogo privado opt-in; 15/15 pruebas aisladas PASS.\n- **I3a integrado en main:** PR #219, admisión privada y ledger de recuperación, 19/19 pruebas aisladas PASS.\n- **I3b integrado en main:** PR #220, broker opt-in + entrada systemd, 15/15 pruebas aisladas PASS.\n- **I4 candidato:** editor original Chema por gateway privado Owner, Stage/Push/Show, bridge JS y workspace; 90/90 pruebas Python + 1/1 JS PASS en checkout temporal. E2E real de main pendiente.\n- **CI:** issue #221 documenta seis fallos heredados de E2E sesión (luz/framing/performers), anteriores a I3.
 - Orden: login/catálogo Owner → runtime autorizado/worker → editor Chema y media → Companion Windows/Mac → aceptación y despliegue por fases.
 - Mantener rutas incompletas inactivas: no presentar la incorporación de un módulo como beta completa ni cambiar `engine/` o `mixer/` sin sus repos.
 - PR: informar A novedades, B duplicidades, C reutilización, D riesgos, E recomendaciones; declarar SHAs de Engine/Mixer y comandos de prueba.

@@ -1,0 +1,313 @@
+"""Reviewable native Chema New/Latest boundary inside a private Owner worker.
+
+Do not mount on a public WSGI server. Authentication, CSRF, owner->worker
+admission, OS isolation and the trusted data_root are enforced by the
+surrounding Owner/broker. This module only fences project paths and media
+arguments before handing requests to Chema's ORIGINAL handlers.
+
+Crucially:
+  - New is forwarded untouched; it never deletes saved native projects.
+  - The native /montara/recovery/latest handler runs unchanged and searches
+    Projects AND Sessions within the worker's private data_root.
+  - A browser must not open a project or use media outside that data_root.
+
+This first gate covers the New/Latest/Stage draft transition. Other original
+API families (Music, Push, Show, native export, etc.) require a separate
+route-by-route review before the complete UI can be published.
+"""
+from __future__ import annotations
+
+import io
+import json
+import re
+from pathlib import Path
+
+from werkzeug.wrappers import Response
+
+from urano.native_owner_project_scope import (
+    UnsafeNativeProject,
+    verified_native_project,
+)
+
+_MAX_BODY = 256_000
+_SESSION_ID = re.compile(r"[a-f0-9]{12}\Z")
+_UPLOAD_ID = re.compile(r"[a-f0-9]{32}\Z")
+_PROJECT_BODY = {
+    "/api/v1/wizard/projects/open",
+    "/api/v1/wizard/projects/delete",
+}
+_MEDIA_BODY = {
+    "/api/v1/wizard/draft",
+    "/api/v1/wizard/prepare",
+    "/api/v1/wizard/start",
+    "/api/v1/wizard/review/replace",
+    "/api/v1/wizard/review/render",
+    *{
+        "/api/v1/settings/" + key for key in (
+            "fillers", "video-light", "camera-types", "camera-subjects",
+            "camera-roles", "spherical-landmarks", "stage-performers"
+        )
+    },
+}
+_GUARDED_POST = _PROJECT_BODY | _MEDIA_BODY | {
+    "/api/v1/wizard/projects/new",
+}
+_GUARDED_GET = {"/api/v1/wizard/status"}
+
+
+class UntrustedNativeWorkspace(ValueError):
+    """An incoming JM request references a different workspace."""
+
+
+def verified_private_media(data_root: Path, supplied: str) -> Path:
+    """Require a regular local file inside a reviewed Owner-owned data area.
+
+    Uploads created by Chema's unmodified upload endpoints and files generated
+    inside the private Sessions/Projects folders are legitimate. No arbitrary
+    fixture roots, host absolute paths, symlinks, ../, or browser file paths.
+    """
+    if (not isinstance(supplied, str) or not supplied or len(supplied) > 4096
+            or "\x00" in supplied):
+        raise UntrustedNativeWorkspace("Untrusted private media")
+    try:
+        root = Path(data_root).resolve(strict=True)
+        path = Path(supplied)
+        if (not path.is_absolute() or "." in path.parts or ".." in path.parts
+                or path.is_symlink() or not path.is_file()
+                or path.stat().st_size <= 0):
+            raise UntrustedNativeWorkspace("Untrusted private media")
+        relative = path.relative_to(root)
+        parts = relative.parts
+        if len(parts) < 2 or parts[0] not in (
+                "WizardUploads", "Uploads", "Sessions", "Projects"):
+            raise UntrustedNativeWorkspace("Untrusted private media")
+        # Reject a linked intermediate folder even when the canonical file
+        # appears to be regular or points back into this owner namespace.
+        current = root
+        for component in parts:
+            current = current / component
+            if current.is_symlink():
+                raise UntrustedNativeWorkspace("Linked private media")
+        if path.resolve(strict=True) != root.joinpath(*parts):
+            raise UntrustedNativeWorkspace("Untrusted private media")
+        if parts[0] == "WizardUploads":
+            if len(parts) != 2:
+                raise UntrustedNativeWorkspace("Invalid wizard upload")
+        elif parts[0] == "Uploads":
+            if len(parts) != 3 or not _UPLOAD_ID.fullmatch(parts[1]):
+                raise UntrustedNativeWorkspace("Invalid completed upload")
+            metadata = root / "Uploads" / parts[1] / "upload.json"
+            if metadata.is_symlink() or not metadata.is_file():
+                raise UntrustedNativeWorkspace("Unverified upload")
+            if not 1 <= metadata.stat().st_size <= 8192:
+                raise UntrustedNativeWorkspace("Unverified upload")
+            info = json.loads(metadata.read_text(encoding="utf-8"))
+            if (not isinstance(info, dict) or info.get("complete") is not True
+                    or parts[2] != info.get("restored", info.get("name"))):
+                raise UntrustedNativeWorkspace("Unverified upload")
+        elif parts[0] == "Sessions":
+            if len(parts) < 3 or not _SESSION_ID.fullmatch(parts[1]):
+                raise UntrustedNativeWorkspace("Unknown private session")
+            metadata = root / "Sessions" / parts[1] / "session.json"
+            if (metadata.is_symlink() or not metadata.is_file()
+                    or not 1 <= metadata.stat().st_size <= 8 * 1024 * 1024):
+                raise UntrustedNativeWorkspace("Unknown private session")
+            session = json.loads(metadata.read_text(encoding="utf-8"))
+            if not isinstance(session, dict) or session.get("id") != parts[1]:
+                raise UntrustedNativeWorkspace("Unknown private session")
+        else:
+            if len(parts) < 3:
+                raise UntrustedNativeWorkspace("Invalid saved media source")
+            verified_native_project(root, str(root / "Projects" / parts[1]))
+        return path
+    except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+        raise UntrustedNativeWorkspace("Untrusted private media") from exc
+
+
+class NativeOwnerWorkspaceGate:
+    """Minimal request validation; do not replace Chema's New/Latest logic."""
+
+    def __init__(self, application, *, data_root: Path):
+        root = Path(data_root)
+        if root.is_symlink() or not root.is_dir():
+            raise UntrustedNativeWorkspace("Private workspace unavailable")
+        self.root = root.resolve(strict=True)
+        if self.root.stat().st_mode & 0o077:
+            raise UntrustedNativeWorkspace("Private workspace permissions")
+        if not callable(application):
+            raise TypeError("A native WSGI application is required")
+        self.app = application
+
+    def __call__(self, environ, start_response):
+        method = environ.get("REQUEST_METHOD")
+        path = environ.get("PATH_INFO")
+        if method == "GET" and path == "/montara/audio":
+            from urllib.parse import parse_qs
+            try:
+                args = parse_qs(environ.get("QUERY_STRING", ""),
+                                keep_blank_values=False, strict_parsing=True,
+                                max_num_fields=1)
+                if set(args) != {"path"} or len(args["path"]) != 1:
+                    raise UntrustedNativeWorkspace("Invalid audio query")
+                media = verified_private_media(self.root, args["path"][0])
+                if media.suffix.lower() not in {
+                    ".wav", ".mp3", ".m4a", ".aif", ".aiff",
+                    ".flac", ".ogg", ".opus"
+                }:
+                    raise UntrustedNativeWorkspace("Not private audio")
+            except (ValueError, TypeError, OSError):
+                return self._deny(environ, start_response)
+            return self.app(environ, start_response)
+        if method in ("GET","HEAD") and (path in (
+                "/api/v1/edit/native-recipe","/api/v1/edit/native-master")
+                or re.fullmatch(r"/api/v1/edit/native-source/[0-9]{1,3}",path)):
+            from urllib.parse import parse_qs
+            try:
+                args=parse_qs(environ.get("QUERY_STRING",""),
+                              strict_parsing=True,max_num_fields=2)
+                keys={"project_id"} if path.endswith("native-recipe") else {
+                    "project_id","revision"}
+                if (set(args)!=keys or any(len(v)!=1 for v in args.values())
+                        or not self._safe_project(args["project_id"][0])
+                        or ("revision" in keys and not re.fullmatch(
+                             r"[a-f0-9]{20}",args["revision"][0]))):
+                    raise UntrustedNativeWorkspace("Untrusted export request")
+            except (ValueError,TypeError,KeyError):
+                return self._deny(environ,start_response)
+            return self.app(environ,start_response)
+        if method == "GET" and path in _GUARDED_GET:
+            # Chema may poll another *saved* project while a new video starts.
+            # The query's project_id must still be owner-local.
+            from urllib.parse import parse_qs
+            query = parse_qs(environ.get("QUERY_STRING", ""), keep_blank_values=True)
+            ids = query.get("project_id", [])
+            if (len(ids) > 1 or
+                    (ids and ids[0] not in ("", None)
+                     and not self._safe_project(ids[0]))):
+                return self._deny(environ, start_response)
+            return self.app(environ, start_response)
+        if method=="PATCH" and path=="/api/v1/edit/shot":
+            try:
+                length=int(environ.get("CONTENT_LENGTH") or "")
+                if not 2<=length<=8192:
+                    raise UntrustedNativeWorkspace("Invalid shot edit size")
+                data=environ["wsgi.input"].read(length)
+                if len(data)!=length:
+                    raise UntrustedNativeWorkspace("Incomplete shot edit")
+                body=json.loads(data)
+                if not isinstance(body,dict):
+                    raise UntrustedNativeWorkspace("Invalid shot edit")
+                verified_native_project(self.root,body["project_id"])
+                if (type(body.get("index")) is not int or
+                        type(body.get("choice")) is not int or
+                        not 0<=body["index"]<=9999 or
+                        not 0<=body["choice"]<=99 or
+                        body.get("apply_to_source") is not False):
+                    raise UntrustedNativeWorkspace("Invalid private shot selection")
+            except (ValueError,KeyError,TypeError,OSError,json.JSONDecodeError,
+                    UnsafeNativeProject):
+                return self._deny(environ,start_response)
+            copy=dict(environ)
+            copy["wsgi.input"]=io.BytesIO(data)
+            copy["CONTENT_LENGTH"]=str(len(data))
+            return self.app(copy,start_response)
+        if method != "POST" or path not in _GUARDED_POST:
+            # All other APIs require review at the *outer* CSRF/Owner gateway.
+            return self.app(environ, start_response)
+        try:
+            length = int(environ.get("CONTENT_LENGTH") or "")
+            if not 0 <= length <= _MAX_BODY:
+                raise UntrustedNativeWorkspace("Invalid body size")
+            data = environ["wsgi.input"].read(length)
+            if len(data) != length:
+                raise UntrustedNativeWorkspace("Incomplete request")
+            body = json.loads(data) if data else {}
+            if not isinstance(body, dict):
+                raise UntrustedNativeWorkspace("Invalid native request")
+            if path == "/api/v1/wizard/projects/new":
+                if body:
+                    raise UntrustedNativeWorkspace("New needs no client project")
+            elif path in _PROJECT_BODY:
+                keys = set(body)
+                if (not {"path"} <= keys
+                        or keys - ({"path", "keep_exports"}
+                                   if path.endswith("/delete") else {"path"})
+                        or ("keep_exports" in body and
+                            type(body["keep_exports"]) is not bool)):
+                    raise UntrustedNativeWorkspace("Invalid project selection")
+                verified_native_project(self.root, body["path"])
+            else:
+                self._validate_media_request(path, body)
+        except (KeyError, ValueError, TypeError, OSError,
+                json.JSONDecodeError, UnsafeNativeProject):
+            return self._deny(environ, start_response)
+        copy = dict(environ)
+        copy["wsgi.input"] = io.BytesIO(data)
+        copy["CONTENT_LENGTH"] = str(len(data))
+        return self.app(copy, start_response)
+
+    def _safe_project(self, path: str) -> bool:
+        try:
+            verified_native_project(self.root, path)
+            return True
+        except (ValueError, UnsafeNativeProject):
+            return False
+
+    def _validate_media_request(self, path: str, body: dict):
+        project = body.get("project_id")
+        if path == "/api/v1/wizard/draft":
+            # The original Chema handler creates a new project for null ID.
+            if project not in (None, ""):
+                verified_native_project(self.root, project)
+        elif path in ("/api/v1/wizard/prepare","/api/v1/wizard/start"):
+            # The original Engine must have an active saved private edit.
+            if not isinstance(project,str) or not project:
+                raise UntrustedNativeWorkspace("Selected project unavailable")
+            verified_native_project(self.root, project)
+        elif project not in (None,""):
+            # Native setting/review endpoints may omit project_id, but if
+            # supplied it must never refer to a different Owner workspace.
+            verified_native_project(self.root, project)
+        videos = body.get("videos", [])
+        if (not isinstance(videos, list) or len(videos) > 200
+                or any(not isinstance(x, str) for x in videos)):
+            raise UntrustedNativeWorkspace("Invalid video sources")
+        for item in videos:
+            verified_private_media(self.root, item)
+        audio_paths = body.get("audio_paths", [])
+        if (not isinstance(audio_paths, list) or len(audio_paths) > 128
+                or any(not isinstance(x, str) for x in audio_paths)):
+            raise UntrustedNativeWorkspace("Invalid audio sources")
+        for item in (body.get("master"), body.get("songs"),
+                     body.get("spherical_source_path"), *audio_paths):
+            if item not in (None, ""):
+                verified_private_media(self.root, item)
+        if path == "/api/v1/settings/fillers":
+            for key in ("fillers","cutaways"):
+                collection=body.get(key,[])
+                if not isinstance(collection,list) or len(collection)>200:
+                    raise UntrustedNativeWorkspace("Untrusted media selection")
+                for item in collection:
+                    verified_private_media(self.root,item)
+        if path in (
+            "/api/v1/settings/camera-types",
+            "/api/v1/settings/camera-subjects",
+            "/api/v1/settings/camera-roles",
+        ):
+            for key in ("camera_types","camera_subjects","camera_roles"):
+                mapping=body.get(key,{})
+                if not isinstance(mapping,dict) or len(mapping)>200:
+                    raise UntrustedNativeWorkspace("Untrusted camera settings")
+                for native_path in mapping:
+                    verified_private_media(self.root,native_path)
+
+    @staticmethod
+    def _deny(environ, start_response):
+        return Response(
+            json.dumps({"error": {"code": "private_workspace",
+                                   "message": "Private workspace resource unavailable"}}),
+            status=403,
+            content_type="application/json",
+            headers={"Cache-Control": "no-store",
+                     "X-Content-Type-Options": "nosniff"},
+        )(environ, start_response)
