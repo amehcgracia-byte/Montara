@@ -46,7 +46,7 @@ $kits=Join-Path ([Environment]::GetFolderPath('ProgramFilesX86')) 'Windows Kits\
 $makeappx=Get-ChildItem $kits -Filter makeappx.exe -File -Recurse|Where-Object FullName -like '*\x64\*'|Sort-Object FullName -Descending|Select-Object -First 1 -ExpandProperty FullName
 $signtool=Get-ChildItem $kits -Filter signtool.exe -File -Recurse|Where-Object FullName -like '*\x64\*'|Sort-Object FullName -Descending|Select-Object -First 1 -ExpandProperty FullName
 if(!$makeappx -or !$signtool){throw 'Windows SDK tools unavailable'}
-$package=Join-Path $Output 'Montara.Companion.Dev_0.6.11.1_x64.msix'
+$package=Join-Path $Output 'Montara.Companion.Dev_0.6.12.0_x64.msix'
 & $makeappx pack /d $stage /p $package /o
 if($LASTEXITCODE -ne 0){throw 'MakeAppx failed'}
 $cert=New-SelfSignedCertificate -Type Custom -Subject 'CN=Montara Development' -KeyAlgorithm RSA -KeyLength 3072 -HashAlgorithm SHA256 -KeyUsage DigitalSignature -KeyExportPolicy NonExportable -CertStoreLocation 'Cert:\CurrentUser\My' -TextExtension @('2.5.29.37={text}1.3.6.1.5.5.7.3.3') -FriendlyName 'Montara ephemeral dev signing'
