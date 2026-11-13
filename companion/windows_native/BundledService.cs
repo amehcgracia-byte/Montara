@@ -25,6 +25,36 @@ internal static class BundledService
             "MontaraSMARTBeta");
         Directory.CreateDirectory(data);
 
+        // Older standalone Companion versions stored only their project
+        // mapping under the user profile. Offer a copy, never move or delete
+        // it, so reconnecting does not silently drop saved project IDs.
+        var previous = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            ".montara-companion");
+        var previousProjects = Path.Combine(previous, "projects.json");
+        var currentProjects = Path.Combine(data, "projects.json");
+        if (!File.Exists(currentProjects) && File.Exists(previousProjects))
+        {
+            var choice = System.Windows.Forms.MessageBox.Show(
+                "Se ha encontrado una configuración anterior de Companion.\\n" +
+                "¿Copiar las referencias de proyectos al nuevo Companion?\\n" +
+                "No se moverán ni subirán vídeos.",
+                "Montara · Conservar proyectos",
+                System.Windows.Forms.MessageBoxButtons.YesNo,
+                System.Windows.Forms.MessageBoxIcon.Question);
+            if (choice == System.Windows.Forms.DialogResult.Yes)
+            {
+                File.Copy(previousProjects, currentProjects, overwrite: false);
+                foreach (var name in new[] { "places.json" })
+                {
+                    var src = Path.Combine(previous, name);
+                    var dst = Path.Combine(data, name);
+                    if (File.Exists(src) && !File.Exists(dst))
+                        File.Copy(src, dst, overwrite: false);
+                }
+            }
+        }
+
         var start = new ProcessStartInfo(Executable)
         {
             WorkingDirectory = data,
