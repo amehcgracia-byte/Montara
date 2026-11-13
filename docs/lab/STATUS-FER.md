@@ -1,32 +1,19 @@
 # STATUS — laboratorio Fernando
-
-Actualizado: 2026-10-30 · Responsable: equipo Fernando · Rama: `fernando/continuacion-montara`
-
-## Referencias
-- HEAD publicado y sincronizado: **`58d8d7e`** (merge de `main` `e46b685` sobre FER `3bbee90`).
-- Submódulos: `engine=c89e779` · `mixer=c7a46a6`.
-- La rama experimental conserva sus commits y ahora incluye los 10 commits que le faltaban de ese `main`.
-- El checkout original de FER quedó limpio y sincronizado con origin tras el push.
-
-## Hitos recientes
-| Pieza | Estado |
-|---|---|
-| JÚPITER-GCP-01: Python 3.11.18 y checkout separado | `validado-lab`: 11 tests de proxies originales |
-| JÚPITER-UI: selectores de cámaras | `implementado` en `3bbee90`; sintaxis JS validada, navegador pendiente |
-| Integración `main` → FER | `validado-lab` parcial: merge `58d8d7e`; dos conflictos resueltos; 21 tests |
-| ZuckerVideos | `c89e779` instalado; `60a7b7e` es antecesor confirmado |
-| ZuckerMixer | `c7a46a6` inicializado y coincidente con pin |
-| SATURNO-24 | `validado-lab` controlado: 39,8 % menos bytes de medios; no producción |
-| SATURNO-25 | `validado-lab` loopback: transferencia HTTP local; no WAN |
-
-## Riesgos y pendientes
-- Proxies/single-flight en `main` proceden de prototipo: **no conectados por sí solos a subida web pública ni al render final**. Windows no certificado, sin deduplicación multiproceso no POSIX.
-- Se eligió variante `main` de `local_media/proxies.py` y `tests/test_proxy_singleflight.py` en la resolución experimental.
-- 21/21 tests en worktree temporal con Python de FER; `pip check` correcto, pero **no** se certificaron todas las dependencias nuevas ni E2E.
-- Pendientes: E2E Linux y capturas, importaciones/rutas críticas con motor nuevo, pruebas web reales, pruebas de rendimiento con manifiesto, WAN y Windows.
-- El primer fetch recursivo de `main` falló por referencia histórica de engine `bf5d0066`; fetch sin recursión y recuperación específica de `c89e779` funcionaron.
-- Documento de arranque JÚPITER-GCP-01 es histórico: algunas afirmaciones de estado inicial quedaron obsoletas tras los commits `1a5f3bd` y `58d8d7e`.
-
-## Próximo paso
-- Auditoría cruzada JM/IA de avances FER, revisión de reutilización y duplicidades; `main` decide integración selectiva mediante PR pequeñas.
-- No interpretar la prueba parcial como validación de producción.
+Actualizado: 2026-11-13 · Responsable: equipo Fernando · rama de integración: `fernando/integracion-i1-owner-session-20261113`
+## Fuentes de verdad y coordinación
+- Acuerdo: `docs/COLLABORATION.md` y `AGENTS.md`. Issue compartido #216 reactiva ambos STATUS (JM actualiza SOLO STATUS-JM).
+- La autorización posterior de Chema permite a Fernando preparar integración a main; revisión y PR pequeños siguen siendo obligatorias.
+- Referencia histórica (NO merge masivo): PR #189 `fernando/integracion`. Entrega técnica Owner: `docs/integration/MONTARA_MAIN_INTEGRATION_HANDOFF_OWNER_COMPANION_2026-11-13.md` en `fernando/chema-native-owner`.
+## Estado y pruebas
+- **VALIDADO POR USUARIO / beta H4 (13-11):** Google real → proyectos privados → editor Stage original de Chema → Companion Windows 0.6.10 con Engine b867b3c72af8fe4685b487bcf1e09ffcc2a7c82b → MP4 local de 635117659 B, imagen y audio correctos.
+- **NO INTEGRADO EN MAIN:** el recorrido Owner H4 completo; la validación H4 no equivale a main ni a producción.
+- H4 privado: Google OAuth, catálogo SQLite, sesiones revocables (10 días al iniciar nueva sesión) y Engine/worker privado por dueño. No subir originales por defecto.
+- Windows: MSIX 0.6.11.1 tray parcial; el servicio real del PASS fue lanzado con Python desde SMART Beta; versión empaquetada 0.6.12.0 construida en CI, aún sin validación humana de instalador/firma persistente.
+- Pendientes: doble espera de miniaturas al guardar tomas, handling localhost WinError 10053, instalador Companion por SO, multiusuario E2E real de dos cuentas y rollback.
+- VM: watchdog 120 min, timer 20 min, SSH/web + trabajos FFmpeg; worker vacío no bloquea el apagado (PR #202). Cierre cooperativo avanzado pendiente.
+## Integración a main por piezas
+- I1 sesión: rama `fernando/integracion-i1-owner-session-20261113` abierta desde main, cap explícito 10 días conservando valor por defecto 3600 s; NO habilita login Google ni editor. Estado **candidato** hasta pruebas/PR.
+- Orden: login/catálogo Owner → runtime autorizado/worker → editor Chema y media → Companion Windows/Mac → aceptación y despliegue por fases.
+- Mantener rutas incompletas inactivas: no presentar la incorporación de un módulo como beta completa ni cambiar `engine/` o `mixer/` sin sus repos.
+- PR: informar A novedades, B duplicidades, C reutilización, D riesgos, E recomendaciones; declarar SHAs de Engine/Mixer y comandos de prueba.
+- Acciones en main únicamente mediante PR revisada, sin fusión de rama experimental ni force-push.
