@@ -17,6 +17,21 @@ remember_activity() {
 keep() { echo "$1: keep"; exit 0; }
 if (( up < GRACE_MIN * 60 )); then keep "boot grace $((up / 60)) min of $GRACE_MIN"; fi
 
+# Private per-owner Engine jobs are transient systemd units, not necessarily
+# ffmpeg processes. A quiet worker can still hold an owner project/session.
+# Never stop the VM while even one such unit is active: only the authorized
+# broker may prove it is safe to release that owner-bound worker.
+# Do not "remember activity" for this guard: an idle-only worker can be
+# released later without restarting the full two-hour inactivity clock.
+if ! units=$(systemctl --system list-units \
+  --type=service --state=active --no-legend --plain \
+  'montara-i*-job-*.service' 2>/dev/null); then
+  keep "private worker unit status unavailable (fail safe)"
+fi
+if [[ -n "$units" ]]; then
+  keep "private owner worker active; broker must release it before shutdown"
+fi
+
 # Real engine work or a held lab benchmark lock must never be interrupted.
 if pgrep -x ffmpeg >/dev/null || pgrep -x ffprobe >/dev/null || pgrep -f "mixer_adapter.session" >/dev/null; then
   remember_activity
