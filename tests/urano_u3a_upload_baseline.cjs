@@ -47,9 +47,10 @@ async function scenario(name, config) {
     constructor() {this.upload = {};}
     open(method,url) {this.method=method;this.url=url;}
     setRequestHeader(){}
-    send(payload) {recorded.push({route:this.url,name:payload.name,size:payload.size});}
+    send(payload) {recorded.push({route:this.url,name:payload.name,size:payload.size});this.onloadend?.();}
   }
   const ctx = vm.createContext({
+    AUDIO_NAME: /\.(wav|mp3|aiff?)$/i,
     AbortController, state, montaraCompanion:companion, XMLHttpRequest:FakeXHR,
     window:{confirm:message=>{prompts.push(message);return Boolean(config.approveOriginal);}},
     sendResumableUpload:async (payload,progress,registered,cancelled,extra)=>{

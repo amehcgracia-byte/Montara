@@ -41,6 +41,7 @@ const TrackTypes = (() => {
     'microfreak', 'minibrute', 'mininova', 'bass station', 'oberheim', 'dx7', 'op 1', 'op1', 'eurorack', 'modular', 'polysynth'];
 
   const label = name => String(name || '').replace(/(\.(wav|flac|wv|opus|aiff?|mp3|m4a|ogg))+$/i, '');
+  const needsLabel = name => /^(?:(?:track|channel|stem|audio)[ _.-]*)?\d+(?:[ _.-]\d+)*$/i.test(label(name).trim());
   const words = s => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
   const has = (low, list) => {
     const n = words(low), compact = n.replace(/ /g, '');
@@ -75,6 +76,7 @@ const TrackTypes = (() => {
   const key = name => label(String(name).split('/').pop()).toLowerCase();
   const chosen = {};  // key -> {type, side, chosen:true} set by the person
   const of = name => chosen[key(name)] || { type: guess(name), side: guessSide(name), chosen: false };
+  function forget(names) { for (const name of names) delete chosen[key(name)]; }
   function set(name, change) { chosen[key(name)] = { ...of(name), ...change, chosen: true }; }
   // For the server: {file name: {type, side, chosen}}.
   const forFiles = files => Object.fromEntries(files.map(f => [String(f).split('/').pop(), of(f)]));
@@ -96,5 +98,5 @@ const TrackTypes = (() => {
   });
 
   const labelOf = name => (TYPES.find(([v]) => v === of(name).type) || [, 'Other'])[1];
-  return { TYPES, guess, guessSide, of, set, forFiles, controls, label: labelOf };
+  return { TYPES, needsLabel, forget, guess, guessSide, of, set, forFiles, controls, label: labelOf };
 })();
