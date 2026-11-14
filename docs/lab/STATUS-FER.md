@@ -22,3 +22,5 @@ Actualizado: 2026-11-14 · Responsable: equipo Fernando · integración I1–I5b
 - **Gate I6:** falta prueba de render prolongado/apagado VM y recuperación real. Un timeout no garantiza escritura durable ni cgroup vacío; preservar fencing. Ver docs/integration/I6_SAFE_SHUTDOWN_HANDOFF_2026-11-14.md.
 
 - **I7 candidato 14-11:** aceptación SQLite dos Owner + aislamiento mutuo, CSRF, ledger, stop y crash recovery; 6/6 PASS (sin Google real ni Companion E2E). I6b y aceptación humana pendientes.
+
+- **I6b candidato 14-11:** preflight SQLite Owner solo lectura: 7/7 tests; no se conecta al watchdog: falta bloqueo de nuevas admisiones + quiescencia y prueba OS. No está desplegado.
