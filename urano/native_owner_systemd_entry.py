@@ -18,6 +18,7 @@ import re
 import secrets
 import signal
 import sys
+import threading
 from pathlib import Path
 
 _UNIT = re.compile(r"montara-i24-job-[a-f0-9]{32}\Z")
@@ -181,13 +182,15 @@ def main(argv: list[str] | None = None):
             "ready": True, "uid": os.getuid(), "folder": workspace}))
         tmp.replace(marker)
 
-    signal.signal(signal.SIGTERM, lambda signum, frame: sys.exit(0))
+    shutdown_event = threading.Event()
+    # SIGTERM requests a graceful stop; do not interrupt in-flight writes.
+    signal.signal(signal.SIGTERM, lambda signum, frame: shutdown_event.set())
     serve_native_owner_workspace(
         app_factory=create_montara_app, data_root=state,
         runtime_root=runtime, workspace_id=workspace,
         generation=generation, on_ready=ready,
         make_private_server=create_private_jm_wsgi_server,
-        serve_stage_socket=serve_stage_socket,
+        serve_stage_socket=serve_stage_socket, shutdown_event=shutdown_event,
     )
 
 

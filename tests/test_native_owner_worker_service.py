@@ -94,6 +94,42 @@ class NativeOwnerWorkerServiceTests(unittest.TestCase):
         self.assertFalse((self.runtime/"jm-editor-http.sock").exists())
         self.assertEqual(list(self.data.iterdir()),[])
 
+    def test_cooperative_stop_drains_before_socket_close(self):
+        shutdown = threading.Event()
+        serving = threading.Event()
+        closed = threading.Event()
+        gate = threading.Event()
+
+        def graceful_server(app, directory):
+            original, path = self.socket_server(app, directory)
+            class Server:
+                def serve_forever(self):
+                    serving.set()
+                    gate.wait(timeout=2)
+                def shutdown(self):
+                    gate.set()
+                def server_close(self):
+                    self_test.assertTrue(gate.is_set())
+                    closed.set()
+                    original.server_close()
+            self_test = self
+            return Server(), path
+
+        def send_shutdown():
+            self.assertTrue(serving.wait(timeout=2))
+            shutdown.set()
+        trigger = threading.Thread(target=send_shutdown)
+        trigger.start()
+        try:
+            self.run_worker(make_private_server=graceful_server,
+                            shutdown_event=shutdown)
+        finally:
+            gate.set()
+            self.stop.set()
+            trigger.join(timeout=2)
+        self.assertTrue(closed.is_set())
+        self.assertFalse((self.runtime/"jm-editor-http.sock").exists())
+
     def test_rejects_runtime_permission_before_app_factory(self):
         self.runtime.chmod(0o755)
         with self.assertRaises(NativeOwnerSocketUnavailable):

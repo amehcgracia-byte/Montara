@@ -23,7 +23,7 @@ SYSTEMD_PROPS = (
     "ProtectHome=yes", "ProtectSystem=strict",
     "PrivateTmp=yes", "PrivateDevices=yes", "PrivateNetwork=yes",
     "RestrictSUIDSGID=yes", "MemoryMax=768M", "TasksMax=64",
-    "CPUQuota=100%", "KillMode=control-group", "TimeoutStopSec=3s",
+    "CPUQuota=100%", "KillMode=control-group", "TimeoutStopSec=90s",
     "SendSIGKILL=yes", "RuntimeDirectoryMode=0700",
 )
 CGROUP_ROOT = Path("/sys/fs/cgroup")
