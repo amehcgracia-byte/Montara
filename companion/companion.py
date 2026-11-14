@@ -220,26 +220,34 @@ def valid_original(original) -> bool:
             and isinstance(original.get("fingerprint"), str) and re.fullmatch(r"[a-f0-9]{64}", original["fingerprint"]) is not None)
 
 
+def original_id(name: str, size: int, edge_hash: str) -> str:
+    # Old audio proxies may have been made from another track with silent edges.
+    prefix = "audio-v2|" if Path(name).suffix.lower() in AUDIO_SUFFIXES else ""
+    return hashlib.sha256(f"{prefix}{name}|{size}|{edge_hash}".encode()).hexdigest()[:24]
+
+
 def find_original(original: dict) -> Path | None:
-    source_id = hashlib.sha256(f"{original['name']}|{original['size']}|{original['fingerprint']}".encode()).hexdigest()[:24]
+    name, size, edge_hash = (original[key] for key in ('name', 'size', 'fingerprint'))
+    source_id = original_id(name, size, edge_hash)
     cached = sources.get(source_id)
     if cached:
         try:
-            if cached.is_file() and cached.stat().st_size == original['size'] and fingerprint(cached) == original['fingerprint']:
+            if cached.is_file() and cached.stat().st_size == size and fingerprint(cached) == edge_hash:
                 return cached
         except OSError:
             pass
         sources.pop(source_id, None)
-    # A reimport can register the same bytes under a new name. Reuse only a
-    # verified content identity, never basename, mtime, or a previous cache hit.
-    for path in list(sources.values()):
-        try:
-            if path.is_file() and path.stat().st_size == original['size'] and fingerprint(path) == original['fingerprint']:
-                sources[source_id] = path
-                return path
-        except OSError:
-            continue
-    path = locate(original['name'], original['size'], original['fingerprint'])
+    # Audio stems may have identical silence at both ends and the same size.
+    # Keep renamed-video recovery, but look up audio by its registered filename.
+    if Path(name).suffix.lower() not in AUDIO_SUFFIXES:
+        for path in list(sources.values()):
+            try:
+                if path.is_file() and path.stat().st_size == size and fingerprint(path) == edge_hash:
+                    sources[source_id] = path
+                    return path
+            except OSError:
+                continue
+    path = locate(name, size, edge_hash)
     if path:
         sources[source_id] = path
     return path
@@ -612,7 +620,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/health":
             return self.reply(200, {"app": "montara-companion", "version": VERSION, "ffmpeg": bool(FFMPEG and FFPROBE),
                                     "hardware_encoder": HW_H264, "tonemap": TONEMAP, "lossless_audio": True,
-                                    "audio_preview": OPUS, "segment_formats": ["lossless"] + (["opus"] if OPUS else []),
+                                    "audio_preview": OPUS, "audio_identity_revision": 2, "segment_formats": ["lossless"] + (["opus"] if OPUS else []),
                                     "local_mix": local_mixer(), "mix_progress": True, "local_video": video_jobs.runtime(),
                                     "busy": any(
                                         row.get("status") not in {"ready", "done", "failed", "cancelled", "skipped"}
@@ -703,7 +711,7 @@ class Handler(BaseHTTPRequestHandler):
             if (not isinstance(name, str) or "/" in name or "\\" in name or Path(name).suffix.lower() not in VIDEO_SUFFIXES | AUDIO_SUFFIXES
                     or not isinstance(size, int) or not isinstance(print_, str) or not re.fullmatch(r"[a-f0-9]{64}", print_)):
                 return self.reply(400, {"error": "invalid file description"})
-            source_id = hashlib.sha256(f"{name}|{size}|{print_}".encode()).hexdigest()[:24]
+            source_id = original_id(name, size, print_)
             path = find_original({'name':name,'size':size,'fingerprint':print_})
             if not path:
                 return self.reply(404, {'error':'not found on this computer'})

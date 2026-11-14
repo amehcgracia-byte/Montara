@@ -174,9 +174,7 @@ async function mixSessionForVideo(data) {
     fullSession.data.songs = data.video_excerpt ? [song]
       : data.songs.map(s=>({...s, selected:s.id===song.id, confirmed:s.id===song.id}));
     drawSessionSongs();
-    // Camera + stems: one automatic mix/master, without preparing a separate
-    // browser mixer preview. Audio-only Full session still opens its song review.
-    await renderFullSession(true);
+    await openSongMixer(songList().findIndex(candidate => candidate.id === song.id));
   } finally { fullSession.busy = false; fullSession.videoMatching = false; }
 }
 
@@ -406,7 +404,11 @@ function applySavedMix(changes) {
   if (!changes) return;
   const keys = { eq_low_cut_hz: ['low', 'hz'], eq_mid_gain_db: ['mid', 'db'], eq_air_gain_db: ['air', 'db'], eq_high_cut_hz: ['high', 'hz'] };
   for (const t of mix.plan.tracks) {
-    if (changes.faders?.[t.file] !== undefined) t.fader_db = Number(t.auto_fader_db) + Number(changes.faders[t.file]);
+    if (changes.base_gains?.[t.file] !== undefined) {
+      t.fader_db = Number(changes.base_gains[t.file]) + Number(changes.faders?.[t.file] || 0);
+    } else if (changes.faders?.[t.file] !== undefined) {
+      t.fader_db = Number(t.auto_fader_db) + Number(changes.faders[t.file]);
+    }
     if (changes.mutes?.[t.file] !== undefined) t.mute = changes.mutes[t.file];
     for (const [key, value] of Object.entries(changes.eq?.[t.file] || {})) { const [slot, field] = keys[key]; if (t.eq?.[slot]) t.eq[slot][field] = value; }
     for (const [effect, amount] of Object.entries(changes.effects?.[t.file] || {})) {
@@ -445,9 +447,10 @@ async function openSongMixer(i) {
       $$('#strips .strip').forEach((strip, index) => { if (mix.plan.tracks[index].active === false) strip.querySelectorAll('input,button').forEach(el => { el.disabled = true; }); });
       fullSession.mixCache[song.id] = { key: songKey(song), job: mix.job, plan: mix.plan, buffers: mix.buffers, fxBuffers: mix.fxBuffers };
     }
-    $('#useMix').textContent = fullSession.forVideo ? 'Use this mix for the video' : 'Save mix for this song';
+    setMixReview(fullSession.forVideo);
+    $('#useMix').textContent = fullSession.forVideo ? 'Continue with this mix' : 'Save mix for this song';
     $('#mixAll').hidden = fullSession.forVideo; $('#mixAll').disabled = false;
-    $('#mixStatusText').textContent = fullSession.forVideo ? 'Adjust your tracks, then use this mix as the audio for your video.' : `${song.name}: ${Math.ceil(mix.plan.duration)} s from the busiest part. Changes apply to this song only; the others keep their automatic mix.`;
+    $('#mixStatusText').textContent = fullSession.forVideo ? 'Your automatic mix is ready to listen.' : `${song.name}: ${Math.ceil(mix.plan.duration)} s from the busiest part. Changes apply to this song only; the others keep their automatic mix.`;
   } catch (error) { toast(error.message, true); show('sessionReview'); }
 }
 
@@ -493,12 +496,17 @@ $('#sessionEmpty').addEventListener('click', async event => {
 });
 
 // The changes made in the mixer, relative to its automatic mix: nothing else travels.
-function mixChanges() {
+function mixChanges({ preserveBalance = false } = {}) {
   const changes = {
     faders: Object.fromEntries(mix.plan.tracks.map(t => [t.file, Number(t.fader_db || 0) - Number(t.auto_fader_db ?? t.fader_db ?? 0)]).filter(([, v]) => Math.abs(v) > .05)),
     mutes: Object.fromEntries(mix.plan.tracks.filter(t => Boolean(t.mute) !== Boolean(t.auto_mute ?? t.mute)).map(t => [t.file, Boolean(t.mute)])),
   };
-  const effects = Object.fromEntries(mix.plan.tracks.filter(t => ['reverb', 'delay'].some(key => t.fx?.[key]?.enabled))
+  if (preserveBalance) {
+    changes.base_gains = Object.fromEntries(mix.plan.tracks.map(t => [t.file, Number(t.base_gain_db || 0)]));
+    changes.faders = Object.fromEntries(mix.plan.tracks.map(t => [t.file, MixLevels.offset(t)]));
+    changes.mutes = Object.fromEntries(mix.plan.tracks.map(t => [t.file, Boolean(t.mute)]));
+  }
+  const effects = Object.fromEntries(mix.plan.tracks.filter(t => preserveBalance || ['reverb', 'delay'].some(key => t.fx?.[key]?.enabled))
     .map(t => [t.file, Object.fromEntries(['reverb', 'delay'].map(key => [key, t.fx?.[key]?.enabled ? t.fx[key].amount / 100 : 0]))]));
   if (Object.keys(effects).length) changes.effects = effects;  // otherwise the automatic space and echo stay on
   const eq = eqChanges();
@@ -524,7 +532,7 @@ async function saveSongMix() {
   $('#mixAll').hidden = true;
   stopMix();
   const songId = fullSession.mixSong, job = mix.job;
-  fullSession.mixes[songId] = mixChanges();   // kept at once; the page goes straight back to the list
+  fullSession.mixes[songId] = mixChanges({preserveBalance: fullSession.forVideo});   // kept at once; the page goes straight back to the list
   $('#useMix').textContent = 'Use this mix';
   if(fullSession.forVideo){
     $('#useMix').disabled=true;
@@ -546,6 +554,7 @@ async function renderFullSession(forVideo = false) {
   const songs = songList();
   if (!songs.some(s => s.selected)) return toast('Select at least one song.', true);
   if(forVideo && songs.filter(s=>s.selected).length!==1)return toast('Choose one song for this video.',true);
+  if(forVideo && !fullSession.mixes[songs.find(s=>s.selected).id]?.base_gains) return toast('Listen to the song mix and choose Continue with this mix.', true);
   $('#sessionMix').hidden = true;
   fullSession.cancelRequested = false;
   fullSession.exportRun = (fullSession.exportRun || 0) + 1;
@@ -605,7 +614,8 @@ async function mixSongsLocally(songs, perSong) {
   for (const song of songs) {
     if (fullSession.cancelRequested) break;
     const mix = perSong[song.id] || {};
-    if (mix.reference) { left.push(song); continue; }   // mastering references are mixed on the server
+    // Older local mixers cannot lock the reviewed gain baseline.
+    if (mix.reference || mix.base_gains) { left.push(song); continue; }
     $('#sessionStatus').textContent = fullSession.forVideo ? 'Mixing and mastering your song…' : 'Mixing songs…';
     fullSession.localProgress[song.id] = {status: 'working', progress: 0, tracks: []};
     paintSessionRender(fullSession.data);

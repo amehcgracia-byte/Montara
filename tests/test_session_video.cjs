@@ -51,3 +51,20 @@ for(const [files,expected] of [
   [[{duration:60}],false],
 ]){restored.state.files=files;assert.equal(restored.isWholeSession(),expected);}
 console.log('5 restored-session routing scenarios passed');
+
+const fullSessionJS = fs.readFileSync(require('node:path').join(__dirname, '../web/full-session.js'), 'utf8');
+const reviewed = vm.createContext({
+  mix: {plan: {tracks: [{file:'Keys.wav', base_gain_db:-10, auto_fader_db:-12, fader_db:-4, mute:false}]}},
+  MixLevels: require('../web/mix-levels.js'),
+  eqChanges: () => ({}),
+});
+vm.runInContext(fullSessionJS.slice(fullSessionJS.indexOf('function mixChanges('), fullSessionJS.indexOf('// "Save mix for this song"')), reviewed);
+const adjusted = vm.runInContext('mixChanges({preserveBalance:true})', reviewed);
+assert.equal(adjusted.base_gains['Keys.wav'] + adjusted.faders['Keys.wav'], -4);
+assert.equal(adjusted.mutes['Keys.wav'], false);
+assert.equal(adjusted.effects['Keys.wav'].delay, 0);
+assert.equal(vm.runInContext('mixChanges().faders["Keys.wav"]', reviewed), 8);
+const stageRoute = fullSessionJS.slice(fullSessionJS.indexOf('async function mixSessionForVideo('), fullSessionJS.indexOf('// ---------- song list'));
+assert.match(stageRoute, /await openSongMixer\(/);
+assert.doesNotMatch(stageRoute, /renderFullSession\(/);
+console.log('Stage waits for review and preserves the confirmed keyboard gain');

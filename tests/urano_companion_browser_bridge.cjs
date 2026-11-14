@@ -40,6 +40,8 @@ async function scenario(mode) {
   const entry = { name: original.name, kind: "uploading", removed: false, progress: 0 };
   const state = { uploads: 0, platform: "reel", files: [entry] };
   const ctx = vm.createContext({
+    AbortSignal,
+    AUDIO_NAME: /\.(wav|mp3|aiff?)$/i,
     Blob, File, AbortController, setTimeout, clearTimeout,
     crypto: webcrypto, state,
     console: { warn() {}, info() {} },
@@ -73,7 +75,7 @@ async function scenario(mode) {
       constructor() { this.upload = {}; }
       open(method, url) { this.method = method; this.url = url; }
       setRequestHeader() {}
-      send(file) { uploads.push({ route: this.url, file }); }
+      send(file) { uploads.push({ route: this.url, file }); this.onloadend?.(); }
     },
     sendResumableUpload: async (file,progress,registered,cancelled,extra) => {
       uploads.push({route:"/montara/uploads",file,extra});
