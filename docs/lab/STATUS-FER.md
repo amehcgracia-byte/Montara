@@ -1,5 +1,5 @@
 # STATUS — laboratorio Fernando
-Actualizado: 2026-11-13 · Responsable: equipo Fernando · integración I1–I5b en `main` (I5 release público pendiente)
+Actualizado: 2026-11-14 · Responsable: equipo Fernando · integración I1–I5b en main (I5 release público pendiente)
 ## Fuentes de verdad y coordinación
 - Acuerdo: `docs/COLLABORATION.md` y `AGENTS.md`. Issue compartido #216 reactiva ambos STATUS (JM actualiza SOLO STATUS-JM).
 - La autorización posterior de Chema permite a Fernando preparar integración a main; revisión y PR pequeños siguen siendo obligatorias.
@@ -17,3 +17,6 @@ Actualizado: 2026-11-13 · Responsable: equipo Fernando · integración I1–I5b
 - Mantener rutas incompletas inactivas: no presentar la incorporación de un módulo como beta completa ni cambiar `engine/` o `mixer/` sin sus repos.
 - PR: informar A novedades, B duplicidades, C reutilización, D riesgos, E recomendaciones; declarar SHAs de Engine/Mixer y comandos de prueba.
 - Acciones en main únicamente mediante PR revisada, sin fusión de rama experimental ni force-push.
+
+- **I6 candidato 14-11:** cierre cooperativo SIGTERM de Owner nativo, WSGI espera hilos, TimeoutStopSec=90s; pruebas 94 Owner + 7 ledger PASS en checkout aislado. Sin deploy.
+- **Gate I6:** falta prueba de render prolongado/apagado VM y recuperación real. Un timeout no garantiza escritura durable ni cgroup vacío; preservar fencing. Ver docs/integration/I6_SAFE_SHUTDOWN_HANDOFF_2026-11-14.md.

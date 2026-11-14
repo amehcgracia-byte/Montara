@@ -33,6 +33,7 @@ def serve_native_owner_workspace(
     serve_stage_socket: Callable,
     on_ready: Callable,
     ready_timeout: float = 10,
+    shutdown_event: threading.Event | None = None,
 ) -> None:
     """Serve Chema over private Unix sockets until root-broker stops the unit.
 
@@ -47,7 +48,8 @@ def serve_native_owner_workspace(
             or not callable(make_private_server)
             or not callable(serve_stage_socket)
             or not callable(on_ready)
-            or not 0.1 <= ready_timeout <= 30):
+            or not 0.1 <= ready_timeout <= 30
+            or (shutdown_event is not None and not isinstance(shutdown_event, threading.Event))):
         raise NativeOwnerSocketUnavailable("Unverified worker lifecycle")
     runtime = runtime.resolve(strict=True)
     app, read_snapshot = bind_native_owner_application(
@@ -56,6 +58,9 @@ def serve_native_owner_workspace(
     )
 
     server, socket_path = make_private_server(app, runtime)
+    # Complete active HTTP requests before exiting. systemd bounds shutdown.
+    server.daemon_threads = False
+    server.block_on_close = True
     socket_path = Path(socket_path)
     ready = threading.Event()
     errors: list[str] = []
@@ -75,6 +80,17 @@ def serve_native_owner_workspace(
         target=listen, daemon=True, name="montara-private-stage-status",
     )
     thread.start()
+    watcher_done = threading.Event()
+    if shutdown_event is not None:
+        def cooperative_stop():
+            while not watcher_done.is_set():
+                if shutdown_event.wait(timeout=0.1):
+                    # BaseServer.shutdown must run outside serve_forever.
+                    server.shutdown()
+                    return
+        threading.Thread(
+            target=cooperative_stop, daemon=True,
+            name="montara-owner-cooperative-stop").start()
     try:
         if not ready.wait(timeout=ready_timeout) or errors or not thread.is_alive():
             raise NativeOwnerSocketUnavailable("Private Stage status unavailable")
@@ -90,5 +106,6 @@ def serve_native_owner_workspace(
         on_ready()
         server.serve_forever()
     finally:
+        watcher_done.set()
         server.server_close()
         socket_path.unlink(missing_ok=True)
