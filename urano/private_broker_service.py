@@ -31,6 +31,7 @@ from urano.private_editor_fd_handoff import (
 )
 from urano.native_owner_broker_policy import trusted_operator_worker_script
 from urano.job_recovery_ledger import JobRecoveryLedger,BusyOwner,StaleJob
+from urano.owner_shutdown_barrier import guarded_owner_start
 from urano.restricted_broker_ipc import authenticate_peer,parse_stop
 from urano.restricted_systemd_broker import (
     RestrictedTargetControl,expected_cgroup,fixed_launch_properties,UnverifiedTarget,
@@ -105,6 +106,7 @@ class DemoBroker:
             except Exception:
                 pass  # retain orphaned/stopping state; deny new launch
 
+    @guarded_owner_start
     def demo_start(self, owner_id=OWNER, project_id=PROJECT):
         lease=self.ledger.start_trusted(owner_id,project_id)
         unit=self.ledger.reserve_target_unit(lease)
