@@ -20,3 +20,5 @@ Actualizado: 2026-11-14 · Responsable: equipo Fernando · integración I1–I5b
 
 - **I6 candidato 14-11:** cierre cooperativo SIGTERM de Owner nativo, WSGI espera hilos, TimeoutStopSec=90s; pruebas 94 Owner + 7 ledger PASS en checkout aislado. Sin deploy.
 - **Gate I6:** falta prueba de render prolongado/apagado VM y recuperación real. Un timeout no garantiza escritura durable ni cgroup vacío; preservar fencing. Ver docs/integration/I6_SAFE_SHUTDOWN_HANDOFF_2026-11-14.md.
+
+- **I7 candidato 14-11:** aceptación SQLite dos Owner + aislamiento mutuo, CSRF, ledger, stop y crash recovery; 6/6 PASS (sin Google real ni Companion E2E). I6b y aceptación humana pendientes.
